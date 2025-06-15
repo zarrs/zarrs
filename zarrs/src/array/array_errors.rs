@@ -124,6 +124,9 @@ pub enum ArrayError {
     /// A `DLPack` error
     #[error(transparent)]
     DlPackError(#[from] super::array_dlpack_ext::ArrayDlPackExtError),
+    /// Any other error.
+    #[error("{_0}")]
+    Other(String),
 }
 
 /// An unsupported additional field error.

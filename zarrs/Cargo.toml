@@ -1,6 +1,6 @@
 [package]
 name = "zarrs"
-version = "0.21.0"
+version = "0.21.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.82"
@@ -32,6 +32,8 @@ zstd = ["dep:zstd"] # Enable the zstd codec
 ndarray = ["dep:ndarray"] # Adds ndarray utility functions to Array
 dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
 async = ["dep:async-generic", "dep:async-trait", "dep:futures", "zarrs_storage/async"] # Enable experimental async API
+jiff = ["dep:jiff"] # Adds support for jiff time array elements
+chrono = ["dep:chrono"] # Adds support for chrono time array elements
 
 [lints]
 workspace = true
@@ -64,7 +66,7 @@ num.workspace = true
 pco = { version = "0.4.0", optional = true }
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.2.0"
-serde = { version = "1.0.185", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_order"] }
 thiserror.workspace = true
 thread_local = "1.1.8"
@@ -81,13 +83,15 @@ dlpark = { version = ">=0.4.1,<0.6", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
 zarrs_metadata_ext.workspace = true
+jiff = { version = "0.2.15", optional = true }
+chrono = { version = "0.4.39", optional = true }
 
 [dependencies.num-complex]
 version = "0.4.3"
 features = ["bytemuck"]
 
 [dev-dependencies]
-chrono = "0.4"
+chrono = "0.4.39"
 criterion = "0.5.1"
 object_store = { workspace = true, features = ["http"] }
 opendal = { workspace = true, features = ["services-fs", "services-http"] }

@@ -141,7 +141,15 @@ fn pack_bits_components(
             num_components: 1,
             sign_extension: false,
         }),
-        DT::Int32 => Ok(DataTypeExtensionPackBitsCodecComponents {
+        DT::Int32
+        | DT::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DT::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(DataTypeExtensionPackBitsCodecComponents {
             component_size_bits: 32,
             num_components: 1,
             sign_extension: true,

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `numpy.datetime64` and `numpy.timedelta64` data type support
+  - `chrono` and `jiff` native element types are supported
+
+### Changed
+- Add `Other` to `ArrayError` enum
+
 ## [0.21.0] - 2025-06-08
 
 ### Added
