@@ -84,14 +84,14 @@ async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
 zarrs_metadata_ext.workspace = true
 jiff = { version = "0.2.15", optional = true }
-chrono = { version = "0.4.34", optional = true }
+chrono = { version = "0.4.39", optional = true }
 
 [dependencies.num-complex]
 version = "0.4.3"
 features = ["bytemuck"]
 
 [dev-dependencies]
-chrono = "0.4.34"
+chrono = "0.4.39"
 criterion = "0.5.1"
 object_store = { workspace = true, features = ["http"] }
 opendal = { workspace = true, features = ["services-fs", "services-http"] }
