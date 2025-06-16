@@ -13,7 +13,7 @@ impl Element for chrono::TimeDelta {
         use chrono::DateTime;
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
+        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
@@ -36,7 +36,7 @@ impl Element for chrono::TimeDelta {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
         if matches!(
             data_type,
-            DataType::NumpyDateTime64 {
+            DataType::NumpyTimeDelta64 {
                 unit: _,
                 scale_factor: _
             }
@@ -56,7 +56,7 @@ impl ElementOwned for chrono::TimeDelta {
     ) -> Result<Vec<Self>, ArrayError> {
         use chrono::{DateTime, NaiveDateTime};
 
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
+        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
             return Err(ArrayError::IncompatibleElementType);
         };
 
@@ -90,7 +90,7 @@ impl Element for jiff::SignedDuration {
         use jiff::{SignedDuration, Span, Unit};
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
+        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
@@ -111,7 +111,7 @@ impl Element for jiff::SignedDuration {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
         if matches!(
             data_type,
-            DataType::NumpyDateTime64 {
+            DataType::NumpyTimeDelta64 {
                 unit: _,
                 scale_factor: _
             }
@@ -133,7 +133,7 @@ impl ElementOwned for jiff::SignedDuration {
         use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
+        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
             return Err(ArrayError::IncompatibleElementType);
         };
 

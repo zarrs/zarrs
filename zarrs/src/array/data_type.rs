@@ -375,7 +375,7 @@ impl DataType {
                                 metadata.to_string(),
                             ))
                         })?;
-                    return Ok(Self::NumpyDateTime64 { unit, scale_factor });
+                    return Ok(Self::NumpyTimeDelta64 { unit, scale_factor });
                 }
                 _ => {}
             }
