@@ -27,7 +27,6 @@ fn try_numpy_to_jiff_unit(unit: NumpyTimeUnit) -> Result<jiff::Unit, NumpyTimeUn
 #[cfg(any(feature = "chrono", feature = "jiff"))]
 #[test]
 fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
-    use zarrs_metadata_ext::data_type::NumpyTimeUnit;
     for (path, unit) in [
         (
             "tests/data/zarr_python_compat/datetime64[Y].zarr",
@@ -161,8 +160,6 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
 #[cfg(any(feature = "chrono", feature = "jiff"))]
 #[test]
 fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
-    use zarrs_metadata_ext::data_type::NumpyTimeUnit;
-
     for unit in [
         NumpyTimeUnit::Year,
         NumpyTimeUnit::Month,
@@ -368,8 +365,6 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
 #[cfg(any(feature = "chrono", feature = "jiff"))]
 #[test]
 fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
-    use zarrs_metadata_ext::data_type::NumpyTimeUnit;
-
     for scale_factor in [1, 2] {
         for unit in [
             NumpyTimeUnit::Second,

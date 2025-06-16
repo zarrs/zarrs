@@ -19,7 +19,8 @@ use zarrs_metadata::{
     ConfigurationSerialize, DataTypeSize,
 };
 use zarrs_metadata_ext::data_type::{
-    NumpyDateTime64DataTypeConfiguration, NumpyTimeDelta64DataTypeConfiguration, NumpyTimeUnit,
+    numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
+    numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1, NumpyTimeUnit,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
 use zarrs_registry::ExtensionAliasesDataTypeV3;
@@ -254,14 +255,14 @@ impl DataType {
             Self::Bytes => MetadataV3::new(zarrs_registry::data_type::BYTES),
             Self::NumpyDateTime64 { unit, scale_factor } => MetadataV3::new_with_configuration(
                 zarrs_registry::data_type::NUMPY_DATETIME64,
-                NumpyDateTime64DataTypeConfiguration {
+                NumpyDateTime64DataTypeConfigurationV1 {
                     unit: *unit,
                     scale_factor: *scale_factor,
                 },
             ),
             Self::NumpyTimeDelta64 { unit, scale_factor } => MetadataV3::new_with_configuration(
                 zarrs_registry::data_type::NUMPY_TIMEDELTA64,
-                NumpyTimeDelta64DataTypeConfiguration {
+                NumpyTimeDelta64DataTypeConfigurationV1 {
                     unit: *unit,
                     scale_factor: *scale_factor,
                 },
@@ -348,9 +349,9 @@ impl DataType {
             #[allow(clippy::single_match)]
             match metadata.name() {
                 zarrs_registry::data_type::NUMPY_DATETIME64 => {
-                    use zarrs_metadata_ext::data_type::NumpyDateTime64DataTypeConfiguration;
-                    let NumpyDateTime64DataTypeConfiguration { unit, scale_factor } =
-                        NumpyDateTime64DataTypeConfiguration::try_from_configuration(
+                    use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
+                    let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
+                        NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(
                             configuration.clone(),
                         )
                         .map_err(|_| {
@@ -363,9 +364,9 @@ impl DataType {
                     return Ok(Self::NumpyDateTime64 { unit, scale_factor });
                 }
                 zarrs_registry::data_type::NUMPY_TIMEDELTA64 => {
-                    use zarrs_metadata_ext::data_type::NumpyTimeDelta64DataTypeConfiguration;
-                    let NumpyTimeDelta64DataTypeConfiguration { unit, scale_factor } =
-                        NumpyTimeDelta64DataTypeConfiguration::try_from_configuration(
+                    use zarrs_metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
+                    let NumpyTimeDelta64DataTypeConfigurationV1 { unit, scale_factor } =
+                        NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(
                             configuration.clone(),
                         )
                         .map_err(|_| {

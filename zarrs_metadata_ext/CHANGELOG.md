@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `data_type::Numpy{DateTime64,TimeDelta64}DataTypeConfiguration`
+- Add `data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1`
+- Add `data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1`
 - Add `data_type::NumpyTimeUnit`
 
 ### Changed

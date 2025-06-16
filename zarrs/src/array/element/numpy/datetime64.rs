@@ -22,7 +22,6 @@ impl Element for chrono::DateTime<chrono::Utc> {
             if element == &Self::MIN_UTC {
                 bytes.extend_from_slice(&i64::MIN.to_ne_bytes());
             } else {
-                use zarrs_metadata_ext::data_type::NumpyTimeUnit;
                 let value = super::chrono_timedelta_to_int(
                     // why is this API self?
                     (*element).signed_duration_since(DateTime::UNIX_EPOCH),
@@ -110,7 +109,6 @@ impl Element for jiff::Timestamp {
             if element == &Timestamp::MIN {
                 bytes.extend_from_slice(&i64::MIN.to_ne_bytes());
             } else {
-                use zarrs_metadata_ext::data_type::NumpyTimeUnit;
                 let value = super::jiff_duration_to_int(
                     element.duration_since(Timestamp::UNIX_EPOCH),
                     *unit,
@@ -145,7 +143,6 @@ impl ElementOwned for jiff::Timestamp {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         use jiff::{SignedDuration, Span, Timestamp};
-        use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
         // Self::validate_data_type(data_type)?;
         let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {

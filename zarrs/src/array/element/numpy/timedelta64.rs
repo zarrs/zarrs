@@ -22,7 +22,6 @@ impl Element for chrono::TimeDelta {
             if element == &Self::MIN {
                 bytes.extend_from_slice(&i64::MIN.to_ne_bytes());
             } else {
-                use zarrs_metadata_ext::data_type::NumpyTimeUnit;
                 let value = super::chrono_timedelta_to_int(*element, *unit, scale_factor)
                     .ok_or_else(|| {
                         ArrayError::Other("unsupported chrono::DateTime unit or offset".to_string())
@@ -130,7 +129,6 @@ impl ElementOwned for jiff::SignedDuration {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         use jiff::{SignedDuration, Span};
-        use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
         // Self::validate_data_type(data_type)?;
         let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
