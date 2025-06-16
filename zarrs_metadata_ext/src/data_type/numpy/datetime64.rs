@@ -13,7 +13,7 @@ use super::time_unit::NumpyTimeUnit;
 pub struct NumpyDateTime64DataTypeConfiguration {
     /// The `NumPy` temporal unit.
     pub unit: NumpyTimeUnit,
-    /// The `NumPy` scale factor.
+    /// The `NumPy` temporal scale factor.
     pub scale_factor: NonZeroU32, // 31
 }
 

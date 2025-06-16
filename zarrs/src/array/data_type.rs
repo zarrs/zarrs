@@ -127,7 +127,7 @@ pub enum DataType {
     NumpyDateTime64{
         /// The `NumPy` temporal unit.
         unit: NumpyTimeUnit,
-        /// The `NumPy` scale factor.
+        /// The `NumPy` temporal scale factor.
         scale_factor: NonZeroU32,
     },
     /// `numpy.timedelta64` a 64-bit signed integer represents signed temporal durations.
@@ -136,7 +136,7 @@ pub enum DataType {
     NumpyTimeDelta64{
         /// The `NumPy` temporal unit.
         unit: NumpyTimeUnit,
-        /// The `NumPy` scale factor.
+        /// The `NumPy` temporal scale factor.
         scale_factor: NonZeroU32,
     },
     /// An extension data type.

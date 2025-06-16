@@ -116,7 +116,7 @@ pub enum ArrayError {
     ///  - a bool array with a value not equal to 0 (false) or 1 (true).
     ///  - a string with invalid utf-8 encoding.
     #[error("Invalid element value")]
-    InvalidElementValue,
+    InvalidElementValue, // TODO: Add reason
     /// Unsupported method.
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),

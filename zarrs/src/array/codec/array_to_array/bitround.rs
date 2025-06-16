@@ -81,6 +81,14 @@ macro_rules! supported_dtypes {
             | DataType::ComplexFloat64
             | DataType::Complex64
             | DataType::Complex128
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            }
     };
 }
 macro_rules! unsupported_dtypes {
@@ -105,14 +113,6 @@ macro_rules! unsupported_dtypes {
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
             | DataType::Extension(_)
     };
 }
@@ -246,7 +246,16 @@ fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<
             bytes.chunks_exact_mut(8).for_each(round);
             Ok(())
         }
-        DataType::UInt64 | DataType::Int64 => {
+        DataType::UInt64
+        | DataType::Int64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => {
             let round = |chunk: &mut [u8]| {
                 let element = u64::from_ne_bytes(chunk.try_into().unwrap());
                 let element = u64::to_ne_bytes(round_bits64(
