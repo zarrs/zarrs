@@ -40,7 +40,7 @@ version = "0.5.0"
 path = "zarrs_metadata"
 
 [workspace.dependencies.zarrs_metadata_ext]
-version = "0.1.0"
+version = "0.1.1"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]
@@ -48,7 +48,7 @@ version = "0.2.1"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_registry]
-version = "0.1.2"
+version = "0.1.3"
 path = "zarrs_registry"
 
 [workspace.dependencies.zarrs_storage]

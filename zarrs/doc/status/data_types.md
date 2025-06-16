@@ -36,6 +36,8 @@
 | [`RawBits`]           | r                  |             | `[u8; N]` / `&[u8; N]`         |              |
 | [`String`]            | string             | \|O         | [`String`] / [`&str`]          |              |
 | [`Bytes`]             | bytes<br>binary    | \|VX        | [`Vec<u8>`] / `&[u8]`          |              |
+| [`NumpyDateTime64`]   | numpy.datetime64   |             | [`i64`]<br>[`chrono::DateTime<Utc>`]<br>[`jiff::Timestamp`]  | <br>chrono<br>jiff     |
+| [`NumpyTimeDelta64`]  | numpy.timedelta64  |             | [`i64`]<br>[`chrono::TimeDelta`]<br>[`jiff::SignedDuration`] | <br>chrono<br>jiff     |
 
 [`DataType`]: crate::array::DataType
 
@@ -75,6 +77,12 @@
 [`RawBits`]: crate::array::DataType::RawBits
 [`String`]: crate::array::DataType::String
 [`Bytes`]: crate::array::DataType::Bytes
+[`NumpyDateTime64`]: crate::array::DataType::NumpyDateTime64
+[`NumpyTimeDelta64`]: crate::array::DataType::NumpyTimeDelta64
+[`jiff::Timestamp`]: https://docs.rs/jiff/latest/jiff/struct.Timestamp.html
+[`jiff::SignedDuration`]: https://docs.rs/jiff/latest/jiff/struct.SignedDuration.html
+[`chrono::DateTime<Utc>`]: https://docs.rs/chrono/latest/chrono/struct.DateTime.html
+[`chrono::TimeDelta`]: https://docs.rs/chrono/latest/chrono/struct.TimeDelta.html
 
 [`Element`]: crate::array::Element
 [`ElementOwned`]: crate::array::ElementOwned

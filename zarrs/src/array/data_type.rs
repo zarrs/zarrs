@@ -7,7 +7,7 @@
 //! Custom data types can be implemented by registering structs that implement the traits of [`zarrs_data_type`].
 //! A custom data type guide can be found in [The `zarrs` book](https://book.zarrs.dev).
 
-use std::{fmt::Debug, mem::discriminant, sync::Arc};
+use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
 
 pub use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
@@ -16,9 +16,12 @@ pub use zarrs_data_type::{
 };
 use zarrs_metadata::{
     v3::{FillValueMetadataV3, MetadataV3},
-    DataTypeSize,
+    ConfigurationSerialize, DataTypeSize,
 };
-use zarrs_plugin::{PluginCreateError, PluginUnsupportedError};
+use zarrs_metadata_ext::data_type::{
+    NumpyDateTime64DataTypeConfiguration, NumpyTimeDelta64DataTypeConfiguration, NumpyTimeUnit,
+};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
 use zarrs_registry::ExtensionAliasesDataTypeV3;
 
 /// A data type.
@@ -118,6 +121,24 @@ pub enum DataType {
     String,
     /// Variable-sized binary data.
     Bytes,
+    /// `numpy.datetime64` a 64-bit signed integer represents moments in time relative to the Unix epoch.
+    ///
+    /// This data type closely models the `datetime64` data type from `NumPy`.
+    NumpyDateTime64{
+        /// The `NumPy` temporal unit.
+        unit: NumpyTimeUnit,
+        /// The `NumPy` temporal scale factor.
+        scale_factor: NonZeroU32,
+    },
+    /// `numpy.timedelta64` a 64-bit signed integer represents signed temporal durations.
+    ///
+    /// This data type closely models the `timedelta64` data type from `NumPy`.
+    NumpyTimeDelta64{
+        /// The `NumPy` temporal unit.
+        unit: NumpyTimeUnit,
+        /// The `NumPy` temporal scale factor.
+        scale_factor: NonZeroU32,
+    },
     /// An extension data type.
     Extension(Arc<dyn DataTypeExtension>)
 }
@@ -177,6 +198,14 @@ impl DataType {
             Self::RawBits(size) => format!("r{}", size * 8),
             Self::String => zarrs_registry::data_type::STRING.to_string(),
             Self::Bytes => zarrs_registry::data_type::BYTES.to_string(),
+            Self::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            } => zarrs_registry::data_type::NUMPY_DATETIME64.to_string(),
+            Self::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => zarrs_registry::data_type::NUMPY_TIMEDELTA64.to_string(),
             Self::Extension(extension) => extension.name(),
         }
     }
@@ -223,6 +252,20 @@ impl DataType {
             Self::RawBits(size) => MetadataV3::new(format!("r{}", size * 8)),
             Self::String => MetadataV3::new(zarrs_registry::data_type::STRING),
             Self::Bytes => MetadataV3::new(zarrs_registry::data_type::BYTES),
+            Self::NumpyDateTime64 { unit, scale_factor } => MetadataV3::new_with_configuration(
+                zarrs_registry::data_type::NUMPY_DATETIME64,
+                NumpyDateTime64DataTypeConfiguration {
+                    unit: *unit,
+                    scale_factor: *scale_factor,
+                },
+            ),
+            Self::NumpyTimeDelta64 { unit, scale_factor } => MetadataV3::new_with_configuration(
+                zarrs_registry::data_type::NUMPY_TIMEDELTA64,
+                NumpyTimeDelta64DataTypeConfiguration {
+                    unit: *unit,
+                    scale_factor: *scale_factor,
+                },
+            ),
             Self::Extension(ext) => {
                 MetadataV3::new_with_configuration(ext.name(), ext.configuration())
             }
@@ -256,9 +299,19 @@ impl DataType {
             | Self::Float32
             | Self::ComplexFloat16
             | Self::ComplexBFloat16 => DataTypeSize::Fixed(4),
-            Self::Int64 | Self::UInt64 | Self::Float64 | Self::Complex64 | Self::ComplexFloat32 => {
-                DataTypeSize::Fixed(8)
+            Self::Int64
+            | Self::UInt64
+            | Self::Float64
+            | Self::Complex64
+            | Self::ComplexFloat32
+            | Self::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
             }
+            | Self::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => DataTypeSize::Fixed(8),
             Self::Complex128 | Self::ComplexFloat64 => DataTypeSize::Fixed(16),
             Self::RawBits(size) => DataTypeSize::Fixed(*size),
             Self::String | Self::Bytes => DataTypeSize::Variable,
@@ -280,6 +333,7 @@ impl DataType {
     /// # Errors
     ///
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
+    #[allow(clippy::too_many_lines)]
     pub fn from_metadata(
         metadata: &MetadataV3,
         data_type_aliases: &ExtensionAliasesDataTypeV3,
@@ -290,7 +344,43 @@ impl DataType {
             ));
         }
 
-        if metadata.configuration_is_none_or_empty() {
+        if let Some(configuration) = metadata.configuration() {
+            #[allow(clippy::single_match)]
+            match metadata.name() {
+                zarrs_registry::data_type::NUMPY_DATETIME64 => {
+                    use zarrs_metadata_ext::data_type::NumpyDateTime64DataTypeConfiguration;
+                    let NumpyDateTime64DataTypeConfiguration { unit, scale_factor } =
+                        NumpyDateTime64DataTypeConfiguration::try_from_configuration(
+                            configuration.clone(),
+                        )
+                        .map_err(|_| {
+                            PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                                zarrs_registry::data_type::NUMPY_DATETIME64,
+                                "data_type",
+                                metadata.to_string(),
+                            ))
+                        })?;
+                    return Ok(Self::NumpyDateTime64 { unit, scale_factor });
+                }
+                zarrs_registry::data_type::NUMPY_TIMEDELTA64 => {
+                    use zarrs_metadata_ext::data_type::NumpyTimeDelta64DataTypeConfiguration;
+                    let NumpyTimeDelta64DataTypeConfiguration { unit, scale_factor } =
+                        NumpyTimeDelta64DataTypeConfiguration::try_from_configuration(
+                            configuration.clone(),
+                        )
+                        .map_err(|_| {
+                            PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                                zarrs_registry::data_type::NUMPY_TIMEDELTA64,
+                                "data_type",
+                                metadata.to_string(),
+                            ))
+                        })?;
+                    return Ok(Self::NumpyTimeDelta64 { unit, scale_factor });
+                }
+                _ => {}
+            }
+        } else {
+            // Data types with no configuration
             match metadata.name() {
                 zarrs_registry::data_type::BOOL => return Ok(Self::Bool),
                 zarrs_registry::data_type::INT2 => return Ok(Self::Int2),
@@ -525,6 +615,22 @@ impl DataType {
                 Ok(FV::from(bytes))
             }
             Self::String => Ok(FV::from(fill_value.as_str().ok_or_else(err0)?)),
+            Self::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | Self::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => {
+                if let Some("NaT") = fill_value.as_str() {
+                    Ok(FV::from(i64::MIN))
+                } else if let Some(i) = fill_value.as_i64() {
+                    Ok(FV::from(i))
+                } else {
+                    Err(err0())?
+                }
+            }
             Self::Extension(ext) => ext.fill_value(fill_value),
         }
     }
@@ -708,6 +814,22 @@ impl DataType {
                 String::from_utf8(fill_value.as_ne_bytes().to_vec()).map_err(|_| error())?,
             )),
             Self::Bytes => Ok(FillValueMetadataV3::from(fill_value.as_ne_bytes().to_vec())),
+            Self::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | Self::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => {
+                let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                let number = i64::from_ne_bytes(bytes);
+                if number == i64::MIN {
+                    Ok(FillValueMetadataV3::from("NaT"))
+                } else {
+                    Ok(FillValueMetadataV3::from(number))
+                }
+            }
             Self::Extension(extension) => extension.metadata_fill_value(fill_value),
         }
     }

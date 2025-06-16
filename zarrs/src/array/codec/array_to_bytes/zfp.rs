@@ -182,7 +182,16 @@ const fn zarr_to_zfp_data_type(data_type: &DataType) -> Option<zfp_sys::zfp_type
         | DataType::UInt16
         | DataType::Int32
         | DataType::UInt32 => Some(zfp_sys::zfp_type_zfp_type_int32),
-        DataType::Int64 | DataType::UInt64 => Some(zfp_sys::zfp_type_zfp_type_int64),
+        DataType::Int64
+        | DataType::UInt64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Some(zfp_sys::zfp_type_zfp_type_int64),
         DataType::Float32 => Some(zfp_sys::zfp_type_zfp_type_float),
         DataType::Float64 => Some(zfp_sys::zfp_type_zfp_type_double),
         unsupported_dtypes!() => None,
@@ -238,7 +247,15 @@ fn promote_before_zfp_encoding(
                 .collect();
             Ok(ZfpArray::Int32(i))
         }
-        DataType::Int64 => Ok(ZfpArray::Int64(convert_from_bytes_slice::<i64>(
+        DataType::Int64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(ZfpArray::Int64(convert_from_bytes_slice::<i64>(
             decoded_value,
         ))),
         DataType::UInt64 => {
@@ -273,7 +290,16 @@ fn init_zfp_decoding_output(
         | DataType::UInt16
         | DataType::Int32
         | DataType::UInt32 => Ok(ZfpArray::Int32(vec![0; num_elements])),
-        DataType::Int64 | DataType::UInt64 => Ok(ZfpArray::Int64(vec![0; num_elements])),
+        DataType::Int64
+        | DataType::UInt64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(ZfpArray::Int64(vec![0; num_elements])),
         DataType::Float32 => Ok(ZfpArray::Float(vec![0.0; num_elements])),
         DataType::Float64 => Ok(ZfpArray::Double(vec![0.0; num_elements])),
         unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
