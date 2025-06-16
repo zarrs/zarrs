@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2025-06-16
+
 ### Added
 - Add `numpy.datetime64` and `numpy.timedelta64` data type support
   - `chrono` and `jiff` native element types are supported
 
 ### Changed
 - Add `Other` to `ArrayError` enum
+- Bump `zarrs_registry` to 0.1.3
+- Bump `zarrs_metadata_ext` to 0.1.1
 
 ## [0.21.0] - 2025-06-08
 
@@ -1384,7 +1388,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.1...HEAD
+[0.21.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.1
 [0.21.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.0
 [0.20.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.1
 [0.20.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0
