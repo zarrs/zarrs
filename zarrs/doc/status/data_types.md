@@ -16,11 +16,11 @@
 | [`Float4E2M1FN`]†             | float4_e2m1fn              |             |                                               |
 | [`Float6E2M3FN`]†             | float6_e2m3fn              |             |                                               |
 | [`Float6E3M2FN`]†             | float6_e3m2fn              |             |                                               |
-| [`Float8E3M4`]†               | float8_e3m4                |             |                                               |
+| [`Float8E3M4`]†               | float8_e3m4                |             | [`float8::F8E4M3`] (`float8`)                 |
 | [`Float8E4M3`]†               | float8_e4m3                |             |                                               |
 | [`Float8E4M3B11FNUZ`]†        | float8_e4m3b11fnuz         |             |                                               |
 | [`Float8E4M3FNUZ`]†           | float8_e4m3fnuz            |             |                                               |
-| [`Float8E5M2`]†               | float8_e5m2                |             |                                               |
+| [`Float8E5M2`]†               | float8_e5m2                |             | [`float8::F8E5M2`] (`float8`)                 |
 | [`Float8E5M2FNUZ`]†           | float8_e5m2fnuz            |             |                                               |
 | [`Float8E8M0FNU`]†            | float8_e8m0fnu             |             |                                               |
 | [`BFloat16`]                  | bfloat16                   |             | [`half::bf16`]                                |
@@ -37,10 +37,10 @@
 | [`ComplexFloat6E2M3FN`]†      | complex_float6_e2m3fn      |             |                                               |
 | [`ComplexFloat6E3M2FN`]†      | complex_float6_e3m2fn      |             |                                               |
 | [`ComplexFloat8E3M4`]†        | complex_float8_e3m4        |             |                                               |
-| [`ComplexFloat8E4M3`]†        | complex_float8_e4m3        |             |                                               |
+| [`ComplexFloat8E4M3`]†        | complex_float8_e4m3        |             | [`Complex<float8::F8E4M3>`] (`float8`)        |
 | [`ComplexFloat8E4M3B11FNUZ`]† | complex_float8_e4m3b11fnuz |             |                                               |
 | [`ComplexFloat8E4M3FNUZ`]†    | complex_float8_e4m3fnuz    |             |                                               |
-| [`ComplexFloat8E5M2`]†        | complex_float8_e5m2        |             |                                               |
+| [`ComplexFloat8E5M2`]†        | complex_float8_e5m2        |             | [`Complex<float8::F8E5M2>`] (`float8`)        |
 | [`ComplexFloat8E5M2FNUZ`]†    | complex_float8_e5m2fnuz    |             |                                               |
 | [`ComplexFloat8E8M0FNU`]†     | complex_float8_e8m0fnu     |             |                                               |
 | [`RawBits`]                   | r*                         |             | `[u8; N]` / `&[u8; N]`                        |
@@ -111,6 +111,8 @@
 [`Complex<f64>`]: num::complex::Complex<f64>
 [`Complex<f32>`]: num::complex::Complex<f32>
 [`Complex<f64>`]: num::complex::Complex<f64>
+[`Complex<float8::F8E4M3>`]: num::complex::Complex<float8::F8E4M3>
+[`Complex<float8::F8E5M2>`]: num::complex::Complex<float8::F8E5M2>
 
 [ZEP0001]: https://zarr.dev/zeps/accepted/ZEP0001.html
 [zarr-specs #130]: https://github.com/zarr-developers/zarr-specs/issues/130

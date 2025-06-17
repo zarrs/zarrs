@@ -629,27 +629,43 @@ impl DataType {
                 let int = fill_value.as_u64().ok_or_else(err0)?;
                 Ok(FV::from(int))
             }
+            Self::Float8E4M3 => {
+                #[cfg(feature = "float8")]
+                {
+                    subfloat_hex_string_to_fill_value(fill_value)
+                        .or_else(|| {
+                            let number = float8::F8E4M3::from_f64(fill_value.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)
+                }
+                #[cfg(not(feature = "float8"))]
+                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+            }
+            Self::Float8E5M2 => {
+                #[cfg(feature = "float8")]
+                {
+                    subfloat_hex_string_to_fill_value(fill_value)
+                        .or_else(|| {
+                            let number = float8::F8E5M2::from_f64(fill_value.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)
+                }
+                #[cfg(not(feature = "float8"))]
+                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+            }
             Self::Float4E2M1FN
             | Self::Float6E2M3FN
             | Self::Float6E3M2FN
             | Self::Float8E3M4
-            | Self::Float8E4M3
             | Self::Float8E4M3B11FNUZ
             | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2
             | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU => match fill_value {
+            | Self::Float8E8M0FNU => {
                 // FIXME: Support normal floating point fill value metadata for these data types.
-                FillValueMetadataV3::String(string) => match string.as_str() {
-                    "Infinity" | "-Infinity" | "NaN" => Err(err0()),
-                    _ => Ok(FV::from(hex_string_to_be_bytes(string).ok_or_else(err0)?)),
-                },
-                FillValueMetadataV3::Null
-                | FillValueMetadataV3::Bool(_)
-                | FillValueMetadataV3::Number(_)
-                | FillValueMetadataV3::Array(_)
-                | FillValueMetadataV3::Object(_) => Err(err0()),
-            },
+                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+            }
             Self::BFloat16 => Ok(FV::from(fill_value.as_bf16().ok_or_else(err0)?)),
             Self::Float16 => Ok(FV::from(fill_value.as_f16().ok_or_else(err0)?)),
             Self::Float32 => Ok(FV::from(fill_value.as_f32().ok_or_else(err0)?)),
@@ -690,30 +706,60 @@ impl DataType {
                     Err(err0())?
                 }
             }
+            Self::ComplexFloat8E4M3 => {
+                #[cfg(feature = "float8")]
+                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
+                    let re = subfloat_hex_string_to_fill_value(re)
+                        .or_else(|| {
+                            let number = float8::F8E4M3::from_f64(re.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)?;
+                    let im = subfloat_hex_string_to_fill_value(im)
+                        .or_else(|| {
+                            let number = float8::F8E4M3::from_f64(im.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)?;
+                    Ok(FV::from(num::complex::Complex::new(re, im)))
+                } else {
+                    Err(err0())?
+                }
+                #[cfg(not(feature = "float8"))]
+                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+            }
+            Self::ComplexFloat8E5M2 => {
+                #[cfg(feature = "float8")]
+                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
+                    let re = subfloat_hex_string_to_fill_value(re)
+                        .or_else(|| {
+                            let number = float8::F8E5M2::from_f64(re.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)?;
+                    let im = subfloat_hex_string_to_fill_value(im)
+                        .or_else(|| {
+                            let number = float8::F8E5M2::from_f64(im.as_f64()?);
+                            Some(FV::from(number.to_bits()))
+                        })
+                        .ok_or_else(err0)?;
+                    Ok(FV::from(num::complex::Complex::new(re, im)))
+                } else {
+                    Err(err0())?
+                }
+                #[cfg(not(feature = "float8"))]
+                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+            }
             Self::ComplexFloat4E2M1FN
             | Self::ComplexFloat6E2M3FN
             | Self::ComplexFloat6E3M2FN
             | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3
             | Self::ComplexFloat8E4M3B11FNUZ
             | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2
             | Self::ComplexFloat8E5M2FNUZ
             | Self::ComplexFloat8E8M0FNU => {
                 // FIXME: Support normal floating point fill value metadata for these data types.
-                if let Some([re, im]) = fill_value.as_array() {
-                    let re = re.as_str().ok_or_else(err0)?;
-                    let im = im.as_str().ok_or_else(err0)?;
-                    if let (Some(re), Some(im)) =
-                        (hex_string_to_be_bytes(re), hex_string_to_be_bytes(im))
-                    {
-                        Ok(FV::from(re.into_iter().chain(im).collect::<Vec<u8>>()))
-                    } else {
-                        Err(err0())?
-                    }
-                } else {
-                    Err(err0())?
-                }
+                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
             }
             Self::RawBits(size) => {
                 let bytes = fill_value.as_bytes().ok_or_else(err0)?;
@@ -844,39 +890,85 @@ impl DataType {
                 let number = u64::from_ne_bytes(bytes);
                 Ok(FillValueMetadataV3::from(number))
             }
+            Self::Float8E4M3 => {
+                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                #[cfg(feature = "float8")]
+                {
+                    let number = float8::F8E4M3::from_bits(bytes[0]);
+                    Ok(FillValueMetadataV3::from(number.to_f64()))
+                }
+                #[cfg(not(feature = "float8"))]
+                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
+            }
+            Self::Float8E5M2 => {
+                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                #[cfg(feature = "float8")]
+                {
+                    let number = float8::F8E5M2::from_bits(bytes[0]);
+                    Ok(FillValueMetadataV3::from(number.to_f64()))
+                }
+                #[cfg(not(feature = "float8"))]
+                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
+            }
             Self::Float4E2M1FN
             | Self::Float6E2M3FN
             | Self::Float6E3M2FN
             | Self::Float8E3M4
-            | Self::Float8E4M3
             | Self::Float8E4M3B11FNUZ
             | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2
             | Self::Float8E5M2FNUZ
             | Self::Float8E8M0FNU => {
                 // FIXME: Support normal floating point fill value metadata for these data types.
                 let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let hex_string = bytes_to_hex_string(&bytes);
-                Ok(FillValueMetadataV3::from(hex_string))
+                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
+            }
+            Self::ComplexFloat8E4M3 => {
+                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                #[cfg(feature = "float8")]
+                {
+                    let re = float8::F8E4M3::from_bits(bytes[0]);
+                    let im = float8::F8E4M3::from_bits(bytes[1]);
+                    let re = FillValueMetadataV3::from(re.to_f64());
+                    let im = FillValueMetadataV3::from(im.to_f64());
+                    Ok(FillValueMetadataV3::from([re, im]))
+                }
+                #[cfg(not(feature = "float8"))]
+                {
+                    let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
+                    let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
+                    Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
+                }
+            }
+            Self::ComplexFloat8E5M2 => {
+                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                #[cfg(feature = "float8")]
+                {
+                    let re = float8::F8E5M2::from_bits(bytes[0]);
+                    let im = float8::F8E5M2::from_bits(bytes[1]);
+                    let re = FillValueMetadataV3::from(re.to_f64());
+                    let im = FillValueMetadataV3::from(im.to_f64());
+                    Ok(FillValueMetadataV3::from([re, im]))
+                }
+                #[cfg(not(feature = "float8"))]
+                {
+                    let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
+                    let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
+                    Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
+                }
             }
             Self::ComplexFloat4E2M1FN
             | Self::ComplexFloat6E2M3FN
             | Self::ComplexFloat6E3M2FN
             | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3
             | Self::ComplexFloat8E4M3B11FNUZ
             | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2
             | Self::ComplexFloat8E5M2FNUZ
             | Self::ComplexFloat8E8M0FNU => {
                 // FIXME: Support normal floating point fill value metadata for these data types.
                 let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let hex_string_re = bytes_to_hex_string(&bytes[0..1]);
-                let hex_string_im = bytes_to_hex_string(&bytes[1..2]);
-                Ok(FillValueMetadataV3::from([
-                    FillValueMetadataV3::from(hex_string_re),
-                    FillValueMetadataV3::from(hex_string_im),
-                ]))
+                let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
+                let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
+                Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
             }
             Self::BFloat16 => {
                 let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
@@ -973,29 +1065,36 @@ impl core::fmt::Display for DataType {
     }
 }
 
-// copy of zarrs_metadata::v3::array::bytes_to_hex_string
-fn bytes_to_hex_string(v: &[u8]) -> String {
-    let mut string = String::with_capacity(2 + v.len() * 2);
+fn byte_to_hex_string(byte: u8) -> String {
+    let mut string = String::with_capacity(4);
     string.push('0');
     string.push('x');
-    for byte in v {
-        string.push(char::from_digit((byte / 16).into(), 16).unwrap());
-        string.push(char::from_digit((byte % 16).into(), 16).unwrap());
-    }
+    string.push(char::from_digit((byte / 16).into(), 16).unwrap());
+    string.push(char::from_digit((byte % 16).into(), 16).unwrap());
     string
 }
 
-// copy of zarrs_metadata::v3::array::hex_string_to_be_bytes
-fn hex_string_to_be_bytes(s: &str) -> Option<Vec<u8>> {
-    if s.starts_with("0x") && s.len() % 2 == 0 {
-        (2..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-            .collect::<Result<Vec<_>, _>>()
-            .ok()
-    } else {
-        None
+fn subfloat_hex_string_to_fill_value(fill_value: &FillValueMetadataV3) -> Option<FillValue> {
+    if let Some(s) = fill_value.as_str() {
+        if s.starts_with("0x") && s.len() == 4 {
+            return u8::from_str_radix(&s[2..4], 16).ok().map(FillValue::from);
+        }
     }
+    None
+}
+
+fn complex_subfloat_hex_string_to_fill_value(
+    fill_value: &FillValueMetadataV3,
+) -> Option<FillValue> {
+    if let Some([re, im]) = fill_value.as_array() {
+        if let (Some(re), Some(im)) = (
+            subfloat_hex_string_to_fill_value(re),
+            subfloat_hex_string_to_fill_value(im),
+        ) {
+            return Some(FillValue::from([re.as_ne_bytes()[0], im.as_ne_bytes()[0]]));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1538,6 +1637,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "float8"))]
     #[test]
     fn data_type_float8_e4m3() {
         let json = r#""float8_e4m3""#;
@@ -1553,6 +1653,72 @@ mod tests {
         assert_eq!(
             metadata,
             data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+    }
+
+    #[cfg(feature = "float8")]
+    #[test]
+    fn data_type_float8_e4m3() {
+        let json = r#""float8_e4m3""#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let data_type =
+            DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
+        assert_eq!(json, serde_json::to_string(&data_type.metadata()).unwrap());
+        assert_eq!(data_type.name(), "float8_e4m3");
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""0xaa""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        let metadata2 = serde_json::from_str::<FillValueMetadataV3>(r#"-0.3125"#).unwrap();
+        assert_eq!(fill_value.as_ne_bytes(), [170]);
+        assert_eq!(
+            metadata2,
+            data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""NaN""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert!(float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""Infinity""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::INFINITY
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""-Infinity""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::NEG_INFINITY
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"0"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::ZERO
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-0"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::NEG_ZERO
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-1"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::NEG_ONE
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"1"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::ONE
         );
     }
 
@@ -1592,6 +1758,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "float8"))]
     #[test]
     fn data_type_float8_e5m2() {
         let json = r#""float8_e5m2""#;
@@ -1607,6 +1774,72 @@ mod tests {
         assert_eq!(
             metadata,
             data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+    }
+
+    #[cfg(feature = "float8")]
+    #[test]
+    fn data_type_float8_e5m2() {
+        let json = r#""float8_e5m2""#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let data_type =
+            DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
+        assert_eq!(json, serde_json::to_string(&data_type.metadata()).unwrap());
+        assert_eq!(data_type.name(), "float8_e5m2");
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""0xaa""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        let metadata2 = serde_json::from_str::<FillValueMetadataV3>(r#"-0.046875"#).unwrap();
+        assert_eq!(fill_value.as_ne_bytes(), [170]);
+        assert_eq!(
+            metadata2,
+            data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""NaN""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert!(float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""Infinity""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::INFINITY
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""-Infinity""#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::NEG_INFINITY
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"0"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::ZERO
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-0"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::NEG_ZERO
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-1"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::NEG_ONE
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"1"#).unwrap();
+        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::ONE
         );
     }
 

@@ -34,6 +34,7 @@ dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
 async = ["dep:async-generic", "dep:async-trait", "dep:futures", "zarrs_storage/async"] # Enable experimental async API
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
+float8 = ["dep:float8"] # Adds support for float8 array elements
 
 [lints]
 workspace = true
@@ -85,6 +86,7 @@ async-lock = "3.4.0"
 zarrs_metadata_ext.workspace = true
 jiff = { version = "0.2.15", optional = true }
 chrono = { version = "0.4.39", optional = true }
+float8 = { version = "0.2.1", optional = true, features = ["bytemuck"] }
 
 [dependencies.num-complex]
 version = "0.4.3"
