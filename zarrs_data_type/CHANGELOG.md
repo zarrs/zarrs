@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Implement `From<num::complex::Complex<T>>` for `FillValue: From<T>`
+
 ## [0.3.1] - 2025-06-08
 
 ### Added
