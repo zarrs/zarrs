@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bump `bzip2` to 0.6.0
+- Bump `criterion` (dev) to 0.6.0
 
 ## [0.21.1] - 2025-06-16
 

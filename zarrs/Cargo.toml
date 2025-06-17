@@ -92,7 +92,7 @@ features = ["bytemuck"]
 
 [dev-dependencies]
 chrono = "0.4.39"
-criterion = "0.5.1"
+criterion = "0.6.0"
 object_store = { workspace = true, features = ["http"] }
 opendal = { workspace = true, features = ["services-fs", "services-http"] }
 tempfile = "3"
