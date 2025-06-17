@@ -100,6 +100,36 @@ pub const COMPLEX_FLOAT32: &str = "complex_float32";
 /// Unique identifier for the `complex_float64` data type (registered, `complex128` alias).
 pub const COMPLEX_FLOAT64: &str = "complex_float64";
 
+/// Unique identifier for the `complex_float4_e2m1fn` data type (registered).
+pub const COMPLEX_FLOAT4_E2M1FN: &str = "complex_float4_e2m1fn";
+
+/// Unique identifier for the `complex_float6_e2m3fn` data type (registered).
+pub const COMPLEX_FLOAT6_E2M3FN: &str = "complex_float6_e2m3fn";
+
+/// Unique identifier for the `complex_float6_e3m2fn` data type (registered).
+pub const COMPLEX_FLOAT6_E3M2FN: &str = "complex_float6_e3m2fn";
+
+/// Unique identifier for the `complex_float8_e3m4` data type (registered).
+pub const COMPLEX_FLOAT8_E3M4: &str = "complex_float8_e3m4";
+
+/// Unique identifier for the `complex_float8_e4m3` data type (registered).
+pub const COMPLEX_FLOAT8_E4M3: &str = "complex_float8_e4m3";
+
+/// Unique identifier for the `complex_float8_e4m3b11fnuz` data type (registered).
+pub const COMPLEX_FLOAT8_E4M3B11FNUZ: &str = "complex_float8_e4m3b11fnuz";
+
+/// Unique identifier for the `complex_float8_e4m3fnuz` data type (registered).
+pub const COMPLEX_FLOAT8_E4M3FNUZ: &str = "complex_float8_e4m3fnuz";
+
+/// Unique identifier for the `complex_float8_e5m2` data type (registered).
+pub const COMPLEX_FLOAT8_E5M2: &str = "complex_float8_e5m2";
+
+/// Unique identifier for the `complex_float8_e5m2fnuz` data type (registered).
+pub const COMPLEX_FLOAT8_E5M2FNUZ: &str = "complex_float8_e5m2fnuz";
+
+/// Unique identifier for the `complex_float8_e8m0fnu` data type (registered).
+pub const COMPLEX_FLOAT8_E8M0FNU: &str = "complex_float8_e8m0fnu";
+
 /// Unique identifier for the `string` data type (registered).
 pub const STRING: &str = "string";
 
