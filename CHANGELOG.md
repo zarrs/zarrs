@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add complex variants of `float4_e2m1fn`, `float6_{e2m3fn,e3m2fn}`, `float8_{e3m4,e4m3,e4m3b11fnuz,e4m3fnuz,e5m2,e5m2fnuz,e8m0fnu}` data types
+- Add `float8` feature enabling the use of `float8::F8E4M3` and `float8::F8E5M2` in `Array::*_elements` methods
 
 ### Changed
 - Bump `bzip2` to 0.6.0

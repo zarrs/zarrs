@@ -169,7 +169,7 @@
 //!
 //! ## Crate Features
 //! #### Default
-//!  - `filesystem`: Re-export `zarrs_filesystem` as `zarrs::filesystem`
+//!  - `filesystem`: Re-export [`zarrs_filesystem`] as [`zarrs::filesystem`](crate::filesystem`).
 //!  - `ndarray`: [`ndarray`] utility functions for [`Array`](crate::array::Array).
 //!  - Codecs: `blosc`, `crc32c`, `gzip`, `sharding`, `transpose`, `zstd`.
 //!
@@ -177,8 +177,12 @@
 //!  - `async`: an **experimental** asynchronous API for [`stores`](storage), [`Array`](crate::array::Array), and [`Group`](group::Group).
 //!    - The async API is runtime-agnostic. This has some limitations that are detailed in the [`Array`](crate::array::Array) docs.
 //!    - The async API is not as performant as the sync API.
-//!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array)
 //!  - Codecs: `bitround`, `bz2`, `fletcher32`, `gdeflate`, `pcodec`, `zfp`, `zlib`.
+//!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array).
+//!  - Additional [`Element`](crate::array::Element)/[`ElementOwned`](crate::array::ElementOwned) implementations:
+//!    - `float8`: add support for [`float8`] subfloat data types.
+//!    - `jiff`: add support for [`jiff`] time data types.
+//!    - `chrono`: add support for [`chrono`] time data types.
 //!
 //! ## `zarrs` Ecosystem
 #![doc = include_str!("../doc/ecosystem.md")]
