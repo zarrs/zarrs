@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bump minimum `serde` to 1.0.203
+- Bump minimum `half` to 2.4.1
 
 ## [0.5.0] - 2025-05-16
 
