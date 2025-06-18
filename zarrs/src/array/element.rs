@@ -329,3 +329,15 @@ impl ElementOwned for Vec<u8> {
         Ok(elements)
     }
 }
+
+#[cfg(feature = "float8")]
+impl_element_pod!(float8::F8E4M3, DataType::Float8E4M3);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(float8::F8E5M2, DataType::Float8E5M2);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(num::Complex<float8::F8E4M3>, DataType::ComplexFloat8E4M3);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(num::Complex<float8::F8E5M2>, DataType::ComplexFloat8E5M2);
