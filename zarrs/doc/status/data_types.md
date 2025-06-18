@@ -16,8 +16,8 @@
 | [`Float4E2M1FN`]†             | float4_e2m1fn              |             |                                               |
 | [`Float6E2M3FN`]†             | float6_e2m3fn              |             |                                               |
 | [`Float6E3M2FN`]†             | float6_e3m2fn              |             |                                               |
-| [`Float8E3M4`]†               | float8_e3m4                |             | [`float8::F8E4M3`] (`float8`)                 |
-| [`Float8E4M3`]†               | float8_e4m3                |             |                                               |
+| [`Float8E3M4`]†               | float8_e3m4                |             |                                               |
+| [`Float8E4M3`]†               | float8_e4m3                |             |  [`float8::F8E4M3`] (`float8`)                |
 | [`Float8E4M3B11FNUZ`]†        | float8_e4m3b11fnuz         |             |                                               |
 | [`Float8E4M3FNUZ`]†           | float8_e4m3fnuz            |             |                                               |
 | [`Float8E5M2`]†               | float8_e5m2                |             | [`float8::F8E5M2`] (`float8`)                 |
