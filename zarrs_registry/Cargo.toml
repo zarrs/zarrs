@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_registry"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"

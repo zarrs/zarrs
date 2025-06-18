@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `data_type::COMPLEX_FLOAT4_E2M1FN`
+- Add `data_type::COMPLEX_FLOAT6_{E2M3FN,E3M2FN}`
+- Add `data_type::FLOAT8_{E3M4,E4M3,E4M3B11FNUZ,E4M3FNUZ,E5M2,E5M2FNUZ,E8M0FNU}`
+
 ## [0.1.3] - 2025-06-16
 
 ### Added

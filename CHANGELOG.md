@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add complex variants of `float4_e2m1fn`, `float6_{e2m3fn,e3m2fn}`, `float8_{e3m4,e4m3,e4m3b11fnuz,e4m3fnuz,e5m2,e5m2fnuz,e8m0fnu}` data types
+
 ### Changed
 - Bump `bzip2` to 0.6.0
 - Bump `criterion` (dev) to 0.6.0

@@ -112,6 +112,26 @@ pub enum DataType {
     ComplexFloat32,
     /// `complex_float64` real and complex components are each IEEE 754 double-precision floating point.
     ComplexFloat64,
+    /// `complex_float4_e2m1fn` real and complex components are each the `float4_e2m1fn` type.
+    ComplexFloat4E2M1FN,
+    /// `complex_float6_e2m3fn` real and complex components are each the `float6_e2m3fn` type.
+    ComplexFloat6E2M3FN,
+    /// `complex_float6_e3m2fn` real and complex components are each the `float6_e3m2fn` type.
+    ComplexFloat6E3M2FN,
+    /// `complex_float8_e3m4` real and complex components are each the `float8_e3m4` type.
+    ComplexFloat8E3M4,
+    /// `complex_float8_e4m3` real and complex components are each the `float8_e4m3` type.
+    ComplexFloat8E4M3,
+    /// `complex_float8_e4m3b11fnuz` real and complex components are each the `float8_e4m3b11fnuz` type.
+    ComplexFloat8E4M3B11FNUZ,
+    /// `complex_float8_e4m3fnuz` real and complex components are each the `float8_e4m3fnuz` type.
+    ComplexFloat8E4M3FNUZ,
+    /// `complex_float8_e5m2` real and complex components are each the `float8_e5m2` type.
+    ComplexFloat8E5M2,
+    /// `complex_float8_e5m2fnuz` real and complex components are each the `float8_e5m2fnuz` type.
+    ComplexFloat8E5M2FNUZ,
+    /// `complex_float8_e8m0fnu` real and complex components are each the `float8_e8m0fnu` type.
+    ComplexFloat8E8M0FNU,
     /// `complex64` real and complex components are each IEEE 754 single-precision floating point.
     Complex64,
     /// `complex128` real and complex components are each IEEE 754 double-precision floating point.
@@ -196,6 +216,30 @@ impl DataType {
             Self::ComplexFloat16 => zarrs_registry::data_type::COMPLEX_FLOAT16.to_string(),
             Self::ComplexFloat32 => zarrs_registry::data_type::COMPLEX_FLOAT32.to_string(),
             Self::ComplexFloat64 => zarrs_registry::data_type::COMPLEX_FLOAT64.to_string(),
+            Self::ComplexFloat4E2M1FN => {
+                zarrs_registry::data_type::COMPLEX_FLOAT4_E2M1FN.to_string()
+            }
+            Self::ComplexFloat6E2M3FN => {
+                zarrs_registry::data_type::COMPLEX_FLOAT6_E2M3FN.to_string()
+            }
+            Self::ComplexFloat6E3M2FN => {
+                zarrs_registry::data_type::COMPLEX_FLOAT6_E3M2FN.to_string()
+            }
+            Self::ComplexFloat8E3M4 => zarrs_registry::data_type::COMPLEX_FLOAT8_E3M4.to_string(),
+            Self::ComplexFloat8E4M3 => zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3.to_string(),
+            Self::ComplexFloat8E4M3B11FNUZ => {
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3B11FNUZ.to_string()
+            }
+            Self::ComplexFloat8E4M3FNUZ => {
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3FNUZ.to_string()
+            }
+            Self::ComplexFloat8E5M2 => zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2.to_string(),
+            Self::ComplexFloat8E5M2FNUZ => {
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2FNUZ.to_string()
+            }
+            Self::ComplexFloat8E8M0FNU => {
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E8M0FNU.to_string()
+            }
             Self::RawBits(size) => format!("r{}", size * 8),
             Self::String => zarrs_registry::data_type::STRING.to_string(),
             Self::Bytes => zarrs_registry::data_type::BYTES.to_string(),
@@ -250,6 +294,36 @@ impl DataType {
             Self::ComplexFloat16 => MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT16),
             Self::ComplexFloat32 => MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT32),
             Self::ComplexFloat64 => MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT64),
+            Self::ComplexFloat4E2M1FN => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT4_E2M1FN)
+            }
+            Self::ComplexFloat6E2M3FN => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT6_E2M3FN)
+            }
+            Self::ComplexFloat6E3M2FN => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT6_E3M2FN)
+            }
+            Self::ComplexFloat8E3M4 => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E3M4)
+            }
+            Self::ComplexFloat8E4M3 => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3)
+            }
+            Self::ComplexFloat8E4M3B11FNUZ => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3B11FNUZ)
+            }
+            Self::ComplexFloat8E4M3FNUZ => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3FNUZ)
+            }
+            Self::ComplexFloat8E5M2 => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2)
+            }
+            Self::ComplexFloat8E5M2FNUZ => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2FNUZ)
+            }
+            Self::ComplexFloat8E8M0FNU => {
+                MetadataV3::new(zarrs_registry::data_type::COMPLEX_FLOAT8_E8M0FNU)
+            }
             Self::RawBits(size) => MetadataV3::new(format!("r{}", size * 8)),
             Self::String => MetadataV3::new(zarrs_registry::data_type::STRING),
             Self::Bytes => MetadataV3::new(zarrs_registry::data_type::BYTES),
@@ -294,7 +368,20 @@ impl DataType {
             | Self::Float8E5M2
             | Self::Float8E5M2FNUZ
             | Self::Float8E8M0FNU => DataTypeSize::Fixed(1),
-            Self::Int16 | Self::UInt16 | Self::Float16 | Self::BFloat16 => DataTypeSize::Fixed(2),
+            Self::Int16
+            | Self::UInt16
+            | Self::Float16
+            | Self::BFloat16
+            | Self::ComplexFloat4E2M1FN
+            | Self::ComplexFloat6E2M3FN
+            | Self::ComplexFloat6E3M2FN
+            | Self::ComplexFloat8E3M4
+            | Self::ComplexFloat8E4M3
+            | Self::ComplexFloat8E4M3B11FNUZ
+            | Self::ComplexFloat8E4M3FNUZ
+            | Self::ComplexFloat8E5M2
+            | Self::ComplexFloat8E5M2FNUZ
+            | Self::ComplexFloat8E8M0FNU => DataTypeSize::Fixed(2),
             Self::Int32
             | Self::UInt32
             | Self::Float32
@@ -603,6 +690,31 @@ impl DataType {
                     Err(err0())?
                 }
             }
+            Self::ComplexFloat4E2M1FN
+            | Self::ComplexFloat6E2M3FN
+            | Self::ComplexFloat6E3M2FN
+            | Self::ComplexFloat8E3M4
+            | Self::ComplexFloat8E4M3
+            | Self::ComplexFloat8E4M3B11FNUZ
+            | Self::ComplexFloat8E4M3FNUZ
+            | Self::ComplexFloat8E5M2
+            | Self::ComplexFloat8E5M2FNUZ
+            | Self::ComplexFloat8E8M0FNU => {
+                // FIXME: Support normal floating point fill value metadata for these data types.
+                if let Some([re, im]) = fill_value.as_array() {
+                    let re = re.as_str().ok_or_else(err0)?;
+                    let im = im.as_str().ok_or_else(err0)?;
+                    if let (Some(re), Some(im)) =
+                        (hex_string_to_be_bytes(re), hex_string_to_be_bytes(im))
+                    {
+                        Ok(FV::from(re.into_iter().chain(im).collect::<Vec<u8>>()))
+                    } else {
+                        Err(err0())?
+                    }
+                } else {
+                    Err(err0())?
+                }
+            }
             Self::RawBits(size) => {
                 let bytes = fill_value.as_bytes().ok_or_else(err0)?;
                 if bytes.len() == *size {
@@ -746,6 +858,25 @@ impl DataType {
                 let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
                 let hex_string = bytes_to_hex_string(&bytes);
                 Ok(FillValueMetadataV3::from(hex_string))
+            }
+            Self::ComplexFloat4E2M1FN
+            | Self::ComplexFloat6E2M3FN
+            | Self::ComplexFloat6E3M2FN
+            | Self::ComplexFloat8E3M4
+            | Self::ComplexFloat8E4M3
+            | Self::ComplexFloat8E4M3B11FNUZ
+            | Self::ComplexFloat8E4M3FNUZ
+            | Self::ComplexFloat8E5M2
+            | Self::ComplexFloat8E5M2FNUZ
+            | Self::ComplexFloat8E8M0FNU => {
+                // FIXME: Support normal floating point fill value metadata for these data types.
+                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+                let hex_string_re = bytes_to_hex_string(&bytes[0..1]);
+                let hex_string_im = bytes_to_hex_string(&bytes[1..2]);
+                Ok(FillValueMetadataV3::from([
+                    FillValueMetadataV3::from(hex_string_re),
+                    FillValueMetadataV3::from(hex_string_im),
+                ]))
             }
             Self::BFloat16 => {
                 let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;

@@ -91,6 +91,16 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
         | DataType::Float8E5M2
         | DataType::Float8E5M2FNUZ
         | DataType::Float8E8M0FNU
+        | DataType::ComplexFloat4E2M1FN
+        | DataType::ComplexFloat6E2M3FN
+        | DataType::ComplexFloat6E3M2FN
+        | DataType::ComplexFloat8E3M4
+        | DataType::ComplexFloat8E4M3
+        | DataType::ComplexFloat8E4M3B11FNUZ
+        | DataType::ComplexFloat8E4M3FNUZ
+        | DataType::ComplexFloat8E5M2
+        | DataType::ComplexFloat8E5M2FNUZ
+        | DataType::ComplexFloat8E8M0FNU
         | DataType::RawBits(_) => {}
         DataType::Int16
         | DataType::UInt16
