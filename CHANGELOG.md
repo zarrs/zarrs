@@ -7,14 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2] - 2025-06-19
+
 ### Added
 - Add complex variants of `float4_e2m1fn`, `float6_{e2m3fn,e3m2fn}`, `float8_{e3m4,e4m3,e4m3b11fnuz,e4m3fnuz,e5m2,e5m2fnuz,e8m0fnu}` data types
 - Add `float8` feature enabling the use of `float8::F8E4M3` and `float8::F8E5M2` in `Array::*_elements` methods
 
 ### Changed
+- Cleanup `zarrs` root docs and README
 - Bump `bzip2` to 0.6.0
 - Bump `criterion` (dev) to 0.6.0
 - Bump `zip` (dev) to 4.0.0
+- Bump `zarrs_registry` to 0.1.4
+- Bump `zarrs_data_type` to 0.3.2
+- Bump `zarrs_zip` to 0.2.3
 
 ## [0.21.1] - 2025-06-16
 
@@ -1397,7 +1403,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.2...HEAD
+[0.21.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.2
 [0.21.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.1
 [0.21.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.0
 [0.20.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.1
