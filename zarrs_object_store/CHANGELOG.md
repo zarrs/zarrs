@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `fs`, `aws`, `azure`, `gcp` and `http` features to enable `object_store` features of the same name
+
 ## [0.4.2] - 2025-05-16
 
 ## Changed
