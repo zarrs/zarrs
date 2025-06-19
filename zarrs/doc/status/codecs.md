@@ -1,29 +1,29 @@
-| Codec Type     | Default codec `name`               | Specification                       | Feature Flag* |
+| Codec Type     | V3 `name`                          | V2 `id`                             | Feature Flag* |
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
-| Array to Array | [`transpose`]                      | [Zarr V3.0 Transpose]               | **transpose** |
-|                | [`numcodecs.fixedscaleoffset`]     | Experimental                        |               |
-|                | [`numcodecs.bitround`]†            | Experimental                        | bitround      |
-|                | [`zarrs.squeeze`]                  | Experimental                        |               |
-| Array to Bytes | [`bytes`]                          | [Zarr V3.0 Bytes]                   |               |
-|                | [`sharding_indexed`]               | [Zarr V3.0 Sharding]                | **sharding**  |
-|                | [`vlen-array`]                     | Experimental                        |               |
-|                | [`vlen-bytes`]                     | [zarr-extensions/codecs/vlen-bytes] |               |
-|                | [`vlen-utf8`]                      | [zarr-extensions/codecs/vlen-utf8]  |               |
-|                | [`numcodecs.pcodec`]               | Experimental                        | pcodec        |
-|                | [`numcodecs.zfpy`]                 | Experimental                        | zfp           |
-|                | [`packbits`]                       | [zarr-extensions/codecs/packbits]   |               |
-|                | [`zarrs.vlen`]                     | Experimental                        |               |
-|                | [`zarrs.vlen_v2`]                  | Experimental                        |               |
-|                | [`zfp`]                            | [zarr-extensions/codecs/zfp]        | zfp           |
-| Bytes to Bytes | [`blosc`]                          | [Zarr V3.0 Blosc]                   | **blosc**     |
-|                | [`crc32c`]                         | [Zarr V3.0 CRC32C]                  | **crc32c**    |
-|                | [`gzip`]                           | [Zarr V3.0 Gzip]                    | **gzip**      |
-|                | [`zstd`]                           | [zarr-extensions/codecs/zstd]       | **zstd**      |
-|                | [`numcodecs.bz2`]                  | Experimental                        | bz2           |
-|                | [`numcodecs.fletcher32`]           | Experimental                        | fletcher32    |
-|                | [`numcodecs.shuffle`]              | Experimental                        |               |
-|                | [`numcodecs.zlib`]                 | Experimental                        | zlib          |
-|                | [`zarrs.gdeflate`]                 | Experimental                        | gdeflate      |
+| Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
+|                | ~~[`numcodecs.fixedscaleoffset`]~~ | `fixedscaleoffset`                  |               |
+|                | ~~[`numcodecs.bitround`]~~†        | `bitround`                          | bitround      |
+|                | ~~[`zarrs.squeeze`]~~              | -                                   |               |
+| Array to Bytes | [`bytes`]                          | -                                   |               |
+|                | [`sharding_indexed`]               | -                                   | **sharding**  |
+|                | ~~[`vlen-array`]~~                 | `vlen-array`                        |               |
+|                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
+|                | [`vlen-utf8`]                      | `vlen-utf8`                         |               |
+|                | [`packbits`]                       | `packbits`                          |               |
+|                | ~~[`numcodecs.pcodec`]~~           | `pcodec`                            | pcodec        |
+|                | ~~[`numcodecs.zfpy`]~~             | `zfpy`                              | zfp           |
+|                | ~~[`zarrs.vlen`]~~                 | -                                   |               |
+|                | ~~[`zarrs.vlen_v2`]~~              | -                                   |               |
+|                | [`zfp`]                            | -                                   | zfp           |
+| Bytes to Bytes | [`blosc`]                          | `blosc`                             | **blosc**     |
+|                | [`crc32c`]                         | `crc32c`                            | **crc32c**    |
+|                | [`gzip`]                           | `gzip`                              | **gzip**      |
+|                | [`zstd`]                           | `zstd`                              | **zstd**      |
+|                | ~~[`numcodecs.bz2`]~~              | `bz2`                               | bz2           |
+|                | ~~[`numcodecs.fletcher32`]~~       | `fletcher32`                        | fletcher32    |
+|                | ~~[`numcodecs.shuffle`]~~          | `shuffle`                           |               |
+|                | ~~[`numcodecs.zlib`]~~             | `zlib`                              | zlib          |
+|                | ~~[`zarrs.gdeflate`]~~             | -                                   | gdeflate      |
 
 <sup>\* Bolded feature flags are part of the default set of features.</sup>
 <sup>† `numcodecs.bitround` supports additional data types not supported by `zarr-python`/`numcodecs`</sup>
@@ -68,15 +68,4 @@
 [`numcodecs.zlib`]: crate::array::codec::bytes_to_bytes::zlib
 [`zarrs.gdeflate`]: crate::array::codec::bytes_to_bytes::gdeflate
 
-Codecs have three potential statuses:
-- *Core*: These are defined in the Zarr V3 specification and are fully supported.
-- *Registered*: These are specified at <https://github.com/zarr-developers/zarr-extensions/> and are fully supported unless otherwise indicated.
-- *Experimental*: These are **recommended for evaluation only**.
-  - These codecs may have no formal specification or are pending registration at <https://github.com/zarr-developers/zarr-extensions/>.
-  - These codecs may change in future releases without maintaining backwards compatibility.
-
-Codec `name`s and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and [`Config::codec_aliases_v2_mut`](config::Config::codec_aliases_v2_mut).
-`zarrs` will persist codec names if opening an existing array of creating an array from metadata.
-
-`zarrs` supports arrays created with `zarr-python` 3.x.x with various `numcodecs.zarr3` codecs.
-However, arrays must be written with `numcodecs` 0.15.1+.
+`zarrs` supports arrays created with `zarr-python` 3.0.0+ and `numcodecs` 0.15.1+ with various `numcodecs.zarr3` codecs.

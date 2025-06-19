@@ -1,7 +1,7 @@
 | Chunk Grid                   | ZEP               | V3      | V2      | Feature Flag |
 | ---------------------------- | ----------------- | ------- | ------- | ------------ |
 | [regular]                    | [ZEP0001]         | &check; | &check; |              |
-| [rectangular] (experimental) | [ZEP0003] (draft) | &check; |         |              |
+| ~~[rectangular]~~            | [ZEP0003] (draft) | &check; |         |              |
 
 [regular]: crate::array::chunk_grid::RegularChunkGrid
 [rectangular]: crate::array::chunk_grid::RectangularChunkGrid
