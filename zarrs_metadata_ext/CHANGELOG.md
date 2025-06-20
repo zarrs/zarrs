@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Breaking**: add `data_type` parameter to `v2_to_v3::fill_value_metadata_v2_to_v3()` ([#207] by [@jder])
+- Map Zarr V2 `null` fill valus to a default for more data types ([#207] by [@jder])
+  - This matches the behaviour of `zarr-python` 3.0.3+
 - Bump minimum `half` to 2.4.1
+
+[#207]: https://github.com/zarrs/zarrs/pull/207
 
 ## [0.1.1] - 2025-06-16
 
@@ -33,3 +38,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.1.1...HEAD
 [0.1.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.1
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.0
+
+[@jder]: https://github.com/jder
