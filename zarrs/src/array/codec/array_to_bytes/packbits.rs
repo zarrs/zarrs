@@ -116,6 +116,29 @@ fn pack_bits_components(
             num_components: 1,
             sign_extension: false,
         }),
+        DataType::ComplexFloat4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
+            component_size_bits: 4,
+            num_components: 2,
+            sign_extension: false,
+        }),
+        DataType::ComplexFloat6E2M3FN | DataType::ComplexFloat6E3M2FN => {
+            Ok(DataTypeExtensionPackBitsCodecComponents {
+                component_size_bits: 6,
+                num_components: 2,
+                sign_extension: false,
+            })
+        }
+        DataType::ComplexFloat8E3M4
+        | DataType::ComplexFloat8E4M3
+        | DataType::ComplexFloat8E4M3B11FNUZ
+        | DataType::ComplexFloat8E4M3FNUZ
+        | DataType::ComplexFloat8E5M2
+        | DataType::ComplexFloat8E5M2FNUZ
+        | DataType::ComplexFloat8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
+            component_size_bits: 8,
+            num_components: 2,
+            sign_extension: false,
+        }),
         DT::Int8 => Ok(DataTypeExtensionPackBitsCodecComponents {
             component_size_bits: 8,
             num_components: 1,
@@ -141,7 +164,15 @@ fn pack_bits_components(
             num_components: 1,
             sign_extension: false,
         }),
-        DT::Int32 => Ok(DataTypeExtensionPackBitsCodecComponents {
+        DT::Int32
+        | DT::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DT::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(DataTypeExtensionPackBitsCodecComponents {
             component_size_bits: 32,
             num_components: 1,
             sign_extension: true,

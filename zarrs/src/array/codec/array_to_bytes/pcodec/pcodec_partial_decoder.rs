@@ -88,7 +88,15 @@ fn do_partial_decode<'a>(
                 DataType::Int32 => {
                     pcodec_partial_decode!(i32);
                 }
-                DataType::Int64 => {
+                DataType::Int64
+                | DataType::NumpyDateTime64 {
+                    unit: _,
+                    scale_factor: _,
+                }
+                | DataType::NumpyTimeDelta64 {
+                    unit: _,
+                    scale_factor: _,
+                } => {
                     pcodec_partial_decode!(i64);
                 }
                 DataType::Float16 | DataType::ComplexFloat16 => {

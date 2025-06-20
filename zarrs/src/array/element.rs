@@ -7,6 +7,8 @@ use super::{
     convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayError, DataType, RawBytesOffsets,
 };
 
+mod numpy;
+
 /// A trait representing an array element type.
 pub trait Element: Sized + Clone {
     /// Validate the data type.
@@ -130,7 +132,18 @@ macro_rules! impl_element_pod {
 impl_element_pod!(i8, DataType::Int8 | DataType::Int4 | DataType::Int2);
 impl_element_pod!(i16, DataType::Int16);
 impl_element_pod!(i32, DataType::Int32);
-impl_element_pod!(i64, DataType::Int64);
+impl_element_pod!(
+    i64,
+    DataType::Int64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _
+        }
+);
 impl_element_pod!(u8, DataType::UInt8 | DataType::UInt4 | DataType::UInt2);
 impl_element_pod!(u16, DataType::UInt16);
 impl_element_pod!(u32, DataType::UInt32);
@@ -316,3 +329,15 @@ impl ElementOwned for Vec<u8> {
         Ok(elements)
     }
 }
+
+#[cfg(feature = "float8")]
+impl_element_pod!(float8::F8E4M3, DataType::Float8E4M3);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(float8::F8E5M2, DataType::Float8E5M2);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(num::Complex<float8::F8E4M3>, DataType::ComplexFloat8E4M3);
+
+#[cfg(feature = "float8")]
+impl_element_pod!(num::Complex<float8::F8E5M2>, DataType::ComplexFloat8E5M2);

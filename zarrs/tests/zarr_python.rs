@@ -71,3 +71,42 @@ fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[test]
+fn zarr_python_v2_compat_bool_fv_null() -> Result<(), Box<dyn Error>> {
+    let store = Arc::new(FilesystemStore::new(
+        "tests/data/zarr_python_compat/bool_v2_fv_null.zarr",
+    )?);
+    let array = Array::open(store, "/")?;
+    let subset_all = array.subset_all();
+    let elements = array.retrieve_array_subset_elements::<bool>(&subset_all)?;
+    assert_eq!(elements, &[true, false, false, false, false]);
+
+    Ok(())
+}
+
+#[test]
+fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
+    let store = Arc::new(FilesystemStore::new(
+        "tests/data/zarr_python_compat/int_v2_fv_null.zarr",
+    )?);
+    let array = Array::open(store, "/")?;
+    let subset_all = array.subset_all();
+    let elements = array.retrieve_array_subset_elements::<i32>(&subset_all)?;
+    assert_eq!(elements, &[42, 123, 0, 0, 0]);
+
+    Ok(())
+}
+
+#[test]
+fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
+    let store = Arc::new(FilesystemStore::new(
+        "tests/data/zarr_python_compat/float_v2_fv_null.zarr",
+    )?);
+    let array = Array::open(store, "/")?;
+    let subset_all = array.subset_all();
+    let elements = array.retrieve_array_subset_elements::<f32>(&subset_all)?;
+    assert_eq!(elements, &[3.14, 2.71, 0.0, 0.0, 0.0]);
+
+    Ok(())
+}
