@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_metadata_ext"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"
