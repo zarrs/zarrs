@@ -225,7 +225,7 @@ pub fn data_type_metadata_v2_to_endianness(
 
 /// Zarr V2 fill value metadata.
 ///
-/// Provides the default value to use for uninitialized portions of the array, or null if no fill value is to be used.
+/// Provides the default value to use for uninitialized portions of the array, or null if a default fill value is to be used.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FillValueMetadataV2 {
     /// No fill value.
