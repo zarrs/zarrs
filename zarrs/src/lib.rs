@@ -11,7 +11,7 @@
 //!   - ZEP 0007: Strings
 //!   - ZEP 0009: Zarr Extension Naming
 //! - various registered extensions from [zarr-developers/zarr-extensions/](https://github.com/zarr-developers/zarr-extensions/),
-//! - experimental codecs and data types intended for future registration, and
+//! - experimental codecs intended for future registration, and
 //! - user-defined custom extensions and stores.
 //!
 //! A changelog can be found [here](https://github.com/zarrs/zarrs/blob/main/CHANGELOG.md).
@@ -20,15 +20,11 @@
 //! Developed at the [Department of Materials Physics](https://physics.anu.edu.au/research/mp/), Australian National University, Canberra, Australia.
 //!
 //! ## Getting Started
-//! - Review the [implementation status](#implementation-status) which summarises zarr version support, array support (codecs, data types, etc.) and storage support.
-//! - Read [The `zarrs` Book].
-//! - View the [examples](https://github.com/zarrs/zarrs/tree/main/zarrs/examples) and [the example below](#examples).
-//! - Read the [documentation](https://docs.rs/zarrs/latest/zarrs/).
-//! - Check out the [`zarrs` ecosystem](#zarrs-ecosystem).
+//! - Review the [Zarr version support](#zarr-version-support), [array extension support](#array-extension-support) (codecs, data types, etc.), [storage support](#storage-support), and the [`zarrs` ecosystem](#zarrs-ecosystem).
+//! - View the [the examples](#examples) below.
+//! - Read the [documentation](https://docs.rs/zarrs/latest/zarrs/) and [The `zarrs` Book].
 //!
-//! ## Implementation Status
-//!
-//! #### Zarr Version Support
+//! ### Zarr Version Support
 //!
 //! `zarrs` has first-class Zarr V3 support and additionally supports a *compatible subset* of Zarr V2 data that:
 //! - can be converted to V3 with only a metadata change, and
@@ -36,41 +32,45 @@
 //!
 //! `zarrs` supports forward conversion from Zarr V2 to V3. See ["Converting Zarr V2 to V3"](https://book.zarrs.dev/v2_to_v3.html) in [The `zarrs` Book], or try the [`zarrs_reencode`](https://github.com/zarrs/zarrs_tools/blob/main/docs/zarrs_reencode.md) CLI tool.
 //!
-//! #### Array Support
+//! ### Array Extension Support
 //!
-//! <details><summary>Data Types</summary>
+//! Extensions are grouped into three categories:
+//! - *Core*: defined in the Zarr V3 specification and are fully supported.
+//! - *Registered*: specified at <https://github.com/zarr-developers/zarr-extensions/>
+//!   - Registered extensions listed in the below tables are fully supported unless otherwise indicated.
+//! - *Experimental*: **recommended for evaluation only** and are ~~striked out~~ in the tables below.
+//!   - Experimental extensions are either pending registration or have no formal specification outside of the `zarrs` docs.
+//!   - Experimental extensions may be unrecognised or incompatible with other Zarr implementations.
+//!   - Experimental extensions may change in future releases without maintaining backwards compatibility.
+//!
+//! Extension names and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and similar methods for data types and Zarr V2.
+//! `zarrs` will persist extension names if opening an existing array of creating an array from metadata.
+//!
+//! #### Data Types
 //!
 #![doc = include_str!("../doc/status/data_types.md")]
-//! </details>
 //!
-//! <details><summary>Codecs</summary>
+//! #### Codecs
 //!
 #![doc = include_str!("../doc/status/codecs.md")]
-//! </details>
 //!
-//! <details><summary>Chunk Grids</summary>
+//! #### Chunk Grids
 //!
 #![doc = include_str!("../doc/status/chunk_grids.md")]
-//! </details>
 //!
-//! <details><summary>Chunk Key Encodings</summary>
+//! #### Chunk Key Encodings
 //!
 #![doc = include_str!("../doc/status/chunk_key_encodings.md")]
-//! </details>
 //!
-//! <details><summary>Storage Transformers</summary>
+//! #### Storage Transformers
 //!
 #![doc = include_str!("../doc/status/storage_transformers.md")]
-//! </details>
 //!
-//! #### Storage Support
+//! ### Storage Support
 //!
 //! `zarrs` supports a huge range of stores (including custom stores) via the [`zarrs_storage`] API.
 //!
-//! <details><summary>Stores</summary>
-//!
 #![doc = include_str!("../doc/status/stores.md")]
-//! </details>
 //!
 //! [`opendal`]: https://docs.rs/opendal/latest/opendal/
 //! [`object_store`]: https://docs.rs/object_store/latest/object_store/
@@ -92,38 +92,41 @@
 #![cfg_attr(feature = "ndarray", doc = "```rust")]
 #![cfg_attr(not(feature = "ndarray"), doc = "```rust,ignore")]
 //! # use std::{path::PathBuf, sync::Arc};
-//! use zarrs::group::GroupBuilder;
-//! use zarrs::array::{ArrayBuilder, DataType, FillValue, ZARR_NAN_F32};
-//! # #[cfg(feature = "gzip")]
-//! use zarrs::array::codec::GzipCodec; // requires gzip feature
-//! use zarrs::array_subset::ArraySubset;
-//! use zarrs::storage::ReadableWritableListableStorage;
-//! use zarrs::filesystem::FilesystemStore; // requires filesystem feature
 //!
 //! // Create a filesystem store
 //! let store_path: PathBuf = "/path/to/hierarchy.zarr".into();
 //! # let store_path: PathBuf = "tests/data/array_write_read.zarr".into();
-//! let store: ReadableWritableListableStorage =
-//!     Arc::new(FilesystemStore::new(&store_path)?);
+//! let store: zarrs::storage::ReadableWritableListableStorage = Arc::new(
+//!     // zarrs::filesystem requires the filesystem feature
+//!     zarrs::filesystem::FilesystemStore::new(&store_path)?
+//! );
 //! # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 //!
 //! // Write the root group metadata
-//! GroupBuilder::new()
+//! zarrs::group::GroupBuilder::new()
 //!     .build(store.clone(), "/")?
 //!     // .attributes(...)
 //!     .store_metadata()?;
 //!
-//! // Create a new V3 array using the array builder
-//! let array = ArrayBuilder::new(
+//! // Create a new sharded V3 array using the array builder
+//! let array = zarrs::array::ArrayBuilder::new(
 //!     vec![3, 4], // array shape
-//!     DataType::Float32,
-//!     vec![2, 2].try_into()?, // regular chunk shape (non-zero elements)
-//!     FillValue::from(ZARR_NAN_F32),
+//!     zarrs::array::DataType::Float32,
+//!     vec![2, 2].try_into()?, // regular chunk (shard) shape
+//!     zarrs::array::FillValue::from(0.0f32),
 //! )
-//! .bytes_to_bytes_codecs(vec![
-//! #     #[cfg(feature = "gzip")]
-//!     Arc::new(GzipCodec::new(5)?),
-//! ])
+//! .array_to_bytes_codec(Arc::new(
+//!     // The sharding codec requires the sharding feature
+//!     zarrs::array::codec::ShardingCodecBuilder::new(
+//!         [2, 1].try_into()? // inner chunk shape
+//!     )
+//!     .bytes_to_bytes_codecs(vec![
+//!         // GzipCodec requires the gzip feature
+//! #       #[cfg(feature = "gzip")]
+//!         Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+//!     ])
+//!     .build()
+//! ))
 //! .dimension_names(["y", "x"].into())
 //! .attributes(serde_json::json!({"Zarr V3": "is great"}).as_object().unwrap().clone())
 //! .build(store.clone(), "/array")?; // /path/to/hierarchy.zarr/array
@@ -137,7 +140,7 @@
 //! //     ...
 //! // }
 //!
-//! // Perform some operations on the chunks
+//! // Perform some write operations on the chunks
 //! array.store_chunk_elements::<f32>(
 //!     &[0, 1], // chunk index
 //!     &[0.2, 0.3, 1.2, 1.3]
@@ -149,16 +152,36 @@
 //! array.erase_chunk(&[1, 1])?;
 //!
 //! // Retrieve all array elements as an ndarray
-//! let array_ndarray = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
-//! println!("{array_ndarray:4}");
+//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
+//! println!("{array_all:4}");
 //! // [[ NaN,  NaN,  0.2,  0.3],
 //! //  [ NaN, -1.1, -1.2,  1.3],
 //! //  [ NaN, -2.1,  NaN,  NaN]]
+//!
+//! // Retrieve a chunk directly
+//! let array_chunk = array.retrieve_chunk_ndarray::<f32>(
+//!     &[0, 1], // chunk index
+//! )?;
+//! println!("{array_chunk:4}");
+//! // [[  0.2,  0.3],
+//! //  [ -1.2,  1.3]]
+//!
+//! // Retrieve an inner chunk
+//! use zarrs::array::ArrayShardedReadableExt;
+//! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
+//! let array_inner_chunk = array.retrieve_inner_chunk_ndarray_opt::<f32>(
+//!     &shard_index_cache,
+//!     &[0, 3], // inner chunk index
+//!     &zarrs::array::codec::CodecOptions::default(),
+//! )?;
+//! println!("{array_inner_chunk:4}");
+//! // [[ 0.3],
+//! //  [ 1.3]]
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! ### More examples
-//! Various examples can be found in the [examples](https://github.com/zarrs/zarrs/blob/main/zarrs/examples) directory that demonstrate:
+//! ### Additional Examples
+//! Various examples can be found in the [`examples/`](https://github.com/zarrs/zarrs/blob/main/zarrs/examples) directory of the `zarrs` repository that demonstrate:
 //! - creating and manipulating zarr hierarchies with various stores (sync and async), codecs, etc,
 //! - converting between Zarr V2 and V3, and
 //! - creating custom data types.
@@ -169,7 +192,7 @@
 //!
 //! ## Crate Features
 //! #### Default
-//!  - `filesystem`: Re-export `zarrs_filesystem` as `zarrs::filesystem`
+//!  - `filesystem`: Re-export [`zarrs_filesystem`] as [`zarrs::filesystem`](crate::filesystem`).
 //!  - `ndarray`: [`ndarray`] utility functions for [`Array`](crate::array::Array).
 //!  - Codecs: `blosc`, `crc32c`, `gzip`, `sharding`, `transpose`, `zstd`.
 //!
@@ -177,8 +200,12 @@
 //!  - `async`: an **experimental** asynchronous API for [`stores`](storage), [`Array`](crate::array::Array), and [`Group`](group::Group).
 //!    - The async API is runtime-agnostic. This has some limitations that are detailed in the [`Array`](crate::array::Array) docs.
 //!    - The async API is not as performant as the sync API.
-//!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array)
 //!  - Codecs: `bitround`, `bz2`, `fletcher32`, `gdeflate`, `pcodec`, `zfp`, `zlib`.
+//!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array).
+//!  - Additional [`Element`](crate::array::Element)/[`ElementOwned`](crate::array::ElementOwned) implementations:
+//!    - `float8`: add support for [`float8`] subfloat data types.
+//!    - `jiff`: add support for [`jiff`] time data types.
+//!    - `chrono`: add support for [`chrono`] time data types.
 //!
 //! ## `zarrs` Ecosystem
 #![doc = include_str!("../doc/ecosystem.md")]

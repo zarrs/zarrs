@@ -49,11 +49,29 @@ macro_rules! unsupported_dtypes {
             | DataType::ComplexFloat16
             | DataType::ComplexFloat32
             | DataType::ComplexFloat64
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
             | DataType::Complex64
             | DataType::Complex128
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            }
             | DataType::Extension(_)
     };
 }

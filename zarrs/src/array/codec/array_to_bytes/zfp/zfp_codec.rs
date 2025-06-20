@@ -346,7 +346,15 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
             | DataType::Int64
             | DataType::UInt64
             | DataType::Float32
-            | DataType::Float64 => Ok(BytesRepresentation::BoundedSize(bufsize as u64)),
+            | DataType::Float64
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => Ok(BytesRepresentation::BoundedSize(bufsize as u64)),
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
                 ZFP.to_string(),

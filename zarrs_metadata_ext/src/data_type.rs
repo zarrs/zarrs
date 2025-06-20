@@ -1,5 +1,9 @@
 //! Zarr array data type metadata.
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#array-metadata-data-type>.
-//!
-//! This module is currently empty because no data types have any `configuration`.
+
+pub mod numpy_datetime64;
+pub mod numpy_timedelta64;
+
+mod numpy_time_unit;
+pub use numpy_time_unit::NumpyTimeUnit;

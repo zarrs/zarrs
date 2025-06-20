@@ -32,7 +32,7 @@ missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.3.1"
+version = "0.3.2"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]
@@ -40,7 +40,7 @@ version = "0.5.0"
 path = "zarrs_metadata"
 
 [workspace.dependencies.zarrs_metadata_ext]
-version = "0.1.0"
+version = "0.2.0"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]
@@ -48,7 +48,7 @@ version = "0.2.1"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_registry]
-version = "0.1.2"
+version = "0.1.4"
 path = "zarrs_registry"
 
 [workspace.dependencies.zarrs_storage]
@@ -72,7 +72,7 @@ version = "0.7.2"
 path = "zarrs_opendal"
 
 [workspace.dependencies.zarrs_zip]
-version = "0.2.2"
+version = "0.2.3"
 path = "zarrs_zip"
 
 [workspace.dependencies.object_store]
@@ -82,10 +82,10 @@ version = "0.12"
 version = "0.53.0"
 
 [workspace.dependencies.zip]
-version = "3.0.0"
+version = "4.0.0"
 
 [workspace.dependencies.half]
-version = "2.3.1"
+version = "2.4.1"
 features = ["bytemuck"]
 
 [workspace.dependencies.num]
