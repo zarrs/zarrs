@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump `blosc-src` to 0.3.6
+
 ## [0.21.2] - 2025-06-19
 
 ### Added

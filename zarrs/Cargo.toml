@@ -17,7 +17,7 @@ exclude = [".dockerignore", ".github", ".editorconfig", "Dockerfile", "coverage.
 default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
 filesystem = ["dep:zarrs_filesystem"] # Re-export zarrs_filesystem as zarrs::filesystem
 bitround = [] # Enable the bitround codec
-blosc = ["dep:blosc-sys"] # Enable the blosc codec
+blosc = ["dep:blosc-src"] # Enable the blosc codec
 bz2 = ["dep:bzip2"] # Enable the bz2 codec
 crc32c = ["dep:crc32c"] # Enable the crc32c checksum codec
 fletcher32 = [] # Enable the fletcher32 checksum codec
@@ -48,7 +48,7 @@ bench = false
 
 [dependencies]
 async-trait = { version = "0.1.74", optional = true }
-blosc-sys = { version = "0.3.4", package = "blosc-src", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
+blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
 bytes = "1.6.0"
 bzip2 = { version = "0.6.0", optional = true }
