@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `index_location` support to `vlen` codec
+  - Add `VlenCodec::with_index_location()`
+
 ### Changed
+- **Breaking**: `VlenCodec::new` gains an `index_location` parameter
+- Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6
 
 ## [0.21.2] - 2025-06-19

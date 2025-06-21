@@ -30,13 +30,19 @@
 //! element_length = offsets[j + 1] - offsets[j]  // (for 0 <= j < length)
 //! ```
 //! where `length` is the number of chunk elements.
-//! The index can be encoded with either `uint32` or `uint64` offsets depdendent on the `index_data_type` configuration parameter.
+//! The index can be encoded with either `uint32` or `uint64` offsets dependent on the `index_data_type` configuration parameter.
 //!
 //! The data and index can use their own independent codec chain with support for any Zarr V3 codecs.
 //! The codecs are specified by `data_codecs` and `index_codecs` parameters in the codec configuration.
 //!
-//! The first 8 bytes hold a u64 little-endian indicating the length of the encoded index.
-//! This is followed by the encoded index and then the encoded bytes with no padding.
+//! The index length and index can be encoded at the start or end of each chunk.
+//! If `index_location` is `start`:
+//! - The first 8 bytes hold a u64 little-endian indicating the length of the encoded index.
+//! - This is followed by the encoded index and then the encoded bytes with no padding.
+//!
+//! If `index_location` is `end`:
+//! - The last 8 bytes hold the length of the encoded index.
+//! - The encoded index lies between the encoded data and the index length.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `zarrs.vlen`
@@ -94,6 +100,7 @@ mod vlen_partial_decoder;
 use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::Itertools;
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 
 use crate::array::{
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
@@ -135,41 +142,56 @@ fn get_vlen_bytes_and_offsets(
     bytes: &RawBytes,
     index_codecs: &CodecChain,
     data_codecs: &CodecChain,
+    index_location: VlenIndexLocation,
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
-    // Get the index length and data start
+    // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
     }
-    let index_len = u64::from_le_bytes(bytes[0..size_of::<u64>()].try_into().unwrap());
+    let (bytes_index_len, bytes_main) = match index_location {
+        VlenIndexLocation::Start => bytes.split_at(size_of::<u64>()),
+        VlenIndexLocation::End => {
+            let (bytes_main, bytes_index_len) = bytes.split_at(bytes.len() - size_of::<u64>());
+            (bytes_index_len, bytes_main)
+        }
+    };
+    let index_len = u64::from_le_bytes(bytes_index_len.try_into().unwrap());
     let index_len = usize::try_from(index_len)
         .map_err(|_| CodecError::Other("index length exceeds usize::MAX".to_string()))?;
-    let data_start = size_of::<u64>() + index_len;
+
+    // Get the encoded index and data
+    let (index_enc, data_enc) = match index_location {
+        VlenIndexLocation::Start => bytes_main.split_at(index_len),
+        VlenIndexLocation::End => {
+            let (bytes_data, bytes_index) = bytes_main.split_at(bytes_main.len() - index_len);
+            (bytes_index, bytes_data)
+        }
+    };
 
     // Decode the index
-    let index = &bytes[size_of::<u64>()..data_start];
-    let mut index_bytes = index_codecs
-        .decode(index.into(), index_chunk_representation, options)?
+    let mut index = index_codecs
+        .decode(index_enc.into(), index_chunk_representation, options)?
         .into_fixed()?;
     if Endianness::Big.is_native() {
-        reverse_endianness(index_bytes.to_mut(), &DataType::UInt64);
+        reverse_endianness(index.to_mut(), &DataType::UInt64);
     }
     #[allow(clippy::wildcard_enum_match_arm)]
     let index = match index_chunk_representation.data_type() {
         // DataType::UInt8 => {
-        //     let index = convert_from_bytes_slice::<u8>(&index_bytes);
+        //     let index = convert_from_bytes_slice::<u8>(&index);
         //     offsets_u8_to_usize(index)
         // }
         // DataType::UInt16 => {
-        //     let index = convert_from_bytes_slice::<u16>(&index_bytes);
+        //     let index = convert_from_bytes_slice::<u16>(&index);
         //     offsets_u16_to_usize(index)
         // }
         DataType::UInt32 => {
-            let index = convert_from_bytes_slice::<u32>(&index_bytes);
+            let index = convert_from_bytes_slice::<u32>(&index);
             offsets_u32_to_usize(index)
         }
         DataType::UInt64 => {
-            let index = convert_from_bytes_slice::<u64>(&index_bytes);
+            let index = convert_from_bytes_slice::<u64>(&index);
             offsets_u64_to_usize(index)
         }
         _ => unreachable!("other data types are not part of VlenIndexDataType"),
@@ -183,11 +205,10 @@ fn get_vlen_bytes_and_offsets(
     };
 
     // Decode the data
-    let data = &bytes[data_start..];
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
         data_codecs
             .decode(
-                data.into(),
+                data_enc.into(),
                 &unsafe {
                     // SAFETY: data type and fill value are compatible
                     ChunkRepresentation::new_unchecked(
@@ -203,9 +224,9 @@ fn get_vlen_bytes_and_offsets(
     } else {
         vec![]
     };
-    let data_len = data.len();
 
     // Check the data length is as expected
+    let data_len = data.len();
     if data_len != data_len_expected {
         return Err(CodecError::Other(format!(
             "Expected data length {data_len_expected} does not match data length {data_len}"
