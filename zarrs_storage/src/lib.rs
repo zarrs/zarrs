@@ -155,7 +155,7 @@ pub struct StoreKeyOffsetValue<'a> {
 
 impl StoreKeyOffsetValue<'_> {
     /// Create a new [`StoreKeyOffsetValue`].
-    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue {
+    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue<'_> {
         StoreKeyOffsetValue { key, offset, value }
     }
 

@@ -30,7 +30,7 @@
 //! - can be converted to V3 with only a metadata change, and
 //! - uses array metadata that is recognised and supported for encoding/decoding.
 //!
-//! `zarrs` supports forward conversion from Zarr V2 to V3. See ["Converting Zarr V2 to V3"](https://book.zarrs.dev/v2_to_v3.html) in [The `zarrs` Book], or try the [`zarrs_reencode`](https://github.com/zarrs/zarrs_tools/blob/main/docs/zarrs_reencode.md) CLI tool.
+//! `zarrs` supports forward conversion from Zarr V2 to V3. See [Converting Zarr V2 to V3](https://book.zarrs.dev/v2_to_v3.html) in [The `zarrs` Book], or try the [`zarrs_reencode`](https://github.com/zarrs/zarrs_tools/blob/main/docs/zarrs_reencode.md) CLI tool.
 //!
 //! ### Array Extension Support
 //!

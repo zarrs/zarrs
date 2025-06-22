@@ -444,7 +444,7 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
         }
 
         let decoded_value = self
-            .partial_decode(&[array_subset.clone()], options)?
+            .partial_decode(std::slice::from_ref(array_subset), options)?
             .remove(0);
         if let ArrayBytes::Fixed(decoded_value) = decoded_value {
             output_view.copy_from_slice(&decoded_value)?;
@@ -568,7 +568,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
             .into());
         }
         let decoded_value = self
-            .partial_decode(&[array_subset.clone()], options)
+            .partial_decode(std::slice::from_ref(array_subset), options)
             .await?
             .remove(0);
         if let ArrayBytes::Fixed(decoded_value) = decoded_value {

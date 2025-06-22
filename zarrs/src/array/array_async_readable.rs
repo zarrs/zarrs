@@ -766,7 +766,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .clone()
                 .async_partial_decoder(input_handle, &chunk_representation, options)
                 .await?
-                .partial_decode(&[chunk_subset.clone()], options)
+                .partial_decode(std::slice::from_ref(chunk_subset), options)
                 .await?
                 .remove(0)
                 .into_owned()
