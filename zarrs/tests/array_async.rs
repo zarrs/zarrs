@@ -11,6 +11,7 @@ use zarrs::array_subset::ArraySubset;
 use object_store::memory::InMemory;
 
 use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -292,29 +293,34 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
-    let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
-    let array_path = "/array";
-    let mut builder = ArrayBuilder::new(
-        vec![4, 4], // array shape
-        DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
-    );
-    builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
-        TransposeOrder::new(&[1, 0]).unwrap(),
-    ))]);
-    builder.array_to_bytes_codec(Arc::new(
-        zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
-            vec![2, 1].try_into().unwrap(),
-        )
-        .array_to_bytes_codec(Arc::<VlenCodec>::default())
-        .bytes_to_bytes_codecs(vec![
-            #[cfg(feature = "gzip")]
-            Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-        ])
-        .build(),
-    ));
+    for index_location in [VlenIndexLocation::Start, VlenIndexLocation::End] {
+        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![4, 4], // array shape
+            DataType::String,
+            vec![2, 2].try_into().unwrap(), // regular chunk shape
+            FillValue::from(""),
+        );
+        builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
+            TransposeOrder::new(&[1, 0]).unwrap(),
+        ))]);
+        builder.array_to_bytes_codec(Arc::new(
+            zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
+                vec![2, 1].try_into().unwrap(),
+            )
+            .array_to_bytes_codec(Arc::new(
+                VlenCodec::default().with_index_location(index_location),
+            ))
+            .bytes_to_bytes_codecs(vec![
+                #[cfg(feature = "gzip")]
+                Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+            ])
+            .build(),
+        ));
 
-    let array = builder.build(store, array_path).unwrap();
-    array_str_impl(array).await
+        let array = builder.build(store, array_path).unwrap();
+        array_str_impl(array).await?;
+    }
+    Ok(())
 }
