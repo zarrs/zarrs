@@ -219,6 +219,7 @@
 //!
 //! [The `zarrs` Book]: https://book.zarrs.dev
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc(html_logo_url = "https://zarrs.dev/zarrs-logo-400x400.png")]
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod array;
