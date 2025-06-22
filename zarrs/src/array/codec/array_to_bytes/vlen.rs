@@ -88,7 +88,8 @@
 //!                     }
 //!             }
 //!     ],
-//!     "index_data_type": "uint32"
+//!     "index_data_type": "uint32",
+//!     "index_location": "end"
 //! }
 //! # "#;
 //! # use zarrs_metadata_ext::codec::vlen::VlenCodecConfiguration;
@@ -107,7 +108,9 @@ use crate::array::{
     convert_from_bytes_slice, ChunkRepresentation, CodecChain, DataType, Endianness, FillValue,
     RawBytes,
 };
-pub use zarrs_metadata_ext::codec::vlen::{VlenCodecConfiguration, VlenCodecConfigurationV0};
+pub use zarrs_metadata_ext::codec::vlen::{
+    VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
+};
 use zarrs_registry::codec::VLEN;
 
 pub use vlen_codec::VlenCodec;
