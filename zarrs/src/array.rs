@@ -1362,6 +1362,13 @@ mod tests {
         array_v3_numcodecs("tests/data/v3_zarr_python/array_fletcher32.zarr")
     }
 
+    #[cfg(feature = "adler32")]
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_v3_adler32() {
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_adler32.zarr")
+    }
+
     #[cfg(feature = "zlib")]
     #[test]
     #[cfg_attr(miri, ignore)]

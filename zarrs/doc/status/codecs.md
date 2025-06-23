@@ -19,6 +19,7 @@
 |                | [`crc32c`]                         | `crc32c`                            | **crc32c**    |
 |                | [`gzip`]                           | `gzip`                              | **gzip**      |
 |                | [`zstd`]                           | `zstd`                              | **zstd**      |
+|                | ~~[`numcodecs.adler32`]~~          | `adler32`                           | adler32       |
 |                | ~~[`numcodecs.bz2`]~~              | `bz2`                               | bz2           |
 |                | ~~[`numcodecs.fletcher32`]~~       | `fletcher32`                        | fletcher32    |
 |                | ~~[`numcodecs.shuffle`]~~          | `shuffle`                           |               |
@@ -62,6 +63,7 @@
 [`crc32c`]: crate::array::codec::bytes_to_bytes::crc32c
 [`gzip`]: crate::array::codec::bytes_to_bytes::gzip
 [`zstd`]: crate::array::codec::bytes_to_bytes::zstd
+[`numcodecs.adler32`]: crate::array::codec::bytes_to_bytes::adler32
 [`numcodecs.bz2`]: crate::array::codec::bytes_to_bytes::gzip
 [`numcodecs.fletcher32`]: crate::array::codec::bytes_to_bytes::fletcher32
 [`numcodecs.shuffle`]: crate::array::codec::bytes_to_bytes::shuffle

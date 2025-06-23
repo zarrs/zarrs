@@ -25,6 +25,7 @@ impl Default for ExtensionAliasesCodecV3 {
                 (codec::VLEN_V2, "zarrs.vlen_v2".into()),
                 (codec::ZFP, "zfp".into()),
                 // bytes to bytes
+                (codec::ADLER32, "numcodecs.adler32".into()),
                 (codec::BZ2, "numcodecs.bz2".into()),
                 (codec::GDEFLATE, "zarrs.gdeflate".into()),
                 (codec::FLETCHER32, "numcodecs.fletcher32".into()),
@@ -41,6 +42,8 @@ impl Default for ExtensionAliasesCodecV3 {
                 ("zfp".into(), codec::ZFP),
                 ("zarrs.zfp".into(), codec::ZFP), // 0.20.0-dev
                 ("zarrs.gdeflate".into(), codec::GDEFLATE),
+                // zarrs 0.22
+                ("numcodecs.adler32".into(), codec::ADLER32),
                 // zarrs 0.20 / zarr-python 3.0
                 ("numcodecs.bitround".into(), codec::BITROUND),
                 ("numcodecs.fixedscaleoffset".into(), codec::FIXEDSCALEOFFSET),
