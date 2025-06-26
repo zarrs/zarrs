@@ -48,7 +48,9 @@ mod array_sync_sharded_readable_ext;
 use std::sync::Arc;
 
 pub use self::{
-    array_builder::ArrayBuilder,
+    array_builder::{
+        ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderDataType, ArrayBuilderFillValue,
+    },
     array_bytes::{
         copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, RawBytes,
         RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
@@ -687,6 +689,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         metadata
     }
 
+    pub(crate) fn fill_value_metadata_v3(&self) -> FillValueMetadataV3 {
+        self.data_type
+            .metadata_fill_value(&self.fill_value)
+            .expect("data type and fill value are compatible")
+    }
+
     /// Create an array builder matching the parameters of this array.
     #[must_use]
     pub fn builder(&self) -> ArrayBuilder {
@@ -1064,14 +1072,9 @@ mod tests {
         let store = Arc::new(MemoryStore::new());
 
         let array_path = "/array";
-        let array = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::UInt8,
-            vec![4, 4].try_into().unwrap(),
-            FillValue::from(0u8),
-        )
-        .build(store.clone(), array_path)
-        .unwrap();
+        let array = ArrayBuilder::new(vec![8, 8], DataType::UInt8, vec![4, 4], 0u8)
+            .build(store.clone(), array_path)
+            .unwrap();
         array.store_metadata().unwrap();
         let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
 
@@ -1086,8 +1089,8 @@ mod tests {
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
             DataType::Float32,
-            vec![4, 4].try_into().unwrap(),
-            FillValue::from(ZARR_NAN_F32),
+            vec![4, 4],
+            ZARR_NAN_F32,
         )
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
@@ -1118,8 +1121,8 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![8, 8], // array shape
             DataType::Float32,
-            vec![4, 4].try_into().unwrap(), // regular chunk shape
-            FillValue::from(1f32),
+            vec![4, 4], // regular chunk shape
+            1f32,
         )
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
@@ -1405,7 +1408,7 @@ mod tests {
     //         vec![100, 4],
     //         DataType::UInt8,
     //         vec![10, 2].try_into().unwrap(),
-    //         FillValue::from(0u8),
+    //         0u8,
     //     )
     //     .build(store, array_path)
     //     .unwrap();
@@ -1460,8 +1463,8 @@ mod tests {
             let array = ArrayBuilder::new(
                 vec![8, 8], // array shape
                 DataType::Float32,
-                vec![4, 4].try_into().unwrap(),
-                FillValue::from(ZARR_NAN_F32),
+                vec![4, 4],
+                ZARR_NAN_F32,
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]

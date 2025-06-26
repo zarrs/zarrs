@@ -307,12 +307,9 @@ mod tests {
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::Float32,
-            0.0f32.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float32, 0.0f32)
+                .unwrap();
         let elements: Vec<f32> = vec![
             //                         |
             0.0,
@@ -351,12 +348,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::UInt32,
-            0u32.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt32, 0u32)
+                .unwrap();
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -389,12 +383,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint8() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::UInt8,
-            0u8.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt8, 0u8)
+                .unwrap();
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -431,7 +422,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![(elements.len() as u64).try_into().unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
@@ -490,7 +481,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![(elements.len() as u64).try_into().unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes = crate::array::transmute_to_bytes_vec(elements);

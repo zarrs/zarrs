@@ -8,7 +8,7 @@ use zarrs::storage::{
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     use zarrs::{
-        array::{DataType, FillValue, ZARR_NAN_F32},
+        array::{DataType, ZARR_NAN_F32},
         array_subset::ArraySubset,
         node::Node,
         storage::store,
@@ -58,8 +58,8 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         DataType::Float32,
-        vec![4, 4].try_into()?, // regular chunk shape
-        FillValue::from(ZARR_NAN_F32),
+        vec![4, 4], // regular chunk shape
+        ZARR_NAN_F32,
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed
     .dimension_names(["y", "x"].into())

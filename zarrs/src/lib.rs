@@ -112,8 +112,8 @@
 //! let array = zarrs::array::ArrayBuilder::new(
 //!     vec![3, 4], // array shape
 //!     zarrs::array::DataType::Float32,
-//!     vec![2, 2].try_into()?, // regular chunk (shard) shape
-//!     zarrs::array::FillValue::from(0.0f32),
+//!     vec![2, 2], // regular chunk (shard) shape
+//!     0.0f32, // fill value
 //! )
 //! .array_to_bytes_codec(Arc::new(
 //!     // The sharding codec requires the sharding feature

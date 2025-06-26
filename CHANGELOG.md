@@ -10,8 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
+- Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
 
 ### Changed
+- **Breaking**: change `ArrayBuilder::new()` to take a broader range of types for each parameter. See below
+```diff
+ArrayBuilder::new(
+    // array shape
+    vec![8, 8], // or [8, 8], &[8, 8], etc.
+    // data type, data type name, or data type metadata
+    DataType::Float32, // or "float32" or MetadataV3::new("float32"), etc.
+    // regular chunk shape, chunk grid, or chunk grid metadata
+-    vec![4, 4].try_into()?, // no longer valid
++    vec![4, 4],
+    // scalar/string, fill value, or fill value metadata
+-    f32::NAN.into(), // no longer valid
++    f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
+)
+.build()
+```
+- **Breaking**: change the `{Array,Chunk}Representation::new[_unchecked]` `fill_value` parameter to take `impl Into<FillValue>` instead of `FillValue`
+```diff
+-  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
++  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
+```
 - **Breaking**: `VlenCodec::new` gains an `index_location` parameter
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6

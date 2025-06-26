@@ -9,7 +9,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::array::ChunkGrid;
     use zarrs::{
-        array::{chunk_grid::RectangularChunkGrid, codec, FillValue},
+        array::{chunk_grid::RectangularChunkGrid, codec},
         node::Node,
     };
     use zarrs::{
@@ -63,7 +63,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             [1, 2, 3, 2].try_into()?,
             4.try_into()?,
         ])),
-        FillValue::from(ZARR_NAN_F32),
+        ZARR_NAN_F32,
     )
     .bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]

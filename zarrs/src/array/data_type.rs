@@ -2422,10 +2422,8 @@ mod tests {
 
     #[test]
     fn incompatible_fill_value() {
-        let err = DataTypeFillValueError::new(
-            zarrs_registry::data_type::BOOL.to_string(),
-            FillValue::from(1.0f32),
-        );
+        let err =
+            DataTypeFillValueError::new(zarrs_registry::data_type::BOOL.to_string(), 1.0f32.into());
         assert_eq!(
             err.to_string(),
             "incompatible fill value [0, 0, 128, 63] for data type bool"

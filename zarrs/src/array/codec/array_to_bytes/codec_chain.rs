@@ -752,10 +752,7 @@ impl ArrayCodecTraits for CodecChain {
 mod tests {
     use std::num::NonZeroU64;
 
-    use crate::{
-        array::{DataType, FillValue},
-        array_subset::ArraySubset,
-    };
+    use crate::{array::DataType, array_subset::ArraySubset};
 
     use super::*;
 
@@ -935,8 +932,7 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, FillValue::from(0f32))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0f32).unwrap();
         let elements: Vec<f32> = (0..chunk_representation.num_elements())
             .map(|i| i as f32)
             .collect();
@@ -961,8 +957,7 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, FillValue::from(0f32))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0f32).unwrap();
         let elements: Vec<f32> = (0..chunk_representation.num_elements())
             .map(|i| i as f32)
             .collect();

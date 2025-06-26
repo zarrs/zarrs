@@ -209,7 +209,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4096, 1], // array shape
         DataType::Extension(Arc::new(CustomDataTypeUInt12)),
-        vec![5, 1].try_into().unwrap(), // regular chunk shape
+        vec![5, 1], // regular chunk shape
         FillValue::new(fill_value.to_le_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

@@ -49,8 +49,8 @@ fn cities_impl(
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
         DataType::String,
-        vec![chunk_size].try_into()?, // regular chunk shape
-        FillValue::from(""),
+        vec![chunk_size], // regular chunk shape
+        "",
     );
     if let Some(shard_size) = shard_size {
         builder.array_to_bytes_codec(Arc::new(

@@ -11,22 +11,37 @@ use super::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, BytesToBytesCodecTraits,
         NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
     },
-    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkGrid, CodecChain,
-    DataType, DimensionName, FillValue, StorageTransformerChain,
+    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, CodecChain, DataType,
+    DimensionName, StorageTransformerChain,
 };
+
+mod array_builder_chunk_grid;
+pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
+
+mod array_builder_data_type;
+pub use array_builder_data_type::ArrayBuilderDataType;
+
+mod array_builder_fill_value;
+pub use array_builder_fill_value::ArrayBuilderFillValue;
 
 /// An [`Array`] builder.
 ///
-/// The array builder is initialised from an array shape, data type, chunk grid, and fill value.
-///  - The only codec enabled by default is `bytes` (with native endian encoding), so the output is uncompressed.
-///  - The default chunk key encoding is `default` with the `/` chunk key separator.
+/// [`ArrayBuilder`] is initialised from an array shape, data type, chunk grid, and fill value.
+///  - The default array-to-bytes codec is dependent on the data type:
+///    - [`bytes`](crate::array::codec::array_to_bytes::bytes) for fixed-length data types,
+///    - [`vlen-utf8`](crate::array::codec::array_to_bytes::vlen_utf8) for the [`string`](crate::array::data_type::DataType::String) variable-length data type,
+///    - [`vlen-bytes`](crate::array::codec::array_to_bytes::vlen_bytes) for the [`bytes`](crate::array::data_type::DataType::Bytes) variable-length data type, and
+///    - [`vlen`](crate::array::codec::array_to_bytes::vlen) for any other variable-length data type.
+///  - Array-to-array and bytes-to-bytes codecs are empty by default.
+///  - The default chunk key encoding is [`default`](crate::array::chunk_key_encoding::default::DefaultChunkKeyEncoding) with the `/` chunk key separator.
 ///  - Attributes, storage transformers, and dimension names are empty.
-///  - Codecs are configured to use multiple threads where possible.
 ///
 /// Use the methods in the array builder to change the configuration away from these defaults, and then build the array at a path of some storage with [`ArrayBuilder::build`].
-/// Note that [`build`](ArrayBuilder::build) does not modify the store; the array metadata has to be explicitly written with [`Array::store_metadata`].
 ///
-/// For example:
+/// [`build`](ArrayBuilder::build) does not modify the store! Array metadata has to be explicitly written with [`Array::store_metadata`].
+///
+/// ### Simple Example
+/// This array is uncompressed, and has no dimension names or attributes.
 ///
 /// ```rust
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,24 +50,40 @@ use super::{
 /// # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 /// let mut array = ArrayBuilder::new(
 ///     vec![8, 8], // array shape
-///     DataType::Float32,
-///     vec![4, 4].try_into()?, // regular chunk shape (elements must be non-zero)
-///     FillValue::from(ZARR_NAN_F32),
+///     DataType::Float32, // data type
+///     vec![4, 4], // regular chunk shape
+///     f32::NAN, // fill value
 /// )
-/// .bytes_to_bytes_codecs(vec![
-///     #[cfg(feature = "gzip")]
-///     Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-/// ])
-/// .dimension_names(["y", "x"].into())
 /// .build(store.clone(), "/group/array")?;
 /// array.store_metadata()?; // write metadata to the store
+/// # Ok(())
+/// # }
+/// ```
 ///
-/// // array.store_chunk(...)
-/// // array.store_array_subset(...)
+/// ### Advanced Example
+/// The array is compressed with the [`zstd`](crate::array::codec::bytes_to_bytes::zstd) codec, dimension names are set, and the experimental [`rectangular`](crate::array::chunk_grid::rectangular) chunk grid is used.
 ///
-/// array.set_shape(vec![16, 16]); // revise the shape if needed
-/// array.store_metadata()?; // update stored metadata
+/// This example uses alternative types to specify the array shape, data type, chunk grid, and fill value.
+/// In general you don't want to use strings, prefer concrete types (like [`RectangularChunkGridConfiguration`](crate::array::chunk_grid::RectangularChunkGridConfiguration), for example).
 ///
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # use std::sync::Arc;
+/// use zarrs::array::{ArrayBuilder, DataType, FillValue, ZARR_NAN_F32};
+/// # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
+/// let mut array = ArrayBuilder::new(
+///     [8, 8],
+///     "float32",
+///     r#"{"name":"rectangular","configuration":{"chunk_shape": [[1, 2, 5], 4]}}"#,
+///     "NaN",
+/// )
+/// .bytes_to_bytes_codecs(vec![
+///     #[cfg(feature = "zstd")]
+///     Arc::new(zarrs::array::codec::ZstdCodec::new(5, false)),
+/// ])
+/// .dimension_names(Some(["y", "x"]))
+/// .build(store.clone(), "/group/array")?;
+/// array.store_metadata()?; // write metadata to the store
 /// # Ok(())
 /// # }
 /// ```
@@ -61,18 +92,18 @@ pub struct ArrayBuilder {
     /// Array shape.
     pub shape: ArrayShape,
     /// Data type.
-    pub data_type: DataType,
+    pub data_type: ArrayBuilderDataType,
     /// Chunk grid.
-    pub chunk_grid: ChunkGrid,
+    pub chunk_grid: ArrayBuilderChunkGrid,
     /// Chunk key encoding.
     pub chunk_key_encoding: ChunkKeyEncoding,
     /// Fill value.
-    pub fill_value: FillValue,
-    /// Array to array codecs.
+    pub fill_value: ArrayBuilderFillValue,
+    /// The array-to-array codecs.
     pub array_to_array_codecs: Vec<NamedArrayToArrayCodec>,
-    /// Array to bytes codec.
-    pub array_to_bytes_codec: NamedArrayToBytesCodec,
-    /// Bytes to bytes codecs.
+    /// The array-to-bytes codec.
+    pub array_to_bytes_codec: Option<NamedArrayToBytesCodec>,
+    /// The bytes-to-bytes codecs. If [`None`], chooses a default based on the data type.
     pub bytes_to_bytes_codecs: Vec<NamedBytesToBytesCodec>,
     /// Storage transformer chain.
     pub storage_transformers: StorageTransformerChain,
@@ -91,80 +122,15 @@ impl ArrayBuilder {
     /// The shape of the [`Array`] can be be updated as required.
     #[must_use]
     pub fn new(
-        shape: ArrayShape,
-        data_type: DataType,
-        chunk_grid: ChunkGrid,
-        fill_value: FillValue,
+        shape: impl Into<ArrayShape>,
+        data_type: impl Into<ArrayBuilderDataType>,
+        chunk_grid: impl Into<ArrayBuilderChunkGrid>,
+        fill_value: impl Into<ArrayBuilderFillValue>,
     ) -> Self {
-        let array_to_bytes_codec: NamedArrayToBytesCodec = if data_type.fixed_size().is_some() {
-            Arc::<BytesCodec>::default().into()
-        } else {
-            // FIXME: Default to VlenCodec if ever stabilised
-            match data_type {
-                DataType::String => NamedArrayToBytesCodec::new(
-                    zarrs_registry::codec::VLEN_UTF8.to_string(),
-                    Arc::new(VlenV2Codec::new()),
-                ),
-                DataType::Bytes => NamedArrayToBytesCodec::new(
-                    zarrs_registry::codec::VLEN_BYTES.to_string(),
-                    Arc::new(VlenV2Codec::new()),
-                ),
-                DataType::Extension(_) => Arc::new(VlenCodec::default()).into(),
-                // Fixed size data types
-                DataType::Bool
-                | DataType::Int2
-                | DataType::Int4
-                | DataType::Int8
-                | DataType::Int16
-                | DataType::Int32
-                | DataType::Int64
-                | DataType::UInt2
-                | DataType::UInt4
-                | DataType::UInt8
-                | DataType::UInt16
-                | DataType::UInt32
-                | DataType::UInt64
-                | DataType::Float4E2M1FN
-                | DataType::Float6E2M3FN
-                | DataType::Float6E3M2FN
-                | DataType::Float8E3M4
-                | DataType::Float8E4M3
-                | DataType::Float8E4M3B11FNUZ
-                | DataType::Float8E4M3FNUZ
-                | DataType::Float8E5M2
-                | DataType::Float8E5M2FNUZ
-                | DataType::Float8E8M0FNU
-                | DataType::BFloat16
-                | DataType::Float16
-                | DataType::Float32
-                | DataType::Float64
-                | DataType::ComplexBFloat16
-                | DataType::ComplexFloat16
-                | DataType::ComplexFloat32
-                | DataType::ComplexFloat64
-                | DataType::ComplexFloat4E2M1FN
-                | DataType::ComplexFloat6E2M3FN
-                | DataType::ComplexFloat6E3M2FN
-                | DataType::ComplexFloat8E3M4
-                | DataType::ComplexFloat8E4M3
-                | DataType::ComplexFloat8E4M3B11FNUZ
-                | DataType::ComplexFloat8E4M3FNUZ
-                | DataType::ComplexFloat8E5M2
-                | DataType::ComplexFloat8E5M2FNUZ
-                | DataType::ComplexFloat8E8M0FNU
-                | DataType::Complex64
-                | DataType::Complex128
-                | DataType::NumpyDateTime64 {
-                    unit: _,
-                    scale_factor: _,
-                }
-                | DataType::NumpyTimeDelta64 {
-                    unit: _,
-                    scale_factor: _,
-                }
-                | DataType::RawBits(_) => unreachable!(),
-            }
-        };
+        let shape = shape.into();
+        let data_type = data_type.into();
+        let chunk_grid = chunk_grid.into();
+        let fill_value = fill_value.into();
 
         Self {
             shape,
@@ -173,7 +139,7 @@ impl ArrayBuilder {
             chunk_key_encoding: ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default()),
             fill_value,
             array_to_array_codecs: Vec::default(),
-            array_to_bytes_codec,
+            array_to_bytes_codec: None,
             bytes_to_bytes_codecs: Vec::default(),
             attributes: serde_json::Map::default(),
             storage_transformers: StorageTransformerChain::default(),
@@ -188,8 +154,8 @@ impl ArrayBuilder {
         let mut builder = Self::new(
             array.shape().to_vec(),
             array.data_type().clone(),
-            array.chunk_grid().clone(),
-            array.fill_value().clone(),
+            array.chunk_grid().create_metadata(),
+            array.fill_value_metadata_v3(),
         );
         let additional_fields = match array.metadata() {
             ArrayMetadata::V2(_metadata) => AdditionalFieldsV3::default(),
@@ -209,26 +175,26 @@ impl ArrayBuilder {
     }
 
     /// Set the shape.
-    pub fn shape(&mut self, shape: ArrayShape) -> &mut Self {
-        self.shape = shape;
+    pub fn shape(&mut self, shape: impl Into<ArrayShape>) -> &mut Self {
+        self.shape = shape.into();
         self
     }
 
     /// Set the data type.
-    pub fn data_type(&mut self, data_type: DataType) -> &mut Self {
-        self.data_type = data_type;
+    pub fn data_type(&mut self, data_type: impl Into<ArrayBuilderDataType>) -> &mut Self {
+        self.data_type = data_type.into();
         self
     }
 
     /// Set the chunk grid.
-    pub fn chunk_grid(&mut self, chunk_grid: ChunkGrid) -> &mut Self {
-        self.chunk_grid = chunk_grid;
+    pub fn chunk_grid(&mut self, chunk_grid: impl Into<ArrayBuilderChunkGrid>) -> &mut Self {
+        self.chunk_grid = chunk_grid.into();
         self
     }
 
     /// Set the fill value.
-    pub fn fill_value(&mut self, fill_value: FillValue) -> &mut Self {
-        self.fill_value = fill_value;
+    pub fn fill_value(&mut self, fill_value: impl Into<ArrayBuilderFillValue>) -> &mut Self {
+        self.fill_value = fill_value.into();
         self
     }
 
@@ -240,7 +206,7 @@ impl ArrayBuilder {
         self
     }
 
-    /// Set the chunk key encoding to default with `separator`.
+    /// Set the chunk key encoding to `default` with `separator`.
     ///
     /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
     pub fn chunk_key_encoding_default_separator(
@@ -251,9 +217,9 @@ impl ArrayBuilder {
         self
     }
 
-    /// Set the array to array codecs.
+    /// Set the array-to-array codecs.
     ///
-    /// If left unmodified, the array will have no array to array codecs.
+    /// If left unmodified, the array will have no array-to-array codecs.
     pub fn array_to_array_codecs(
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
@@ -262,9 +228,9 @@ impl ArrayBuilder {
         self
     }
 
-    /// Set the array to array codecs with non-default names.
+    /// Set the array-to-array codecs with non-default names.
     ///
-    /// If left unmodified, the array will have no array to array codecs.
+    /// If left unmodified, the array will have no array-to-array codecs.
     pub fn array_to_array_codecs_named(
         &mut self,
         array_to_array_codecs: Vec<impl Into<NamedArrayToArrayCodec>>,
@@ -273,31 +239,31 @@ impl ArrayBuilder {
         self
     }
 
-    /// Set the array to bytes codec.
+    /// Set the array-to-bytes codec.
     ///
     /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
     pub fn array_to_bytes_codec(
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        self.array_to_bytes_codec = array_to_bytes_codec.into();
+        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
         self
     }
 
-    /// Set the array to bytes codec with non-default names.
+    /// Set the array-to-bytes codec with non-default names.
     ///
     /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
     pub fn array_to_bytes_codec_named(
         &mut self,
         array_to_bytes_codec: impl Into<NamedArrayToBytesCodec>,
     ) -> &mut Self {
-        self.array_to_bytes_codec = array_to_bytes_codec.into();
+        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
         self
     }
 
-    /// Set the bytes to bytes codecs.
+    /// Set the bytes-to-bytes codecs.
     ///
-    /// If left unmodified, the array will have no bytes to bytes codecs.
+    /// If left unmodified, the array will have no bytes-to-bytes codecs.
     pub fn bytes_to_bytes_codecs(
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
@@ -306,9 +272,9 @@ impl ArrayBuilder {
         self
     }
 
-    /// Set the bytes to bytes codecs with non-default names.
+    /// Set the bytes-to-bytes codecs with non-default names.
     ///
-    /// If left unmodified, the array will have no bytes to bytes codecs.
+    /// If left unmodified, the array will have no bytes-to-bytes codecs.
     pub fn bytes_to_bytes_codecs_named(
         &mut self,
         bytes_to_bytes_codecs: Vec<impl Into<NamedBytesToBytesCodec>>,
@@ -383,12 +349,9 @@ impl ArrayBuilder {
         path: &str,
     ) -> Result<Array<TStorage>, ArrayCreateError> {
         let path: NodePath = path.try_into()?;
-        if self.chunk_grid.dimensionality() != self.shape.len() {
-            return Err(ArrayCreateError::InvalidChunkGridDimensionality(
-                self.chunk_grid.dimensionality(),
-                self.shape.len(),
-            ));
-        }
+        let chunk_grid = self.chunk_grid.to_chunk_grid(&self.shape)?;
+        let data_type = self.data_type.to_data_type()?;
+        let fill_value = self.fill_value.to_fill_value(&data_type)?;
         if let Some(dimension_names) = &self.dimension_names {
             if dimension_names.len() != self.shape.len() {
                 return Err(ArrayCreateError::InvalidDimensionNames(
@@ -398,18 +361,23 @@ impl ArrayBuilder {
             }
         }
 
+        let array_to_bytes_codec = self
+            .array_to_bytes_codec
+            .clone()
+            .unwrap_or_else(|| Self::default_codec(&data_type));
+
         let codec_chain = CodecChain::new_named(
             self.array_to_array_codecs.clone(),
-            self.array_to_bytes_codec.clone(),
+            array_to_bytes_codec,
             self.bytes_to_bytes_codecs.clone(),
         );
 
         let array_metadata = ArrayMetadata::V3(
             ArrayMetadataV3::new(
                 self.shape.clone(),
-                self.chunk_grid.create_metadata(),
-                self.data_type.metadata(),
-                self.data_type.metadata_fill_value(&self.fill_value)?,
+                chunk_grid.create_metadata(),
+                data_type.metadata(),
+                data_type.metadata_fill_value(&fill_value)?,
                 codec_chain.create_metadatas(),
             )
             .with_attributes(self.attributes.clone())
@@ -420,6 +388,78 @@ impl ArrayBuilder {
         );
 
         Array::new_with_metadata(storage, path.as_str(), array_metadata)
+    }
+
+    fn default_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
+        if data_type.fixed_size().is_some() {
+            Arc::<BytesCodec>::default().into()
+        } else {
+            // FIXME: Default to VlenCodec if ever stabilised
+            match data_type {
+                DataType::String => NamedArrayToBytesCodec::new(
+                    zarrs_registry::codec::VLEN_UTF8.to_string(),
+                    Arc::new(VlenV2Codec::new()),
+                ),
+                DataType::Bytes => NamedArrayToBytesCodec::new(
+                    zarrs_registry::codec::VLEN_BYTES.to_string(),
+                    Arc::new(VlenV2Codec::new()),
+                ),
+                DataType::Extension(_) => Arc::new(VlenCodec::default()).into(),
+                // Fixed size data types
+                DataType::Bool
+                | DataType::Int2
+                | DataType::Int4
+                | DataType::Int8
+                | DataType::Int16
+                | DataType::Int32
+                | DataType::Int64
+                | DataType::UInt2
+                | DataType::UInt4
+                | DataType::UInt8
+                | DataType::UInt16
+                | DataType::UInt32
+                | DataType::UInt64
+                | DataType::Float4E2M1FN
+                | DataType::Float6E2M3FN
+                | DataType::Float6E3M2FN
+                | DataType::Float8E3M4
+                | DataType::Float8E4M3
+                | DataType::Float8E4M3B11FNUZ
+                | DataType::Float8E4M3FNUZ
+                | DataType::Float8E5M2
+                | DataType::Float8E5M2FNUZ
+                | DataType::Float8E8M0FNU
+                | DataType::BFloat16
+                | DataType::Float16
+                | DataType::Float32
+                | DataType::Float64
+                | DataType::ComplexBFloat16
+                | DataType::ComplexFloat16
+                | DataType::ComplexFloat32
+                | DataType::ComplexFloat64
+                | DataType::ComplexFloat4E2M1FN
+                | DataType::ComplexFloat6E2M3FN
+                | DataType::ComplexFloat6E3M2FN
+                | DataType::ComplexFloat8E3M4
+                | DataType::ComplexFloat8E4M3
+                | DataType::ComplexFloat8E4M3B11FNUZ
+                | DataType::ComplexFloat8E4M3FNUZ
+                | DataType::ComplexFloat8E5M2
+                | DataType::ComplexFloat8E5M2FNUZ
+                | DataType::ComplexFloat8E8M0FNU
+                | DataType::Complex64
+                | DataType::Complex128
+                | DataType::NumpyDateTime64 {
+                    unit: _,
+                    scale_factor: _,
+                }
+                | DataType::NumpyTimeDelta64 {
+                    unit: _,
+                    scale_factor: _,
+                }
+                | DataType::RawBits(_) => unreachable!(),
+            }
+        }
     }
 
     /// Build into an [`Arc<Array>`].
@@ -439,8 +479,10 @@ impl ArrayBuilder {
 
 #[cfg(test)]
 mod tests {
+    use zarrs_data_type::FillValue;
+
     use crate::{
-        array::{chunk_grid::RegularChunkGrid, chunk_key_encoding::V2ChunkKeyEncoding},
+        array::chunk_key_encoding::V2ChunkKeyEncoding,
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
 
@@ -448,21 +490,14 @@ mod tests {
 
     #[test]
     fn array_builder() {
-        let mut builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let mut builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8);
 
         // Coverage
         builder.shape(vec![8, 8]);
         builder.data_type(DataType::Int8);
         // builder.chunk_grid(vec![2, 2].try_into().unwrap());
-        builder.chunk_grid(ChunkGrid::new(RegularChunkGrid::new(
-            vec![2, 2].try_into().unwrap(),
-        )));
-        builder.fill_value(FillValue::from(0i8));
+        builder.chunk_grid([2, 2]);
+        builder.fill_value(0i8);
 
         builder.dimension_names(["y", "x"].into());
 
@@ -511,28 +546,16 @@ mod tests {
     fn array_builder_invalid() {
         let storage = Arc::new(MemoryStore::new());
         // Invalid chunk shape
-        let builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2, 2], 0i8);
         assert!(builder.build(storage.clone(), "/").is_err());
-        // Invalid fill value
-        let builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i16),
-        );
+        // Invalid fill value, but okay when interpreted as fill value metadata
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16);
+        assert!(builder.build(storage.clone(), "/").is_ok());
+        // Strictly invalid fill value
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], vec![0, 0]);
         assert!(builder.build(storage.clone(), "/").is_err());
         // Invalid dimension names
-        let mut builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let mut builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         builder.dimension_names(["z", "y", "x"].into());
         assert!(builder.build(storage.clone(), "/").is_err());
     }

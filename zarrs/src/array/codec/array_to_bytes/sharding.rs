@@ -76,7 +76,7 @@ use crate::{
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
             CodecPlugin,
         },
-        BytesRepresentation, ChunkRepresentation, ChunkShape, CodecChain, DataType, FillValue,
+        BytesRepresentation, ChunkRepresentation, ChunkShape, CodecChain, DataType,
     },
     byte_range::ByteRange,
     metadata::v3::MetadataV3,
@@ -125,7 +125,7 @@ fn sharding_index_decoded_representation(chunks_per_shard: &[NonZeroU64]) -> Chu
     let mut index_shape = Vec::with_capacity(chunks_per_shard.len() + 1);
     index_shape.extend(chunks_per_shard);
     index_shape.push(unsafe { NonZeroU64::new_unchecked(2) });
-    ChunkRepresentation::new(index_shape, DataType::UInt64, FillValue::from(u64::MAX)).unwrap()
+    ChunkRepresentation::new(index_shape, DataType::UInt64, u64::MAX).unwrap()
 }
 
 fn compute_index_encoded_size(
@@ -337,7 +337,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             ChunkShape::try_from(vec![4, 4]).unwrap().into(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
         let elements: Vec<u16> = if all_fill_value {
@@ -432,7 +432,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             ChunkShape::try_from(vec![4, 4]).unwrap().into(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
         let elements: Vec<u16> = if all_fill_value {
@@ -497,8 +497,7 @@ mod tests {
     ) {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_representation.num_elements() as usize]
         } else {
@@ -581,8 +580,7 @@ mod tests {
     ) {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_representation.num_elements() as usize]
         } else {
@@ -664,12 +662,8 @@ mod tests {
     #[test]
     fn codec_sharding_partial_decode2() {
         let chunk_shape: ChunkShape = vec![2, 4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt16,
-            FillValue::from(0u16),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt16, 0u16).unwrap();
         let elements: Vec<u16> = (0..chunk_representation.num_elements() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -711,8 +705,7 @@ mod tests {
     fn codec_sharding_partial_decode3() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 

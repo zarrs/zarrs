@@ -89,12 +89,9 @@ mod tests {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &'static str =
             r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::Float64,
-            0.0f64.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float64, 0.0f64)
+                .unwrap();
         let elements: Vec<f64> = vec![
             1000.,
             1000.11111111,

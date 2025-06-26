@@ -75,7 +75,11 @@ mod tests {
 
     use super::*;
 
-    fn codec_squeeze_round_trip_impl(json: &str, data_type: DataType, fill_value: FillValue) {
+    fn codec_squeeze_round_trip_impl(
+        json: &str,
+        data_type: DataType,
+        fill_value: impl Into<FillValue>,
+    ) {
         let chunk_representation = ChunkRepresentation::new(
             vec![
                 NonZeroU64::new(2).unwrap(),
@@ -132,7 +136,7 @@ mod tests {
     #[test]
     fn codec_squeeze_round_trip_array1() {
         const JSON: &str = r#"{}"#;
-        codec_squeeze_round_trip_impl(JSON, DataType::UInt8, FillValue::from(0u8));
+        codec_squeeze_round_trip_impl(JSON, DataType::UInt8, 0u8);
     }
 
     #[test]
@@ -149,7 +153,7 @@ mod tests {
                 NonZeroU64::new(1).unwrap(),
             ],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
