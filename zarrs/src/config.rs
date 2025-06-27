@@ -65,12 +65,12 @@ use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 ///
 /// ## Metadata Options
 ///
-/// ### Experimental Codec Store Metadata If Encode Only
-/// > default: [`false`]
+/// ### Codec Store Metadata If Encode Only
+/// > default: [`true`]
 ///
 /// Some codecs perform potentially irreversible transformations during encoding that decoders do not need to be aware of.
-/// If this option is `false`, experimental codecs with this behaviour will not write their metadata.
-/// This enables arrays to be consumed by other zarr3 implementations that do not support the experimental codec.
+/// If this option is `false`, codecs with this behaviour will not write their metadata.
+/// This enables arrays to be consumed by other Zarr V3 implementations that do not support the codec.
 /// Currently, this options only affects the `bitround` codec.
 ///
 /// ### Metadata Convert Version
@@ -135,7 +135,7 @@ pub struct Config {
     store_empty_chunks: bool,
     codec_concurrent_target: usize,
     chunk_concurrent_minimum: usize,
-    experimental_codec_store_metadata_if_encode_only: bool,
+    codec_store_metadata_if_encode_only: bool,
     metadata_convert_version: MetadataConvertVersion,
     metadata_erase_version: MetadataEraseVersion,
     include_zarrs_metadata: bool,
@@ -155,7 +155,7 @@ impl Default for Config {
             store_empty_chunks: false,
             codec_concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
-            experimental_codec_store_metadata_if_encode_only: false,
+            codec_store_metadata_if_encode_only: true,
             metadata_convert_version: MetadataConvertVersion::Default,
             metadata_erase_version: MetadataEraseVersion::Default,
             include_zarrs_metadata: true,
@@ -218,18 +218,15 @@ impl Config {
         self
     }
 
-    /// Get the [experimental codec store metadata if encode only](#experimental-codec-store-metadata-if-encode-only) configuration.
+    /// Get the [codec store metadata if encode only](#codec-store-metadata-if-encode-only) configuration.
     #[must_use]
-    pub fn experimental_codec_store_metadata_if_encode_only(&self) -> bool {
-        self.experimental_codec_store_metadata_if_encode_only
+    pub fn codec_store_metadata_if_encode_only(&self) -> bool {
+        self.codec_store_metadata_if_encode_only
     }
 
-    /// Set the [experimental codec store metadata if encode only](#experimental-codec-store-metadata-if-encode-only) configuration.
-    pub fn set_experimental_codec_store_metadata_if_encode_only(
-        &mut self,
-        enabled: bool,
-    ) -> &mut Self {
-        self.experimental_codec_store_metadata_if_encode_only = enabled;
+    /// Set the [codec store metadata if encode only](#codec-store-metadata-if-encode-only) configuration.
+    pub fn set_codec_store_metadata_if_encode_only(&mut self, enabled: bool) -> &mut Self {
+        self.codec_store_metadata_if_encode_only = enabled;
         self
     }
 
