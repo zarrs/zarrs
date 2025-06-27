@@ -46,6 +46,7 @@ pub struct Adler32CodecConfigurationV1 {
 
 /// The location of the checksum.
 #[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq, Debug, Display, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum Adler32CodecConfigurationChecksumLocation {
     #[default]
     /// The checksum is encoded at the start of the byte sequence.

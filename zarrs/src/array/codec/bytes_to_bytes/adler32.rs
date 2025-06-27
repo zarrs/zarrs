@@ -79,6 +79,8 @@ mod tests {
     use super::*;
 
     const JSON1: &str = r#"{}"#;
+    const JSON2: &str = r#"{"location":"start"}"#;
+    const JSON3: &str = r#"{"location":"end"}"#;
 
     #[test]
     fn codec_adler32_configuration_none() {
@@ -94,25 +96,34 @@ mod tests {
         let bytes = elements;
         let bytes_representation = BytesRepresentation::FixedSize(bytes.len() as u64);
 
-        let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(JSON1).unwrap();
-        let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
+        for json in [JSON1, JSON2, JSON3] {
+            let codec_configuration: Adler32CodecConfiguration =
+                serde_json::from_str(json).unwrap();
+            let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
 
-        let encoded = codec
-            .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
-            .unwrap();
-        let decoded = codec
-            .decode(
-                encoded.clone(),
-                &bytes_representation,
-                &CodecOptions::default(),
-            )
-            .unwrap();
-        assert_eq!(bytes, decoded.to_vec());
+            let encoded = codec
+                .encode(Cow::Borrowed(&bytes), &CodecOptions::default())
+                .unwrap();
+            let decoded = codec
+                .decode(
+                    encoded.clone(),
+                    &bytes_representation,
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+            assert_eq!(bytes, decoded.to_vec());
 
-        // Check that the checksum is correct
-        let checksum: &[u8; 4] = &encoded[..size_of::<u32>()].try_into().unwrap();
-        println!("checksum {checksum:?}");
-        assert_eq!(checksum, &[16, 0, 41, 0]);
+            // Check that the checksum is correct
+            let checksum: &[u8; 4] = if json.contains("end") {
+                &encoded[encoded.len() - size_of::<u32>()..]
+                    .try_into()
+                    .unwrap()
+            } else {
+                &encoded[..size_of::<u32>()].try_into().unwrap()
+            };
+            println!("checksum {checksum:?}");
+            assert_eq!(checksum, &[16, 0, 41, 0]);
+        }
     }
 
     #[test]
