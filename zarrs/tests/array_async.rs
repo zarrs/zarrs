@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
-use zarrs::array::{Array, ArrayBuilder, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, DataType};
 use zarrs::array_subset::ArraySubset;
 
 use object_store::memory::InMemory;

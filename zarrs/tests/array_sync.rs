@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 

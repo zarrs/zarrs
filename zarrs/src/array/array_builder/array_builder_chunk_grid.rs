@@ -81,6 +81,12 @@ impl From<ChunkGrid> for ArrayBuilderChunkGrid {
     }
 }
 
+impl<T: ChunkGridTraits + 'static> From<T> for ArrayBuilderChunkGrid {
+    fn from(value: T) -> Self {
+        Self(ArrayBuilderChunkGridImpl::ChunkGrid(ChunkGrid::new(value)))
+    }
+}
+
 impl From<Arc<dyn ChunkGridTraits>> for ArrayBuilderChunkGrid {
     fn from(value: Arc<dyn ChunkGridTraits>) -> Self {
         Self(ArrayBuilderChunkGridImpl::ChunkGrid(value.into()))
@@ -111,8 +117,28 @@ impl<const N: usize> From<[u64; N]> for ArrayBuilderChunkGrid {
     }
 }
 
+impl<const N: usize> From<&[u64; N]> for ArrayBuilderChunkGrid {
+    fn from(chunk_shape: &[u64; N]) -> Self {
+        Self(ArrayBuilderChunkGridImpl::ArrayShape(chunk_shape.to_vec()))
+    }
+}
+
+impl From<&[u64]> for ArrayBuilderChunkGrid {
+    fn from(chunk_shape: &[u64]) -> Self {
+        Self(ArrayBuilderChunkGridImpl::ArrayShape(chunk_shape.to_vec()))
+    }
+}
+
 impl<const N: usize> From<[NonZeroU64; N]> for ArrayBuilderChunkGrid {
     fn from(chunk_shape: [NonZeroU64; N]) -> Self {
+        Self(ArrayBuilderChunkGridImpl::ChunkShape(
+            chunk_shape.to_vec().into(),
+        ))
+    }
+}
+
+impl<const N: usize> From<&[NonZeroU64; N]> for ArrayBuilderChunkGrid {
+    fn from(chunk_shape: &[NonZeroU64; N]) -> Self {
         Self(ArrayBuilderChunkGridImpl::ChunkShape(
             chunk_shape.to_vec().into(),
         ))

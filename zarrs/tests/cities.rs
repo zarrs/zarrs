@@ -16,7 +16,7 @@ use zarrs::{
             },
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
         },
-        ArrayBuilder, ArrayMetadataOptions, DataType, FillValue,
+        ArrayBuilder, ArrayMetadataOptions, DataType,
     },
     storage::{store::MemoryStore, ReadableWritableListableStorage},
 };

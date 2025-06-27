@@ -337,18 +337,11 @@ impl ArrayBuilder {
         self
     }
 
-    /// Build into an [`Array`].
+    /// Get the metadata of an array that would be created with the current builder state.
     ///
     /// # Errors
-    ///
-    /// Returns [`ArrayCreateError`] if there is an error creating the array.
-    /// This can be due to a storage error, an invalid path, or a problem with array configuration.
-    pub fn build<TStorage: ?Sized>(
-        &self,
-        storage: Arc<TStorage>,
-        path: &str,
-    ) -> Result<Array<TStorage>, ArrayCreateError> {
-        let path: NodePath = path.try_into()?;
+    /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
+    pub fn metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
         let chunk_grid = self.chunk_grid.to_chunk_grid(&self.shape)?;
         let data_type = self.data_type.to_data_type()?;
         let fill_value = self.fill_value.to_fill_value(&data_type)?;
@@ -372,21 +365,33 @@ impl ArrayBuilder {
             self.bytes_to_bytes_codecs.clone(),
         );
 
-        let array_metadata = ArrayMetadata::V3(
-            ArrayMetadataV3::new(
-                self.shape.clone(),
-                chunk_grid.create_metadata(),
-                data_type.metadata(),
-                data_type.metadata_fill_value(&fill_value)?,
-                codec_chain.create_metadatas(),
-            )
-            .with_attributes(self.attributes.clone())
-            .with_additional_fields(self.additional_fields.clone())
-            .with_chunk_key_encoding(self.chunk_key_encoding.create_metadata())
-            .with_dimension_names(self.dimension_names.clone())
-            .with_storage_transformers(self.storage_transformers.create_metadatas()),
-        );
+        Ok(ArrayMetadataV3::new(
+            self.shape.clone(),
+            chunk_grid.create_metadata(),
+            data_type.metadata(),
+            data_type.metadata_fill_value(&fill_value)?,
+            codec_chain.create_metadatas(),
+        )
+        .with_attributes(self.attributes.clone())
+        .with_additional_fields(self.additional_fields.clone())
+        .with_chunk_key_encoding(self.chunk_key_encoding.create_metadata())
+        .with_dimension_names(self.dimension_names.clone())
+        .with_storage_transformers(self.storage_transformers.create_metadatas()))
+    }
 
+    /// Build into an [`Array`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ArrayCreateError`] if there is an error creating the array.
+    /// This can be due to a storage error, an invalid path, or a problem with array configuration.
+    pub fn build<TStorage: ?Sized>(
+        &self,
+        storage: Arc<TStorage>,
+        path: &str,
+    ) -> Result<Array<TStorage>, ArrayCreateError> {
+        let path: NodePath = path.try_into()?;
+        let array_metadata = ArrayMetadata::V3(self.metadata()?);
         Array::new_with_metadata(storage, path.as_str(), array_metadata)
     }
 
@@ -479,10 +484,14 @@ impl ArrayBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use zarrs_data_type::FillValue;
+    use zarrs_metadata::v3::{FillValueMetadataV3, MetadataV3};
+    use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
     use crate::{
-        array::chunk_key_encoding::V2ChunkKeyEncoding,
+        array::{chunk_grid::RegularChunkGrid, chunk_key_encoding::V2ChunkKeyEncoding},
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
 
@@ -558,5 +567,84 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         builder.dimension_names(["z", "y", "x"].into());
         assert!(builder.build(storage.clone(), "/").is_err());
+    }
+
+    #[test]
+    fn array_builder_variants_array_shape() {
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(&[8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new([8, 8], DataType::Int8, vec![2, 2], 0i8);
+    }
+
+    #[test]
+    fn array_builder_variants_data_type() {
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], "int8", vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], r#"{"name":"int8"}"#, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            r#"{"name":"int8", "configuration":{},"must_understand":true}"#,
+            vec![2, 2],
+            0i8,
+        );
+    }
+
+    #[test]
+    fn array_builder_variants_chunk_grid() {
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8);
+        let nz2 = NonZeroU64::new(2).unwrap();
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![nz2, nz2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[nz2, nz2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2], 0i8);
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#,
+            0i8,
+        );
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            RegularChunkGrid::new([2, 2].try_into().unwrap()),
+            0i8,
+        );
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            MetadataV3::new_with_configuration(
+                "regular",
+                RegularChunkGridConfiguration {
+                    chunk_shape: [2, 2].try_into().unwrap(),
+                },
+            ),
+            0i8,
+        );
+    }
+
+    #[test]
+    fn array_builder_variants_fill_value() {
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16); // 0i16 -> 0 metadata -> 0i8
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            vec![2, 2],
+            FillValue::new(vec![0u8]),
+        );
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], FillValue::from(0u8));
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            vec![2, 2],
+            FillValueMetadataV3::Number(serde_json::Number::from(0u8)),
+        );
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "NaN");
+        let ab = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "0x7fc00000");
+        assert_eq!(
+            ab.metadata().unwrap().fill_value,
+            FillValueMetadataV3::from("NaN")
+        );
     }
 }

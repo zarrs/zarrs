@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
 - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
+- Add `ArrayBuilder::metadata()`
 
 ### Changed
 - **Breaking**: change `ArrayBuilder::new()` to take a broader range of types for each parameter. See below
@@ -19,10 +20,10 @@ ArrayBuilder::new(
     // array shape
     vec![8, 8], // or [8, 8], &[8, 8], etc.
     // data type, data type name, or data type metadata
-    DataType::Float32, // or "float32" or MetadataV3::new("float32"), etc.
+    DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
     // regular chunk shape, chunk grid, or chunk grid metadata
 -    vec![4, 4].try_into()?, // no longer valid
-+    vec![4, 4],
++    vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
     // scalar/string, fill value, or fill value metadata
 -    f32::NAN.into(), // no longer valid
 +    f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
