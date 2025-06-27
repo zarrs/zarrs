@@ -63,10 +63,26 @@ impl From<&[u8]> for ArrayBuilderFillValue {
     }
 }
 
+// impl<const N: usize> From<[u8; N]> for ArrayBuilderFillValue {
+//     fn from(value: [u8; N]) -> Self {
+//         Self(ArrayBuilderFillValueImpl::Metadata(
+//             FillValueMetadataV3::from(value.as_slice()),
+//         ))
+//     }
+// }
+
+// impl<const N: usize> From<&[u8; N]> for ArrayBuilderFillValue {
+//     fn from(value: &[u8; N]) -> Self {
+//         Self(ArrayBuilderFillValueImpl::Metadata(
+//             FillValueMetadataV3::from(value.as_slice()),
+//         ))
+//     }
+// }
+
 impl From<Vec<u8>> for ArrayBuilderFillValue {
     fn from(value: Vec<u8>) -> Self {
         Self(ArrayBuilderFillValueImpl::Metadata(
-            FillValueMetadataV3::Array(value.into_iter().map(FillValueMetadataV3::from).collect()),
+            FillValueMetadataV3::from(value.as_slice()),
         ))
     }
 }

@@ -491,7 +491,11 @@ mod tests {
     use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
     use crate::{
-        array::{chunk_grid::RegularChunkGrid, chunk_key_encoding::V2ChunkKeyEncoding},
+        array::{
+            chunk_grid::{ChunkGridTraits, RegularChunkGrid},
+            chunk_key_encoding::V2ChunkKeyEncoding,
+            ChunkGrid,
+        },
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
 
@@ -574,6 +578,7 @@ mod tests {
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         let _ = ArrayBuilder::new(&[8, 8], DataType::Int8, vec![2, 2], 0i8);
         let _ = ArrayBuilder::new([8, 8], DataType::Int8, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new([8, 8].as_slice(), DataType::Int8, vec![2, 2], 0i8);
     }
 
     #[test]
@@ -581,6 +586,12 @@ mod tests {
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], "int8", vec![2, 2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], r#"{"name":"int8"}"#, vec![2, 2], 0i8);
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            r#"{"name":"int8"}"#.to_string(),
+            vec![2, 2],
+            0i8,
+        );
         let _ = ArrayBuilder::new(
             vec![8, 8],
             r#"{"name":"int8", "configuration":{},"must_understand":true}"#,
@@ -591,13 +602,28 @@ mod tests {
 
     #[test]
     fn array_builder_variants_chunk_grid() {
+        assert!(
+            ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![0, 0], 0i8)
+                .metadata()
+                .is_err()
+        );
+        assert!(
+            ArrayBuilder::new(vec![8, 8], DataType::Int8, "regular", 0i8)
+                .metadata()
+                .is_err()
+        );
+        assert!(ArrayBuilder::new(vec![8, 8], DataType::Int8, "{", 0i8)
+            .metadata()
+            .is_err());
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[2, 2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2].as_slice(), 0i8);
         let nz2 = NonZeroU64::new(2).unwrap();
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![nz2, nz2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[nz2, nz2], 0i8);
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2], 0i8);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2].as_slice(), 0i8);
         let _ = ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
@@ -607,7 +633,22 @@ mod tests {
         let _ = ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
+            r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#.to_string(),
+            0i8,
+        );
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
             RegularChunkGrid::new([2, 2].try_into().unwrap()),
+            0i8,
+        );
+        let chunk_grid: Arc<dyn ChunkGridTraits> =
+            Arc::new(RegularChunkGrid::new([2, 2].try_into().unwrap()));
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, chunk_grid, 0i8);
+        let _ = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            ChunkGrid::new(RegularChunkGrid::new([2, 2].try_into().unwrap())),
             0i8,
         );
         let _ = ArrayBuilder::new(
@@ -633,6 +674,10 @@ mod tests {
             vec![2, 2],
             FillValue::new(vec![0u8]),
         );
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], vec![0u8]);
+        // let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], &[0u8]);
+        // let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], [0u8]);
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], [0u8].as_slice());
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], FillValue::from(0u8));
         let _ = ArrayBuilder::new(
             vec![8, 8],
@@ -640,11 +685,24 @@ mod tests {
             vec![2, 2],
             FillValueMetadataV3::Number(serde_json::Number::from(0u8)),
         );
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], f32::NAN);
         let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "NaN");
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "Infinity");
+        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "-Infinity");
         let ab = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "0x7fc00000");
         assert_eq!(
             ab.metadata().unwrap().fill_value,
             FillValueMetadataV3::from("NaN")
+        );
+        let ab = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Float32,
+            vec![2, 2],
+            f32::from_bits(0x7fc00001),
+        ); // non-standard NaN
+        assert_eq!(
+            ab.metadata().unwrap().fill_value,
+            FillValueMetadataV3::from("0x7fc00001")
         );
     }
 }
