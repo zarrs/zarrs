@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `VlenCodec::with_index_location()`
 - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
 - Add `ArrayBuilder::metadata()`
-- Implement `From<&[FillValueMetadataV3; N]>` for `FillValueMetadataV3`
 
 ### Changed
 - **Breaking**: change `ArrayBuilder::new()` to take a broader range of types for each parameter. See below

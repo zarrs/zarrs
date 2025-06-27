@@ -234,12 +234,6 @@ impl<const N: usize> From<[FillValueMetadataV3; N]> for FillValueMetadataV3 {
     }
 }
 
-impl<const N: usize> From<&[FillValueMetadataV3; N]> for FillValueMetadataV3 {
-    fn from(value: &[FillValueMetadataV3; N]) -> Self {
-        Self::Array(value.to_vec())
-    }
-}
-
 macro_rules! impl_from_for_int_fill_value_metadata_v3 {
     ($($t:ty),*) => {
         $(
