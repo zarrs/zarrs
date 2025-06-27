@@ -575,29 +575,50 @@ mod tests {
 
     #[test]
     fn array_builder_variants_array_shape() {
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(&[8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new([8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new([8, 8].as_slice(), DataType::Int8, vec![2, 2], 0i8);
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(&[8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new([8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new([8, 8].as_slice(), DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
     }
 
     #[test]
     fn array_builder_variants_data_type() {
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], "int8", vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], r#"{"name":"int8"}"#, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], "int8", vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], r#"{"name":"int8"}"#, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             r#"{"name":"int8"}"#.to_string(),
             vec![2, 2],
             0i8,
-        );
-        let _ = ArrayBuilder::new(
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             r#"{"name":"int8", "configuration":{},"must_understand":true}"#,
             vec![2, 2],
             0i8,
-        );
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], MetadataV3::new("int8"), vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
     }
 
     #[test]
@@ -615,43 +636,69 @@ mod tests {
         assert!(ArrayBuilder::new(vec![8, 8], DataType::Int8, "{", 0i8)
             .metadata()
             .is_err());
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2].as_slice(), 0i8);
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, &[2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2].as_slice(), 0i8)
+            .metadata()
+            .unwrap();
         let nz2 = NonZeroU64::new(2).unwrap();
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![nz2, nz2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, &[nz2, nz2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2].as_slice(), 0i8);
-        let _ = ArrayBuilder::new(
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, &[nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2].as_slice(), 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#,
             0i8,
-        );
-        let _ = ArrayBuilder::new(
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#.to_string(),
             0i8,
-        );
-        let _ = ArrayBuilder::new(
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             RegularChunkGrid::new([2, 2].try_into().unwrap()),
             0i8,
-        );
+        )
+        .metadata()
+        .unwrap();
         let chunk_grid: Arc<dyn ChunkGridTraits> =
             Arc::new(RegularChunkGrid::new([2, 2].try_into().unwrap()));
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, chunk_grid, 0i8);
-        let _ = ArrayBuilder::new(
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, chunk_grid, 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             ChunkGrid::new(RegularChunkGrid::new([2, 2].try_into().unwrap())),
             0i8,
-        );
-        let _ = ArrayBuilder::new(
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             MetadataV3::new_with_configuration(
@@ -661,34 +708,50 @@ mod tests {
                 },
             ),
             0i8,
-        );
+        )
+        .metadata()
+        .unwrap();
     }
 
     #[test]
     fn array_builder_variants_fill_value() {
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16); // 0i16 -> 0 metadata -> 0i8
-        let _ = ArrayBuilder::new(
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16)
+            .metadata()
+            .unwrap(); // 0i16 -> 0 metadata -> 0i8
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             vec![2, 2],
             FillValue::new(vec![0u8]),
-        );
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], vec![0u8]);
-        // let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], &[0u8]);
-        // let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], [0u8]);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], [0u8].as_slice());
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], FillValue::from(0u8));
-        let _ = ArrayBuilder::new(
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], FillValue::from(0u8))
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
             vec![8, 8],
             DataType::Int8,
             vec![2, 2],
             FillValueMetadataV3::Number(serde_json::Number::from(0u8)),
-        );
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], f32::NAN);
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "NaN");
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "Infinity");
-        let _ = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "-Infinity");
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], f32::NAN)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "NaN")
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "Infinity")
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "-Infinity")
+            .metadata()
+            .unwrap();
         let ab = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "0x7fc00000");
         assert_eq!(
             ab.metadata().unwrap().fill_value,

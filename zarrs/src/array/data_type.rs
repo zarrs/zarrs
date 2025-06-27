@@ -467,7 +467,9 @@ impl DataType {
                 }
                 _ => {}
             }
-        } else {
+        }
+
+        if metadata.configuration_is_none_or_empty() {
             // Data types with no configuration
             match metadata.name() {
                 zarrs_registry::data_type::BOOL => return Ok(Self::Bool),
