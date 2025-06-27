@@ -184,8 +184,8 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
                 unit,
                 scale_factor: 1.try_into().unwrap(),
             },
-            vec![5].try_into().unwrap(),
-            FillValue::from(i64::MIN),
+            vec![5],
+            i64::MIN,
         )
         .build(store.clone(), "/")?;
         array.store_metadata()?;
@@ -384,8 +384,8 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
                     unit,
                     scale_factor: scale_factor.try_into().unwrap(),
                 },
-                vec![5].try_into().unwrap(),
-                FillValue::from(i64::MIN),
+                vec![5],
+                i64::MIN,
             )
             .build(store.clone(), "/")?;
             array.store_metadata()?;

@@ -29,6 +29,15 @@ pub enum ArrayCreateError {
     /// Invalid fill value.
     #[error(transparent)]
     InvalidFillValue(#[from] DataTypeFillValueError),
+    // /// Unparseable metadata.
+    // #[error("unparseable metadata: {_0:?}")]
+    // UnparseableMetadata(String),
+    // /// Invalid data type metadata.
+    // #[error("unsupported data type metadata: {_0:?}")]
+    // UnsupportedDataTypeMetadata(MetadataV3),
+    // /// Invalid chunk grid metadata.
+    // #[error("unsupported chunk grid metadata: {_0:?}")]
+    // UnsupportedChunkGridMetadata(MetadataV3),
     /// Invalid fill value metadata.
     #[error(transparent)]
     InvalidFillValueMetadata(#[from] DataTypeFillValueMetadataError),

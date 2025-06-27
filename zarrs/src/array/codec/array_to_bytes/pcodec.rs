@@ -146,7 +146,7 @@ mod tests {
     fn codec_pcodec_round_trip_impl(
         codec: &PcodecCodec,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
         let chunk_representation =
@@ -176,7 +176,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
     }
@@ -187,7 +187,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt32,
-            FillValue::from(0u32),
+            0u32,
         )
         .unwrap();
     }
@@ -198,7 +198,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt64,
-            FillValue::from(0u64),
+            0u64,
         )
         .unwrap();
     }
@@ -209,7 +209,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int16,
-            FillValue::from(0i16),
+            0i16,
         )
         .unwrap();
     }
@@ -220,7 +220,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int32,
-            FillValue::from(0i32),
+            0i32,
         )
         .unwrap();
     }
@@ -231,7 +231,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int64,
-            FillValue::from(0i64),
+            0i64,
         )
         .unwrap();
     }
@@ -242,7 +242,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float16,
-            FillValue::from(half::f16::from_f32(0.0)),
+            half::f16::from_f32(0.0),
         )
         .unwrap();
     }
@@ -253,7 +253,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float32,
-            FillValue::from(0f32),
+            0f32,
         )
         .unwrap();
     }
@@ -264,7 +264,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float64,
-            FillValue::from(0f64),
+            0f64,
         )
         .unwrap();
     }
@@ -275,10 +275,10 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat16,
-            FillValue::from(num::complex::Complex::<half::f16>::new(
+            num::complex::Complex::<half::f16>::new(
                 half::f16::from_f32(0f32),
                 half::f16::from_f32(0f32),
-            )),
+            ),
         )
         .unwrap();
     }
@@ -289,7 +289,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat32,
-            FillValue::from(num::complex::Complex::<f32>::new(0f32, 0f32)),
+            num::complex::Complex::<f32>::new(0f32, 0f32),
         )
         .unwrap();
     }
@@ -300,7 +300,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat64,
-            FillValue::from(num::complex::Complex::<f64>::new(0f64, 0f64)),
+            num::complex::Complex::<f64>::new(0f64, 0f64),
         )
         .unwrap();
     }
@@ -311,7 +311,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Complex64,
-            FillValue::from(num::complex::Complex32::new(0f32, 0f32)),
+            num::complex::Complex32::new(0f32, 0f32),
         )
         .unwrap();
     }
@@ -322,7 +322,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Complex128,
-            FillValue::from(num::complex::Complex64::new(0f64, 0f64)),
+            num::complex::Complex64::new(0f64, 0f64),
         )
         .unwrap();
     }
@@ -333,7 +333,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt8,
-            FillValue::from(0u8),
+            0u8,
         )
         .is_err());
     }
@@ -341,12 +341,8 @@ mod tests {
     #[test]
     fn codec_pcodec_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
         let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -392,12 +388,8 @@ mod tests {
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
         let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();

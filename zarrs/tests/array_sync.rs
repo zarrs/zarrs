@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
@@ -107,8 +107,8 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     let array = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        vec![2, 2], // regular chunk shape
+        0u8,
     )
     .bytes_to_bytes_codecs(vec![])
     // .storage_transformers(vec![].into())
@@ -136,8 +136,8 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        vec![2, 2], // regular chunk shape
+        0u8,
     );
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
@@ -268,8 +268,8 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        vec![2, 2], // regular chunk shape
+        "",
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
@@ -291,8 +291,8 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        vec![2, 2], // regular chunk shape
+        "",
     );
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
         TransposeOrder::new(&[1, 0]).unwrap(),
@@ -322,8 +322,8 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::Bytes,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from([]),
+        vec![2, 2], // regular chunk shape
+        [],
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]

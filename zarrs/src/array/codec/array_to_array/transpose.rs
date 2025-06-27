@@ -165,7 +165,11 @@ mod tests {
 
     use super::*;
 
-    fn codec_transpose_round_trip_impl(json: &str, data_type: DataType, fill_value: FillValue) {
+    fn codec_transpose_round_trip_impl(
+        json: &str,
+        data_type: DataType,
+        fill_value: impl Into<FillValue>,
+    ) {
         let chunk_representation = ChunkRepresentation::new(
             vec![
                 NonZeroU64::new(2).unwrap(),
@@ -213,7 +217,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [0, 2, 1]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt8, FillValue::from(0u8));
+        codec_transpose_round_trip_impl(JSON, DataType::UInt8, 0u8);
     }
 
     #[test]
@@ -221,7 +225,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [2, 1, 0]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt16, FillValue::from(0u16));
+        codec_transpose_round_trip_impl(JSON, DataType::UInt16, 0u16);
     }
 
     #[test]
@@ -232,7 +236,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -291,7 +295,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes = crate::array::transmute_to_bytes_vec(elements);

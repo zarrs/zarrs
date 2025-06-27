@@ -737,7 +737,7 @@ mod tests {
     use crate::{
         array::{
             codec::{array_to_bytes::sharding::ShardingCodecBuilder, TransposeCodec},
-            ArrayBuilder, DataType, FillValue,
+            ArrayBuilder, DataType,
         },
         array_subset::ArraySubset,
         storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
@@ -753,8 +753,8 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
             DataType::UInt16,
-            vec![4, 4].try_into()?, // regular chunk shape
-            FillValue::from(0u16),
+            vec![4, 4], // regular chunk shape
+            0u16,
         );
         if sharded {
             builder.array_to_bytes_codec(Arc::new(
@@ -973,8 +973,8 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![16, 16, 9], // array shape
             DataType::UInt32,
-            vec![8, 4, 3].try_into()?, // regular chunk shape
-            FillValue::from(0u32),
+            vec![8, 4, 3], // regular chunk shape
+            0u32,
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
             &[1, 0, 2],

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
-use zarrs::array::{Array, ArrayBuilder, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, DataType};
 use zarrs::array_subset::ArraySubset;
 
 use object_store::memory::InMemory;
@@ -20,8 +20,8 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        vec![2, 2], // regular chunk shape
+        0u8,
     );
     builder.bytes_to_bytes_codecs(vec![]);
     // builder.storage_transformers(vec![].into());
@@ -279,8 +279,8 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        vec![2, 2], // regular chunk shape
+        "",
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
@@ -299,8 +299,8 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         let mut builder = ArrayBuilder::new(
             vec![4, 4], // array shape
             DataType::String,
-            vec![2, 2].try_into().unwrap(), // regular chunk shape
-            FillValue::from(""),
+            vec![2, 2], // regular chunk shape
+            "",
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
             TransposeOrder::new(&[1, 0]).unwrap(),

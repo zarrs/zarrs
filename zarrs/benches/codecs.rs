@@ -29,7 +29,7 @@ fn codec_bytes(c: &mut Criterion) {
         let rep = ChunkRepresentation::new(
             vec![num_elements.try_into().unwrap(); 1],
             DataType::UInt16,
-            0u16.into(),
+            0u16,
         )
         .unwrap();
 

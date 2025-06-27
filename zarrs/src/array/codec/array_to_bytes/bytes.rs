@@ -200,7 +200,7 @@ mod tests {
     fn codec_bytes_round_trip_impl(
         endianness: Option<Endianness>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
         let chunk_representation =
@@ -225,80 +225,38 @@ mod tests {
 
     #[test]
     fn codec_bytes_round_trip_f32() {
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Big),
-            DataType::Float32,
-            FillValue::from(0.0f32),
-        )
-        .unwrap();
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Little),
-            DataType::Float32,
-            FillValue::from(0.0f32),
-        )
-        .unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::Float32, 0.0f32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::Float32, 0.0f32).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u32() {
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Big),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Little),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt32, 0u32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt32, 0u32).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u16() {
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Big),
-            DataType::UInt16,
-            FillValue::from(0u16),
-        )
-        .unwrap();
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Little),
-            DataType::UInt16,
-            FillValue::from(0u16),
-        )
-        .unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt16, 0u16).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt16, 0u16).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u8() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt8, FillValue::from(0u8))
-            .unwrap();
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Little),
-            DataType::UInt8,
-            FillValue::from(0u8),
-        )
-        .unwrap();
-        codec_bytes_round_trip_impl(None, DataType::UInt8, FillValue::from(0u8)).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt8, 0u8).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt8, 0u8).unwrap();
+        codec_bytes_round_trip_impl(None, DataType::UInt8, 0u8).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::Int32, FillValue::from(0))
-            .unwrap();
-        codec_bytes_round_trip_impl(
-            Some(Endianness::Little),
-            DataType::Int32,
-            FillValue::from(0),
-        )
-        .unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::Int32, 0).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::Int32, 0).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32_endianness_none() {
-        assert!(codec_bytes_round_trip_impl(None, DataType::Int32, FillValue::from(0)).is_err());
+        assert!(codec_bytes_round_trip_impl(None, DataType::Int32, 0).is_err());
     }
 
     #[test]
@@ -306,13 +264,13 @@ mod tests {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
             DataType::Complex64,
-            FillValue::from(num::complex::Complex32::new(0.0, 0.0)),
+            num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
             DataType::Complex64,
-            FillValue::from(num::complex::Complex32::new(0.0, 0.0)),
+            num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
     }
@@ -322,13 +280,13 @@ mod tests {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
             DataType::Complex128,
-            FillValue::from(num::complex::Complex64::new(0.0, 0.0)),
+            num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
             DataType::Complex128,
-            FillValue::from(num::complex::Complex64::new(0.0, 0.0)),
+            num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
     }
@@ -337,8 +295,7 @@ mod tests {
     fn codec_bytes_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
@@ -381,8 +338,7 @@ mod tests {
     async fn codec_bytes_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 

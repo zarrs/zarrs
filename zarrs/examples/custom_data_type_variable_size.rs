@@ -122,6 +122,8 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
             Ok(FillValue::new(f.to_ne_bytes().to_vec()))
         } else if fill_value_metadata.is_null() {
             Ok(FillValue::new(vec![]))
+        } else if let Some(bytes) = fill_value_metadata.as_bytes() {
+            Ok(FillValue::new(bytes))
         } else {
             Err(DataTypeFillValueMetadataError::new(
                 self.name(),
@@ -156,8 +158,8 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
-        vec![3, 1].try_into().unwrap(), // regular chunk shape
-        FillValue::from(vec![]),
+        vec![3, 1], // regular chunk shape
+        [],
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
