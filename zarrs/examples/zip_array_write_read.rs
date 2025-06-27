@@ -9,7 +9,7 @@ use std::{
 use walkdir::WalkDir;
 
 use zarrs::{
-    array::{codec, Array, DataType, FillValue, ZARR_NAN_F32},
+    array::{codec, Array, DataType, ZARR_NAN_F32},
     array_subset::ArraySubset,
     filesystem::FilesystemStore,
     node::Node,
@@ -31,8 +31,8 @@ fn write_array_to_storage<TStorage: ReadableWritableStorageTraits + ?Sized + 'st
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         DataType::Float32,
-        vec![4, 4].try_into()?, // regular chunk shape
-        FillValue::from(ZARR_NAN_F32),
+        vec![4, 4], // regular chunk shape
+        ZARR_NAN_F32,
     )
     .bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]

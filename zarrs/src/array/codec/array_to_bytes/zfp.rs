@@ -509,7 +509,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i8() {
         codec_zfp_round_trip::<i8>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int8, 0i8.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int8, 0i8).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i8>(
@@ -522,7 +522,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u8() {
         codec_zfp_round_trip::<u8>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt8, 0u8.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt8, 0u8).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u8>(
@@ -535,7 +535,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i16() {
         codec_zfp_round_trip::<i16>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int16, 0i16.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int16, 0i16).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i16>(
@@ -548,7 +548,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u16() {
         codec_zfp_round_trip::<u16>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt16, 0u16.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt16, 0u16).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u16>(
@@ -561,7 +561,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i32() {
         codec_zfp_round_trip::<i32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int32, 0i32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int32, 0i32).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i32>(
@@ -574,7 +574,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u32() {
         codec_zfp_round_trip::<u32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt32, 0u32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt32, 0u32).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u32>(
@@ -587,7 +587,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i64() {
         codec_zfp_round_trip::<i64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int64, 0i64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int64, 0i64).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i64>(
@@ -600,11 +600,11 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u64() {
         codec_zfp_round_trip::<u64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u64>(
-        //     &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64.into()).unwrap(),
+        //     &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64).unwrap(),
         //     &json_fixedprecision(64),
         // );
     }
@@ -613,19 +613,19 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_f32() {
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedprecision(13),
         );
     }
@@ -634,19 +634,19 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_f64() {
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedprecision(16),
         );
     }
@@ -660,7 +660,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32.into()).unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32).unwrap();
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -716,7 +716,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32.into()).unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32).unwrap();
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -781,19 +781,19 @@ mod tests {
         };
 
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedprecision(13),
         );
     }

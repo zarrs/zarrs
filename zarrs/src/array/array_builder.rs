@@ -11,22 +11,37 @@ use super::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, BytesToBytesCodecTraits,
         NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
     },
-    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkGrid, CodecChain,
-    DataType, DimensionName, FillValue, StorageTransformerChain,
+    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, CodecChain, DataType,
+    DimensionName, StorageTransformerChain,
 };
+
+mod array_builder_chunk_grid;
+pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
+
+mod array_builder_data_type;
+pub use array_builder_data_type::ArrayBuilderDataType;
+
+mod array_builder_fill_value;
+pub use array_builder_fill_value::ArrayBuilderFillValue;
 
 /// An [`Array`] builder.
 ///
-/// The array builder is initialised from an array shape, data type, chunk grid, and fill value.
-///  - The only codec enabled by default is `bytes` (with native endian encoding), so the output is uncompressed.
-///  - The default chunk key encoding is `default` with the `/` chunk key separator.
+/// [`ArrayBuilder`] is initialised from an array shape, data type, chunk grid, and fill value.
+///  - The default array-to-bytes codec is dependent on the data type:
+///    - [`bytes`](crate::array::codec::array_to_bytes::bytes) for fixed-length data types,
+///    - [`vlen-utf8`](crate::array::codec::array_to_bytes::vlen_utf8) for the [`string`](crate::array::data_type::DataType::String) variable-length data type,
+///    - [`vlen-bytes`](crate::array::codec::array_to_bytes::vlen_bytes) for the [`bytes`](crate::array::data_type::DataType::Bytes) variable-length data type, and
+///    - [`vlen`](crate::array::codec::array_to_bytes::vlen) for any other variable-length data type.
+///  - Array-to-array and bytes-to-bytes codecs are empty by default.
+///  - The default chunk key encoding is [`default`](crate::array::chunk_key_encoding::default::DefaultChunkKeyEncoding) with the `/` chunk key separator.
 ///  - Attributes, storage transformers, and dimension names are empty.
-///  - Codecs are configured to use multiple threads where possible.
 ///
 /// Use the methods in the array builder to change the configuration away from these defaults, and then build the array at a path of some storage with [`ArrayBuilder::build`].
-/// Note that [`build`](ArrayBuilder::build) does not modify the store; the array metadata has to be explicitly written with [`Array::store_metadata`].
 ///
-/// For example:
+/// [`build`](ArrayBuilder::build) does not modify the store! Array metadata has to be explicitly written with [`Array::store_metadata`].
+///
+/// ### Simple Example
+/// This array is uncompressed, and has no dimension names or attributes.
 ///
 /// ```rust
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,24 +50,40 @@ use super::{
 /// # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 /// let mut array = ArrayBuilder::new(
 ///     vec![8, 8], // array shape
-///     DataType::Float32,
-///     vec![4, 4].try_into()?, // regular chunk shape (elements must be non-zero)
-///     FillValue::from(ZARR_NAN_F32),
+///     DataType::Float32, // data type
+///     vec![4, 4], // regular chunk shape
+///     f32::NAN, // fill value
 /// )
-/// .bytes_to_bytes_codecs(vec![
-///     #[cfg(feature = "gzip")]
-///     Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-/// ])
-/// .dimension_names(["y", "x"].into())
 /// .build(store.clone(), "/group/array")?;
 /// array.store_metadata()?; // write metadata to the store
+/// # Ok(())
+/// # }
+/// ```
 ///
-/// // array.store_chunk(...)
-/// // array.store_array_subset(...)
+/// ### Advanced Example
+/// The array is compressed with the [`zstd`](crate::array::codec::bytes_to_bytes::zstd) codec, dimension names are set, and the experimental [`rectangular`](crate::array::chunk_grid::rectangular) chunk grid is used.
 ///
-/// array.set_shape(vec![16, 16]); // revise the shape if needed
-/// array.store_metadata()?; // update stored metadata
+/// This example uses alternative types to specify the array shape, data type, chunk grid, and fill value.
+/// In general you don't want to use strings, prefer concrete types (like [`RectangularChunkGridConfiguration`](crate::array::chunk_grid::RectangularChunkGridConfiguration), for example).
 ///
+/// ```rust
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # use std::sync::Arc;
+/// use zarrs::array::{ArrayBuilder, DataType, FillValue, ZARR_NAN_F32};
+/// # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
+/// let mut array = ArrayBuilder::new(
+///     [8, 8],
+///     "float32",
+///     r#"{"name":"rectangular","configuration":{"chunk_shape": [[1, 2, 5], 4]}}"#,
+///     "NaN",
+/// )
+/// .bytes_to_bytes_codecs(vec![
+///     #[cfg(feature = "zstd")]
+///     Arc::new(zarrs::array::codec::ZstdCodec::new(5, false)),
+/// ])
+/// .dimension_names(Some(["y", "x"]))
+/// .build(store.clone(), "/group/array")?;
+/// array.store_metadata()?; // write metadata to the store
 /// # Ok(())
 /// # }
 /// ```
@@ -61,18 +92,18 @@ pub struct ArrayBuilder {
     /// Array shape.
     pub shape: ArrayShape,
     /// Data type.
-    pub data_type: DataType,
+    pub data_type: ArrayBuilderDataType,
     /// Chunk grid.
-    pub chunk_grid: ChunkGrid,
+    pub chunk_grid: ArrayBuilderChunkGrid,
     /// Chunk key encoding.
     pub chunk_key_encoding: ChunkKeyEncoding,
     /// Fill value.
-    pub fill_value: FillValue,
-    /// Array to array codecs.
+    pub fill_value: ArrayBuilderFillValue,
+    /// The array-to-array codecs.
     pub array_to_array_codecs: Vec<NamedArrayToArrayCodec>,
-    /// Array to bytes codec.
-    pub array_to_bytes_codec: NamedArrayToBytesCodec,
-    /// Bytes to bytes codecs.
+    /// The array-to-bytes codec.
+    pub array_to_bytes_codec: Option<NamedArrayToBytesCodec>,
+    /// The bytes-to-bytes codecs. If [`None`], chooses a default based on the data type.
     pub bytes_to_bytes_codecs: Vec<NamedBytesToBytesCodec>,
     /// Storage transformer chain.
     pub storage_transformers: StorageTransformerChain,
@@ -91,12 +122,281 @@ impl ArrayBuilder {
     /// The shape of the [`Array`] can be be updated as required.
     #[must_use]
     pub fn new(
-        shape: ArrayShape,
-        data_type: DataType,
-        chunk_grid: ChunkGrid,
-        fill_value: FillValue,
+        shape: impl Into<ArrayShape>,
+        data_type: impl Into<ArrayBuilderDataType>,
+        chunk_grid: impl Into<ArrayBuilderChunkGrid>,
+        fill_value: impl Into<ArrayBuilderFillValue>,
     ) -> Self {
-        let array_to_bytes_codec: NamedArrayToBytesCodec = if data_type.fixed_size().is_some() {
+        let shape = shape.into();
+        let data_type = data_type.into();
+        let chunk_grid = chunk_grid.into();
+        let fill_value = fill_value.into();
+
+        Self {
+            shape,
+            data_type,
+            chunk_grid,
+            chunk_key_encoding: ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default()),
+            fill_value,
+            array_to_array_codecs: Vec::default(),
+            array_to_bytes_codec: None,
+            bytes_to_bytes_codecs: Vec::default(),
+            attributes: serde_json::Map::default(),
+            storage_transformers: StorageTransformerChain::default(),
+            dimension_names: None,
+            additional_fields: AdditionalFieldsV3::default(),
+        }
+    }
+
+    /// Create a new builder copying the configuration of an existing array.
+    #[must_use]
+    pub fn from_array<T: ?Sized>(array: &Array<T>) -> Self {
+        let mut builder = Self::new(
+            array.shape().to_vec(),
+            array.data_type().clone(),
+            array.chunk_grid().create_metadata(),
+            array.fill_value_metadata_v3(),
+        );
+        let additional_fields = match array.metadata() {
+            ArrayMetadata::V2(_metadata) => AdditionalFieldsV3::default(),
+            ArrayMetadata::V3(metadata) => metadata.additional_fields.clone(),
+        };
+
+        builder
+            .additional_fields(additional_fields)
+            .attributes(array.attributes().clone())
+            .chunk_key_encoding(array.chunk_key_encoding().clone())
+            .dimension_names(array.dimension_names().clone())
+            .array_to_array_codecs_named(array.codecs().array_to_array_codecs().to_vec())
+            .array_to_bytes_codec_named(array.codecs().array_to_bytes_codec().clone())
+            .bytes_to_bytes_codecs_named(array.codecs().bytes_to_bytes_codecs().to_vec())
+            .storage_transformers(array.storage_transformers().clone());
+        builder
+    }
+
+    /// Set the shape.
+    pub fn shape(&mut self, shape: impl Into<ArrayShape>) -> &mut Self {
+        self.shape = shape.into();
+        self
+    }
+
+    /// Set the data type.
+    pub fn data_type(&mut self, data_type: impl Into<ArrayBuilderDataType>) -> &mut Self {
+        self.data_type = data_type.into();
+        self
+    }
+
+    /// Set the chunk grid.
+    pub fn chunk_grid(&mut self, chunk_grid: impl Into<ArrayBuilderChunkGrid>) -> &mut Self {
+        self.chunk_grid = chunk_grid.into();
+        self
+    }
+
+    /// Set the fill value.
+    pub fn fill_value(&mut self, fill_value: impl Into<ArrayBuilderFillValue>) -> &mut Self {
+        self.fill_value = fill_value.into();
+        self
+    }
+
+    /// Set the chunk key encoding.
+    ///
+    /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
+    pub fn chunk_key_encoding(&mut self, chunk_key_encoding: ChunkKeyEncoding) -> &mut Self {
+        self.chunk_key_encoding = chunk_key_encoding;
+        self
+    }
+
+    /// Set the chunk key encoding to `default` with `separator`.
+    ///
+    /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
+    pub fn chunk_key_encoding_default_separator(
+        &mut self,
+        separator: ChunkKeySeparator,
+    ) -> &mut Self {
+        self.chunk_key_encoding = ChunkKeyEncoding::new(DefaultChunkKeyEncoding::new(separator));
+        self
+    }
+
+    /// Set the array-to-array codecs.
+    ///
+    /// If left unmodified, the array will have no array-to-array codecs.
+    pub fn array_to_array_codecs(
+        &mut self,
+        array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+    ) -> &mut Self {
+        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set the array-to-array codecs with non-default names.
+    ///
+    /// If left unmodified, the array will have no array-to-array codecs.
+    pub fn array_to_array_codecs_named(
+        &mut self,
+        array_to_array_codecs: Vec<impl Into<NamedArrayToArrayCodec>>,
+    ) -> &mut Self {
+        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set the array-to-bytes codec.
+    ///
+    /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
+    pub fn array_to_bytes_codec(
+        &mut self,
+        array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+    ) -> &mut Self {
+        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
+        self
+    }
+
+    /// Set the array-to-bytes codec with non-default names.
+    ///
+    /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
+    pub fn array_to_bytes_codec_named(
+        &mut self,
+        array_to_bytes_codec: impl Into<NamedArrayToBytesCodec>,
+    ) -> &mut Self {
+        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
+        self
+    }
+
+    /// Set the bytes-to-bytes codecs.
+    ///
+    /// If left unmodified, the array will have no bytes-to-bytes codecs.
+    pub fn bytes_to_bytes_codecs(
+        &mut self,
+        bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+    ) -> &mut Self {
+        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set the bytes-to-bytes codecs with non-default names.
+    ///
+    /// If left unmodified, the array will have no bytes-to-bytes codecs.
+    pub fn bytes_to_bytes_codecs_named(
+        &mut self,
+        bytes_to_bytes_codecs: Vec<impl Into<NamedBytesToBytesCodec>>,
+    ) -> &mut Self {
+        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Set the user defined attributes.
+    ///
+    /// If left unmodified, the user defined attributes of the array will be empty.
+    pub fn attributes(
+        &mut self,
+        attributes: serde_json::Map<String, serde_json::Value>,
+    ) -> &mut Self {
+        self.attributes = attributes;
+        self
+    }
+
+    /// Set the additional fields.
+    ///
+    /// Set additional fields not defined in the Zarr specification.
+    /// Use this cautiously. In general, store user defined attributes using [`ArrayBuilder::attributes`].
+    ///
+    /// `zarrs` and other implementations are expected to error when opening an array with unsupported additional fields, unless they are a JSON object containing `"must_understand": false`.
+    pub fn additional_fields(&mut self, additional_fields: AdditionalFieldsV3) -> &mut Self {
+        self.additional_fields = additional_fields;
+        self
+    }
+
+    /// Set the dimension names.
+    ///
+    /// If left unmodified, all dimension names are "unnamed".
+    pub fn dimension_names<I, D>(&mut self, dimension_names: Option<I>) -> &mut Self
+    where
+        I: IntoIterator<Item = D>,
+        D: IntoDimensionName,
+    {
+        if let Some(dimension_names) = dimension_names {
+            self.dimension_names = Some(
+                dimension_names
+                    .into_iter()
+                    .map(IntoDimensionName::into_dimension_name)
+                    .collect(),
+            );
+        } else {
+            self.dimension_names = None;
+        }
+        self
+    }
+
+    /// Set the storage transformers.
+    ///
+    /// If left unmodified, there are no storage transformers.
+    pub fn storage_transformers(
+        &mut self,
+        storage_transformers: StorageTransformerChain,
+    ) -> &mut Self {
+        self.storage_transformers = storage_transformers;
+        self
+    }
+
+    /// Get the metadata of an array that would be created with the current builder state.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
+    pub fn metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
+        let chunk_grid = self.chunk_grid.to_chunk_grid(&self.shape)?;
+        let data_type = self.data_type.to_data_type()?;
+        let fill_value = self.fill_value.to_fill_value(&data_type)?;
+        if let Some(dimension_names) = &self.dimension_names {
+            if dimension_names.len() != self.shape.len() {
+                return Err(ArrayCreateError::InvalidDimensionNames(
+                    dimension_names.len(),
+                    self.shape.len(),
+                ));
+            }
+        }
+
+        let array_to_bytes_codec = self
+            .array_to_bytes_codec
+            .clone()
+            .unwrap_or_else(|| Self::default_codec(&data_type));
+
+        let codec_chain = CodecChain::new_named(
+            self.array_to_array_codecs.clone(),
+            array_to_bytes_codec,
+            self.bytes_to_bytes_codecs.clone(),
+        );
+
+        Ok(ArrayMetadataV3::new(
+            self.shape.clone(),
+            chunk_grid.create_metadata(),
+            data_type.metadata(),
+            data_type.metadata_fill_value(&fill_value)?,
+            codec_chain.create_metadatas(),
+        )
+        .with_attributes(self.attributes.clone())
+        .with_additional_fields(self.additional_fields.clone())
+        .with_chunk_key_encoding(self.chunk_key_encoding.create_metadata())
+        .with_dimension_names(self.dimension_names.clone())
+        .with_storage_transformers(self.storage_transformers.create_metadatas()))
+    }
+
+    /// Build into an [`Array`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ArrayCreateError`] if there is an error creating the array.
+    /// This can be due to a storage error, an invalid path, or a problem with array configuration.
+    pub fn build<TStorage: ?Sized>(
+        &self,
+        storage: Arc<TStorage>,
+        path: &str,
+    ) -> Result<Array<TStorage>, ArrayCreateError> {
+        let path: NodePath = path.try_into()?;
+        let array_metadata = ArrayMetadata::V3(self.metadata()?);
+        Array::new_with_metadata(storage, path.as_str(), array_metadata)
+    }
+
+    fn default_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
+        if data_type.fixed_size().is_some() {
             Arc::<BytesCodec>::default().into()
         } else {
             // FIXME: Default to VlenCodec if ever stabilised
@@ -164,262 +464,7 @@ impl ArrayBuilder {
                 }
                 | DataType::RawBits(_) => unreachable!(),
             }
-        };
-
-        Self {
-            shape,
-            data_type,
-            chunk_grid,
-            chunk_key_encoding: ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default()),
-            fill_value,
-            array_to_array_codecs: Vec::default(),
-            array_to_bytes_codec,
-            bytes_to_bytes_codecs: Vec::default(),
-            attributes: serde_json::Map::default(),
-            storage_transformers: StorageTransformerChain::default(),
-            dimension_names: None,
-            additional_fields: AdditionalFieldsV3::default(),
         }
-    }
-
-    /// Create a new builder copying the configuration of an existing array.
-    #[must_use]
-    pub fn from_array<T: ?Sized>(array: &Array<T>) -> Self {
-        let mut builder = Self::new(
-            array.shape().to_vec(),
-            array.data_type().clone(),
-            array.chunk_grid().clone(),
-            array.fill_value().clone(),
-        );
-        let additional_fields = match array.metadata() {
-            ArrayMetadata::V2(_metadata) => AdditionalFieldsV3::default(),
-            ArrayMetadata::V3(metadata) => metadata.additional_fields.clone(),
-        };
-
-        builder
-            .additional_fields(additional_fields)
-            .attributes(array.attributes().clone())
-            .chunk_key_encoding(array.chunk_key_encoding().clone())
-            .dimension_names(array.dimension_names().clone())
-            .array_to_array_codecs_named(array.codecs().array_to_array_codecs().to_vec())
-            .array_to_bytes_codec_named(array.codecs().array_to_bytes_codec().clone())
-            .bytes_to_bytes_codecs_named(array.codecs().bytes_to_bytes_codecs().to_vec())
-            .storage_transformers(array.storage_transformers().clone());
-        builder
-    }
-
-    /// Set the shape.
-    pub fn shape(&mut self, shape: ArrayShape) -> &mut Self {
-        self.shape = shape;
-        self
-    }
-
-    /// Set the data type.
-    pub fn data_type(&mut self, data_type: DataType) -> &mut Self {
-        self.data_type = data_type;
-        self
-    }
-
-    /// Set the chunk grid.
-    pub fn chunk_grid(&mut self, chunk_grid: ChunkGrid) -> &mut Self {
-        self.chunk_grid = chunk_grid;
-        self
-    }
-
-    /// Set the fill value.
-    pub fn fill_value(&mut self, fill_value: FillValue) -> &mut Self {
-        self.fill_value = fill_value;
-        self
-    }
-
-    /// Set the chunk key encoding.
-    ///
-    /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
-    pub fn chunk_key_encoding(&mut self, chunk_key_encoding: ChunkKeyEncoding) -> &mut Self {
-        self.chunk_key_encoding = chunk_key_encoding;
-        self
-    }
-
-    /// Set the chunk key encoding to default with `separator`.
-    ///
-    /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
-    pub fn chunk_key_encoding_default_separator(
-        &mut self,
-        separator: ChunkKeySeparator,
-    ) -> &mut Self {
-        self.chunk_key_encoding = ChunkKeyEncoding::new(DefaultChunkKeyEncoding::new(separator));
-        self
-    }
-
-    /// Set the array to array codecs.
-    ///
-    /// If left unmodified, the array will have no array to array codecs.
-    pub fn array_to_array_codecs(
-        &mut self,
-        array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
-    ) -> &mut Self {
-        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Set the array to array codecs with non-default names.
-    ///
-    /// If left unmodified, the array will have no array to array codecs.
-    pub fn array_to_array_codecs_named(
-        &mut self,
-        array_to_array_codecs: Vec<impl Into<NamedArrayToArrayCodec>>,
-    ) -> &mut Self {
-        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Set the array to bytes codec.
-    ///
-    /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
-    pub fn array_to_bytes_codec(
-        &mut self,
-        array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
-    ) -> &mut Self {
-        self.array_to_bytes_codec = array_to_bytes_codec.into();
-        self
-    }
-
-    /// Set the array to bytes codec with non-default names.
-    ///
-    /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
-    pub fn array_to_bytes_codec_named(
-        &mut self,
-        array_to_bytes_codec: impl Into<NamedArrayToBytesCodec>,
-    ) -> &mut Self {
-        self.array_to_bytes_codec = array_to_bytes_codec.into();
-        self
-    }
-
-    /// Set the bytes to bytes codecs.
-    ///
-    /// If left unmodified, the array will have no bytes to bytes codecs.
-    pub fn bytes_to_bytes_codecs(
-        &mut self,
-        bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    ) -> &mut Self {
-        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Set the bytes to bytes codecs with non-default names.
-    ///
-    /// If left unmodified, the array will have no bytes to bytes codecs.
-    pub fn bytes_to_bytes_codecs_named(
-        &mut self,
-        bytes_to_bytes_codecs: Vec<impl Into<NamedBytesToBytesCodec>>,
-    ) -> &mut Self {
-        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
-        self
-    }
-
-    /// Set the user defined attributes.
-    ///
-    /// If left unmodified, the user defined attributes of the array will be empty.
-    pub fn attributes(
-        &mut self,
-        attributes: serde_json::Map<String, serde_json::Value>,
-    ) -> &mut Self {
-        self.attributes = attributes;
-        self
-    }
-
-    /// Set the additional fields.
-    ///
-    /// Set additional fields not defined in the Zarr specification.
-    /// Use this cautiously. In general, store user defined attributes using [`ArrayBuilder::attributes`].
-    ///
-    /// `zarrs` and other implementations are expected to error when opening an array with unsupported additional fields, unless they are a JSON object containing `"must_understand": false`.
-    pub fn additional_fields(&mut self, additional_fields: AdditionalFieldsV3) -> &mut Self {
-        self.additional_fields = additional_fields;
-        self
-    }
-
-    /// Set the dimension names.
-    ///
-    /// If left unmodified, all dimension names are "unnamed".
-    pub fn dimension_names<I, D>(&mut self, dimension_names: Option<I>) -> &mut Self
-    where
-        I: IntoIterator<Item = D>,
-        D: IntoDimensionName,
-    {
-        if let Some(dimension_names) = dimension_names {
-            self.dimension_names = Some(
-                dimension_names
-                    .into_iter()
-                    .map(IntoDimensionName::into_dimension_name)
-                    .collect(),
-            );
-        } else {
-            self.dimension_names = None;
-        }
-        self
-    }
-
-    /// Set the storage transformers.
-    ///
-    /// If left unmodified, there are no storage transformers.
-    pub fn storage_transformers(
-        &mut self,
-        storage_transformers: StorageTransformerChain,
-    ) -> &mut Self {
-        self.storage_transformers = storage_transformers;
-        self
-    }
-
-    /// Build into an [`Array`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ArrayCreateError`] if there is an error creating the array.
-    /// This can be due to a storage error, an invalid path, or a problem with array configuration.
-    pub fn build<TStorage: ?Sized>(
-        &self,
-        storage: Arc<TStorage>,
-        path: &str,
-    ) -> Result<Array<TStorage>, ArrayCreateError> {
-        let path: NodePath = path.try_into()?;
-        if self.chunk_grid.dimensionality() != self.shape.len() {
-            return Err(ArrayCreateError::InvalidChunkGridDimensionality(
-                self.chunk_grid.dimensionality(),
-                self.shape.len(),
-            ));
-        }
-        if let Some(dimension_names) = &self.dimension_names {
-            if dimension_names.len() != self.shape.len() {
-                return Err(ArrayCreateError::InvalidDimensionNames(
-                    dimension_names.len(),
-                    self.shape.len(),
-                ));
-            }
-        }
-
-        let codec_chain = CodecChain::new_named(
-            self.array_to_array_codecs.clone(),
-            self.array_to_bytes_codec.clone(),
-            self.bytes_to_bytes_codecs.clone(),
-        );
-
-        let array_metadata = ArrayMetadata::V3(
-            ArrayMetadataV3::new(
-                self.shape.clone(),
-                self.chunk_grid.create_metadata(),
-                self.data_type.metadata(),
-                self.data_type.metadata_fill_value(&self.fill_value)?,
-                codec_chain.create_metadatas(),
-            )
-            .with_attributes(self.attributes.clone())
-            .with_additional_fields(self.additional_fields.clone())
-            .with_chunk_key_encoding(self.chunk_key_encoding.create_metadata())
-            .with_dimension_names(self.dimension_names.clone())
-            .with_storage_transformers(self.storage_transformers.create_metadatas()),
-        );
-
-        Array::new_with_metadata(storage, path.as_str(), array_metadata)
     }
 
     /// Build into an [`Arc<Array>`].
@@ -439,8 +484,18 @@ impl ArrayBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
+    use zarrs_data_type::FillValue;
+    use zarrs_metadata::v3::{FillValueMetadataV3, MetadataV3};
+    use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+
     use crate::{
-        array::{chunk_grid::RegularChunkGrid, chunk_key_encoding::V2ChunkKeyEncoding},
+        array::{
+            chunk_grid::{ChunkGridTraits, RegularChunkGrid},
+            chunk_key_encoding::V2ChunkKeyEncoding,
+            ChunkGrid,
+        },
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
 
@@ -448,21 +503,14 @@ mod tests {
 
     #[test]
     fn array_builder() {
-        let mut builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let mut builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8);
 
         // Coverage
         builder.shape(vec![8, 8]);
         builder.data_type(DataType::Int8);
         // builder.chunk_grid(vec![2, 2].try_into().unwrap());
-        builder.chunk_grid(ChunkGrid::new(RegularChunkGrid::new(
-            vec![2, 2].try_into().unwrap(),
-        )));
-        builder.fill_value(FillValue::from(0i8));
+        builder.chunk_grid([2, 2]);
+        builder.fill_value(0i8);
 
         builder.dimension_names(["y", "x"].into());
 
@@ -511,29 +559,213 @@ mod tests {
     fn array_builder_invalid() {
         let storage = Arc::new(MemoryStore::new());
         // Invalid chunk shape
-        let builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2, 2], 0i8);
         assert!(builder.build(storage.clone(), "/").is_err());
-        // Invalid fill value
-        let builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i16),
-        );
+        // Invalid fill value, but okay when interpreted as fill value metadata
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16);
+        assert!(builder.build(storage.clone(), "/").is_ok());
+        // Strictly invalid fill value
+        let builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], vec![0, 0]);
         assert!(builder.build(storage.clone(), "/").is_err());
         // Invalid dimension names
-        let mut builder = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::Int8,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(0i8),
-        );
+        let mut builder = ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8);
         builder.dimension_names(["z", "y", "x"].into());
         assert!(builder.build(storage.clone(), "/").is_err());
+    }
+
+    #[test]
+    fn array_builder_variants_array_shape() {
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(&[8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new([8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new([8, 8].as_slice(), DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+    }
+
+    #[test]
+    fn array_builder_variants_data_type() {
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], "int8", vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], r#"{"name":"int8"}"#, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            r#"{"name":"int8"}"#.to_string(),
+            vec![2, 2],
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            r#"{"name":"int8", "configuration":{},"must_understand":true}"#,
+            vec![2, 2],
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], MetadataV3::new("int8"), vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+    }
+
+    #[test]
+    fn array_builder_variants_chunk_grid() {
+        assert!(
+            ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![0, 0], 0i8)
+                .metadata()
+                .is_err()
+        );
+        assert!(
+            ArrayBuilder::new(vec![8, 8], DataType::Int8, "regular", 0i8)
+                .metadata()
+                .is_err()
+        );
+        assert!(ArrayBuilder::new(vec![8, 8], DataType::Int8, "{", 0i8)
+            .metadata()
+            .is_err());
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, &[2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [2, 2].as_slice(), 0i8)
+            .metadata()
+            .unwrap();
+        let nz2 = NonZeroU64::new(2).unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, &[nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, [nz2, nz2].as_slice(), 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#,
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            r#"{"name":"regular","configuration":{"chunk_shape":[2,2]}}"#.to_string(),
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            RegularChunkGrid::new([2, 2].try_into().unwrap()),
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        let chunk_grid: Arc<dyn ChunkGridTraits> =
+            Arc::new(RegularChunkGrid::new([2, 2].try_into().unwrap()));
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, chunk_grid, 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            ChunkGrid::new(RegularChunkGrid::new([2, 2].try_into().unwrap())),
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            MetadataV3::new_with_configuration(
+                "regular",
+                RegularChunkGridConfiguration {
+                    chunk_shape: [2, 2].try_into().unwrap(),
+                },
+            ),
+            0i8,
+        )
+        .metadata()
+        .unwrap();
+    }
+
+    #[test]
+    fn array_builder_variants_fill_value() {
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i8)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], 0i16)
+            .metadata()
+            .unwrap(); // 0i16 -> 0 metadata -> 0i8
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            vec![2, 2],
+            FillValue::new(vec![0u8]),
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Int8, vec![2, 2], FillValue::from(0u8))
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Int8,
+            vec![2, 2],
+            FillValueMetadataV3::Number(serde_json::Number::from(0u8)),
+        )
+        .metadata()
+        .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], f32::NAN)
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "NaN")
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "Infinity")
+            .metadata()
+            .unwrap();
+        ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "-Infinity")
+            .metadata()
+            .unwrap();
+        let ab = ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![2, 2], "0x7fc00000");
+        assert_eq!(
+            ab.metadata().unwrap().fill_value,
+            FillValueMetadataV3::from("NaN")
+        );
+        let ab = ArrayBuilder::new(
+            vec![8, 8],
+            DataType::Float32,
+            vec![2, 2],
+            f32::from_bits(0x7fc00001),
+        ); // non-standard NaN
+        assert_eq!(
+            ab.metadata().unwrap().fill_value,
+            FillValueMetadataV3::from("0x7fc00001")
+        );
     }
 }

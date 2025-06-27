@@ -9,7 +9,7 @@ use zarrs::{
             array_to_bytes::sharding::ShardingCodecBuilder, BytesToBytesCodecTraits,
             CodecOptionsBuilder,
         },
-        ArrayBuilder, DataType, FillValue,
+        ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
 };
@@ -46,8 +46,8 @@ fn array_partial_encode_sharding(
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         DataType::UInt16,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u16),
+        vec![2, 2], // regular chunk shape
+        0u16,
     );
     builder
         .array_to_bytes_codec(Arc::new(

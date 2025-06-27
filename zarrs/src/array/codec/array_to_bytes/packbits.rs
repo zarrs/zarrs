@@ -231,7 +231,7 @@ mod tests {
         array::{
             codec::{ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
             element::{Element, ElementOwned},
-            ArrayBytes, ChunkRepresentation, DataType, FillValue,
+            ArrayBytes, ChunkRepresentation, DataType,
         },
         array_subset::ArraySubset,
     };
@@ -270,7 +270,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Bool;
-            let fill_value = FillValue::from(false);
+            let fill_value = false;
 
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
             let chunk_representation =
@@ -334,7 +334,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float32;
-            let fill_value = FillValue::from(0.0f32);
+            let fill_value = 0.0f32;
 
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
             let chunk_representation =
@@ -387,7 +387,7 @@ mod tests {
                             .unwrap(),
                     );
                     let data_type = DataType::Int16;
-                    let fill_value = FillValue::from(0i16);
+                    let fill_value = 0i16;
 
                     let chunk_shape =
                         vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
@@ -431,7 +431,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::UInt2;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -469,7 +469,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::UInt4;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -507,7 +507,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Int2;
-            let fill_value = FillValue::from(0i8);
+            let fill_value = 0i8;
 
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -545,7 +545,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Int4;
-            let fill_value = FillValue::from(0i8);
+            let fill_value = 0i8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -583,7 +583,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float4E2M1FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -620,7 +620,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float6E2M3FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -657,7 +657,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float6E3M2FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =

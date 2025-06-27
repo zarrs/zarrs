@@ -14,6 +14,10 @@ use crate::{Configuration, ConfigurationError};
 /// `must_understand` is implicitly set to [`true`] if omitted.
 /// See [ZEP0009](https://zarr.dev/zeps/draft/ZEP0009.html) for more information on this field and Zarr V3 extensions.
 ///
+/// Note that metadata with an empty `configuration` will be serialised as `{"name":"...","configuration":{}}`, even though it *could* be simplified to a string representation.
+/// This is to support compatibility with Zarr <3.1, which specified that array `codec` metadata must be a list of JSON objects.
+/// Codec metadata can include strings since Zarr 3.1, but this may limit compatibility with older Zarr implementations.
+///
 /// ### Example Metadata
 /// ```json
 /// "bytes"

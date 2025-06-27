@@ -145,21 +145,16 @@ mod tests {
     use zarrs_storage::store::MemoryStore;
 
     use crate::{
-        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType, FillValue},
+        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType},
         array_subset::ArraySubset,
     };
 
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(
-            vec![4, 4],
-            DataType::Float32,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(-1.0f32),
-        )
-        .build(store.into(), "/")
-        .unwrap();
+        let array = ArrayBuilder::new(vec![4, 4], DataType::Float32, vec![2, 2], -1.0f32)
+            .build(store.into(), "/")
+            .unwrap();
         array
             .store_chunk_elements::<f32>(&[0, 0], &[0.0, 1.0, 2.0, 3.0])
             .unwrap();

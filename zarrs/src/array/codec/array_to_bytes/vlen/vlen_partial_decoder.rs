@@ -62,16 +62,16 @@ fn decode_vlen_bytes<'a>(
         let index_shape = vec![unsafe { NonZeroU64::new_unchecked(1 + num_elements as u64) }];
         let index_chunk_representation = match index_data_type {
             // VlenIndexDataType::UInt8 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt8, FillValue::from(0u8))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt8, 0u8)
             // }
             // VlenIndexDataType::UInt16 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt16, FillValue::from(0u16))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt16, 0u16)
             // }
             VlenIndexDataType::UInt32 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt32, FillValue::from(0u32))
+                ChunkRepresentation::new(index_shape, DataType::UInt32, 0u32)
             }
             VlenIndexDataType::UInt64 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt64, FillValue::from(0u64))
+                ChunkRepresentation::new(index_shape, DataType::UInt64, 0u64)
             }
         }
         .expect("all data types/fill values are compatible");

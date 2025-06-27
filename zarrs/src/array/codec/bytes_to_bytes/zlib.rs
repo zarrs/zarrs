@@ -72,7 +72,7 @@ mod tests {
     use crate::{
         array::{
             codec::{BytesToBytesCodecTraits, CodecOptions},
-            ArrayRepresentation, BytesRepresentation, DataType, FillValue,
+            ArrayRepresentation, BytesRepresentation, DataType,
         },
         array_subset::ArraySubset,
         byte_range::ByteRange,
@@ -109,8 +109,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zlib_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -156,8 +155,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn codec_zlib_async_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);

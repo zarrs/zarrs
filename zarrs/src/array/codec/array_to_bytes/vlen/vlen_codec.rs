@@ -11,7 +11,7 @@ use crate::{
             RecommendedConcurrency,
         },
         transmute_to_bytes_vec, ArrayBytes, BytesRepresentation, ChunkRepresentation, CodecChain,
-        DataType, DataTypeSize, Endianness, FillValue, RawBytes, RawBytesOffsets,
+        DataType, DataTypeSize, Endianness, RawBytes, RawBytesOffsets,
     },
     plugin::PluginCreateError,
 };
@@ -189,7 +189,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             //     let index_chunk_rep = ChunkRepresentation::new(
             //         vec![num_offsets],
             //         DataType::UInt8,
-            //         FillValue::from(0u8),
+            //         0u8,
             //     )
             //     .unwrap();
             //     self.index_codecs
@@ -209,7 +209,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             //     let index_chunk_rep = ChunkRepresentation::new(
             //         vec![num_offsets],
             //         DataType::UInt16,
-            //         FillValue::from(0u16),
+            //         0u16,
             //     )
             //     .unwrap();
             //     self.index_codecs
@@ -226,12 +226,8 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                         )
                     })?;
                 let offsets = transmute_to_bytes_vec(offsets);
-                let index_chunk_rep = ChunkRepresentation::new(
-                    vec![num_offsets],
-                    DataType::UInt32,
-                    FillValue::from(0u32),
-                )
-                .unwrap();
+                let index_chunk_rep =
+                    ChunkRepresentation::new(vec![num_offsets], DataType::UInt32, 0u32).unwrap();
                 self.index_codecs
                     .encode(offsets.into(), &index_chunk_rep, options)?
             }
@@ -241,12 +237,8 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                     .map(|offset| u64::try_from(*offset).unwrap())
                     .collect::<Vec<u64>>();
                 let offsets = transmute_to_bytes_vec(offsets);
-                let index_chunk_rep = ChunkRepresentation::new(
-                    vec![num_offsets],
-                    DataType::UInt64,
-                    FillValue::from(0u64),
-                )
-                .unwrap();
+                let index_chunk_rep =
+                    ChunkRepresentation::new(vec![num_offsets], DataType::UInt64, 0u64).unwrap();
                 self.index_codecs
                     .encode(offsets.into(), &index_chunk_rep, options)?
             }
@@ -256,8 +248,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
             self.data_codecs.encode(
                 data.into(),
-                &ChunkRepresentation::new(vec![data_len], DataType::UInt8, FillValue::from(0u8))
-                    .unwrap(),
+                &ChunkRepresentation::new(vec![data_len], DataType::UInt8, 0u8).unwrap(),
                 options,
             )?
         } else {
@@ -293,16 +284,16 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         let index_shape = vec![NonZeroU64::try_from(num_elements as u64 + 1).unwrap()];
         let index_chunk_rep = match self.index_data_type {
             // VlenIndexDataType::UInt8 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt8, FillValue::from(0u8))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt8, 0u8)
             // }
             // VlenIndexDataType::UInt16 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt16, FillValue::from(0u16))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt16, 0u16)
             // }
             VlenIndexDataType::UInt32 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt32, FillValue::from(0u32))
+                ChunkRepresentation::new(index_shape, DataType::UInt32, 0u32)
             }
             VlenIndexDataType::UInt64 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt64, FillValue::from(0u64))
+                ChunkRepresentation::new(index_shape, DataType::UInt64, 0u64)
             }
         }
         .unwrap();

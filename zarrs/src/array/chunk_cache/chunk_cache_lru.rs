@@ -365,7 +365,7 @@ mod tests {
         array::{
             codec::CodecOptions, ArrayBuilder, ArrayChunkCacheExt, ChunkCacheDecodedLruChunkLimit,
             ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
-            ChunkCacheEncodedLruSizeLimit, ChunkCacheType, DataType, FillValue,
+            ChunkCacheEncodedLruSizeLimit, ChunkCacheType, DataType,
         },
         array_subset::ArraySubset,
         storage::{
@@ -383,8 +383,8 @@ mod tests {
         let builder = ArrayBuilder::new(
             vec![8, 8], // array shape
             DataType::UInt8,
-            vec![4, 4].try_into().unwrap(), // regular chunk shape
-            FillValue::from(0u8),
+            vec![4, 4], // regular chunk shape
+            0u8,
         );
         let array = builder.build(store.clone(), "/").unwrap();
 

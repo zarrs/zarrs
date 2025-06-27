@@ -461,7 +461,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use crate::{
-        array::{ArrayBuilder, ArrayMetadataOptions, FillValue},
+        array::{ArrayBuilder, ArrayMetadataOptions},
         group::{GroupMetadata, GroupMetadataV3},
         storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
     };
@@ -554,8 +554,8 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![1, 2, 3],
             crate::array::DataType::Float32,
-            vec![1, 1, 1].try_into().unwrap(),
-            FillValue::from(0.0f32),
+            vec![1, 1, 1],
+            0.0f32,
         )
         .build(store.clone(), node_path)
         .unwrap();

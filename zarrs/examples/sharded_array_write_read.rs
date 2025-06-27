@@ -12,7 +12,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::{
         array::{
             codec::{self, array_to_bytes::sharding::ShardingCodecBuilder},
-            DataType, FillValue,
+            DataType,
         },
         array_subset::ArraySubset,
         node::Node,
@@ -69,8 +69,8 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         DataType::UInt16,
-        shard_shape.try_into()?,
-        FillValue::from(0u16),
+        shard_shape,
+        0u16,
     )
     .array_to_bytes_codec(Arc::new(sharding_codec_builder.build()))
     .dimension_names(["y", "x"].into())

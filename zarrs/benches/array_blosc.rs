@@ -17,8 +17,8 @@ fn array_blosc_write_all(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     zarrs::array::DataType::UInt8,
-                    vec![32; 3].try_into().unwrap(),
-                    zarrs::array::FillValue::from(0u8),
+                    vec![32; 3],
+                    0u8,
                 )
                 .bytes_to_bytes_codecs(vec![Arc::new(
                     BloscCodec::new(
@@ -52,8 +52,8 @@ fn array_blosc_read_all(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 zarrs::array::DataType::UInt8,
-                vec![32; 3].try_into().unwrap(),
-                zarrs::array::FillValue::from(0u8),
+                vec![32; 3],
+                0u8,
             )
             .bytes_to_bytes_codecs(vec![Arc::new(
                 BloscCodec::new(
