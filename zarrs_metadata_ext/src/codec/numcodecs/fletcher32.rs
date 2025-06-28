@@ -24,8 +24,6 @@ impl ConfigurationSerialize for Fletcher32CodecConfiguration {}
 /// }
 /// ```
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]
-// TODO: deny_unknown_fields could be disabled to support numcodecs, which adds "id": "fletcher32"
-//       However, I would rather be intentionally incompatible and push forward with standardisation instead
 #[serde(deny_unknown_fields)]
 #[display("{}", serde_json::to_string(self).unwrap_or_default())]
 pub struct Fletcher32CodecConfigurationV1 {}

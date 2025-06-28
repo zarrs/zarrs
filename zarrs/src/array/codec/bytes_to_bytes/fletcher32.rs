@@ -118,7 +118,7 @@ mod tests {
             .try_into()
             .unwrap();
         println!("checksum {checksum:?}");
-        assert_eq!(checksum, &[9, 6, 14, 8]); // TODO: CHECK
+        assert_eq!(checksum, &[9, 6, 14, 8]);
     }
 
     #[test]

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
+- Add `numcodecs.adler32` codec
 - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
 - Add `ArrayBuilder::metadata()`
 

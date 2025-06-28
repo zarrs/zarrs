@@ -16,6 +16,7 @@ exclude = [".dockerignore", ".github", ".editorconfig", "Dockerfile", "coverage.
 [features]
 default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
 filesystem = ["dep:zarrs_filesystem"] # Re-export zarrs_filesystem as zarrs::filesystem
+adler32 = ["dep:simd-adler32"] # Enable the adler32 checksum codec
 bitround = [] # Enable the bitround codec
 blosc = ["dep:blosc-src"] # Enable the blosc codec
 bz2 = ["dep:bzip2"] # Enable the bz2 codec
@@ -87,6 +88,7 @@ zarrs_metadata_ext.workspace = true
 jiff = { version = "0.2.15", optional = true }
 chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.1.3", optional = true, features = ["bytemuck"] }
+simd-adler32 = { version = "0.3.7", optional = true }
 
 [dependencies.num-complex]
 version = "0.4.3"

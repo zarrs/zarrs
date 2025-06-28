@@ -47,6 +47,8 @@ pub use zarrs::*;
 
 /// `numcodecs` codec metadata.
 mod numcodecs {
+    /// `adler32` codec metadata (`numcodecs`).
+    pub mod adler32;
     /// `bitround` codec metadata (`numcodecs`).
     pub mod bitround;
     /// `bz2` codec metadata (`numcodecs`).

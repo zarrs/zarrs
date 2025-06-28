@@ -45,6 +45,8 @@ pub use array_to_bytes::{
 };
 
 // Bytes to bytes
+#[cfg(feature = "adler32")]
+pub use bytes_to_bytes::adler32::*;
 #[cfg(feature = "blosc")]
 pub use bytes_to_bytes::blosc::*;
 #[cfg(feature = "bz2")]

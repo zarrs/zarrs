@@ -1,5 +1,7 @@
 //! Bytes to bytes codecs.
 
+#[cfg(feature = "adler32")]
+pub mod adler32;
 #[cfg(feature = "blosc")]
 pub mod blosc;
 #[cfg(feature = "bz2")]
@@ -20,6 +22,9 @@ pub mod zstd;
 
 #[cfg(test)]
 pub mod test_unbounded;
+
+#[cfg(feature = "adler32")]
+mod strip_prefix_partial_decoder;
 
 #[cfg(any(feature = "crc32c", feature = "fletcher32"))]
 mod strip_suffix_partial_decoder;

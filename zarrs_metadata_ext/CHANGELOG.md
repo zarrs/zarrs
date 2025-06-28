@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `index_location` field to `vlen` codec metadata
   - Adds `VlenIndexLocation` and `VlenCodecConfigurationV0_1` structs
   - Adds `V0_1` variant to `VlenCodecConfiguration` enum
+- Add `Adler32CodecConfiguration[V1]`
 
 ### Changed
 - **Breaking**: add `data_type` parameter to `v2_to_v3::fill_value_metadata_v2_to_v3()` ([#207] by [@jder])

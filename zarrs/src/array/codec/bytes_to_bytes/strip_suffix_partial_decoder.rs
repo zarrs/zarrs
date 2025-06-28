@@ -41,7 +41,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
             return Ok(None);
         };
 
-        // Drop trailing checksum
+        // Drop suffix of length `suffix_size`
         let mut output = Vec::with_capacity(bytes.len());
         for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
             let bytes = match byte_range {
