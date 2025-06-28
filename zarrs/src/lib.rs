@@ -111,8 +111,8 @@
 //! // Create a new sharded V3 array using the array builder
 //! let array = zarrs::array::ArrayBuilder::new(
 //!     vec![3, 4], // array shape
-//!     zarrs::array::DataType::Float32,
 //!     vec![2, 2], // regular chunk (shard) shape
+//!     zarrs::array::DataType::Float32,
 //!     0.0f32, // fill value
 //! )
 //! .array_to_bytes_codec(Arc::new(

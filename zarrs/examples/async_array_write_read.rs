@@ -54,8 +54,8 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/group/array";
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
-        DataType::Float32,
         vec![4, 4], // regular chunk shape
+        DataType::Float32,
         ZARR_NAN_F32,
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed
@@ -76,12 +76,9 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         let array = array.clone();
         async move {
             let chunk_indices: Vec<u64> = vec![0, i];
-            let chunk_subset = array
-                .chunk_grid()
-                .subset(&chunk_indices, array.shape())?
-                .ok_or_else(|| {
-                    zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
-                })?;
+            let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
+                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+            })?;
             array
                 .async_store_chunk_elements(
                     &chunk_indices,

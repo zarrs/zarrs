@@ -337,7 +337,7 @@ fn inner_chunk_shard_index_and_subset<TStorage: ?Sized + AsyncReadableStorageTra
     // TODO: Can this logic be simplified?
     let array_subset = cache
         .inner_chunk_grid()
-        .subset(inner_chunk_indices, array.shape())?
+        .subset(inner_chunk_indices)?
         .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(inner_chunk_indices.to_vec()))?;
     let shards = array
         .chunks_in_array_subset(&array_subset)?
@@ -502,14 +502,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         if cache.array_is_sharded() {
             let inner_chunk_grid = cache.inner_chunk_grid();
             let array_subset = inner_chunk_grid
-                .chunks_subset(inner_chunks, self.shape())?
+                .chunks_subset(inner_chunks)?
                 .ok_or_else(|| {
                     ArrayError::InvalidArraySubset(
                         inner_chunks.clone(),
-                        inner_chunk_grid
-                            .grid_shape(self.shape())
-                            .unwrap_or_default()
-                            .unwrap_or_default(),
+                        inner_chunk_grid.grid_shape().clone(),
                     )
                 })?;
             self.async_retrieve_array_subset_sharded_opt(cache, &array_subset, options)
@@ -541,14 +538,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         let inner_chunk_grid = cache.inner_chunk_grid();
         let array_subset = inner_chunk_grid
-            .chunks_subset(inner_chunks, self.shape())?
+            .chunks_subset(inner_chunks)?
             .ok_or_else(|| {
                 ArrayError::InvalidArraySubset(
                     inner_chunks.clone(),
-                    inner_chunk_grid
-                        .grid_shape(self.shape())
-                        .unwrap_or_default()
-                        .unwrap_or_default(),
+                    inner_chunk_grid.grid_shape().clone(),
                 )
             })?;
         let elements = self
@@ -752,8 +746,8 @@ mod tests {
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
-            DataType::UInt16,
             vec![4, 4], // regular chunk shape
+            DataType::UInt16,
             0u16,
         );
         if sharded {
@@ -781,10 +775,7 @@ mod tests {
         let inner_chunk_grid = array.inner_chunk_grid();
         if sharded {
             assert_eq!(array.inner_chunk_shape(), Some(vec![2, 2].try_into()?));
-            assert_eq!(
-                inner_chunk_grid.grid_shape(array.shape())?,
-                Some(vec![4, 4])
-            );
+            assert_eq!(inner_chunk_grid.grid_shape(), &[4, 4]);
 
             let compare = array
                 .async_retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_ranges(&[
@@ -904,10 +895,7 @@ mod tests {
             // );
         } else {
             assert_eq!(array.inner_chunk_shape(), None);
-            assert_eq!(
-                inner_chunk_grid.grid_shape(array.shape())?,
-                Some(vec![2, 2])
-            );
+            assert_eq!(inner_chunk_grid.grid_shape(), &[2, 2]);
 
             let compare = array
                 .async_retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_ranges(&[
@@ -972,8 +960,8 @@ mod tests {
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![16, 16, 9], // array shape
+            vec![8, 4, 3],   // regular chunk shape
             DataType::UInt32,
-            vec![8, 4, 3], // regular chunk shape
             0u32,
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
@@ -1005,16 +993,13 @@ mod tests {
             //   8 x 16 x 3 Inner grid shape
             //   2 x  1 x 3 Effective inner chunk shape (read granularity)
 
-            assert_eq!(array.chunk_grid_shape(), Some(vec![2, 4, 3]));
+            assert_eq!(array.chunk_grid_shape(), &[2, 4, 3]);
             assert_eq!(array.inner_chunk_shape(), Some(vec![1, 2, 3].try_into()?));
             assert_eq!(
                 array.effective_inner_chunk_shape(),
                 Some(vec![2, 1, 3].try_into()?)
             ); // NOTE: transposed
-            assert_eq!(
-                inner_chunk_grid.grid_shape(array.shape())?,
-                Some(vec![8, 16, 3])
-            );
+            assert_eq!(inner_chunk_grid.grid_shape(), &[8, 16, 3]);
         } else {
             // skip above tests if the inner chunk shape is invalid, below calls fail with
             // CodecError(Other("invalid inner chunk shape [1, 3, 3], it must evenly divide [4, 8, 3]"))
@@ -1028,7 +1013,7 @@ mod tests {
             .await?;
 
         // Retrieving an inner chunk should be exactly 2 reads: index + chunk
-        let inner_chunk_subset = inner_chunk_grid.subset(&[0, 0, 0], array.shape())?.unwrap();
+        let inner_chunk_subset = inner_chunk_grid.subset(&[0, 0, 0])?.unwrap();
         let inner_chunk_data = array
             .async_retrieve_array_subset_elements::<u32>(&inner_chunk_subset)
             .await?;

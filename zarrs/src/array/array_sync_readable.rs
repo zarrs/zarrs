@@ -540,7 +540,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
         let shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         let elements = self.retrieve_chunk_elements_if_exists_opt::<T>(chunk_indices, options)?;
         if let Some(elements) = elements {
@@ -560,7 +560,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         let shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         elements_to_ndarray(
             &shape,

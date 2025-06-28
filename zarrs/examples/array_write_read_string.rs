@@ -54,8 +54,8 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/group/array";
     let array = zarrs::array::ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::String,
         vec![2, 2], // regular chunk shape
+        DataType::String,
         "_",
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed

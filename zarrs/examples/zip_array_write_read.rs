@@ -30,8 +30,8 @@ fn write_array_to_storage<TStorage: ReadableWritableStorageTraits + ?Sized + 'st
     // Create an array
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
-        DataType::Float32,
         vec![4, 4], // regular chunk shape
+        DataType::Float32,
         ZARR_NAN_F32,
     )
     .bytes_to_bytes_codecs(vec![
@@ -51,7 +51,7 @@ fn write_array_to_storage<TStorage: ReadableWritableStorageTraits + ?Sized + 'st
         .try_for_each(|i| {
             let chunk_grid = array.chunk_grid();
             let chunk_indices: Vec<u64> = vec![i, 0];
-            if let Some(chunk_subset) = chunk_grid.subset(&chunk_indices, array.shape())? {
+            if let Some(chunk_subset) = chunk_grid.subset(&chunk_indices)? {
                 array.store_chunk_elements(
                     &chunk_indices,
                     &vec![i as f32; chunk_subset.num_elements() as usize],

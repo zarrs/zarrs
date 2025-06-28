@@ -68,8 +68,8 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     ]);
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
-        DataType::UInt16,
         shard_shape,
+        DataType::UInt16,
         0u16,
     )
     .array_to_bytes_codec(Arc::new(sharding_codec_builder.build()))
@@ -93,7 +93,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     (0..2).into_par_iter().try_for_each(|s| {
         let chunk_grid = array.chunk_grid();
         let chunk_indices = vec![s, 0];
-        if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices, array.shape())? {
+        if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices)? {
             let chunk_array = ndarray::ArrayD::<u16>::from_shape_fn(
                 chunk_shape
                     .iter()

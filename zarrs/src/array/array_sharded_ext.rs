@@ -35,7 +35,7 @@ pub trait ArrayShardedExt: private::Sealed {
     /// Return the shape of the inner chunk grid (i.e., the number of inner chunks).
     ///
     /// Returns the normal chunk grid shape for an unsharded array.
-    fn inner_chunk_grid_shape(&self) -> Option<ArrayShape>;
+    fn inner_chunk_grid_shape(&self) -> ArrayShape;
 }
 
 impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
@@ -77,20 +77,21 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
     }
 
     fn inner_chunk_grid(&self) -> ChunkGrid {
+        // FIXME: Create the inner chunk grid in `Array` and return a ref
         if let Some(inner_chunk_shape) = self.effective_inner_chunk_shape() {
-            ChunkGrid::new(crate::array::chunk_grid::RegularChunkGrid::new(
-                inner_chunk_shape,
-            ))
+            ChunkGrid::new(
+                crate::array::chunk_grid::RegularChunkGrid::new(
+                    self.shape().to_vec(),
+                    inner_chunk_shape,
+                ).expect("the chunk grid dimensionality is already confirmed to match the array dimensionality"),
+            )
         } else {
             self.chunk_grid().clone()
         }
     }
 
-    fn inner_chunk_grid_shape(&self) -> Option<ArrayShape> {
-        unsafe {
-            // SAFETY: The inner chunk grid dimensionality is validated against the array shape on creation
-            self.inner_chunk_grid().grid_shape_unchecked(self.shape())
-        }
+    fn inner_chunk_grid_shape(&self) -> ArrayShape {
+        self.inner_chunk_grid().grid_shape().clone()
     }
 }
 

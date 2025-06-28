@@ -1,20 +1,20 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
-use zarrs::storage::{
-    storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
+use zarrs::{
+    array::chunk_grid::RectangularChunkGridConfiguration,
+    storage::{
+        storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
+    },
 };
+use zarrs_metadata::v3::MetadataV3;
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::array::ChunkGrid;
     use zarrs::{
-        array::{chunk_grid::RectangularChunkGrid, codec},
-        node::Node,
-    };
-    use zarrs::{
-        array::{DataType, ZARR_NAN_F32},
+        array::{codec, DataType, ZARR_NAN_F32},
         array_subset::ArraySubset,
+        node::Node,
         storage::store,
     };
 
@@ -58,11 +58,13 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/group/array";
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
+        MetadataV3::new_with_configuration(
+            "rectangular",
+            RectangularChunkGridConfiguration {
+                chunk_shape: vec![[1, 2, 3, 2].try_into()?, 4.try_into()?], // chunk sizes
+            },
+        ),
         DataType::Float32,
-        ChunkGrid::new(RectangularChunkGrid::new(&[
-            [1, 2, 3, 2].try_into()?,
-            4.try_into()?,
-        ])),
         ZARR_NAN_F32,
     )
     .bytes_to_bytes_codecs(vec![
@@ -80,7 +82,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     (0..4).into_par_iter().try_for_each(|i| {
         let chunk_grid = array.chunk_grid();
         let chunk_indices = vec![i, 0];
-        if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices, array.shape())? {
+        if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices)? {
             let chunk_array = ndarray::ArrayD::<f32>::from_elem(
                 chunk_shape
                     .iter()

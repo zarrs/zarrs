@@ -425,7 +425,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         // validate_element_size::<T>(self.data_type())?; in // async_retrieve_chunk_elements_if_exists
         let shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         let elements = self
             .async_retrieve_chunk_elements_if_exists_opt(chunk_indices, options)
@@ -448,7 +448,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         // validate_element_size::<T>(self.data_type())?; // in async_retrieve_chunk_elements
         let shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         let elements = self
             .async_retrieve_chunk_elements_opt(chunk_indices, options)

@@ -45,8 +45,8 @@ fn array_partial_encode_sharding(
     let array_path = "/";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::UInt16,
         vec![2, 2], // regular chunk shape
+        DataType::UInt16,
         0u16,
     );
     builder

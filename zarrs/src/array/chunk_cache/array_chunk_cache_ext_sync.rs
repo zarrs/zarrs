@@ -173,7 +173,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayChunkCacheExt<TSto
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         let shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         crate::array::elements_to_ndarray(
             &shape,

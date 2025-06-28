@@ -79,11 +79,13 @@ impl ShardingPartialEncoder {
             vec![u64::MAX; num_chunks * 2]
         });
 
+        let shard_shape = decoded_representation.shape_u64();
         Ok(Self {
             input_handle,
             output_handle,
             decoded_representation,
-            chunk_grid: RegularChunkGrid::new(chunk_shape),
+            chunk_grid: RegularChunkGrid::new(shard_shape, chunk_shape)
+                .map_err(|err| CodecError::from(err.to_string()))?,
             inner_codecs,
             index_codecs,
             index_location,
@@ -130,7 +132,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let get_inner_chunks = |chunk_subset| {
             self.chunk_grid
-                .chunks_in_array_subset(chunk_subset, &chunks_per_shard)
+                .chunks_in_array_subset(chunk_subset)
                 .map_err(|_| {
                     CodecError::InvalidArraySubsetError(IncompatibleArraySubsetAndShapeError::new(
                         (*chunk_subset).clone(),
@@ -154,8 +156,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Get all the inner chunks that need to be retrieved
         //   This only includes chunks that straddle chunk subsets.
         //   Chunks that are entirely within a chunk subset are entirely replaced and are not read.
-        let shard_shape_u64 = self.decoded_representation.shape_u64();
-
         let mut inner_chunks_intersected = HashSet::<u64>::new();
         let mut inner_chunks_indices = HashSet::<u64>::new();
 
@@ -191,7 +191,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 |inner_chunk_indices| {
                     let inner_chunk_subset = self
                         .chunk_grid
-                        .subset(&inner_chunk_indices, &shard_shape_u64)
+                        .subset(&inner_chunk_indices)
                         .expect("already validated")
                         .expect("regular grid");
 
@@ -277,7 +277,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
                     let inner_chunk_subset = self
                         .chunk_grid
-                        .subset(&inner_chunk_indices, &chunks_per_shard)
+                        .subset(&inner_chunk_indices)
                         .expect("already validated")
                         .expect("regular grid");
                     let inner_chunk_subset_overlap =

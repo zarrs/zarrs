@@ -11,23 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
 - Add `numcodecs.adler32` codec
-- Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
-- Add `ArrayBuilder::metadata()`
 
 ### Changed
-- **Breaking**: change `ArrayBuilder::new()` to take a broader range of types for each parameter. See below
+- **Breaking**: Refactor `ArrayBuilder`
+  - All fields are now private
+  - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata}()`
+  - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
+  - Change `ArrayBuilder::new()` to take a broader range of types for each parameter, and swap order of `chunk_grid`/`data_type`. See below
 ```diff
 ArrayBuilder::new(
     // array shape
     vec![8, 8], // or [8, 8], &[8, 8], etc.
-    // data type, data type name, or data type metadata
-    DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
-    // regular chunk shape, chunk grid, or chunk grid metadata
--    vec![4, 4].try_into()?, // no longer valid
-+    vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
-    // scalar/string, fill value, or fill value metadata
--    f32::NAN.into(), // no longer valid
-+    f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
+-   DataType::Float32,
+-   vec![4, 4].try_into()?, // no longer valid
+-   f32::NAN.into(), // no longer valid
++   // regular chunk shape or chunk grid metadata
++   vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
++   // data type or data type metadata
++   DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
++   // fill value or fill value metadata
++   f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
 )
 .build()
 ```
@@ -36,7 +39,14 @@ ArrayBuilder::new(
 -  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
 +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
 ```
-- **Breaking**: `VlenCodec::new` gains an `index_location` parameter
+- **Breaking**: `Array::set_shape()` now returns a `Result`
+  - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
+- **Breaking**: Refactor `ChunkGridTraits`
+  - The `ArrayShape` argument has been removed from all methods, and chunk grids are instead initialised with an `ArrayShape`
+  - Implementations must now implement `ChunkGridTraits::grid_shape()` as `grid_shape_unchecked()` has been removed
+  - Add `ChunkGridTraits::array_shape()`
+  - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
+- **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6
 

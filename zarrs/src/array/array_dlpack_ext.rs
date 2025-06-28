@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(vec![4, 4], DataType::Float32, vec![2, 2], -1.0f32)
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], DataType::Float32, -1.0f32)
             .build(store.into(), "/")
             .unwrap();
         array
