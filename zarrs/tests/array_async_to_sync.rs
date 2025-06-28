@@ -48,7 +48,7 @@ fn array_read_and_write_async_storage_adapter() {
 
     // Create an array
     let array =
-        zarrs::array::ArrayBuilder::new(vec![8, 8], DataType::Float32, vec![4, 4], ZARR_NAN_F32)
+        zarrs::array::ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::Float32, ZARR_NAN_F32)
             .dimension_names(["y", "x"].into())
             .build(store.clone(), ARRAY_PATH)
             .unwrap();

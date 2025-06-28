@@ -48,8 +48,8 @@ fn cities_impl(
 
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
+        vec![chunk_size],          // regular chunk shape
         DataType::String,
-        vec![chunk_size], // regular chunk shape
         "",
     );
     if let Some(shard_size) = shard_size {

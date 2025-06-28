@@ -166,7 +166,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
             .any(|(end_exc, shape)| end_exc > *shape)

@@ -553,8 +553,8 @@ mod tests {
         let node_path = "/node";
         let array = ArrayBuilder::new(
             vec![1, 2, 3],
-            crate::array::DataType::Float32,
             vec![1, 1, 1],
+            crate::array::DataType::Float32,
             0.0f32,
         )
         .build(store.clone(), node_path)

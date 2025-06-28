@@ -19,8 +19,8 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::UInt8,
         vec![2, 2], // regular chunk shape
+        DataType::UInt8,
         0u8,
     );
     builder.bytes_to_bytes_codecs(vec![]);
@@ -42,7 +42,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
-    assert_eq!(array.chunk_grid_shape().unwrap(), &[2, 2]);
+    assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
 
@@ -278,8 +278,8 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::String,
         vec![2, 2], // regular chunk shape
+        DataType::String,
         "",
     );
     builder.bytes_to_bytes_codecs(vec![
@@ -298,8 +298,8 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![4, 4], // array shape
-            DataType::String,
             vec![2, 2], // regular chunk shape
+            DataType::String,
             "",
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
