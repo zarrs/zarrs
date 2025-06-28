@@ -573,6 +573,13 @@ mod tests {
     fn array_builder() {
         let mut builder = ArrayBuilder::new(vec![8, 8], [2, 2], DataType::Int8, 0i8);
 
+        // Coverage
+        builder.shape(vec![8, 8]);
+        builder.data_type(DataType::Int8);
+        // builder.chunk_grid(vec![2, 2].try_into().unwrap());
+        builder.chunk_grid_metadata([2, 2]);
+        builder.fill_value(0i8);
+
         builder.dimension_names(["y", "x"].into());
 
         let mut attributes = serde_json::Map::new();

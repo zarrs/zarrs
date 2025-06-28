@@ -340,6 +340,11 @@ mod tests {
         //     chunk_grid.chunk_element_indices(&array_index, &array_shape)?,
         //     &[0, 1, 2]
         // );
+
+        assert!(RectangularChunkGrid::new(vec![100; 3], &chunk_shapes).is_err()); // incompatible dimensionality
+        assert!(RectangularChunkGrid::new(vec![123, 100], &chunk_shapes).is_err());
+        // incompatible chunk shapes
+        // incompatible dimensionality
     }
 
     #[test]
