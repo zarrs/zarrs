@@ -41,12 +41,12 @@ ArrayBuilder::new(
 ```
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
-- **Breaking**: Refactor `ChunkGridTraits`
-  - The `ArrayShape` argument has been removed from all methods, and chunk grids are instead initialised with an `ArrayShape`
+- **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
+  - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
   - Implementations must now implement `ChunkGridTraits::grid_shape()` as `grid_shape_unchecked()` has been removed
   - Add `ChunkGridTraits::array_shape()`
-  - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
 - **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
+- **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6
 
