@@ -272,8 +272,8 @@ fn main() {
     let fill_value = CustomDataTypeFixedSizeElement { x: 1, y: 2.3 };
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
-        DataType::Extension(Arc::new(CustomDataTypeFixedSize)),
         vec![2, 1], // regular chunk shape
+        DataType::Extension(Arc::new(CustomDataTypeFixedSize)),
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

@@ -14,7 +14,7 @@ fn array_sync_read(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
-    assert_eq!(array.chunk_grid_shape().unwrap(), &[2, 2]);
+    assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
 
@@ -106,8 +106,8 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let array = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::UInt8,
         vec![2, 2], // regular chunk shape
+        DataType::UInt8,
         0u8,
     )
     .bytes_to_bytes_codecs(vec![])
@@ -135,8 +135,8 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::UInt8,
         vec![2, 2], // regular chunk shape
+        DataType::UInt8,
         0u8,
     );
     builder.array_to_bytes_codec(Arc::new(
@@ -267,8 +267,8 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::String,
         vec![2, 2], // regular chunk shape
+        DataType::String,
         "",
     );
     builder.bytes_to_bytes_codecs(vec![
@@ -290,8 +290,8 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::String,
         vec![2, 2], // regular chunk shape
+        DataType::String,
         "",
     );
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
@@ -321,8 +321,8 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
-        DataType::Bytes,
         vec![2, 2], // regular chunk shape
+        DataType::Bytes,
         [],
     );
     builder.bytes_to_bytes_codecs(vec![

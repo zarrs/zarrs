@@ -49,7 +49,8 @@ use std::sync::Arc;
 
 pub use self::{
     array_builder::{
-        ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderDataType, ArrayBuilderFillValue,
+        ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
+        ArrayBuilderFillValue,
     },
     array_bytes::{
         copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, RawBytes,
@@ -228,8 +229,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// // Get an iterator over the chunk indices
 /// //   The array shape must have been set (i.e. non-zero), otherwise the
 /// //   iterator will be empty
-/// let chunk_grid_shape = array.chunk_grid_shape().unwrap();
-/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape).indices();
+/// let chunk_grid_shape = array.chunk_grid_shape();
+/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape.to_vec()).indices();
 ///
 /// // Iterate over chunk indices (in parallel)
 /// chunks.into_par_iter().try_for_each(|chunk_indices: Vec<u64>| {
@@ -360,8 +361,6 @@ pub struct Array<TStorage: ?Sized> {
     storage: Arc<TStorage>,
     /// The path of the array in a store.
     path: NodePath,
-    // /// An array of integers providing the length of each dimension of the Zarr array.
-    // shape: ArrayShape,
     /// The data type of the Zarr array.
     data_type: DataType,
     /// The chunk grid of the Zarr array.
@@ -420,7 +419,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             global_config().data_type_aliases_v3(),
         )
         .map_err(ArrayCreateError::DataTypeCreateError)?;
-        let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid)
+        let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
             return Err(ArrayCreateError::InvalidChunkGridDimensionality(
@@ -487,23 +486,26 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the array shape.
     #[must_use]
     pub fn shape(&self) -> &[u64] {
-        match &self.metadata {
-            ArrayMetadata::V3(metadata) => &metadata.shape,
-            ArrayMetadata::V2(metadata) => &metadata.shape,
-        }
+        self.chunk_grid().array_shape()
     }
 
     /// Set the array shape.
-    pub fn set_shape(&mut self, shape: ArrayShape) -> &mut Self {
+    ///
+    /// # Errors
+    /// Returns an [`ArrayCreateError`] if the chunk grid is not compatible with `array_shape`.
+    pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
+        self.chunk_grid =
+            ChunkGrid::from_metadata(&self.chunk_grid.create_metadata(), &array_shape)
+                .map_err(ArrayCreateError::ChunkGridCreateError)?;
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
-                metadata.shape = shape;
+                metadata.shape = array_shape;
             }
             ArrayMetadata::V2(metadata) => {
-                metadata.shape = shape;
+                metadata.shape = array_shape;
             }
         }
-        self
+        Ok(self)
     }
 
     /// Get the array dimensionality.
@@ -703,8 +705,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     #[must_use]
-    pub fn chunk_grid_shape(&self) -> Option<ArrayShape> {
-        unsafe { self.chunk_grid().grid_shape_unchecked(self.shape()) }
+    pub fn chunk_grid_shape(&self) -> &ArrayShape {
+        self.chunk_grid().grid_shape()
     }
 
     /// Return the [`StoreKey`] of the chunk at `chunk_indices`.
@@ -719,7 +721,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError> {
         self.chunk_grid()
-            .chunk_origin(chunk_indices, self.shape())
+            .chunk_origin(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -730,7 +732,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError> {
         self.chunk_grid()
-            .chunk_shape(chunk_indices, self.shape())
+            .chunk_shape(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -762,7 +764,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         self.chunk_grid()
-            .subset(chunk_indices, self.shape())
+            .subset(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -811,7 +813,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<ChunkRepresentation, ArrayError> {
-        (self.chunk_grid().chunk_shape(chunk_indices, self.shape())?).map_or_else(
+        self.chunk_grid().chunk_shape(chunk_indices)?.map_or_else(
             || {
                 Err(ArrayError::InvalidChunkGridIndicesError(
                     chunk_indices.to_vec(),
@@ -839,8 +841,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &self,
         array_subset: &ArraySubset,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        self.chunk_grid
-            .chunks_in_array_subset(array_subset, self.shape())
+        self.chunk_grid.chunks_in_array_subset(array_subset)
     }
 
     /// Calculate the recommended codec concurrency.
@@ -1072,7 +1073,7 @@ mod tests {
         let store = Arc::new(MemoryStore::new());
 
         let array_path = "/array";
-        let array = ArrayBuilder::new(vec![8, 8], DataType::UInt8, vec![4, 4], 0u8)
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::UInt8, 0u8)
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
@@ -1088,8 +1089,8 @@ mod tests {
         let array_path = "/group/array";
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
-            DataType::Float32,
             vec![4, 4],
+            DataType::Float32,
             ZARR_NAN_F32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1099,7 +1100,7 @@ mod tests {
         .build(store.into(), array_path)
         .unwrap();
 
-        array.set_shape(vec![16, 16]);
+        array.set_shape(vec![16, 16]).unwrap();
         array
             .attributes_mut()
             .insert("test".to_string(), "apple".into());
@@ -1120,8 +1121,8 @@ mod tests {
         let array_path = "/array";
         let array = ArrayBuilder::new(
             vec![8, 8], // array shape
-            DataType::Float32,
             vec![4, 4], // regular chunk shape
+            DataType::Float32,
             1f32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1469,8 +1470,8 @@ mod tests {
             // Permit array creation with manually added additional fields
             let array = ArrayBuilder::new(
                 vec![8, 8], // array shape
-                DataType::Float32,
                 vec![4, 4],
+                DataType::Float32,
                 ZARR_NAN_F32,
             )
             .bytes_to_bytes_codecs(vec![

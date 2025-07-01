@@ -382,8 +382,8 @@ mod tests {
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
         let builder = ArrayBuilder::new(
             vec![8, 8], // array shape
-            DataType::UInt8,
             vec![4, 4], // regular chunk shape
+            DataType::UInt8,
             0u8,
         );
         let array = builder.build(store.clone(), "/").unwrap();

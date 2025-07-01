@@ -157,8 +157,8 @@ fn main() {
     let array_path = "/array";
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
-        DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
         vec![3, 1], // regular chunk shape
+        DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
         [],
     )
     .array_to_array_codecs(vec![

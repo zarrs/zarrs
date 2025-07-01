@@ -220,8 +220,8 @@ fn main() {
     let fill_value = CustomDataTypeFloat8e3m4Element::from(1.23);
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
-        DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)),
         vec![5, 1], // regular chunk shape
+        DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)),
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

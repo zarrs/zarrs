@@ -180,11 +180,11 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
         let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(
             vec![6],
+            vec![5],
             zarrs::array::DataType::NumpyDateTime64 {
                 unit,
                 scale_factor: 1.try_into().unwrap(),
             },
-            vec![5],
             i64::MIN,
         )
         .build(store.clone(), "/")?;
@@ -380,11 +380,11 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
             let store = Arc::new(MemoryStore::new());
             let array = ArrayBuilder::new(
                 vec![11],
+                vec![5],
                 zarrs::array::DataType::NumpyTimeDelta64 {
                     unit,
                     scale_factor: scale_factor.try_into().unwrap(),
                 },
-                vec![5],
                 i64::MIN,
             )
             .build(store.clone(), "/")?;
