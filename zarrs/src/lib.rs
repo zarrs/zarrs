@@ -167,10 +167,8 @@
 //! //  [ -1.2,  1.3]]
 //!
 //! // Retrieve an inner chunk
-//! use zarrs::array::ArrayShardedReadableExt;
-//! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
-//! let array_inner_chunk = array.retrieve_inner_chunk_ndarray_opt::<f32>(
-//!     &shard_index_cache,
+//! let shard_index_cache = zarrs::array::ArrayShardIndexCache::new(&array);
+//! let array_inner_chunk = shard_index_cache.retrieve_inner_chunk_ndarray_opt::<f32>(
 //!     &[0, 3], // inner chunk index
 //!     &zarrs::array::codec::CodecOptions::default(),
 //! )?;

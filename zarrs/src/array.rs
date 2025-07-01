@@ -83,7 +83,9 @@ pub use crate::metadata::v3::{
 pub use crate::metadata::{
     ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
 };
-use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
+use zarrs_metadata_ext::{
+    codec::sharding::ShardingCodecConfiguration, v2_to_v3::ArrayMetadataV2ToV3Error,
+};
 
 pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
@@ -91,9 +93,7 @@ pub use chunk_cache::{
 };
 
 #[cfg(all(feature = "sharding", feature = "async"))]
-pub use array_async_sharded_readable_ext::{
-    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
-};
+pub use array_async_sharded_readable_ext::AsyncArrayShardIndexCache;
 #[cfg(feature = "dlpack")]
 pub use array_dlpack_ext::{
     ArrayDlPackExt, ArrayDlPackExtError, AsyncArrayDlPackExt, RawBytesDlPack,
@@ -101,9 +101,9 @@ pub use array_dlpack_ext::{
 #[cfg(feature = "sharding")]
 pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
-pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
+pub use array_sync_sharded_readable_ext::ArrayShardIndexCache;
 
-use zarrs_metadata::v2::DataTypeMetadataV2;
+use zarrs_metadata::{v2::DataTypeMetadataV2, ConfigurationSerialize};
 
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
@@ -197,8 +197,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///   - Variants without the `_opt` suffix use default [`CodecOptions`](crate::array::codec::CodecOptions).
 ///   - **Experimental**: `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
-/// Additional [`Array`] methods are offered by extension traits:
-///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
+/// Additional methods are offered by extension traits or supporting structures:
+///  - [`ArrayShardedExt`] and [`ArrayShardIndexCache`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
 ///  - [`[Async]ArrayDlPackExt`](ArrayDlPackExt): methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop.
 ///
 /// [`ChunkCache`] implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
@@ -340,13 +340,13 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The [`ArrayShardedExt`] trait provides additional methods to [`Array`] to query if an array is sharded and retrieve the inner chunk shape.
 /// Additionally, the *inner chunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to inner chunks rather than shards.
 ///
-/// The [`ArrayShardedReadableExt`] trait adds [`Array`] methods to conveniently and efficiently access the data in a sharded array (with `_elements` and `_ndarray` variants):
-///  - [`retrieve_inner_chunk_opt`](ArrayShardedReadableExt::retrieve_inner_chunk_opt)
-///  - [`retrieve_inner_chunks_opt`](ArrayShardedReadableExt::retrieve_inner_chunks_opt)
-///  - [`retrieve_array_subset_sharded_opt`](ArrayShardedReadableExt::retrieve_array_subset_sharded_opt)
+/// The [`ArrayShardIndexCache`] struct has methods for conveniently and efficiently accessing the data in a sharded array (with `_elements` and `_ndarray` variants):
+///  - [`retrieve_inner_chunk_opt`](ArrayShardIndexCache::retrieve_inner_chunk_opt)
+///  - [`retrieve_inner_chunks_opt`](ArrayShardIndexCache::retrieve_inner_chunks_opt)
+///  - [`retrieve_array_subset_sharded_opt`](ArrayShardIndexCache::retrieve_array_subset_sharded_opt)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
-/// Each method has a `cache` parameter ([`ArrayShardedReadableExtCache`]) that stores shard indexes so that they do not have to be repeatedly retrieved and decoded.
+/// The [`ArrayShardIndexCache`] stores shard indexes so that they do not have to be repeatedly retrieved and decoded.
 ///
 /// ## Parallelism and Concurrency
 /// ### Sync API
@@ -376,6 +376,10 @@ pub struct Array<TStorage: ?Sized> {
     data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
+    /// The inner chunk grid of the Zarr array if using the `sharding_indexed` codec.
+    inner_chunk_grid: Option<ChunkGrid>,
+    inner_chunk_shape: Option<ChunkShape>,
+    effective_inner_chunk_shape: Option<ChunkShape>,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
@@ -398,6 +402,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path: self.path.clone(),
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
+            inner_chunk_grid: self.inner_chunk_grid.clone(),
+            inner_chunk_shape: self.effective_inner_chunk_shape.clone(),
+            effective_inner_chunk_shape: self.effective_inner_chunk_shape.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
@@ -471,12 +478,32 @@ impl<TStorage: ?Sized> Array<TStorage> {
             }
         }
 
+        let inner_chunk_shape = inner_chunk_shape(&codecs);
+        let effective_inner_chunk_shape =
+            effective_inner_chunk_shape(&codecs, inner_chunk_shape.as_ref());
+        let inner_chunk_grid =
+            if let Some(effective_inner_chunk_shape) = &effective_inner_chunk_shape {
+                if let Ok(regular_chunk_grid) = crate::array::chunk_grid::RegularChunkGrid::new(
+                    chunk_grid.array_shape().clone(),
+                    effective_inner_chunk_shape.clone(),
+                ) {
+                    Some(ChunkGrid::new(regular_chunk_grid))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
         Ok(Self {
             storage,
             path,
             // shape: metadata_v3.shape,
             data_type,
             chunk_grid,
+            inner_chunk_grid,
+            inner_chunk_shape,
+            effective_inner_chunk_shape,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -906,6 +933,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     path: self.path,
                     data_type: self.data_type,
                     chunk_grid: self.chunk_grid,
+                    inner_chunk_grid: self.inner_chunk_grid,
+                    inner_chunk_shape: self.inner_chunk_shape,
+                    effective_inner_chunk_shape: self.effective_inner_chunk_shape,
                     chunk_key_encoding: self.chunk_key_encoding,
                     fill_value: self.fill_value,
                     codecs: self.codecs,
@@ -958,6 +988,39 @@ impl<TStorage: ?Sized> Array<TStorage> {
             }
         }
         Ok(())
+    }
+}
+
+fn inner_chunk_shape(codecs: &CodecChain) -> Option<ChunkShape> {
+    let configuration = codecs
+        .array_to_bytes_codec()
+        .configuration()
+        .expect("the array to bytes codec should have metadata");
+    if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
+        ShardingCodecConfiguration::try_from_configuration(configuration)
+    {
+        Some(sharding_configuration.chunk_shape)
+    } else {
+        None
+    }
+}
+
+fn effective_inner_chunk_shape(
+    codecs: &CodecChain,
+    inner_chunk_shape: Option<&ChunkShape>,
+) -> Option<ChunkShape> {
+    if let Some(inner_chunk_shape) = inner_chunk_shape {
+        let mut inner_chunk_shape = inner_chunk_shape.clone();
+        for codec in codecs.array_to_array_codecs().iter().rev() {
+            if let Ok(Some(inner_chunk_shape_)) = codec.decoded_shape(&inner_chunk_shape) {
+                inner_chunk_shape = inner_chunk_shape_;
+            } else {
+                return None;
+            }
+        }
+        Some(inner_chunk_shape)
+    } else {
+        None
     }
 }
 

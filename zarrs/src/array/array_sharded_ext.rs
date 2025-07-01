@@ -1,7 +1,6 @@
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_registry::codec::SHARDING;
 
-use super::{codec::ShardingCodecConfiguration, Array, ArrayShape, ChunkGrid, ChunkShape};
+use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
 pub trait ArrayShardedExt: private::Sealed {
@@ -14,7 +13,7 @@ pub trait ArrayShardedExt: private::Sealed {
     /// Return the inner chunk shape as defined in the `sharding_indexed` codec metadata.
     ///
     /// Returns [`None`] for an unsharded array.
-    fn inner_chunk_shape(&self) -> Option<ChunkShape>;
+    fn inner_chunk_shape(&self) -> Option<&ChunkShape>;
 
     /// The effective inner chunk shape.
     ///
@@ -23,14 +22,14 @@ pub trait ArrayShardedExt: private::Sealed {
     /// The effective inner chunk shape is used when determining the inner chunk grid of a sharded array.
     ///
     /// Returns [`None`] for an unsharded array of if the effective inner chunk shape is indeterminate.
-    fn effective_inner_chunk_shape(&self) -> Option<ChunkShape>;
+    fn effective_inner_chunk_shape(&self) -> Option<&ChunkShape>;
 
     /// Retrieve the inner chunk grid.
     ///
     /// This uses the effective inner shape so that reading an inner chunk reads only one contiguous byte range.
     ///
     /// Returns the normal chunk grid for an unsharded array.
-    fn inner_chunk_grid(&self) -> ChunkGrid;
+    fn inner_chunk_grid(&self) -> &ChunkGrid;
 
     /// Return the shape of the inner chunk grid (i.e., the number of inner chunks).
     ///
@@ -49,44 +48,19 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
             && self.codecs.bytes_to_bytes_codecs().is_empty()
     }
 
-    fn inner_chunk_shape(&self) -> Option<ChunkShape> {
-        let configuration = self
-            .codecs
-            .array_to_bytes_codec()
-            .configuration()
-            .expect("the array to bytes codec should have metadata");
-        if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
-            ShardingCodecConfiguration::try_from_configuration(configuration)
-        {
-            Some(sharding_configuration.chunk_shape)
-        } else {
-            None
-        }
+    fn inner_chunk_shape(&self) -> Option<&ChunkShape> {
+        self.inner_chunk_shape.as_ref()
     }
 
-    fn effective_inner_chunk_shape(&self) -> Option<ChunkShape> {
-        let mut inner_chunk_shape = self.inner_chunk_shape()?;
-        for codec in self.codecs().array_to_array_codecs().iter().rev() {
-            if let Ok(Some(inner_chunk_shape_)) = codec.decoded_shape(&inner_chunk_shape) {
-                inner_chunk_shape = inner_chunk_shape_;
-            } else {
-                return None;
-            }
-        }
-        Some(inner_chunk_shape)
+    fn effective_inner_chunk_shape(&self) -> Option<&ChunkShape> {
+        self.effective_inner_chunk_shape.as_ref()
     }
 
-    fn inner_chunk_grid(&self) -> ChunkGrid {
-        // FIXME: Create the inner chunk grid in `Array` and return a ref
-        if let Some(inner_chunk_shape) = self.effective_inner_chunk_shape() {
-            ChunkGrid::new(
-                crate::array::chunk_grid::RegularChunkGrid::new(
-                    self.shape().to_vec(),
-                    inner_chunk_shape,
-                ).expect("the chunk grid dimensionality is already confirmed to match the array dimensionality"),
-            )
+    fn inner_chunk_grid(&self) -> &ChunkGrid {
+        if let Some(inner_chunk_grid) = &self.inner_chunk_grid {
+            inner_chunk_grid
         } else {
-            self.chunk_grid().clone()
+            &self.chunk_grid
         }
     }
 
