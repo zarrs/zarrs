@@ -516,8 +516,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Get the codecs.
     #[must_use]
-    pub fn codecs(&self) -> &CodecChain {
-        &self.codecs
+    pub fn codecs(&self) -> Arc<CodecChain> {
+        self.codecs.clone()
     }
 
     /// Get the chunk grid.

@@ -47,6 +47,7 @@ ArrayBuilder::new(
   - Add `ChunkGridTraits::array_shape()`
 - **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
+- **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6
 
