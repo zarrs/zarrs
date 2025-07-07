@@ -314,6 +314,9 @@ pub trait ArrayCodecTraits: CodecTraits {
 
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + Send + Sync {
+    /// Returns the size of chunk bytes held by the partial decoder.
+    fn size(&self) -> usize;
+
     /// Partially decode bytes.
     ///
     /// Returns [`None`] if partial decoding of the input handle returns [`None`].
@@ -408,6 +411,9 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
 pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
+
+    /// Returns the size of chunk bytes held by the partial decoder.
+    fn size(&self) -> usize;
 
     /// Partially decode a chunk.
     ///
@@ -596,6 +602,10 @@ impl StoragePartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StoragePartialDecoder {
+    fn size(&self) -> usize {
+        0
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
@@ -1170,6 +1180,10 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
 }
 
 impl BytesPartialDecoderTraits for std::io::Cursor<&'static [u8]> {
+    fn size(&self) -> usize {
+        self.get_ref().len()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
@@ -1185,6 +1199,10 @@ impl BytesPartialDecoderTraits for std::io::Cursor<&'static [u8]> {
 }
 
 impl BytesPartialDecoderTraits for std::io::Cursor<RawBytes<'static>> {
+    fn size(&self) -> usize {
+        self.get_ref().len()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
@@ -1200,6 +1218,10 @@ impl BytesPartialDecoderTraits for std::io::Cursor<RawBytes<'static>> {
 }
 
 impl BytesPartialDecoderTraits for std::io::Cursor<Vec<u8>> {
+    fn size(&self) -> usize {
+        self.get_ref().len()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],

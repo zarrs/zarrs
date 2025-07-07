@@ -50,6 +50,10 @@ impl BytesPartialDecoderCache {
 }
 
 impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
+    fn size(&self) -> usize {
+        self.cache.as_ref().map_or(0, Vec::len)
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
