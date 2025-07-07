@@ -119,7 +119,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     }
 
     fn size(&self) -> usize {
-        self.input_handle.size() + self.shard_index.as_ref().map_or(0, Vec::len)
+        self.input_handle.size() + self.shard_index.as_ref().map_or(0, Vec::len) * size_of::<u64>()
     }
 
     #[allow(clippy::too_many_lines)]

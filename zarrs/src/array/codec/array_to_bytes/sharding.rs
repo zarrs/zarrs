@@ -679,11 +679,15 @@ mod tests {
         let input_handle = Arc::new(std::io::Cursor::new(encoded));
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(
+            partial_decoder.size(),
+            input_handle.size() + size_of::<u64>() * 2 * 2 * 2 * 2
+        ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_regions, &CodecOptions::default())
             .unwrap();
@@ -720,11 +724,15 @@ mod tests {
         let input_handle = Arc::new(std::io::Cursor::new(encoded));
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(
+            partial_decoder.size(),
+            input_handle.size() + size_of::<u64>() * 2 * 2 * 2
+        ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_regions, &CodecOptions::default())
             .unwrap();
