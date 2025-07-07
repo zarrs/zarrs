@@ -9,7 +9,7 @@ use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]
-fn array_sync_read(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
+fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(array.data_type(), &DataType::UInt8);
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
@@ -124,7 +124,12 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
         [2, 2].try_into().unwrap()
     );
 
-    array_sync_read(array)
+    array_sync_read(&array)?;
+
+    // uncompressed partial decoder holds no data
+    assert_eq!(array.partial_decoder(&[0, 0])?.size(), 0);
+
+    Ok(())
 }
 
 #[cfg(feature = "sharding")]
@@ -162,7 +167,17 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
         [1, 1].try_into().unwrap()
     );
 
-    array_sync_read(array)
+    array_sync_read(&array)?;
+
+    // sharding partial decoder holds the shard index, which has double the number of elements
+    assert_eq!(
+        array.partial_decoder(&[0, 0])?.size(),
+        size_of::<u64>() * 4 * 2
+    );
+    // this chunk is empty, so it has no shard index
+    assert_eq!(array.partial_decoder(&[1, 1])?.size(), 0);
+
+    Ok(())
 }
 
 fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {

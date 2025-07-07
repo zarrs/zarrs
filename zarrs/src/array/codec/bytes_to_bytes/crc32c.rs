@@ -63,7 +63,9 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{BytesToBytesCodecTraits, CodecOptions, CodecTraits},
+            codec::{
+                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
+            },
             BytesRepresentation,
         },
         byte_range::ByteRange,
@@ -126,11 +128,12 @@ mod tests {
         let input_handle = Arc::new(std::io::Cursor::new(encoded));
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // crc32c partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_regions, &CodecOptions::default())
             .unwrap()

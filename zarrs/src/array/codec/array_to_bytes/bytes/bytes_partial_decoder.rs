@@ -45,6 +45,10 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ArraySubset],

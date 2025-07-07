@@ -35,6 +35,10 @@ impl ByteIntervalPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
+    fn size(&self) -> usize {
+        self.inner.size()
+    }
+
     fn partial_decode(
         &self,
         byte_ranges: &[ByteRange],

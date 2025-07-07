@@ -28,6 +28,10 @@ impl BloscPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for BloscPartialDecoder {
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],

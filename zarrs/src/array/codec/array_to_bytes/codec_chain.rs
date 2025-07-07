@@ -900,11 +900,12 @@ mod tests {
         let partial_decoder = codec
             .clone()
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), decoded.size()); // codec chain caches with most decompression codecs
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_regions, &CodecOptions::default())
             .unwrap();
