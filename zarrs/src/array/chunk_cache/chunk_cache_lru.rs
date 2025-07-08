@@ -531,15 +531,15 @@ mod tests {
         },
     };
 
-    fn array_chunk_cache_impl<TChunkCache: ChunkCache<CT>, CT: ChunkCacheType>(
+    fn array_chunk_cache_impl<TChunkCache: ChunkCache<CT> + 'static, CT: ChunkCacheType>(
         cache: TChunkCache,
         thread_local: bool,
     ) {
         let store = Arc::new(MemoryStore::default());
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
         let array = ArrayBuilder::new(
-            vec![8, 8], // array shape
-            vec![4, 4], // regular chunk shape
+            vec![12, 8], // array shape
+            vec![4, 4],  // regular chunk shape
             DataType::UInt8,
             0u8,
         )
@@ -549,11 +549,9 @@ mod tests {
         .build(store.clone(), "/")
         .unwrap();
 
-        let data: Vec<u8> = (0..array.shape().into_iter().product())
-            .map(|i| i as u8)
-            .collect();
+        let data: Vec<u8> = (0..8 * 8).map(|i| i as u8).collect();
         array
-            .store_array_subset_elements(&array.subset_all(), &data)
+            .store_array_subset_elements(&ArraySubset::new_with_shape(vec![8, 8]), &data)
             .unwrap();
 
         assert_eq!(store.reads(), 0);
@@ -678,6 +676,69 @@ mod tests {
             assert_eq!(cache.len(), 2);
             assert!(cache.get(&[0, 1]).is_some());
             assert!(cache.get(&[0, 0]).is_none() || cache.get(&[1, 0]).is_none());
+        }
+
+        // Partially retrieve from a cached chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[0, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1); // 1 inner chunks
+            } else {
+                assert_eq!(store.reads(), 3);
+            }
+            assert_eq!(cache.len(), 2);
+        }
+
+        // Partially retrieve from an uncached chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[1, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1);
+            // 1 index + 1 inner chunk
+            } else {
+                assert_eq!(store.reads(), 4);
+            }
+            assert_eq!(cache.len(), 2);
+        }
+
+        // Partially retrieve from an empty chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[2, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1 + 1);
+            // 1 index (empty)
+            } else {
+                assert_eq!(store.reads(), 5);
+            }
+            if TypeId::of::<TChunkCache>() == TypeId::of::<ChunkCacheEncodedLruSizeLimit>()
+                || TypeId::of::<TChunkCache>()
+                    == TypeId::of::<ChunkCachePartialDecoderLruSizeLimit>()
+            {
+                assert_eq!(cache.len(), 2 + 1); // empty chunk is not included in size limit
+            } else {
+                assert_eq!(cache.len(), 2);
+            }
         }
     }
 
