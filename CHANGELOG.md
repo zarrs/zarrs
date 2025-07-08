@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
 - Add `numcodecs.adler32` codec
+- Add `ChunkCacheTypePartialDecoder`, `ChunkCachePartialDecoderLru{Chunk,Size}Limit[ThreadLocal]`
 
 ### Changed
 - **Breaking**: Refactor `ArrayBuilder`
@@ -49,6 +50,7 @@ ArrayBuilder::new(
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
 - **Breaking**: Add `size()` method to `{Array,Bytes}PartialDecoderTraits`
+- **Breaking**: Add `retrieve_chunk_subset` method to the `ChunkCache` trait
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `blosc-src` to 0.3.6
 

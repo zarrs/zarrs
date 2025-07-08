@@ -88,6 +88,7 @@ use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 pub use chunk_cache::array_chunk_cache_ext_sync::ArrayChunkCacheExt;
 pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder,
 };
 
 #[cfg(all(feature = "sharding", feature = "async"))]
