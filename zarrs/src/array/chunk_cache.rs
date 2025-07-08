@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
-use crate::storage::ReadableStorageTraits;
+use crate::{
+    array::codec::ArrayPartialDecoderTraits, array_subset::ArraySubset,
+    storage::ReadableStorageTraits,
+};
 
 use super::{codec::CodecOptions, Array, ArrayBytes, ArrayError, RawBytes};
 
-// pub mod array_chunk_cache_ext_decoded_sync;
-// pub mod array_chunk_cache_ext_encoded_sync;
 pub(crate) mod array_chunk_cache_ext_sync;
 pub(crate) mod chunk_cache_lru;
-// pub mod chunk_cache_lru_chunk_limit_thread_local;
-// pub mod chunk_cache_lru_size_limit_thread_local;
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<RawBytes<'static>>;
@@ -17,7 +16,10 @@ pub type ChunkCacheTypeEncoded = Option<RawBytes<'static>>;
 /// The chunk type of a decoded chunk cache.
 pub type ChunkCacheTypeDecoded = ArrayBytes<'static>;
 
-/// A chunk type ([`ChunkCacheTypeEncoded`] or [`ChunkCacheTypeDecoded`]).
+/// The chunk type of a partial decoder chunk cache.
+pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
+
+/// A chunk type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
 pub trait ChunkCacheType: Send + Sync + 'static {
     /// The size of the chunk in bytes.
     fn size(&self) -> usize;
@@ -35,6 +37,12 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
     }
 }
 
+impl ChunkCacheType for ChunkCacheTypePartialDecoder {
+    fn size(&self) -> usize {
+        self.as_ref().size()
+    }
+}
+
 /// Traits for a chunk cache.
 pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
     /// Retrieve and decode a chunk.
@@ -45,6 +53,18 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         array: &Array<TStorage>,
         chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
+
+    /// Retrieve and decode a chunk subset.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the underlying array retrieval method fails.
+    fn retrieve_chunk_subset<TStorage: ?Sized + ReadableStorageTraits + 'static>(
+        &self,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        chunk_subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
 

@@ -11,7 +11,10 @@ use moka::{
 use thread_local::ThreadLocal;
 
 use crate::{
-    array::{codec::ArrayToBytesCodecTraits, ArrayBytes, ArrayError, ArrayIndices, ArraySize},
+    array::{
+        codec::ArrayToBytesCodecTraits, ArrayBytes, ArrayError, ArrayIndices, ArraySize,
+        ChunkCacheTypePartialDecoder,
+    },
     storage::StorageError,
 };
 
@@ -26,36 +29,16 @@ pub struct ChunkCacheLruChunkLimit<T: ChunkCacheType> {
     cache: Cache<ChunkIndices, Arc<T>>,
 }
 
-/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheEncodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeEncoded>;
-
-/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheDecodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>;
-
-/// A chunk cache with a fixed size capacity.
-pub struct ChunkCacheLruSizeLimit<T: ChunkCacheType> {
-    cache: Cache<ChunkIndices, Arc<T>>,
-}
-
-/// An LRU (least recently used) encoded chunk cache with a fixed size capacity in bytes.
-pub type ChunkCacheEncodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeEncoded>;
-
-/// An LRU (least recently used) decoded chunk cache with a fixed size capacity in bytes.
-pub type ChunkCacheDecodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>;
-
 /// A thread local chunk cache with a fixed chunk capacity per thread.
 pub struct ChunkCacheLruChunkLimitThreadLocal<T: ChunkCacheType> {
     cache: ThreadLocal<Mutex<LruCache<ChunkIndices, Arc<T>>>>,
     capacity: u64,
 }
 
-/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheEncodedLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeEncoded>;
-
-/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
-pub type ChunkCacheDecodedLruChunkLimitThreadLocal =
-    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeDecoded>;
+/// A chunk cache with a fixed size capacity.
+pub struct ChunkCacheLruSizeLimit<T: ChunkCacheType> {
+    cache: Cache<ChunkIndices, Arc<T>>,
+}
 
 /// A thread local chunk cache with a fixed chunk capacity per thread.
 pub struct ChunkCacheLruSizeLimitThreadLocal<T: ChunkCacheType> {
@@ -65,12 +48,48 @@ pub struct ChunkCacheLruSizeLimitThreadLocal<T: ChunkCacheType> {
 }
 
 /// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
+pub type ChunkCacheEncodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeEncoded>;
+
+/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
+pub type ChunkCacheEncodedLruChunkLimitThreadLocal =
+    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeEncoded>;
+
+/// An LRU (least recently used) encoded chunk cache with a fixed size capacity in bytes.
+pub type ChunkCacheEncodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeEncoded>;
+
+/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
 pub type ChunkCacheEncodedLruSizeLimitThreadLocal =
     ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeEncoded>;
 
 /// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
+pub type ChunkCacheDecodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheTypeDecoded>;
+
+/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
+pub type ChunkCacheDecodedLruChunkLimitThreadLocal =
+    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeDecoded>;
+
+/// An LRU (least recently used) decoded chunk cache with a fixed size capacity in bytes.
+pub type ChunkCacheDecodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>;
+
+/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
 pub type ChunkCacheDecodedLruSizeLimitThreadLocal =
     ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeDecoded>;
+
+/// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
+pub type ChunkCachePartialDecoderLruChunkLimit =
+    ChunkCacheLruChunkLimit<ChunkCacheTypePartialDecoder>;
+
+/// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
+pub type ChunkCachePartialDecoderLruChunkLimitThreadLocal =
+    ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypePartialDecoder>;
+
+/// An LRU (least recently used) partial decoder chunk cache with a fixed size capacity in bytes.
+pub type ChunkCachePartialDecoderLruSizeLimit =
+    ChunkCacheLruSizeLimit<ChunkCacheTypePartialDecoder>;
+
+/// An LRU (least recently used) partial decoder chunk cache with a fixed chunk capacity.
+pub type ChunkCachePartialDecoderLruSizeLimitThreadLocal =
+    ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypePartialDecoder>;
 
 impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     /// Create a new [`ChunkCacheLruChunkLimit`] with a capacity in chunks of `chunk_capacity`.
@@ -78,18 +97,6 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     pub fn new(chunk_capacity: u64) -> Self {
         let cache = CacheBuilder::new(chunk_capacity)
             .eviction_policy(EvictionPolicy::lru())
-            .build();
-        Self { cache }
-    }
-}
-
-impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
-    /// Create a new [`ChunkCacheLruSizeLimit`] with a capacity in bytes of `capacity`.
-    #[must_use]
-    pub fn new(capacity: u64) -> Self {
-        let cache = CacheBuilder::new(capacity)
-            .eviction_policy(EvictionPolicy::lru())
-            .weigher(|_k, v: &Arc<CT>| u32::try_from(v.size()).unwrap_or(u32::MAX))
             .build();
         Self { cache }
     }
@@ -110,6 +117,18 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
                     .unwrap(),
             ))
         })
+    }
+}
+
+impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
+    /// Create a new [`ChunkCacheLruSizeLimit`] with a capacity in bytes of `capacity`.
+    #[must_use]
+    pub fn new(capacity: u64) -> Self {
+        let cache = CacheBuilder::new(capacity)
+            .eviction_policy(EvictionPolicy::lru())
+            .weigher(|_k, v: &Arc<CT>| u32::try_from(v.size()).unwrap_or(u32::MAX))
+            .build();
+        Self { cache }
     }
 }
 
@@ -178,14 +197,6 @@ macro_rules! impl_ChunkCacheLruEncoded {
                         ArrayError::StorageError(StorageError::from(err.to_string()))
                     })
                 })?;
-            // let chunk_encoded = if let Some(chunk) = cache.get(chunk_indices) {
-            //     chunk
-            // } else {
-            //     let chunk = self.retrieve_encoded_chunk(chunk_indices)?.map(Cow::Owned);
-            //     let chunk = Arc::new(chunk);
-            //     cache.insert(chunk_indices.to_vec(), chunk.clone());
-            //     chunk
-            // };
 
             if let Some(chunk_encoded) = chunk_encoded.as_ref() {
                 let chunk_representation = array.chunk_array_representation(chunk_indices)?;
@@ -208,7 +219,60 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 )))
             }
         }
+
+        fn retrieve_chunk_subset<
+            TStorage: ?Sized + crate::storage::ReadableStorageTraits + 'static,
+        >(
+            &self,
+            array: &crate::array::Array<TStorage>,
+            chunk_indices: &[u64],
+            chunk_subset: &crate::array::ArraySubset,
+            options: &crate::array::codec::CodecOptions,
+        ) -> Result<Arc<crate::array::ArrayBytes<'static>>, ArrayError> {
+            let chunk_encoded = self
+                .try_get_or_insert_with::<_, ArrayError>(chunk_indices.to_vec(), || {
+                    Ok(Arc::new(
+                        array.retrieve_encoded_chunk(chunk_indices)?.map(Cow::Owned),
+                    ))
+                })
+                .map_err(|err| {
+                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
+                    Arc::try_unwrap(err).unwrap_or_else(|err| {
+                        ArrayError::StorageError(StorageError::from(err.to_string()))
+                    })
+                })?;
+
+            if let Some(chunk_encoded) = chunk_encoded.as_ref() {
+                let chunk_representation = array.chunk_array_representation(chunk_indices)?;
+                let input_handle =
+                    Arc::new(std::io::Cursor::new(chunk_encoded.clone().into_owned())); // FIXME: avoid this clone
+                Ok(array
+                    .codecs()
+                    .partial_decoder(input_handle, &chunk_representation, options)?
+                    .partial_decode(std::slice::from_ref(chunk_subset), options)?
+                    .remove(0)
+                    .into_owned()
+                    .into())
+            } else {
+                let array_size =
+                    ArraySize::new(array.data_type().size(), chunk_subset.num_elements());
+                Ok(Arc::new(ArrayBytes::new_fill_value(
+                    array_size,
+                    array.fill_value(),
+                )))
+            }
+        }
     };
+}
+
+impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruChunkLimit {
+    impl_ChunkCacheLruEncoded!();
+    impl_ChunkCacheLruCommon!(ChunkCacheTypeEncoded);
+}
+
+impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruSizeLimit {
+    impl_ChunkCacheLruEncoded!();
+    impl_ChunkCacheLruCommon!(ChunkCacheTypeEncoded);
 }
 
 macro_rules! impl_ChunkCacheLruDecoded {
@@ -232,23 +296,42 @@ macro_rules! impl_ChunkCacheLruDecoded {
                     ArrayError::StorageError(StorageError::from(err.to_string()))
                 })
             })
-            // if let Some(chunk) = cache.get(chunk_indices) {
-            //     Ok(chunk)
-            // } else {
-            //     let chunk = Arc::new(
-            //         array.retrieve_chunk_opt(chunk_indices, options)?
-            //             .into_owned(),
-            //     );
-            //     cache.insert(chunk_indices.to_vec(), chunk.clone());
-            //     Ok(chunk)
-            // }
+        }
+
+        fn retrieve_chunk_subset<
+            TStorage: ?Sized + crate::storage::ReadableStorageTraits + 'static,
+        >(
+            &self,
+            array: &crate::array::Array<TStorage>,
+            chunk_indices: &[u64],
+            chunk_subset: &crate::array::ArraySubset,
+            options: &crate::array::codec::CodecOptions,
+        ) -> Result<Arc<crate::array::ArrayBytes<'static>>, ArrayError> {
+            let chunk = self
+                .try_get_or_insert_with::<_, ArrayError>(chunk_indices.to_vec(), || {
+                    Ok(Arc::new(
+                        array
+                            .retrieve_chunk_opt(chunk_indices, options)?
+                            .into_owned(),
+                    ))
+                })
+                .map_err(|err| {
+                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
+                    Arc::try_unwrap(err).unwrap_or_else(|err| {
+                        ArrayError::StorageError(StorageError::from(err.to_string()))
+                    })
+                })?;
+            let chunk_representation = array.chunk_array_representation(chunk_indices)?;
+            Ok(chunk
+                .extract_array_subset(
+                    chunk_subset,
+                    &chunk_representation.shape_u64(),
+                    array.data_type(),
+                )?
+                .into_owned()
+                .into())
         }
     };
-}
-
-impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruChunkLimit {
-    impl_ChunkCacheLruEncoded!();
-    impl_ChunkCacheLruCommon!(ChunkCacheTypeEncoded);
 }
 
 impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruChunkLimit {
@@ -256,14 +339,77 @@ impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruChunkLimit {
     impl_ChunkCacheLruCommon!(ChunkCacheTypeDecoded);
 }
 
-impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruSizeLimit {
-    impl_ChunkCacheLruEncoded!();
-    impl_ChunkCacheLruCommon!(ChunkCacheTypeEncoded);
-}
-
 impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruSizeLimit {
     impl_ChunkCacheLruDecoded!();
     impl_ChunkCacheLruCommon!(ChunkCacheTypeDecoded);
+}
+
+macro_rules! impl_ChunkCacheLruPartialDecoder {
+    () => {
+        fn retrieve_chunk<TStorage: ?Sized + crate::storage::ReadableStorageTraits + 'static>(
+            &self,
+            array: &crate::array::Array<TStorage>,
+            chunk_indices: &[u64],
+            options: &crate::array::codec::CodecOptions,
+        ) -> Result<Arc<crate::array::ArrayBytes<'static>>, ArrayError> {
+            let partial_decoder = self
+                .try_get_or_insert_with::<_, ArrayError>(chunk_indices.to_vec(), || {
+                    Ok(Arc::new(array.partial_decoder(chunk_indices)?))
+                })
+                .map_err(|err| {
+                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
+                    Arc::try_unwrap(err).unwrap_or_else(|err| {
+                        ArrayError::StorageError(StorageError::from(err.to_string()))
+                    })
+                })?;
+            let chunk_shape =
+                crate::array::chunk_shape_to_array_shape(&array.chunk_shape(chunk_indices)?);
+            Ok(partial_decoder
+                .partial_decode(
+                    &[crate::array::ArraySubset::new_with_shape(chunk_shape)],
+                    options,
+                )?
+                .remove(0)
+                .into_owned()
+                .into())
+        }
+
+        fn retrieve_chunk_subset<
+            TStorage: ?Sized + crate::storage::ReadableStorageTraits + 'static,
+        >(
+            &self,
+            array: &crate::array::Array<TStorage>,
+            chunk_indices: &[u64],
+            chunk_subset: &crate::array::ArraySubset,
+            options: &crate::array::codec::CodecOptions,
+        ) -> Result<Arc<crate::array::ArrayBytes<'static>>, ArrayError> {
+            let partial_decoder = self
+                .try_get_or_insert_with::<_, ArrayError>(chunk_indices.to_vec(), || {
+                    Ok(Arc::new(array.partial_decoder(chunk_indices)?))
+                })
+                .map_err(|err| {
+                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
+                    Arc::try_unwrap(err).unwrap_or_else(|err| {
+                        ArrayError::StorageError(StorageError::from(err.to_string()))
+                    })
+                })?;
+            Ok(partial_decoder
+                .partial_decode(std::slice::from_ref(chunk_subset), options)?
+                .remove(0)
+                .into_owned()
+                .into())
+        }
+    };
+}
+
+impl ChunkCache<ChunkCacheTypePartialDecoder> for ChunkCachePartialDecoderLruChunkLimit {
+    impl_ChunkCacheLruPartialDecoder!();
+    impl_ChunkCacheLruCommon!(ChunkCacheTypePartialDecoder);
+}
+
+impl ChunkCache<ChunkCacheTypePartialDecoder> for ChunkCachePartialDecoderLruSizeLimit {
+    impl_ChunkCacheLruPartialDecoder!();
+    impl_ChunkCacheLruCommon!(ChunkCacheTypePartialDecoder);
 }
 
 macro_rules! impl_ChunkCacheLruChunkLimitThreadLocal {
@@ -302,6 +448,21 @@ macro_rules! impl_ChunkCacheLruChunkLimitThreadLocal {
     };
 }
 
+impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruChunkLimitThreadLocal {
+    impl_ChunkCacheLruEncoded!();
+    impl_ChunkCacheLruChunkLimitThreadLocal!(ChunkCacheTypeEncoded);
+}
+
+impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruChunkLimitThreadLocal {
+    impl_ChunkCacheLruDecoded!();
+    impl_ChunkCacheLruChunkLimitThreadLocal!(ChunkCacheTypeDecoded);
+}
+
+impl ChunkCache<ChunkCacheTypePartialDecoder> for ChunkCachePartialDecoderLruChunkLimitThreadLocal {
+    impl_ChunkCacheLruPartialDecoder!();
+    impl_ChunkCacheLruChunkLimitThreadLocal!(ChunkCacheTypePartialDecoder);
+}
+
 macro_rules! impl_ChunkCacheLruSizeLimitThreadLocal {
     ($ct:ty) => {
         fn get(&self, chunk_indices: &[u64]) -> Option<Arc<$ct>> {
@@ -334,16 +495,6 @@ macro_rules! impl_ChunkCacheLruSizeLimitThreadLocal {
     };
 }
 
-impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruChunkLimitThreadLocal {
-    impl_ChunkCacheLruEncoded!();
-    impl_ChunkCacheLruChunkLimitThreadLocal!(ChunkCacheTypeEncoded);
-}
-
-impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruChunkLimitThreadLocal {
-    impl_ChunkCacheLruDecoded!();
-    impl_ChunkCacheLruChunkLimitThreadLocal!(ChunkCacheTypeDecoded);
-}
-
 impl ChunkCache<ChunkCacheTypeEncoded> for ChunkCacheEncodedLruSizeLimitThreadLocal {
     impl_ChunkCacheLruEncoded!();
     impl_ChunkCacheLruSizeLimitThreadLocal!(ChunkCacheTypeEncoded);
@@ -354,16 +505,22 @@ impl ChunkCache<ChunkCacheTypeDecoded> for ChunkCacheDecodedLruSizeLimitThreadLo
     impl_ChunkCacheLruSizeLimitThreadLocal!(ChunkCacheTypeDecoded);
 }
 
+impl ChunkCache<ChunkCacheTypePartialDecoder> for ChunkCachePartialDecoderLruSizeLimitThreadLocal {
+    impl_ChunkCacheLruPartialDecoder!();
+    impl_ChunkCacheLruSizeLimitThreadLocal!(ChunkCacheTypePartialDecoder);
+}
+
 #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use std::sync::Arc;
+    use std::{any::TypeId, sync::Arc};
 
     use crate::{
         array::{
-            codec::CodecOptions, ArrayBuilder, ArrayChunkCacheExt, ChunkCacheDecodedLruChunkLimit,
+            codec::{CodecOptions, ShardingCodecBuilder},
+            ArrayBuilder, ArrayChunkCacheExt, ChunkCacheDecodedLruChunkLimit,
             ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
             ChunkCacheEncodedLruSizeLimit, ChunkCacheType, DataType,
         },
@@ -374,25 +531,38 @@ mod tests {
         },
     };
 
-    fn array_chunk_cache_impl<TChunkCache: ChunkCache<CT>, CT: ChunkCacheType>(
+    fn array_chunk_cache_impl<TChunkCache: ChunkCache<CT> + 'static, CT: ChunkCacheType>(
         cache: TChunkCache,
-        thread_local: bool,
     ) {
+        let thread_local = TypeId::of::<TChunkCache>()
+            == TypeId::of::<ChunkCacheDecodedLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheEncodedLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCachePartialDecoderLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheDecodedLruSizeLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheEncodedLruSizeLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCachePartialDecoderLruSizeLimitThreadLocal>();
         let store = Arc::new(MemoryStore::default());
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
-        let builder = ArrayBuilder::new(
-            vec![8, 8], // array shape
-            vec![4, 4], // regular chunk shape
+        let array = ArrayBuilder::new(
+            vec![12, 8], // array shape
+            vec![4, 4],  // regular chunk shape
             DataType::UInt8,
             0u8,
-        );
-        let array = builder.build(store.clone(), "/").unwrap();
+        )
+        .array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap()).build(),
+        ))
+        .build(store.clone(), "/")
+        .unwrap();
 
-        let data: Vec<u8> = (0..array.shape().into_iter().product())
-            .map(|i| i as u8)
-            .collect();
+        let data: Vec<u8> = (0..8 * 8).map(|i| i as u8).collect();
         array
-            .store_array_subset_elements(&array.subset_all(), &data)
+            .store_array_subset_elements(&ArraySubset::new_with_shape(vec![8, 8]), &data)
             .unwrap();
 
         assert_eq!(store.reads(), 0);
@@ -407,7 +577,14 @@ mod tests {
                 .unwrap(),
             ndarray::array![[24, 25, 26, 27], [32, 33, 34, 35]].into_dyn()
         );
-        assert_eq!(store.reads(), 2);
+        if !thread_local {
+            assert!(!cache.is_empty());
+        }
+        if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+            assert_eq!(store.reads(), 2 + 8); // 2 index + 8 inner chunks
+        } else {
+            assert_eq!(store.reads(), 2);
+        }
         if !thread_local {
             assert_eq!(cache.len(), 2);
         }
@@ -430,7 +607,11 @@ mod tests {
             .into_dyn()
         );
         if !thread_local {
-            assert_eq!(store.reads(), 2);
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4); // + 4 inner chunks
+            } else {
+                assert_eq!(store.reads(), 2);
+            }
             assert_eq!(cache.len(), 2);
             assert!(cache.get(&[0, 0]).is_some());
             assert!(cache.get(&[1, 0]).is_some());
@@ -448,7 +629,11 @@ mod tests {
             ndarray::array![[9, 10], [17, 18],].into_dyn()
         );
         if !thread_local {
-            assert_eq!(store.reads(), 2);
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4); // 4 inner chunks
+            } else {
+                assert_eq!(store.reads(), 2);
+            }
             assert_eq!(cache.len(), 2);
             assert!(cache.get(&[0, 0]).is_some());
             assert!(cache.get(&[1, 0]).is_some());
@@ -476,7 +661,11 @@ mod tests {
             .into_dyn()
         );
         if !thread_local {
-            assert_eq!(store.reads(), 2);
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8); // + 8 inner chunks
+            } else {
+                assert_eq!(store.reads(), 2);
+            }
             assert_eq!(cache.len(), 2);
             assert!(cache.get(&[0, 0]).is_some());
             assert!(cache.get(&[1, 0]).is_some());
@@ -490,10 +679,77 @@ mod tests {
             Arc::new(vec![4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31].into())
         );
         if !thread_local {
-            assert_eq!(store.reads(), 3);
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4); // 1 index + 4 inner chunks
+            } else {
+                assert_eq!(store.reads(), 3);
+            }
             assert_eq!(cache.len(), 2);
             assert!(cache.get(&[0, 1]).is_some());
             assert!(cache.get(&[0, 0]).is_none() || cache.get(&[1, 0]).is_none());
+        }
+
+        // Partially retrieve from a cached chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[0, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1); // 1 inner chunks
+            } else {
+                assert_eq!(store.reads(), 3);
+            }
+            assert_eq!(cache.len(), 2);
+        }
+
+        // Partially retrieve from an uncached chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[1, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1);
+            // 1 index + 1 inner chunk
+            } else {
+                assert_eq!(store.reads(), 4);
+            }
+            assert_eq!(cache.len(), 2);
+        }
+
+        // Partially retrieve from an empty chunk
+        cache
+            .retrieve_chunk_subset(
+                &array,
+                &[2, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if TypeId::of::<CT>() == TypeId::of::<ChunkCacheTypePartialDecoder>() {
+                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1 + 1);
+            // 1 index (empty)
+            } else {
+                assert_eq!(store.reads(), 5);
+            }
+            if TypeId::of::<TChunkCache>() == TypeId::of::<ChunkCacheEncodedLruSizeLimit>()
+                || TypeId::of::<TChunkCache>()
+                    == TypeId::of::<ChunkCachePartialDecoderLruSizeLimit>()
+            {
+                assert_eq!(cache.len(), 2 + 1); // empty chunk is not included in size limit
+            } else {
+                assert_eq!(cache.len(), 2);
+            }
         }
     }
 
@@ -501,23 +757,46 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_encoded_chunks() {
         let cache = ChunkCacheEncodedLruChunkLimit::new(2);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_chunks_thread_local() {
+        let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(2);
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_encoded_size() {
         // Create a cache with a size limit equivalent to 2 chunks
-        let chunk_size = 4 * 4 * size_of::<u8>();
+        let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let cache = ChunkCacheEncodedLruSizeLimit::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_size_thread_local() {
+        // Create a cache with a size limit equivalent to 2 chunks
+        let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
+        let cache = ChunkCacheEncodedLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_decoded_chunks() {
         let cache = ChunkCacheDecodedLruChunkLimit::new(2);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_chunks_thread_local() {
+        let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(2);
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -526,30 +805,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimit::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, false)
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn array_chunk_cache_encoded_chunks_thread_local() {
-        let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(2);
-        array_chunk_cache_impl(cache, true)
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn array_chunk_cache_encoded_size_thread_local() {
-        // Create a cache with a size limit equivalent to 2 chunks
-        let chunk_size = 4 * 4 * size_of::<u8>();
-        let cache = ChunkCacheEncodedLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, true)
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    fn array_chunk_cache_decoded_chunks_thread_local() {
-        let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(2);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -558,6 +814,38 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks() {
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(2);
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks_thread_local() {
+        let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(2);
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size() {
+        // Create a cache with a size limit equivalent to 2 chunks (indexes)
+        let chunk_size = size_of::<u64>() * 2 * 2 * 2;
+        let cache = ChunkCachePartialDecoderLruSizeLimit::new(2 * chunk_size as u64);
+        array_chunk_cache_impl(cache)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size_thread_local() {
+        // Create a cache with a size limit equivalent to 2 chunks
+        let chunk_size = size_of::<u64>() * 2 * 2 * 2;
+        let cache = ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
+        array_chunk_cache_impl(cache)
     }
 }

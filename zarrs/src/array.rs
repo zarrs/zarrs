@@ -88,6 +88,7 @@ use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 pub use chunk_cache::array_chunk_cache_ext_sync::ArrayChunkCacheExt;
 pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder,
 };
 
 #[cfg(all(feature = "sharding", feature = "async"))]
@@ -302,10 +303,12 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Each method has a `cache` parameter that implements the [`ChunkCache`] trait.
 ///
 /// Several Least Recently Used (LRU) chunk caches are provided by `zarrs`:
-///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity.
-///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
+///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
 ///  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
+///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
 ///  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
+///  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
+///  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 ///
 /// There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
 ///
