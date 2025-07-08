@@ -533,8 +533,19 @@ mod tests {
 
     fn array_chunk_cache_impl<TChunkCache: ChunkCache<CT> + 'static, CT: ChunkCacheType>(
         cache: TChunkCache,
-        thread_local: bool,
     ) {
+        let thread_local = TypeId::of::<TChunkCache>()
+            == TypeId::of::<ChunkCacheDecodedLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheEncodedLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCachePartialDecoderLruChunkLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheDecodedLruSizeLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCacheEncodedLruSizeLimitThreadLocal>()
+            || TypeId::of::<TChunkCache>()
+                == TypeId::of::<ChunkCachePartialDecoderLruSizeLimitThreadLocal>();
         let store = Arc::new(MemoryStore::default());
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
         let array = ArrayBuilder::new(
@@ -746,14 +757,14 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_encoded_chunks() {
         let cache = ChunkCacheEncodedLruChunkLimit::new(2);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_encoded_chunks_thread_local() {
         let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(2);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -762,7 +773,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let cache = ChunkCacheEncodedLruSizeLimit::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -771,21 +782,21 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let cache = ChunkCacheEncodedLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_decoded_chunks() {
         let cache = ChunkCacheDecodedLruChunkLimit::new(2);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_decoded_chunks_thread_local() {
         let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(2);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -794,7 +805,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimit::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -803,21 +814,21 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_partial_decoder_chunks() {
         let cache = ChunkCachePartialDecoderLruChunkLimit::new(2);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_chunk_cache_partial_decoder_chunks_thread_local() {
         let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(2);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -826,7 +837,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks (indexes)
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache = ChunkCachePartialDecoderLruSizeLimit::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, false)
+        array_chunk_cache_impl(cache)
     }
 
     #[test]
@@ -835,6 +846,6 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache = ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(2 * chunk_size as u64);
-        array_chunk_cache_impl(cache, true)
+        array_chunk_cache_impl(cache)
     }
 }
