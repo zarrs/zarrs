@@ -125,6 +125,8 @@ impl FusedIterator for LinearisedIndicesIterator<'_> {}
 
 #[cfg(test)]
 mod tests {
+    use crate::array_subset::indexers::{IndexerEnum, VIndex};
+
     use super::*;
 
     #[test]
@@ -156,5 +158,20 @@ mod tests {
                 .unwrap();
         assert_eq!(indices.len(), 0);
         assert!(indices.is_empty());
+    }
+
+
+    #[test]
+    fn linearised_vindices_iterator_partial() {
+        let indices =
+            LinearisedIndices::new(IndexerEnum::VIndex(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).unwrap()).into(), vec![8, 8])
+                .unwrap();
+        assert_eq!(indices.len(), 4);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(1)); // [0,1]
+        assert_eq!(iter.next(), Some(8)); // [1,0]
+        assert_eq!(iter.next_back(), Some(45)); // [5,5]
+        assert_eq!(iter.next(), Some(18)); // [2,2]
+        assert_eq!(iter.next(), None);
     }
 }

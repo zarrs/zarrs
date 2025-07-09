@@ -19,14 +19,17 @@ use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIte
 /// 6   7   8
 /// 9  10  11
 /// ```
+/// with a `contiguous_elements{_usize}` of `9`.
+/// 
 /// An iterator with an array subset covering the entire array will produce
 /// ```rust,ignore
-/// [(0, 9)]
+/// [0]
 /// ```
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce
 /// ```rust,ignore
-/// [(7, 2), (10, 2)]
+/// [7, 10]
 /// ```
+/// with a `contiguous_elements{_usize}` of `2`.
 pub struct ContiguousLinearisedIndices {
     inner: ContiguousIndices,
     array_shape: Vec<u64>,

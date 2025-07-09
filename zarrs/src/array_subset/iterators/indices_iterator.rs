@@ -246,6 +246,8 @@ impl<'a> From<&'a ParIndicesIterator<'_>> for ParIndicesIteratorProducer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::array_subset::indexers::{IndexerEnum, VIndex};
+
     use super::*;
 
     #[test]
@@ -273,15 +275,14 @@ mod tests {
     }
 
     #[test]
-    fn indices_iterator_empty() {
+    fn indices_iterator_from_vindex_full() {
         let indices =
-            Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 5..5);
-        assert_eq!(indices.len(), 0);
-        assert!(indices.is_empty());
-
-        let indices =
-            Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 5..1);
-        assert_eq!(indices.len(), 0);
-        assert!(indices.is_empty());
+            Indices::new_with_start_end(IndexerEnum::VIndex(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).unwrap()).into(), 0..3);
+        assert_eq!(indices.len(), 3);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(vec![0, 1]));
+        assert_eq!(iter.next_back(), Some(vec![2, 2]));
+        assert_eq!(iter.next(), Some(vec![1, 0]));
+        assert_eq!(iter.next(), None);
     }
 }
