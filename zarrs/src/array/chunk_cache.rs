@@ -54,7 +54,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 }
 
 /// Traits for a chunk cache.
-pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
+pub trait ChunkCache: Send + Sync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> &Array<dyn ReadableStorageTraits>;
 
@@ -72,7 +72,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
+    ) -> Result<Vec<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         T::from_array_bytes(
             self.array().data_type(),
             Arc::unwrap_or_clone(self.retrieve_chunk(chunk_indices, options)?),
@@ -86,7 +89,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
+    ) -> Result<ndarray::ArrayD<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         let shape = self
             .array()
             .chunk_grid()
@@ -112,7 +118,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
+    ) -> Result<Vec<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         T::from_array_bytes(
             self.array().data_type(),
             Arc::unwrap_or_clone(self.retrieve_chunk_subset(
@@ -131,7 +140,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
+    ) -> Result<ndarray::ArrayD<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         let elements = self.retrieve_chunk_subset_elements(chunk_indices, chunk_subset, options)?;
         crate::array::elements_to_ndarray(chunk_subset.shape(), elements)
     }
@@ -291,7 +303,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
+    ) -> Result<Vec<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         T::from_array_bytes(
             self.array().data_type(),
             Arc::unwrap_or_clone(self.retrieve_array_subset(array_subset, options)?),
@@ -305,7 +320,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
+    ) -> Result<ndarray::ArrayD<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         let elements = self.retrieve_array_subset_elements(array_subset, options)?;
         crate::array::elements_to_ndarray(array_subset.shape(), elements)
     }
@@ -335,7 +353,10 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
+    ) -> Result<Vec<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         T::from_array_bytes(
             self.array().data_type(),
             Arc::unwrap_or_clone(self.retrieve_chunks(chunks, options)?),
@@ -349,42 +370,13 @@ pub trait ChunkCache<CT: ChunkCacheType>: Send + Sync {
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
+    ) -> Result<ndarray::ArrayD<T>, ArrayError>
+    where
+        Self: Sized,
+    {
         let array_subset = self.array().chunks_subset(chunks)?;
         let elements = self.retrieve_chunks_elements(chunks, options)?;
         crate::array::elements_to_ndarray(array_subset.shape(), elements)
-    }
-
-    /// Retrieve a chunk from the cache. Returns [`None`] if the chunk is not present.
-    ///
-    /// The chunk cache implementation may modify the cache (e.g. update LRU cache) on retrieval.
-    fn get(&self, chunk_indices: &[u64]) -> Option<Arc<CT>>;
-
-    /// Insert a chunk into the cache.
-    fn insert(&self, chunk_indices: Vec<u64>, chunk: Arc<CT>);
-
-    /// Get or insert a chunk in the cache.
-    ///
-    /// Override the default implementation if a chunk offers a more performant implementation.
-    ///
-    /// # Errors
-    /// Returns an error if `f` returns an error.
-    fn try_get_or_insert_with<F, E>(
-        &self,
-        chunk_indices: Vec<u64>,
-        f: F,
-    ) -> Result<Arc<CT>, Arc<ArrayError>>
-    where
-        F: FnOnce() -> Result<Arc<CT>, ArrayError>,
-    {
-        let chunk_indices = chunk_indices.clone();
-        if let Some(chunk) = self.get(&chunk_indices) {
-            Ok(chunk)
-        } else {
-            let chunk = f()?;
-            self.insert(chunk_indices, chunk.clone());
-            Ok(chunk)
-        }
     }
 
     /// Return the number of chunks in the cache. For a thread-local cache, returns the number of chunks cached on the current thread.
