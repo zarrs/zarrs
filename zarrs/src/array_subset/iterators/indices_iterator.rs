@@ -139,7 +139,8 @@ impl Iterator for IndicesIterator<'_> {
     type Item = ArrayIndices;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.range.start < self.range.end && self.range.start < self.subset.num_elements_usize() {
+        if self.range.start < self.range.end && self.range.start < self.subset.num_elements_usize()
+        {
             let indices = self.subset.find_linearised_index(self.range.start);
             self.range.start += 1;
             Some(indices)
@@ -276,8 +277,14 @@ mod tests {
 
     #[test]
     fn indices_iterator_from_vindex_full() {
-        let indices =
-            Indices::new_with_start_end(IndexerEnum::VIndex(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).unwrap()).into(), 0..3);
+        let indices = Indices::new_with_start_end(
+            IndexerEnum::VIndex(
+                VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]])
+                    .unwrap(),
+            )
+            .into(),
+            0..3,
+        );
         assert_eq!(indices.len(), 3);
         let mut iter = indices.iter();
         assert_eq!(iter.next(), Some(vec![0, 1]));

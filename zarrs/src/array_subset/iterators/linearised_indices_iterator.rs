@@ -34,7 +34,10 @@ impl LinearisedIndices {
     ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
         if !subset.is_compatible_shape(&array_shape) {
             // TODO: Resolve error behavior
-            return Err(IncompatibleArraySubsetAndShapeError::new(subset, array_shape));
+            return Err(IncompatibleArraySubsetAndShapeError::new(
+                subset,
+                array_shape,
+            ));
         };
         return Ok(Self {
             subset,
@@ -160,12 +163,17 @@ mod tests {
         assert!(indices.is_empty());
     }
 
-
     #[test]
     fn linearised_vindices_iterator_partial() {
-        let indices =
-            LinearisedIndices::new(IndexerEnum::VIndex(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).unwrap()).into(), vec![8, 8])
-                .unwrap();
+        let indices = LinearisedIndices::new(
+            IndexerEnum::VIndex(
+                VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]])
+                    .unwrap(),
+            )
+            .into(),
+            vec![8, 8],
+        )
+        .unwrap();
         assert_eq!(indices.len(), 4);
         let mut iter = indices.iter();
         assert_eq!(iter.next(), Some(1)); // [0,1]

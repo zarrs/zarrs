@@ -20,7 +20,7 @@ use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIte
 /// 9  10  11
 /// ```
 /// with a `contiguous_elements{_usize}` of `9`.
-/// 
+///
 /// An iterator with an array subset covering the entire array will produce
 /// ```rust,ignore
 /// [0]

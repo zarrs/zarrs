@@ -1,4 +1,3 @@
-
 use thiserror::Error;
 
 use std::{
@@ -7,15 +6,20 @@ use std::{
     ops::Range,
 };
 
-use crate::array_subset::{iterators::{
-    Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
-}, ArraySubset, ArraySubsetError, IncompatibleStartEndIndicesError};
+use crate::array_subset::{
+    iterators::{
+        Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
+    },
+    ArraySubset, ArraySubsetError, IncompatibleStartEndIndicesError,
+};
 
 use derive_more::From;
 use itertools::izip;
 
 use crate::{
-    array::{unravel_index, ArrayError, ArrayIndices, ArrayShape}, array_subset::{IncompatibleDimensionalityError,IncompatibleArraySubsetAndShapeError}, storage::byte_range::ByteRange
+    array::{unravel_index, ArrayError, ArrayIndices, ArrayShape},
+    array_subset::{IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError},
+    storage::byte_range::ByteRange,
 };
 
 use crate::array_subset::indexers::{Indexer, IndexerEnum};
@@ -40,25 +44,24 @@ impl Display for RangeSubset {
 impl<T: IntoIterator<Item = Range<u64>>> From<T> for RangeSubset {
     fn from(ranges: T) -> Self {
         let (start, shape) = ranges
-        .into_iter()
-        .map(|range| (range.start, range.end.saturating_sub(range.start)))
-        .unzip();
+            .into_iter()
+            .map(|range| (range.start, range.end.saturating_sub(range.start)))
+            .unzip();
         Self { start, shape }
     }
 }
 
 impl Indexer for RangeSubset {
-
     fn num_elements(&self) -> u64 {
         self.shape().iter().product()
     }
 
-    fn is_compatible_shape(&self,array_shape: &[u64]) -> bool {
+    fn is_compatible_shape(&self, array_shape: &[u64]) -> bool {
         self.dimensionality() == array_shape.len()
             && std::iter::zip(self.end_exc(), array_shape).all(|(end, shape)| end <= *shape)
     }
 
-    fn find_linearised_index(&self,index:usize) -> ArrayIndices {
+    fn find_linearised_index(&self, index: usize) -> ArrayIndices {
         unravel_index(index as u64, self.shape())
             .iter()
             .enumerate()
@@ -66,16 +69,13 @@ impl Indexer for RangeSubset {
             .collect()
     }
 
- 
-    fn shape(&self) ->  &[u64] {
+    fn shape(&self) -> &[u64] {
         &self.shape
     }
 
-
-    fn start(&self) ->  &[u64] {
+    fn start(&self) -> &[u64] {
         &self.start
     }
-
 
     fn dimensionality(&self) -> usize {
         self.start.len()
@@ -83,11 +83,15 @@ impl Indexer for RangeSubset {
 
     fn end_exc(&self) -> ArrayIndices {
         std::iter::zip(&self.start, &self.shape)
-        .map(|(start, size)| start + size)
-        .collect()
+            .map(|(start, size)| start + size)
+            .collect()
     }
 
-    fn byte_ranges(&self,array_shape: &[u64],element_size:usize,) -> Result<Vec<ByteRange>,IncompatibleArraySubsetAndShapeError> {
+    fn byte_ranges(
+        &self,
+        array_shape: &[u64],
+        element_size: usize,
+    ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
         let mut byte_ranges: Vec<ByteRange> = Vec::new();
         let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
         let byte_length = contiguous_indices.contiguous_elements_usize() * element_size;
@@ -98,11 +102,14 @@ impl Indexer for RangeSubset {
         Ok(byte_ranges)
     }
 
-    fn contains(&self,indices: &[u64]) -> bool {
+    fn contains(&self, indices: &[u64]) -> bool {
         izip!(indices, &self.start, &self.shape).all(|(&i, &o, &s)| i >= o && i < o + s)
     }
 
-    fn overlap(&self,subset_other: &ArraySubset) -> Result<ArraySubset,IncompatibleDimensionalityError> {
+    fn overlap(
+        &self,
+        subset_other: &ArraySubset,
+    ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         if let IndexerEnum::RangeSubset(range_subset) = &subset_other.indexer {
             if subset_other.dimensionality() == self.dimensionality() {
                 let mut ranges = Vec::with_capacity(self.dimensionality());
@@ -128,14 +135,15 @@ impl Indexer for RangeSubset {
         }
     }
 
-    fn relative_to(&self,start: &[u64]) -> Result<ArraySubset,IncompatibleDimensionalityError> {
+    fn relative_to(&self, start: &[u64]) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         if start.len() == self.dimensionality() {
             Ok(IndexerEnum::RangeSubset(Self {
                 start: std::iter::zip(self.start(), start)
                     .map(|(a, b)| a - b)
                     .collect::<Vec<_>>(),
                 shape: self.shape().to_vec(),
-            }).into())
+            })
+            .into())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 start.len(),
@@ -158,7 +166,6 @@ impl Indexer for RangeSubset {
 }
 
 impl RangeSubset {
- 
     /// Create a new array subset from a list of [`Range`]s.
     #[must_use]
     pub fn new_with_ranges(ranges: &[Range<u64>]) -> Self {
@@ -281,7 +288,7 @@ impl RangeSubset {
             .all(|(end, shape)| end <= shape);
         if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
             return Err(IncompatibleArraySubsetAndShapeError::new(
-IndexerEnum::RangeSubset(self.clone()).into(),
+                IndexerEnum::RangeSubset(self.clone()).into(),
                 array_shape.to_vec(),
             ));
         }
@@ -317,7 +324,13 @@ IndexerEnum::RangeSubset(self.clone()).into(),
         }
     }
 
-    fn contiguous_linearised_indices(&self, array_shape: &[u64]) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
-        ContiguousLinearisedIndices::new(&IndexerEnum::RangeSubset(self.clone()).into(), array_shape.to_vec()) // TODO: a cleaner way of handling these
+    fn contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+        ContiguousLinearisedIndices::new(
+            &IndexerEnum::RangeSubset(self.clone()).into(),
+            array_shape.to_vec(),
+        ) // TODO: a cleaner way of handling these
     }
 }

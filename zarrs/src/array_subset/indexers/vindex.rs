@@ -2,11 +2,15 @@ use std::fmt::{Debug, Display};
 
 use crate::array::{ArrayIndices, ArrayShape};
 
-use crate::array_subset::iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices};
-use crate::array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError};
 use crate::array_subset::indexers::{Indexer, IndexerEnum};
-use itertools::{izip, Itertools};
+use crate::array_subset::iterators::{
+    ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices,
+};
+use crate::array_subset::{
+    ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError,
+};
 use derive_more::From;
+use itertools::{izip, Itertools};
 use thiserror::Error;
 use zarrs_storage::byte_range::ByteRange;
 
@@ -25,8 +29,7 @@ pub struct VIndex {
     are_dimension_first_indices: bool,
 }
 
-fn transpose(v: &Vec<Vec<u64>>) -> Vec<Vec<u64>>
-{
+fn transpose(v: &Vec<Vec<u64>>) -> Vec<Vec<u64>> {
     (0..v[0].len())
         .map(|i| v.iter().map(|inner| inner[i].clone()).collect::<Vec<_>>())
         .collect()
@@ -39,7 +42,6 @@ impl Display for VIndex {
 }
 
 impl Indexer for VIndex {
-
     fn num_elements(&self) -> u64 {
         if self.are_dimension_first_indices {
             return self.indices[0].len() as u64;
@@ -68,7 +70,11 @@ impl Indexer for VIndex {
 
     fn end_exc(&self) -> ArrayIndices {
         if self.are_dimension_first_indices {
-            return self.indices.iter().map(|i| i[i.len() - 1] + 1).collect::<Vec<_>>();
+            return self
+                .indices
+                .iter()
+                .map(|i| i[i.len() - 1] + 1)
+                .collect::<Vec<_>>();
         }
         self.indices[self.indices.len() - 1].clone()
     }
@@ -78,7 +84,12 @@ impl Indexer for VIndex {
             None
         } else {
             if self.are_dimension_first_indices {
-                return Some(self.indices.iter().map(|i| i[i.len() - 1]).collect::<Vec<_>>());
+                return Some(
+                    self.indices
+                        .iter()
+                        .map(|i| i[i.len() - 1])
+                        .collect::<Vec<_>>(),
+                );
             }
             Some(self.indices[self.indices.len() - 1].clone())
         }
@@ -111,21 +122,36 @@ impl Indexer for VIndex {
 
     fn contains(&self, indices: &[u64]) -> bool {
         if self.are_dimension_first_indices {
-            return indices.iter().zip(&self.indices).all(|(index, vindex)| vindex.contains(index) );
+            return indices
+                .iter()
+                .zip(&self.indices)
+                .all(|(index, vindex)| vindex.contains(index));
         }
         self.indices.contains(&indices.to_vec())
     }
 
-    fn overlap(&self, subset_other: &ArraySubset) -> Result<ArraySubset, IncompatibleDimensionalityError> {
+    fn overlap(
+        &self,
+        subset_other: &ArraySubset,
+    ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         if let IndexerEnum::RangeSubset(range_subset) = &subset_other.indexer {
             if range_subset.dimensionality() == self.dimensionality() {
                 let indices: Vec<Vec<u64>>;
-                if self.are_dimension_first_indices{
-                    indices = transpose(&self.indices).into_iter().filter(|row| izip!(row.iter(), subset_other.start(), subset_other.end_exc()).all(|(i, s, e)| i >= s && i < &e)).collect::<Vec<Vec<u64>>>();
+                if self.are_dimension_first_indices {
+                    indices = transpose(&self.indices)
+                        .into_iter()
+                        .filter(|row| {
+                            izip!(row.iter(), subset_other.start(), subset_other.end_exc())
+                                .all(|(i, s, e)| i >= s && i < &e)
+                        })
+                        .collect::<Vec<Vec<u64>>>();
                 } else {
                     indices = self.indices.clone();
                 }
-                return Ok(IndexerEnum::VIndex(Self::new_from_selection_first_indices(indices).unwrap()).into()); // TODO: handle error better
+                return Ok(IndexerEnum::VIndex(
+                    Self::new_from_selection_first_indices(indices).unwrap(),
+                )
+                .into()); // TODO: handle error better
             } else {
                 return Err(IncompatibleDimensionalityError::new(
                     range_subset.dimensionality(),
@@ -145,15 +171,17 @@ impl Indexer for VIndex {
             } else {
                 iter = self.indices.clone().into_iter();
             }
-            let indices = iter.filter(|row| row.iter().zip(start).all(|(i, s)| i >= s)).collect::<Vec<Vec<u64>>>();
+            let indices = iter
+                .filter(|row| row.iter().zip(start).all(|(i, s)| i >= s))
+                .collect::<Vec<Vec<u64>>>();
             let shape = vec![indices[0].len() as u64];
             Ok(IndexerEnum::VIndex(Self {
                 indices,
                 start: start.to_vec(),
                 shape,
-                are_dimension_first_indices: false
-            }).into())
-            
+                are_dimension_first_indices: false,
+            })
+            .into())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 start.len(),
@@ -164,12 +192,14 @@ impl Indexer for VIndex {
 }
 
 impl VIndex {
-
     fn linearised_indices(
         &self,
         array_shape: &[u64],
     ) -> Result<LinearisedIndices, IncompatibleArraySubsetAndShapeError> {
-        LinearisedIndices::new(IndexerEnum::VIndex(self.clone()).into(), array_shape.to_vec()) // TODO: better handling of these iterators
+        LinearisedIndices::new(
+            IndexerEnum::VIndex(self.clone()).into(),
+            array_shape.to_vec(),
+        ) // TODO: better handling of these iterators
     }
 }
 
@@ -193,7 +223,7 @@ pub struct EmptyVIndexError;
 
 /// An incompatible VIndex argument
 #[derive(Debug, Error)]
-pub enum VIndexError{
+pub enum VIndexError {
     /// An incompatible array and array shape error.
     #[error("At least one of the indices was not equal to the others in length: {0}")]
     UnequalVIndexLengths(#[from] UnequalVIndexLengthsError),
@@ -206,74 +236,78 @@ fn check_indices(indices: &[Vec<u64>]) -> Result<(), VIndexError> {
         return Err(EmptyVIndexError.into());
     }
     if !indices.iter().map(|x: &Vec<u64>| x.len()).all_equal() {
-        return Err(UnequalVIndexLengthsError::new(indices.iter().map(|x| x.len()).collect()).into());
+        return Err(
+            UnequalVIndexLengthsError::new(indices.iter().map(|x| x.len()).collect()).into(),
+        );
     }
     Ok(())
 }
 
-
 impl VIndex {
-
-    pub fn new_from_dimension_first_indices(indices: Vec<ArrayIndices>) -> Result<Self, VIndexError> {
+    pub fn new_from_dimension_first_indices(
+        indices: Vec<ArrayIndices>,
+    ) -> Result<Self, VIndexError> {
         check_indices(&indices)?;
         let shape = vec![indices[0].len() as u64];
         let start = indices.iter().map(|i| i[0]).collect::<Vec<_>>();
-        Ok(
-            Self {
-                shape,
-                start,
-                indices,
-                are_dimension_first_indices: true
-            }
-        )
+        Ok(Self {
+            shape,
+            start,
+            indices,
+            are_dimension_first_indices: true,
+        })
     }
 
-    pub fn new_from_selection_first_indices(indices: Vec<ArrayIndices>) -> Result<Self, VIndexError> {
+    pub fn new_from_selection_first_indices(
+        indices: Vec<ArrayIndices>,
+    ) -> Result<Self, VIndexError> {
         check_indices(&indices)?;
         let shape = vec![indices.len() as u64];
         let start = indices[0].clone();
-        Ok(
-            Self {
-                shape,
-                start,
-                indices,
-                are_dimension_first_indices: false
-            }
-        )
+        Ok(Self {
+            shape,
+            start,
+            indices,
+            are_dimension_first_indices: false,
+        })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
 
-    use crate::{array_subset::indexers::Indexer, array_subset::indexers::vindex::VIndexError};
+    use crate::{array_subset::indexers::vindex::VIndexError, array_subset::indexers::Indexer};
 
     use super::VIndex;
 
-
     #[test]
     fn vindex_new_ok() {
-        assert!(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).is_ok())
+        assert!(
+            VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]])
+                .is_ok()
+        )
     }
     #[test]
     fn vindex_new_unequal() {
-        assert!(VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2]]).is_err_and(|x|
-            matches!(x, VIndexError::UnequalVIndexLengths(_))
-        ))
+        assert!(
+            VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2]])
+                .is_err_and(|x| matches!(x, VIndexError::UnequalVIndexLengths(_)))
+        )
     }
 
     #[test]
     fn vindex_new_empty() {
-        assert!(VIndex::new_from_dimension_first_indices(vec![]).is_err_and(|x|
-            matches!(x, VIndexError::EmptyVIndex(_))
-        ))
+        assert!(VIndex::new_from_dimension_first_indices(vec![])
+            .is_err_and(|x| matches!(x, VIndexError::EmptyVIndex(_))))
     }
 
     #[test]
     fn vindex_byte_ranges_dimension_first() {
-        let indexer = VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]]).unwrap();
-        indexer.byte_ranges(vec![10, 10].as_slice(), 4)
+        let indexer =
+            VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]])
+                .unwrap();
+        indexer
+            .byte_ranges(vec![10, 10].as_slice(), 4)
             .unwrap()
             .iter()
             .zip(vec![4, 40, 88, 220])
@@ -285,8 +319,15 @@ mod tests {
 
     #[test]
     fn vindex_byte_ranges_selection_first() {
-        let indexer = VIndex::new_from_selection_first_indices(vec![vec![0, 1],  vec![1, 0], vec![2, 2], vec![5, 5]]).unwrap();
-        indexer.byte_ranges(vec![10, 10].as_slice(), 4)
+        let indexer = VIndex::new_from_selection_first_indices(vec![
+            vec![0, 1],
+            vec![1, 0],
+            vec![2, 2],
+            vec![5, 5],
+        ])
+        .unwrap();
+        indexer
+            .byte_ranges(vec![10, 10].as_slice(), 4)
             .unwrap()
             .iter()
             .zip(vec![4, 40, 88, 220])

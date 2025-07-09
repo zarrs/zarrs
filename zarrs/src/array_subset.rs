@@ -8,8 +8,8 @@
 //! This module also provides convenience functions for:
 //!  - computing the byte ranges of array subsets within an array with a fixed element size.
 
-pub mod iterators;
 pub mod indexers;
+pub mod iterators;
 use serde_json::value::Index;
 use thiserror::Error;
 
@@ -19,22 +19,24 @@ use std::{
     ops::Range,
 };
 
+use indexers::{IndexerEnum, RangeSubset};
 use iterators::{
     Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
 };
-use indexers::{RangeSubset, IndexerEnum};
 
 use derive_more::From;
 use itertools::izip;
 
 use crate::{
-    array::{ArrayError, ArrayIndices, ArrayShape}, array_subset::indexers::Indexer, storage::byte_range::ByteRange
+    array::{ArrayError, ArrayIndices, ArrayShape},
+    array_subset::indexers::Indexer,
+    storage::byte_range::ByteRange,
 };
 
 /// An array subset.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ArraySubset {
-    indexer: IndexerEnum
+    indexer: IndexerEnum,
 }
 impl From<IndexerEnum> for ArraySubset {
     fn from(indexer: IndexerEnum) -> Self {
@@ -50,7 +52,9 @@ impl Display for ArraySubset {
 
 impl<T: IntoIterator<Item = Range<u64>>> From<T> for ArraySubset {
     fn from(ranges: T) -> Self {
-        Self { indexer: IndexerEnum::RangeSubset(ranges.into()) }
+        Self {
+            indexer: IndexerEnum::RangeSubset(ranges.into()),
+        }
     }
 }
 
@@ -58,19 +62,25 @@ impl ArraySubset {
     /// Create a new empty array subset.
     #[must_use]
     pub fn new_empty(dimensionality: usize) -> Self {
-        Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_empty(dimensionality)) }
+        Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_empty(dimensionality)),
+        }
     }
 
     /// Create a new array subset from a list of [`Range`]s.
     #[must_use]
     pub fn new_with_ranges(ranges: &[Range<u64>]) -> Self {
-        Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_ranges(ranges)) }
+        Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_ranges(ranges)),
+        }
     }
 
     /// Create a new array subset with `size` starting at the origin.
     #[must_use]
     pub fn new_with_shape(shape: ArrayShape) -> Self {
-        Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_shape(shape)) }
+        Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_shape(shape)),
+        }
     }
 
     /// Create a new array subset.
@@ -82,7 +92,9 @@ impl ArraySubset {
         start: ArrayIndices,
         shape: ArrayShape,
     ) -> Result<Self, IncompatibleDimensionalityError> {
-        Ok(Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_shape(start, shape)?) })
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_shape(start, shape)?),
+        })
     }
 
     /// Create a new array subset from a start and end (inclusive).
@@ -93,7 +105,9 @@ impl ArraySubset {
         start: ArrayIndices,
         end: ArrayIndices,
     ) -> Result<Self, IncompatibleStartEndIndicesError> {
-        Ok(Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_inc(start, end)?) })
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_inc(start, end)?),
+        })
     }
 
     /// Create a new array subset from a start and end (exclusive).
@@ -104,7 +118,9 @@ impl ArraySubset {
         start: ArrayIndices,
         end: ArrayIndices,
     ) -> Result<Self, IncompatibleStartEndIndicesError> {
-        Ok(Self { indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_exc(start, end)?) })
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_exc(start, end)?),
+        })
     }
 
     /// Return the array subset as a vec of ranges.

@@ -3,12 +3,18 @@ use derive_more::{Display, From};
 use enum_dispatch::enum_dispatch;
 use itertools::izip;
 use serde_json::value::Index;
+use thiserror::Error;
 use zarrs_metadata::ArrayShape;
 use zarrs_storage::byte_range::ByteRange;
-use thiserror::Error;
 
-use crate::{array::ArrayIndices, array_subset::{indexers::{RangeSubset, VIndex}, iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices}, ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError}};
-
+use crate::{
+    array::ArrayIndices,
+    array_subset::{
+        indexers::{RangeSubset, VIndex},
+        iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices},
+        ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError,
+    },
+};
 
 #[enum_dispatch]
 pub trait Indexer: Send + Sync + Clone {
@@ -57,9 +63,12 @@ pub trait Indexer: Send + Sync + Clone {
             return false;
         }
 
-        for (self_start, self_end, other_start, other_end) in
-            izip!(self.start(), self.end_exc(), subset.start(), subset.end_exc())
-        {
+        for (self_start, self_end, other_start, other_end) in izip!(
+            self.start(),
+            self.end_exc(),
+            subset.start(),
+            subset.end_exc()
+        ) {
             if self_start < other_start || self_end > other_end {
                 return false;
             }
@@ -88,7 +97,6 @@ pub trait Indexer: Send + Sync + Clone {
         element_size: usize,
     ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError>;
 
-
     /// Returns [`true`] if the array subset contains `indices`.
     #[must_use]
     fn contains(&self, indices: &[u64]) -> bool;
@@ -98,8 +106,11 @@ pub trait Indexer: Send + Sync + Clone {
     /// # Errors
     ///
     /// Returns [`IncompatibleDimensionalityError`] if the dimensionality of `subset_other` does not match the dimensionality of this array subset.
-    fn overlap(&self, subset_other: &ArraySubset) -> Result<ArraySubset, IncompatibleDimensionalityError>;
-    
+    fn overlap(
+        &self,
+        subset_other: &ArraySubset,
+    ) -> Result<ArraySubset, IncompatibleDimensionalityError>;
+
     /// Return the subset relative to `start`.
     ///
     /// Creates an array subset starting at [`ArraySubset::start()`] - `start`.
@@ -133,9 +144,11 @@ pub trait Indexer: Send + Sync + Clone {
 #[derive(Clone, Error, Debug, Eq, PartialEq, Display, PartialOrd, Ord, Hash)]
 pub enum IndexerEnum {
     RangeSubset,
-    VIndex
+    VIndex,
 }
 
 impl Default for IndexerEnum {
-    fn default() -> Self { IndexerEnum::RangeSubset(Default::default()) }
+    fn default() -> Self {
+        IndexerEnum::RangeSubset(Default::default())
+    }
 }
