@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use zarrs_storage::ReadableStorageTraits;
 
 use crate::{
     array::ArrayBytes,
@@ -18,6 +19,12 @@ use super::{
 };
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Return a read-only instantiation of the array.
+    #[must_use]
+    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+        self.with_storage(self.storage.clone().readable())
+    }
+
     /// Encode `chunk_subset_bytes` and store in `chunk_subset` of the chunk at `chunk_indices` with default codec options.
     ///
     /// Use [`store_chunk_subset_opt`](Array::store_chunk_subset_opt) to control codec options.

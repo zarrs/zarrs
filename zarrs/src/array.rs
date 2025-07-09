@@ -387,7 +387,7 @@ pub struct Array<TStorage: ?Sized> {
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
-    /// Replace the storage backing an array
+    /// Replace the storage backing an array.
     pub(crate) fn with_storage<TStorage2: ?Sized>(
         &self,
         storage: Arc<TStorage2>,
