@@ -21,27 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata}()`
   - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
   - Change `ArrayBuilder::new()` to take a broader range of types for each parameter, and swap order of `chunk_grid`/`data_type`. See below
-```diff
-ArrayBuilder::new(
-    // array shape
-    vec![8, 8], // or [8, 8], &[8, 8], etc.
--   DataType::Float32,
--   vec![4, 4].try_into()?, // no longer valid
--   f32::NAN.into(), // no longer valid
-+   // regular chunk shape or chunk grid metadata
-+   vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
-+   // data type or data type metadata
-+   DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
-+   // fill value or fill value metadata
-+   f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
-)
-.build()
-```
+  ```diff
+  ArrayBuilder::new(
+      // array shape
+      vec![8, 8], // or [8, 8], &[8, 8], etc.
+  -   DataType::Float32,
+  -   vec![4, 4].try_into()?, // no longer valid
+  -   f32::NAN.into(), // no longer valid
+  +   // regular chunk shape or chunk grid metadata
+  +   vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
+  +   // data type or data type metadata
+  +   DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
+  +   // fill value or fill value metadata
+  +   f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
+  )
+  .build()
+  ```
 - **Breaking**: change the `{Array,Chunk}Representation::new[_unchecked]` `fill_value` parameter to take `impl Into<FillValue>` instead of `FillValue`
-```diff
--  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
-+  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
-```
+  ```diff
+  -  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
+  +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
+  ```
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
@@ -52,10 +52,23 @@ ArrayBuilder::new(
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
 - **Breaking**: Add `size()` method to `{Array,Bytes}PartialDecoderTraits`
-- **Breaking**: Add `retrieve_chunk_subset` method to the `ChunkCache` trait
+- **Breaking:: Refactor the `ChunkCache` trait
+  - The previous API supported misuse (e.g. using a chunk cache with different arrays)
+  - **Breaking**: Add `retrieve_chunk_subset()` and `array()` methods (required)
+  - Add `retrieve_{array_subset,chunks}()` methods with `_elements()` and `_ndarray()` variants (provided)
+  - Remove `array` from method parameters, the `ChunkCache` must borrow/own an `Array` instead. See below
+  ```diff
+  -  let cache = ChunkCacheEncodedLruChunkLimit::new(50);
+  -  array.retrieve_chunk_opt_cached(&cache, &[0, 1], &CodecOptions::default()),
+  +  let cache = ChunkCacheEncodedLruChunkLimit::new(&array, 50);
+  +  cache.retrieve_chunk(&[0, 1], &CodecOptions::default()),
+  ```
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
+
+### Removed
+- Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
