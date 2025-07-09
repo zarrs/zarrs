@@ -213,6 +213,8 @@ impl ListableStorageTraits for MemoryStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::ReadableWritableListableStorageTraits;
+
     use super::*;
     use std::error::Error;
 
@@ -222,6 +224,17 @@ mod tests {
         crate::store_test::store_write(&store)?;
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
+        Ok(())
+    }
+
+    #[test]
+    fn memory_generic() -> Result<(), Box<dyn Error>> {
+        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        crate::store_test::store_write(&store.clone().readable_writable().writable())?;
+        crate::store_test::store_write(&store.clone().writable())?;
+        crate::store_test::store_read(&store.clone().readable_writable().readable())?;
+        crate::store_test::store_read(&store.clone().readable())?;
+        crate::store_test::store_list(&store.clone().listable())?;
         Ok(())
     }
 }
