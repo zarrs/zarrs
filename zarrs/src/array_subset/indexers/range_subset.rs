@@ -50,66 +50,110 @@ impl<T: IntoIterator<Item = Range<u64>>> From<T> for RangeSubset {
 impl Indexer for RangeSubset {
 
     fn num_elements(&self) -> u64 {
-        todo!()
+        self.shape().iter().product()
     }
 
     fn is_compatible_shape(&self,array_shape: &[u64]) -> bool {
-        todo!()
+        self.dimensionality() == array_shape.len()
+            && std::iter::zip(self.end_exc(), array_shape).all(|(end, shape)| end <= *shape)
     }
 
     fn find_linearised_index(&self,index:usize) -> ArrayIndices {
-        todo!()
+        unravel_index(index as u64, self.shape())
+            .iter()
+            .enumerate()
+            .map(|(axis, val)| self.find_on_axis(val, axis))
+            .collect()
     }
 
  
     fn shape(&self) ->  &[u64] {
-        todo!()
+        &self.shape
     }
 
 
     fn start(&self) ->  &[u64] {
-        todo!()
+        &self.start
     }
 
 
     fn dimensionality(&self) -> usize {
-        todo!()
+        self.start.len()
     }
 
     fn end_exc(&self) -> ArrayIndices {
-        todo!()
+        std::iter::zip(&self.start, &self.shape)
+        .map(|(start, size)| start + size)
+        .collect()
     }
 
     fn byte_ranges(&self,array_shape: &[u64],element_size:usize,) -> Result<Vec<ByteRange>,IncompatibleArraySubsetAndShapeError> {
-        todo!()
-    }
-
-    fn to_enum(&self) -> IndexerEnum {
-        todo!()
+        let mut byte_ranges: Vec<ByteRange> = Vec::new();
+        let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
+        let byte_length = contiguous_indices.contiguous_elements_usize() * element_size;
+        for array_index in &contiguous_indices {
+            let byte_index = array_index * element_size as u64;
+            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length as u64)));
+        }
+        Ok(byte_ranges)
     }
 
     fn contains(&self,indices: &[u64]) -> bool {
-        todo!()
+        izip!(indices, &self.start, &self.shape).all(|(&i, &o, &s)| i >= o && i < o + s)
     }
 
     fn overlap(&self,subset_other: &ArraySubset) -> Result<ArraySubset,IncompatibleDimensionalityError> {
-        todo!()
+        if let IndexerEnum::RangeSubset(range_subset) = &subset_other.indexer {
+            if subset_other.dimensionality() == self.dimensionality() {
+                let mut ranges = Vec::with_capacity(self.dimensionality());
+                for (start, size, other_start, other_size) in izip!(
+                    &self.start,
+                    &self.shape,
+                    range_subset.start(),
+                    range_subset.shape(),
+                ) {
+                    let overlap_start = *std::cmp::max(start, other_start);
+                    let overlap_end = std::cmp::min(start + size, other_start + other_size);
+                    ranges.push(overlap_start..overlap_end);
+                }
+                Ok(IndexerEnum::RangeSubset(Self::new_with_ranges(&ranges)).into())
+            } else {
+                Err(IncompatibleDimensionalityError::new(
+                    subset_other.dimensionality(),
+                    self.dimensionality(),
+                ))
+            }
+        } else {
+            todo!("Handle no match more gracefully")
+        }
     }
 
     fn relative_to(&self,start: &[u64]) -> Result<ArraySubset,IncompatibleDimensionalityError> {
-        todo!()
-    }
-
-    fn contiguous_indices(&self,array_shape: &[u64],) -> Result<ContiguousIndices,IncompatibleArraySubsetAndShapeError> {
-        todo!()
-    }
-
-    fn contiguous_linearised_indices(&self,array_shape: &[u64],) -> Result<ContiguousLinearisedIndices,IncompatibleArraySubsetAndShapeError> {
-        todo!()
+        if start.len() == self.dimensionality() {
+            Ok(IndexerEnum::RangeSubset(Self {
+                start: std::iter::zip(self.start(), start)
+                    .map(|(a, b)| a - b)
+                    .collect::<Vec<_>>(),
+                shape: self.shape().to_vec(),
+            }).into())
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                start.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
     fn end_inc(&self) -> Option<ArrayIndices> {
-        todo!()
+        if self.is_empty() {
+            None
+        } else {
+            Some(
+                std::iter::zip(&self.start, &self.shape)
+                    .map(|(start, size)| start + size - 1)
+                    .collect(),
+            )
+        }
     }
 }
 
@@ -237,7 +281,7 @@ impl RangeSubset {
             .all(|(end, shape)| end <= shape);
         if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
             return Err(IncompatibleArraySubsetAndShapeError::new(
-self.to_enum().into(),
+IndexerEnum::RangeSubset(self.clone()).into(),
                 array_shape.to_vec(),
             ));
         }
@@ -271,5 +315,9 @@ self.to_enum().into(),
             start: vec![0; dimensionality],
             shape: vec![0; dimensionality],
         }
+    }
+
+    fn contiguous_linearised_indices(&self, array_shape: &[u64]) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+        ContiguousLinearisedIndices::new(&IndexerEnum::RangeSubset(self.clone()).into(), array_shape.to_vec()) // TODO: a cleaner way of handling these
     }
 }

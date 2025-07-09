@@ -88,19 +88,6 @@ pub trait Indexer: Send + Sync + Clone {
         element_size: usize,
     ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError>;
 
-    fn to_enum(&self) -> IndexerEnum;
-
-    /// Returns an iterator over the linearised indices of elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    fn linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<LinearisedIndices, IncompatibleArraySubsetAndShapeError> {
-        LinearisedIndices::new(self.to_enum().into(), array_shape.to_vec())
-    }
 
     /// Returns [`true`] if the array subset contains `indices`.
     #[must_use]
@@ -120,27 +107,6 @@ pub trait Indexer: Send + Sync + Clone {
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if the length of `start` does not match the dimensionality of this array subset.
     fn relative_to(&self, start: &[u64]) -> Result<ArraySubset, IncompatibleDimensionalityError>;
-
-        /// Returns an iterator over the indices of contiguous elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    fn contiguous_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError>;
-
-    /// Returns an iterator over the linearised indices of contiguous elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    fn contiguous_linearised_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError>;
-
 
     /// Return the shape of the array subset.
     ///
