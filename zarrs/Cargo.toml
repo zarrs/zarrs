@@ -89,6 +89,7 @@ jiff = { version = "0.2.15", optional = true }
 chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.1.3", optional = true, features = ["bytemuck"] }
 simd-adler32 = { version = "0.3.7", optional = true }
+enum_dispatch = "0.3.13"
 
 [dependencies.num-complex]
 version = "0.4.3"
