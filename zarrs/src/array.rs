@@ -387,6 +387,25 @@ pub struct Array<TStorage: ?Sized> {
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
+    /// Replace the storage backing an array
+    pub(crate) fn with_storage<TStorage2: ?Sized>(
+        &self,
+        storage: Arc<TStorage2>,
+    ) -> Array<TStorage2> {
+        Array {
+            storage,
+            path: self.path.clone(),
+            data_type: self.data_type.clone(),
+            chunk_grid: self.chunk_grid.clone(),
+            chunk_key_encoding: self.chunk_key_encoding.clone(),
+            fill_value: self.fill_value.clone(),
+            codecs: self.codecs.clone(),
+            storage_transformers: self.storage_transformers.clone(),
+            dimension_names: self.dimension_names.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+
     /// Create an array in `storage` at `path` with `metadata`.
     /// This does **not** write to the store, use [`store_metadata`](Array<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
