@@ -52,6 +52,7 @@ ArrayBuilder::new(
 - **Breaking**: Add `size()` method to `{Array,Bytes}PartialDecoderTraits`
 - **Breaking**: Add `retrieve_chunk_subset` method to the `ChunkCache` trait
 - Bump `zarrs_metadata_ext` to 0.2.0
+- Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
 
 ### Fixed

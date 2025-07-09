@@ -248,29 +248,84 @@ pub trait WritableStorageTraits: Send + Sync {
 
 /// A supertrait of [`ReadableStorageTraits`] and [`WritableStorageTraits`].
 pub trait ReadableWritableStorageTraits: ReadableStorageTraits + WritableStorageTraits {
-    // /// Returns the mutex for the store value at `key`.
-    // ///
-    // /// # Errors
-    // /// Returns a [`StorageError`] if the mutex cannot be retrieved.
-    // fn mutex(&self, key: &StoreKey) -> Result<StoreKeyMutex, StorageError>;
+    /// Return a readable version of the store.
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits>;
+
+    /// Return a writable version of the store.
+    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits>;
 }
 
-impl<T> ReadableWritableStorageTraits for T where T: ReadableStorageTraits + WritableStorageTraits {}
+impl<T> ReadableWritableStorageTraits for T
+where
+    T: ReadableStorageTraits + WritableStorageTraits + 'static,
+{
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits> {
+        self.clone()
+    }
+
+    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits> {
+        self.clone()
+    }
+}
 
 /// A supertrait of [`ReadableStorageTraits`] and [`ListableStorageTraits`].
-pub trait ReadableListableStorageTraits: ReadableStorageTraits + ListableStorageTraits {}
+pub trait ReadableListableStorageTraits: ReadableStorageTraits + ListableStorageTraits {
+    /// Return a readable version of the store.
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits>;
 
-impl<T> ReadableListableStorageTraits for T where T: ReadableStorageTraits + ListableStorageTraits {}
+    /// Return a listable version of the store.
+    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits>;
+}
+
+impl<T> ReadableListableStorageTraits for T
+where
+    T: ReadableStorageTraits + ListableStorageTraits + 'static,
+{
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits> {
+        self.clone()
+    }
+
+    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
+        self.clone()
+    }
+}
 
 /// A supertrait of [`ReadableWritableStorageTraits`] and [`ListableStorageTraits`].
 pub trait ReadableWritableListableStorageTraits:
     ReadableWritableStorageTraits + ListableStorageTraits
 {
+    /// Return a readable and writable version of the store.
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits>;
+
+    /// Return a readable version of the store.
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits>;
+
+    /// Return a writable version of the store.
+    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits>;
+
+    /// Return a listable version of the store.
+    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits>;
 }
 
-impl<T> ReadableWritableListableStorageTraits for T where
-    T: ReadableWritableStorageTraits + ListableStorageTraits
+impl<T> ReadableWritableListableStorageTraits for T
+where
+    T: ReadableWritableStorageTraits + ListableStorageTraits + 'static,
 {
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn ReadableWritableStorageTraits> {
+        self.clone()
+    }
+
+    fn readable(self: Arc<Self>) -> Arc<dyn ReadableStorageTraits> {
+        self.clone()
+    }
+
+    fn writable(self: Arc<Self>) -> Arc<dyn WritableStorageTraits> {
+        self.clone()
+    }
+
+    fn listable(self: Arc<Self>) -> Arc<dyn ListableStorageTraits> {
+        self.clone()
+    }
 }
 
 /// Discover the children of a store prefix.
