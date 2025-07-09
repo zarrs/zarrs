@@ -356,6 +356,11 @@ impl ArrayBuilder {
         self
     }
 
+    /// Return a mutable reference to the attributes.
+    pub fn attributes_mut(&mut self) -> &mut serde_json::Map<String, serde_json::Value> {
+        &mut self.attributes
+    }
+
     /// Set the additional fields.
     ///
     /// Set additional fields not defined in the Zarr specification.

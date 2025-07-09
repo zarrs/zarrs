@@ -85,7 +85,6 @@ pub use crate::metadata::{
 };
 use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 
-pub use chunk_cache::array_chunk_cache_ext_sync::ArrayChunkCacheExt;
 pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
@@ -198,10 +197,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///   - Variants without the `_opt` suffix use default [`CodecOptions`](crate::array::codec::CodecOptions).
 ///   - **Experimental**: `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
-/// Additional methods are offered by extension traits:
+/// Additional [`Array`] methods are offered by extension traits:
 ///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
-///  - [`ArrayChunkCacheExt`]: see [Chunk Caching](#chunk-caching).
 ///  - [`[Async]ArrayDlPackExt`](ArrayDlPackExt): methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop.
+///
+/// [`ChunkCache`] implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
 ///
 /// ### Chunks and Array Subsets
 /// Several convenience methods are available for querying the underlying chunk grid:
@@ -293,16 +293,19 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
 /// ### Chunk Caching
-/// The [`ArrayChunkCacheExt`] trait adds [`Array`] retrieve methods that utilise chunk caching:
-///  - [`retrieve_chunk_opt_cached`](ArrayChunkCacheExt::retrieve_chunk_opt_cached)
-///  - [`retrieve_chunks_opt_cached`](ArrayChunkCacheExt::retrieve_chunks_opt_cached)
-///  - [`retrieve_chunk_subset_opt_cached`](ArrayChunkCacheExt::retrieve_chunk_subset_opt_cached)
-///  - [`retrieve_array_subset_opt_cached`](ArrayChunkCacheExt::retrieve_array_subset_opt_cached)
+/// `zarrs` supports three types of chunk caches:
+/// - [`ChunkCacheTypeDecoded`]: caches decoded chunks.
+///   - Preferred where decoding is expensive and memory is abundant.
+/// - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
+///   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
+/// - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+///   - Preferred where chunks are repeatedly *partially retrieved*.
+///   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
+///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs. See:
+///     - [`CodecTraits::partial_decoder_decodes_all`](crate::array::codec::CodecTraits::partial_decoder_decodes_all), and
+///     - [`CodecTraits::partial_decoder_should_cache_input`](crate::array::codec::CodecTraits::partial_decoder_should_cache_input).
 ///
-/// `_elements` and `_ndarray` variants are also available.
-/// Each method has a `cache` parameter that implements the [`ChunkCache`] trait.
-///
-/// Several Least Recently Used (LRU) chunk caches are provided by `zarrs`:
+/// `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 ///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
 ///  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
 ///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
@@ -311,16 +314,21 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 ///
 /// There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
-///
 /// `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
+///
+/// Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
+///  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
+///  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
+///  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
+///  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
+///
+/// `_elements` and `_ndarray` variants are also available.
 ///
 /// Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 /// Chunk caching may not outperform disk caching with a filesystem store.
 /// The above caches use internal locking to support multithreading, which has a performance overhead.
 /// **Prefer not to use a chunk cache if chunks are not accessed repeatedly**.
-/// Cached retrieve methods do not use partial decoders, and any intersected chunk is fully decoded if not present in the cache.
-/// The encoded chunk caches may be optimal if dealing with highly compressed/sparse data with a fast codec.
-/// However, the decoded chunk caches are likely to be more performant in most cases.
+/// Aside from [`ChunkCacheTypePartialDecoder`]-based caches, caches do not use partial decoders and any intersected chunk is fully retrieved if not present in the cache.
 ///
 /// For many access patterns, chunk caching may reduce performance.
 /// **Benchmark your algorithm/data.**
@@ -374,24 +382,17 @@ pub struct Array<TStorage: ?Sized> {
     fill_value: FillValue,
     /// Specifies a list of codecs to be used for encoding and decoding chunks.
     codecs: Arc<CodecChain>,
-    // /// Optional user defined attributes.
-    // attributes: serde_json::Map<String, serde_json::Value>,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
     dimension_names: Option<Vec<DimensionName>>,
-    // /// Additional fields annotated with `"must_understand": false`.
-    // additional_fields: AdditionalFields,
     /// Metadata used to create the array
     metadata: ArrayMetadata,
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
     /// Replace the storage backing an array.
-    pub(crate) fn with_storage<TStorage2: ?Sized>(
-        &self,
-        storage: Arc<TStorage2>,
-    ) -> Array<TStorage2> {
+    pub fn with_storage<TStorage2: ?Sized>(&self, storage: Arc<TStorage2>) -> Array<TStorage2> {
         Array {
             storage,
             path: self.path.clone(),
