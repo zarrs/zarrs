@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: Refactor `ArrayBuilder`
   - All fields are now private
-  - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata}()`
+  - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata,attributes_mut}()`
   - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
   - Change `ArrayBuilder::new()` to take a broader range of types for each parameter, and swap order of `chunk_grid`/`data_type`. See below
   ```diff
