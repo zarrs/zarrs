@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `VlenCodec::with_index_location()`
 - Add `numcodecs.adler32` codec
 - Add `ChunkCacheTypePartialDecoder`, `ChunkCachePartialDecoderLru{Chunk,Size}Limit[ThreadLocal]`
+- Add `Array::storage()`
 
 ### Changed
 - **Breaking**: Refactor `ArrayBuilder`

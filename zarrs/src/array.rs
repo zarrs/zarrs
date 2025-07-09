@@ -487,6 +487,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })
     }
 
+    /// Get the underlying storage backing the array.
+    #[must_use]
+    pub fn storage(&self) -> Arc<TStorage> {
+        self.storage.clone()
+    }
+
     /// Get the node path.
     #[must_use]
     pub const fn path(&self) -> &NodePath {
