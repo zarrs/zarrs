@@ -1,4 +1,5 @@
 use futures::{StreamExt, TryStreamExt};
+use zarrs_storage::AsyncReadableStorageTraits;
 
 use crate::{
     array::ArrayBytes, array_subset::ArraySubset, storage::AsyncReadableWritableStorageTraits,
@@ -10,6 +11,12 @@ use super::{
 };
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Return a read-only instantiation of the array.
+    #[must_use]
+    pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
+        self.with_storage(self.storage.clone().readable())
+    }
+
     /// Async variant of [`store_chunk_subset`](Array::store_chunk_subset).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_store_chunk_subset<'a>(
