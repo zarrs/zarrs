@@ -7,7 +7,7 @@ use zarrs_metadata::ArrayShape;
 use zarrs_storage::byte_range::ByteRange;
 use thiserror::Error;
 
-use crate::{array::ArrayIndices, array_subset::{indexers::RangeSubset, iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices}, ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError}};
+use crate::{array::ArrayIndices, array_subset::{indexers::{RangeSubset, VIndex}, iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices}, ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError}};
 
 
 #[enum_dispatch]
@@ -132,7 +132,8 @@ pub trait Indexer: Send + Sync + Clone {
 #[enum_dispatch(Indexer)]
 #[derive(Clone, Error, Debug, Eq, PartialEq, Display, PartialOrd, Ord, Hash)]
 pub enum IndexerEnum {
-    RangeSubset
+    RangeSubset,
+    VIndex
 }
 
 impl Default for IndexerEnum {

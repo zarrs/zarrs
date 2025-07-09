@@ -32,16 +32,14 @@ impl LinearisedIndices {
         subset: ArraySubset,
         array_shape: ArrayShape,
     ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
-        if subset.dimensionality() == array_shape.len()
-            && std::iter::zip(subset.end_exc(), &array_shape).all(|(end, shape)| end <= *shape)
-        {
-            Ok(Self {
-                subset,
-                array_shape,
-            })
-        } else {
-            Err(IncompatibleArraySubsetAndShapeError(subset, array_shape))
-        }
+        if !subset.is_compatible_shape(&array_shape) {
+            // TODO: Resolve error behavior
+            return Err(IncompatibleArraySubsetAndShapeError::new(subset, array_shape));
+        };
+        return Ok(Self {
+            subset,
+            array_shape,
+        });
     }
 
     /// Create a new linearised indices iterator.

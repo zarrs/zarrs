@@ -319,6 +319,14 @@ impl ArraySubset {
     pub fn inbounds_shape(&self, array_shape: &[u64]) -> bool {
         self.indexer.inbounds_shape(array_shape)
     }
+
+    pub fn is_compatible_shape(&self, array_shape: &[u64]) -> bool {
+        self.indexer.is_compatible_shape(array_shape)
+    }
+
+    pub fn find_linearised_index(&self, index: usize) -> ArrayIndices {
+        self.indexer.find_linearised_index(index)
+    }
 }
 
 /// An incompatible dimensionality error.
