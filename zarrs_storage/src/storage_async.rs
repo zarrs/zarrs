@@ -277,33 +277,79 @@ pub trait AsyncWritableStorageTraits: Send + Sync {
 pub trait AsyncReadableWritableStorageTraits:
     AsyncReadableStorageTraits + AsyncWritableStorageTraits
 {
+    /// Return a readable version of the store.
+    fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits>;
+
+    /// Return a writable version of the store.
+    fn writable(self: Arc<Self>) -> Arc<dyn AsyncWritableStorageTraits>;
 }
 
-impl<T> AsyncReadableWritableStorageTraits for T where
-    T: AsyncReadableStorageTraits + AsyncWritableStorageTraits
+impl<T> AsyncReadableWritableStorageTraits for T
+where
+    T: AsyncReadableStorageTraits + AsyncWritableStorageTraits + 'static,
 {
+    fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
+        self.clone()
+    }
+
+    fn writable(self: Arc<Self>) -> Arc<dyn AsyncWritableStorageTraits> {
+        self.clone()
+    }
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncListableStorageTraits`].
 pub trait AsyncReadableListableStorageTraits:
     AsyncReadableStorageTraits + AsyncListableStorageTraits
 {
+    /// Return a readable version of the store.
+    fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits>;
+
+    /// Return a listable version of the store.
+    fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits>;
 }
 
-impl<T> AsyncReadableListableStorageTraits for T where
-    T: AsyncReadableStorageTraits + AsyncListableStorageTraits
+impl<T> AsyncReadableListableStorageTraits for T
+where
+    T: AsyncReadableStorageTraits + AsyncListableStorageTraits + 'static,
 {
+    fn readable(self: Arc<Self>) -> Arc<dyn AsyncReadableStorageTraits> {
+        self.clone()
+    }
+
+    fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
+        self.clone()
+    }
 }
 
 /// A supertrait of [`AsyncReadableWritableStorageTraits`] and [`AsyncListableStorageTraits`].
 pub trait AsyncReadableWritableListableStorageTraits:
     AsyncReadableWritableStorageTraits + AsyncListableStorageTraits
 {
+    /// Return a readable and writable version of the store.
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits>;
+
+    /// Return a readable and listable version of the store.
+    fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits>;
+
+    /// Return a listable version of the store.
+    fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits>;
 }
 
-impl<T> AsyncReadableWritableListableStorageTraits for T where
-    T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits
+impl<T> AsyncReadableWritableListableStorageTraits for T
+where
+    T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits + 'static,
 {
+    fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits> {
+        self.clone()
+    }
+
+    fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits> {
+        self.clone()
+    }
+
+    fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits> {
+        self.clone()
+    }
 }
 
 /// Asynchronously discover the children of a store prefix.

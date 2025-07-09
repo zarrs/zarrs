@@ -52,27 +52,27 @@ version = "0.1.4"
 path = "zarrs_registry"
 
 [workspace.dependencies.zarrs_storage]
-version = "0.3.4"
+version = "0.4.0"
 path = "zarrs_storage"
 
 [workspace.dependencies.zarrs_filesystem]
-version = "0.2.3"
+version = "0.3.0"
 path = "zarrs_filesystem"
 
 [workspace.dependencies.zarrs_http]
-version = "0.2.2"
+version = "0.3.0"
 path = "zarrs_http"
 
 [workspace.dependencies.zarrs_object_store]
-version = "0.4.3"
+version = "0.5.0"
 path = "zarrs_object_store"
 
 [workspace.dependencies.zarrs_opendal]
-version = "0.7.2"
+version = "0.8.0"
 path = "zarrs_opendal"
 
 [workspace.dependencies.zarrs_zip]
-version = "0.2.3"
+version = "0.3.0"
 path = "zarrs_zip"
 
 [workspace.dependencies.object_store]

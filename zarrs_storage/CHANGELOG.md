@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
+
 ## [0.3.4] - 2025-05-16
 
 ### Changed
