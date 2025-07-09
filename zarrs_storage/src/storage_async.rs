@@ -328,6 +328,9 @@ pub trait AsyncReadableWritableListableStorageTraits:
     /// Return a readable and writable version of the store.
     fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits>;
 
+    /// Return a readable and listable version of the store.
+    fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits>;
+
     /// Return a listable version of the store.
     fn listable(self: Arc<Self>) -> Arc<dyn AsyncListableStorageTraits>;
 }
@@ -337,6 +340,10 @@ where
     T: AsyncReadableWritableStorageTraits + AsyncListableStorageTraits + 'static,
 {
     fn readable_writable(self: Arc<Self>) -> Arc<dyn AsyncReadableWritableStorageTraits> {
+        self.clone()
+    }
+
+    fn readable_listable(self: Arc<Self>) -> Arc<dyn AsyncReadableListableStorageTraits> {
         self.clone()
     }
 

@@ -228,13 +228,28 @@ mod tests {
     }
 
     #[test]
-    fn memory_generic() -> Result<(), Box<dyn Error>> {
+    fn memory_upcast1() -> Result<(), Box<dyn Error>> {
         let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
-        crate::store_test::store_write(&store.clone().readable_writable().writable())?;
         crate::store_test::store_write(&store.clone().writable())?;
-        crate::store_test::store_read(&store.clone().readable_writable().readable())?;
         crate::store_test::store_read(&store.clone().readable())?;
         crate::store_test::store_list(&store.clone().listable())?;
+        Ok(())
+    }
+
+    #[test]
+    fn memory_upcast2() -> Result<(), Box<dyn Error>> {
+        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        crate::store_test::store_write(&store.clone().readable_writable().writable())?;
+        crate::store_test::store_read(&store.clone().readable_writable().readable())?;
+        Ok(())
+    }
+
+    #[test]
+    fn memory_upcast3() -> Result<(), Box<dyn Error>> {
+        let store: Arc<dyn ReadableWritableListableStorageTraits> = Arc::new(MemoryStore::new());
+        crate::store_test::store_write(&store.clone().writable())?;
+        crate::store_test::store_read(&store.clone().readable_listable().readable())?;
+        crate::store_test::store_list(&store.clone().readable_listable().listable())?;
         Ok(())
     }
 }
