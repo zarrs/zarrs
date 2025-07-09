@@ -392,10 +392,7 @@ pub struct Array<TStorage: ?Sized> {
 
 impl<TStorage: ?Sized> Array<TStorage> {
     /// Replace the storage backing an array.
-    pub(crate) fn with_storage<TStorage2: ?Sized>(
-        &self,
-        storage: Arc<TStorage2>,
-    ) -> Array<TStorage2> {
+    pub fn with_storage<TStorage2: ?Sized>(&self, storage: Arc<TStorage2>) -> Array<TStorage2> {
         Array {
             storage,
             path: self.path.clone(),
