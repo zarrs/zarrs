@@ -1,4 +1,6 @@
 //! Indexer trait with common functionality
+use std::num::NonZeroU64;
+
 use derive_more::{Display, From};
 use enum_dispatch::enum_dispatch;
 use itertools::izip;
@@ -11,7 +13,7 @@ use crate::{
     array::ArrayIndices,
     array_subset::{
         indexers::{RangeSubset, VIndex},
-        iterators::{ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices},
+        iterators::{Chunks, ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices},
         ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError,
     },
 };
@@ -145,6 +147,11 @@ pub trait Indexer: Send + Sync + Clone {
     ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError>;
 
     fn to_enum(&self) -> IndexerEnum;
+
+    fn chunks(
+        &self,
+        chunk_shape: &[NonZeroU64],
+    ) -> Result<Chunks, IncompatibleDimensionalityError>;
 }
 
 #[enum_dispatch(Indexer)]

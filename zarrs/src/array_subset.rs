@@ -302,7 +302,7 @@ impl ArraySubset {
         &self,
         chunk_shape: &[NonZeroU64],
     ) -> Result<Chunks, IncompatibleDimensionalityError> {
-        Chunks::new(self, chunk_shape)
+        self.indexer.chunks(chunk_shape)
     }
 
     /// Return the overlapping subset between this array subset and `subset_other`.

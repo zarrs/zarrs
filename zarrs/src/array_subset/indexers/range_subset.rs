@@ -172,6 +172,13 @@ impl Indexer for RangeSubset {
     fn contiguous_indices(&self,array_shape: &[u64],) -> Result<ContiguousIndices,IncompatibleArraySubsetAndShapeError> {
         ContiguousIndices::new_from_range_subset(self, array_shape)
     }
+
+    fn chunks(
+        &self,
+        chunk_shape: &[NonZeroU64],
+    ) -> Result<Chunks, IncompatibleDimensionalityError> {
+        Chunks::new_from_range_subset(self, chunk_shape)
+    }
 }
 
 impl RangeSubset {

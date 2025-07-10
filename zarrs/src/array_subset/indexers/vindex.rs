@@ -1,10 +1,11 @@
 use std::fmt::{Debug, Display};
+use std::num::NonZeroU64;
 
 use crate::array::{ArrayIndices, ArrayShape};
 
 use crate::array_subset::indexers::{Indexer, IndexerEnum};
 use crate::array_subset::iterators::{
-    ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices,
+    Chunks, ContiguousIndices, ContiguousLinearisedIndices, LinearisedIndices
 };
 use crate::array_subset::{
     ArraySubset, IncompatibleArraySubsetAndShapeError, IncompatibleDimensionalityError,
@@ -198,6 +199,14 @@ impl Indexer for VIndex {
     fn contiguous_indices(&self,array_shape: &[u64],) -> Result<ContiguousIndices,IncompatibleArraySubsetAndShapeError> {
         ContiguousIndices::new_from_discontinuous( self, array_shape)
     }
+
+
+    fn chunks(
+        &self,
+        chunk_shape: &[NonZeroU64],
+    ) -> Result<Chunks, IncompatibleDimensionalityError> {
+        todo!("Implement")
+    }
 }
 
 impl VIndex {
@@ -253,6 +262,8 @@ fn check_indices(indices: &[Vec<u64>]) -> Result<(), VIndexError> {
 }
 
 impl VIndex {
+    /// Create a new VIndex where the indices look like [[0, 0, 1, ...], [0, 1, 2, ...], ...] i.e., make the selection (0, 0, ..) and then (0, 1, ...)
+    /// Here the dimension of the VIndex object i.e., its size is the first shape dimension.
     pub fn new_from_dimension_first_indices(
         indices: Vec<ArrayIndices>,
     ) -> Result<Self, VIndexError> {
@@ -267,6 +278,8 @@ impl VIndex {
         })
     }
 
+    /// Create a new VIndex where the indices look like [[0, 0], [0, 1], ...] i.e., make the selections (0, 0), then (0, 1)...
+    /// Here the first dimension shape is the number of selections and the start is indices[0].
     pub fn new_from_selection_first_indices(
         indices: Vec<ArrayIndices>,
     ) -> Result<Self, VIndexError> {
