@@ -139,11 +139,9 @@ impl Iterator for IndicesIterator<'_> {
     type Item = ArrayIndices;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut indices = unravel_index(self.range.start as u64, self.subset.shape());
-        std::iter::zip(indices.iter_mut(), self.subset.start())
-            .for_each(|(index, start)| *index += start);
-
-        if self.range.start < self.range.end {
+        if self.range.start < self.range.end && self.range.start < self.subset.num_elements_usize()
+        {
+            let indices = self.subset.find_linearised_index(self.range.start);
             self.range.start += 1;
             Some(indices)
         } else {
@@ -161,9 +159,7 @@ impl DoubleEndedIterator for IndicesIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.range.end > self.range.start {
             self.range.end -= 1;
-            let mut indices = unravel_index(self.range.end as u64, self.subset.shape());
-            std::iter::zip(indices.iter_mut(), self.subset.start())
-                .for_each(|(index, start)| *index += start);
+            let indices = self.subset.find_linearised_index(self.range.end);
             Some(indices)
         } else {
             None
@@ -251,6 +247,8 @@ impl<'a> From<&'a ParIndicesIterator<'_>> for ParIndicesIteratorProducer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::array_subset::indexers::{IndexerEnum, VIndex};
+
     use super::*;
 
     #[test]
@@ -278,15 +276,20 @@ mod tests {
     }
 
     #[test]
-    fn indices_iterator_empty() {
-        let indices =
-            Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 5..5);
-        assert_eq!(indices.len(), 0);
-        assert!(indices.is_empty());
-
-        let indices =
-            Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 5..1);
-        assert_eq!(indices.len(), 0);
-        assert!(indices.is_empty());
+    fn indices_iterator_from_vindex_full() {
+        let indices = Indices::new_with_start_end(
+            IndexerEnum::VIndex(
+                VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 5], vec![1, 0, 2, 5]])
+                    .unwrap(),
+            )
+            .into(),
+            0..3,
+        );
+        assert_eq!(indices.len(), 3);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(vec![0, 1]));
+        assert_eq!(iter.next_back(), Some(vec![2, 2]));
+        assert_eq!(iter.next(), Some(vec![1, 0]));
+        assert_eq!(iter.next(), None);
     }
 }

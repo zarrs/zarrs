@@ -8,7 +8,7 @@ use rayon::iter::{
 
 use crate::{
     array::{chunk_shape_to_array_shape, ArrayIndices},
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
+    array_subset::{indexers::{Indexer, IndexerEnum, RangeSubset, VIndex}, ArraySubset, IncompatibleDimensionalityError},
 };
 
 use super::{
@@ -45,12 +45,48 @@ pub struct Chunks {
 }
 
 impl Chunks {
+
+
     /// Create a new chunks iterator.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_shape` does not match the dimensionality of `subset`.
-    pub fn new(
-        subset: &ArraySubset,
+    pub fn new_from_vindex(
+        subset: &VIndex,
+        chunk_shape: &[NonZeroU64],
+    ) -> Result<Self, IncompatibleDimensionalityError> {
+        if subset.dimensionality() == chunk_shape.len() {
+            let chunk_shape = chunk_shape_to_array_shape(chunk_shape);
+            Ok(match subset.end_inc() {
+                Some(_) => {
+                    let mut indices = Indices::new(IndexerEnum::VIndex(subset.clone()).into()).iter().map(
+                        |i| i.iter().zip(&chunk_shape).map(|(s, c)| s / c).collect::<Vec<u64>>()
+                    ).collect::<Vec<Vec<u64>>>();
+                    indices.dedup();
+                    Self {
+                        indices: Indices::new(IndexerEnum::VIndex(VIndex::new_from_selection_first_indices(indices).unwrap()).into()), // TODO: handle error
+                        chunk_shape,
+                    }
+                }
+                None => Self {
+                    indices: ArraySubset::new_empty(subset.dimensionality()).indices(),
+                    chunk_shape,
+                },
+            })
+        } else {
+            Err(IncompatibleDimensionalityError(
+                chunk_shape.len(),
+                subset.dimensionality(),
+            ))
+        }
+    }
+
+    /// Create a new chunks iterator.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleDimensionalityError`] if `chunk_shape` does not match the dimensionality of `subset`.
+    pub fn new_from_range_subset(
+        subset: &RangeSubset,
         chunk_shape: &[NonZeroU64],
     ) -> Result<Self, IncompatibleDimensionalityError> {
         if subset.dimensionality() == chunk_shape.len() {
@@ -244,5 +280,52 @@ impl<'a> From<&'a ParChunksIterator<'_>> for ParChunksIteratorProducer<'a> {
             inner: ParIndicesIteratorProducer::from(&iterator.inner),
             chunk_shape: iterator.chunk_shape,
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZero;
+
+    use crate::array_subset::indexers::VIndex;
+
+    use super::*;
+
+    #[test]
+    fn indices_iterator_from_range_subset() {
+        let indices =
+            Chunks::new_from_range_subset(&RangeSubset::new_with_ranges(&[0..4, 0..3]), &vec![NonZero::new(2 as u64).unwrap(); 2][..]).unwrap();
+        assert_eq!(indices.len(), 4);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some((vec![0, 0], ArraySubset::new_with_start_shape(vec![0, 0], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next_back(), Some((vec![1, 1], ArraySubset::new_with_start_shape(vec![2, 2], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), Some((vec![0, 1], ArraySubset::new_with_start_shape(vec![0, 2], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), Some((vec![1, 0], ArraySubset::new_with_start_shape(vec![2, 0], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn indices_iterator_from_vindex_full() {
+        let indices =
+            Chunks::new_from_vindex(&VIndex::new_from_dimension_first_indices(vec![vec![0, 0, 2, 2], vec![0, 2, 0, 2]]).unwrap(), &vec![NonZero::new(2 as u64).unwrap(); 2][..]).unwrap();
+        assert_eq!(indices.len(), 4);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some((vec![0, 0], ArraySubset::new_with_start_shape(vec![0, 0], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next_back(), Some((vec![1, 1], ArraySubset::new_with_start_shape(vec![2, 2], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), Some((vec![0, 1], ArraySubset::new_with_start_shape(vec![0, 2], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), Some((vec![1, 0], ArraySubset::new_with_start_shape(vec![2, 0], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn indices_iterator_from_vindex_skip() {
+        let indices =
+            Chunks::new_from_vindex(&VIndex::new_from_dimension_first_indices(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3]]).unwrap(), &vec![NonZero::new(2 as u64).unwrap(); 2][..]).unwrap();
+        assert_eq!(indices.len(), 2);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some((vec![0, 0], ArraySubset::new_with_start_shape(vec![0, 0], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next_back(), Some((vec![1, 1], ArraySubset::new_with_start_shape(vec![2, 2], vec![2, 2]).unwrap())));
+        assert_eq!(iter.next(), None);
     }
 }
