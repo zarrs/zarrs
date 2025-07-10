@@ -138,6 +138,13 @@ pub trait Indexer: Send + Sync + Clone {
     }
 
     fn end_inc(&self) -> Option<ArrayIndices>;
+
+    fn contiguous_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError>;
+
+    fn to_enum(&self) -> IndexerEnum;
 }
 
 #[enum_dispatch(Indexer)]
@@ -152,3 +159,4 @@ impl Default for IndexerEnum {
         IndexerEnum::RangeSubset(Default::default())
     }
 }
+

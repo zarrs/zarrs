@@ -52,6 +52,11 @@ impl<T: IntoIterator<Item = Range<u64>>> From<T> for RangeSubset {
 }
 
 impl Indexer for RangeSubset {
+
+    fn to_enum(&self) -> IndexerEnum {
+        IndexerEnum::RangeSubset(self.clone())
+    }
+
     fn num_elements(&self) -> u64 {
         self.shape().iter().product()
     }
@@ -162,6 +167,10 @@ impl Indexer for RangeSubset {
                     .collect(),
             )
         }
+    }
+
+    fn contiguous_indices(&self,array_shape: &[u64],) -> Result<ContiguousIndices,IncompatibleArraySubsetAndShapeError> {
+        ContiguousIndices::new_from_range_subset(self, array_shape)
     }
 }
 

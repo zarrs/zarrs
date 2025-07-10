@@ -276,7 +276,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError> {
-        ContiguousIndices::new(self, array_shape)
+        self.indexer.contiguous_indices(array_shape)
     }
 
     /// Returns an iterator over the linearised indices of contiguous elements within the subset.

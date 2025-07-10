@@ -42,6 +42,11 @@ impl Display for VIndex {
 }
 
 impl Indexer for VIndex {
+
+    fn to_enum(&self) -> IndexerEnum {
+        IndexerEnum::VIndex(self.clone())
+    }
+
     fn num_elements(&self) -> u64 {
         if self.are_dimension_first_indices {
             return self.indices[0].len() as u64;
@@ -188,6 +193,10 @@ impl Indexer for VIndex {
                 self.dimensionality(),
             ))
         }
+    }
+
+    fn contiguous_indices(&self,array_shape: &[u64],) -> Result<ContiguousIndices,IncompatibleArraySubsetAndShapeError> {
+        ContiguousIndices::new_from_discontinuous( self, array_shape)
     }
 }
 
