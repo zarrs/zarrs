@@ -23,13 +23,22 @@ mod contiguous_linearised_indices_iterator;
 mod indices_iterator;
 mod linearised_indices_iterator;
 
-pub use chunks_iterator::{Chunks, ChunksIterator};
-pub use contiguous_indices_iterator::{ContiguousIndices, ContiguousIndicesIterator};
-pub use contiguous_linearised_indices_iterator::{
-    ContiguousLinearisedIndices, ContiguousLinearisedIndicesIterator,
+pub use chunks_iterator::{
+    Chunks, ChunksIntoIterator, ChunksIterator, ParChunksIntoIterator, ParChunksIterator,
 };
-pub use indices_iterator::{Indices, IndicesIterator, ParIndicesIterator};
-pub use linearised_indices_iterator::{LinearisedIndices, LinearisedIndicesIterator};
+pub use contiguous_indices_iterator::{
+    ContiguousIndices, ContiguousIndicesIntoIterator, ContiguousIndicesIterator,
+};
+pub use contiguous_linearised_indices_iterator::{
+    ContiguousLinearisedIndices, ContiguousLinearisedIndicesIntoIterator,
+    ContiguousLinearisedIndicesIterator,
+};
+pub use indices_iterator::{
+    Indices, IndicesIntoIterator, IndicesIterator, ParIndicesIntoIterator, ParIndicesIterator,
+};
+pub use linearised_indices_iterator::{
+    LinearisedIndices, LinearisedIndicesIntoIterator, LinearisedIndicesIterator,
+};
 
 #[cfg(test)]
 mod tests {
