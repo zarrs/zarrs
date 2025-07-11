@@ -2,7 +2,10 @@ use std::iter::FusedIterator;
 
 use crate::{
     array::{ravel_indices, ArrayShape},
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{
+        iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
+        IncompatibleArraySubsetAndShapeError,
+    },
 };
 
 use super::IndicesIterator;
@@ -85,8 +88,27 @@ impl<'a> IntoIterator for &'a LinearisedIndices {
 
     fn into_iter(self) -> Self::IntoIter {
         LinearisedIndicesIterator {
-            inner: IndicesIterator::new(&self.subset),
+            inner: IndicesIterator {
+                subset: &self.subset,
+                range: 0..self.subset.num_elements_usize(),
+            },
             array_shape: &self.array_shape,
+        }
+    }
+}
+
+impl IntoIterator for LinearisedIndices {
+    type Item = u64;
+    type IntoIter = LinearisedIndicesIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let num_elements = self.subset.num_elements_usize();
+        LinearisedIndicesIntoIterator {
+            inner: IndicesIntoIterator {
+                subset: self.subset,
+                range: 0..num_elements,
+            },
+            array_shape: self.array_shape,
         }
     }
 }
@@ -124,6 +146,40 @@ impl DoubleEndedIterator for LinearisedIndicesIterator<'_> {
 impl ExactSizeIterator for LinearisedIndicesIterator<'_> {}
 
 impl FusedIterator for LinearisedIndicesIterator<'_> {}
+
+/// Serial linearised indices iterator.
+///
+/// See [`LinearisedIndices`].
+pub struct LinearisedIndicesIntoIterator {
+    inner: IndicesIntoIterator,
+    array_shape: ArrayShape,
+}
+
+impl Iterator for LinearisedIndicesIntoIterator {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|indices| ravel_indices(&indices, &self.array_shape))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for LinearisedIndicesIntoIterator {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next_back()
+            .map(|indices| ravel_indices(&indices, &self.array_shape))
+    }
+}
+
+impl ExactSizeIterator for LinearisedIndicesIntoIterator {}
+
+impl FusedIterator for LinearisedIndicesIntoIterator {}
 
 #[cfg(test)]
 mod tests {
