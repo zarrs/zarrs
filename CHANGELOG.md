@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkCacheTypePartialDecoder`, `ChunkCachePartialDecoderLru{Chunk,Size}Limit[ThreadLocal]`
 - Add `Array::storage()` and `Array::with_storage()`
 - Add `Array<T>::[async_]readable()` where `T: [Async]ReadableWritableStorageTraits`
+- Add `{Indices,Chunks,LinerisedIndices,ContiguousIndices,ContiguousLinearisedIndices}IntoIterator` and `Par{Indices,Chunks}IntoIterator`
+  - Implement `Into[Parallel]Iterator` for `Indices` and `IntoParallelRefIterator` for `&Indices`
+  - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
+  - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 
 ### Changed
 - **Breaking**: Refactor `ArrayBuilder`
@@ -69,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
+- Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
