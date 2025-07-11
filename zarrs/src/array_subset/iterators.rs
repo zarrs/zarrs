@@ -112,7 +112,7 @@ mod tests {
         let mut iter = indices.into_iter();
         assert_eq!(iter.size_hint(), (1, Some(1)));
         assert_eq!(iter.contiguous_elements(), 4);
-        assert_eq!(iter.next(), Some(vec![0, 0]));
+        assert_eq!(iter.next(), Some((vec![0, 0], 4)));
         assert_eq!(iter.next(), None);
     }
 
@@ -126,8 +126,8 @@ mod tests {
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (2, Some(2)));
         assert_eq!(iter.contiguous_elements(), 2);
-        assert_eq!(iter.next_back(), Some(vec![2, 1]));
-        assert_eq!(iter.next(), Some(vec![1, 1]));
+        assert_eq!(iter.next_back(), Some((vec![2, 1], 2)));
+        assert_eq!(iter.next(), Some((vec![1, 1], 2)));
         assert_eq!(iter.next(), None);
     }
 
@@ -138,7 +138,7 @@ mod tests {
         let mut iter = indices.into_iter();
         assert_eq!(iter.size_hint(), (1, Some(1)));
         assert_eq!(iter.contiguous_elements(), 8);
-        assert_eq!(iter.next(), Some(vec![1, 0, 0, 0]));
+        assert_eq!(iter.next(), Some((vec![1, 0, 0, 0], 8)));
         assert_eq!(iter.next(), None);
     }
 
@@ -156,8 +156,8 @@ mod tests {
         // 12 13 14 15
         assert_eq!(iter.size_hint(), (2, Some(2)));
         assert_eq!(iter.contiguous_elements(), 2);
-        assert_eq!(iter.next_back(), Some(9));
-        assert_eq!(iter.next(), Some(5));
+        assert_eq!(iter.next_back(), Some((9, 2)));
+        assert_eq!(iter.next(), Some((5, 2)));
         assert_eq!(iter.next(), None);
     }
 

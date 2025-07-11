@@ -121,7 +121,7 @@ impl ContiguousIndices {
 }
 
 impl<'a> IntoIterator for &'a ContiguousIndices {
-    type Item = ArrayIndices;
+    type Item = (ArrayIndices, u64);
     type IntoIter = ContiguousIndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -137,7 +137,7 @@ impl<'a> IntoIterator for &'a ContiguousIndices {
 }
 
 impl IntoIterator for ContiguousIndices {
-    type Item = ArrayIndices;
+    type Item = (ArrayIndices, u64);
     type IntoIter = ContiguousIndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -178,10 +178,10 @@ impl ContiguousIndicesIterator<'_> {
 }
 
 impl Iterator for ContiguousIndicesIterator<'_> {
-    type Item = ArrayIndices;
+    type Item = (ArrayIndices, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|i| (i, self.contiguous_elements()))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -191,7 +191,9 @@ impl Iterator for ContiguousIndicesIterator<'_> {
 
 impl DoubleEndedIterator for ContiguousIndicesIterator<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
+        self.inner
+            .next_back()
+            .map(|i| (i, self.contiguous_elements()))
     }
 }
 
@@ -225,10 +227,10 @@ impl ContiguousIndicesIntoIterator {
 }
 
 impl Iterator for ContiguousIndicesIntoIterator {
-    type Item = ArrayIndices;
+    type Item = (ArrayIndices, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
+        self.inner.next().map(|i| (i, self.contiguous_elements()))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -238,7 +240,9 @@ impl Iterator for ContiguousIndicesIntoIterator {
 
 impl DoubleEndedIterator for ContiguousIndicesIntoIterator {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
+        self.inner
+            .next_back()
+            .map(|i| (i, self.contiguous_elements()))
     }
 }
 
