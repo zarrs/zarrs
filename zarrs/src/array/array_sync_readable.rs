@@ -8,6 +8,7 @@ use crate::{
     array::{ArrayBytes, ArrayMetadataV2},
     array_subset::ArraySubset,
     config::MetadataRetrieveVersion,
+    indexer::Indexer,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
     storage::{ReadableStorageTraits, StorageError, StorageHandle},
 };

@@ -76,6 +76,7 @@ mod tests {
         },
         array_subset::ArraySubset,
         byte_range::ByteRange,
+        indexer::Indexer,
     };
 
     use super::*;

@@ -23,6 +23,7 @@ use crate::{
     },
     array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
     byte_range::ByteRange,
+    indexer::Indexer,
 };
 
 use super::{sharding_index_decoded_representation, ShardingIndexLocation};

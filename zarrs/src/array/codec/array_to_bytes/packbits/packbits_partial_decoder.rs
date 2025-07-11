@@ -16,6 +16,7 @@ use crate::{
         ArrayBytes, ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]

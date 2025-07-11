@@ -4,16 +4,19 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::ByteRange;
 
-use crate::array::{
-    array_bytes::merge_chunks_vlen,
-    codec::{
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
-        ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
-        CodecOptions,
+use crate::{
+    array::{
+        array_bytes::merge_chunks_vlen,
+        codec::{
+            ArrayCodecTraits, ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
+            ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
+            CodecOptions,
+        },
+        concurrency::{calc_concurrency_outer_inner, RecommendedConcurrency},
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
+        ChunkShape, DataType, DataTypeSize, RawBytes,
     },
-    concurrency::{calc_concurrency_outer_inner, RecommendedConcurrency},
-    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-    ChunkShape, DataType, DataTypeSize, RawBytes,
+    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]

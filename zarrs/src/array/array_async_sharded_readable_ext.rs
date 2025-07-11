@@ -17,6 +17,7 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, DataTypeSize};
 use crate::array::codec::AsyncStoragePartialDecoder;
+use crate::indexer::Indexer;
 use crate::storage::AsyncReadableStorageTraits;
 use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
 

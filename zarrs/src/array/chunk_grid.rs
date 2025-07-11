@@ -25,6 +25,7 @@ pub use regular::RegularChunkGrid;
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
 
+use crate::indexer::Indexer;
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,

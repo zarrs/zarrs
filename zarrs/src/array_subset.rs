@@ -26,6 +26,7 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
+    indexer::Indexer,
     storage::byte_range::ByteRange,
 };
 
@@ -387,68 +388,55 @@ impl ArraySubset {
         }
         true
     }
+}
 
-    // --------- The below methods are suited to a generic indexer --------
-    // impl crate::indexer::Indexer for ArraySubset {
+impl Indexer for ArraySubset {
+    fn to_arc(&self) -> std::sync::Arc<dyn crate::indexer::Indexer> {
+        std::sync::Arc::new(self.clone())
+    }
 
-    /// Return the dimensionality of the array subset.
-    #[must_use]
-    pub fn dimensionality(&self) -> usize {
+    fn dimensionality(&self) -> usize {
         self.start.len()
     }
 
-    // pub fn len(&self) -> u64 {
-    //     self.num_elements()
-    // }
+    fn len(&self) -> u64 {
+        self.num_elements()
+    }
 
-    /// Returns an iterator over the indices of elements within the subset.
-    #[must_use]
-    pub fn indices(&self) -> Indices {
+    fn output_shape(&self) -> &[u64] {
+        self.shape()
+    }
+
+    #[allow(refining_impl_trait)]
+    fn indices(&self) -> Indices {
         Indices::new(self.clone())
     }
 
-    /// Returns an iterator over the linearised indices of elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn linearised_indices(
+    #[allow(refining_impl_trait)]
+    fn linearised_indices(
         &self,
         array_shape: &[u64],
     ) -> Result<LinearisedIndices, IncompatibleArraySubsetAndShapeError> {
         LinearisedIndices::new(self.clone(), array_shape.to_vec())
     }
 
-    /// Returns an iterator over the indices of contiguous elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn contiguous_indices(
+    #[allow(refining_impl_trait)]
+    fn contiguous_indices(
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError> {
         ContiguousIndices::new(self, array_shape)
     }
 
-    /// Returns an iterator over the linearised indices of contiguous elements within the subset.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn contiguous_linearised_indices(
+    #[allow(refining_impl_trait)]
+    fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
     }
 
-    /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn byte_ranges(
+    fn byte_ranges(
         &self,
         array_shape: &[u64],
         element_size: usize,
@@ -463,18 +451,9 @@ impl ArraySubset {
         Ok(byte_ranges)
     }
 
-    // #[must_use]
-    // pub fn output_shape(&self) -> &[u64] {
-    //     self.shape()
-    // }
-
-    // fn as_array_subset(&self) -> Option<&ArraySubset> {
-    //     Some(self)
-    // }
-
-    // fn to_arc(&self) -> std::sync::Arc<dyn crate::indexer::Indexer> {
-    //     std::sync::Arc::new(self.clone())
-    // }
+    fn as_array_subset(&self) -> Option<&ArraySubset> {
+        Some(self)
+    }
 }
 
 /// An incompatible dimensionality error.

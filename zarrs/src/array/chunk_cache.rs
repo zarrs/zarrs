@@ -14,6 +14,7 @@ use crate::{
         Array, ArrayBytesFixedDisjointView, ArraySize, ElementOwned,
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
+    indexer::Indexer,
 };
 
 use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};

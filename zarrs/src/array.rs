@@ -75,7 +75,6 @@ pub use self::{
 };
 pub use data_type::{DataType, FillValue}; // re-export for zarrs < 0.20 compat
 
-use crate::config::global_config;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
@@ -83,6 +82,7 @@ pub use crate::metadata::v3::{
 pub use crate::metadata::{
     ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
 };
+use crate::{config::global_config, indexer::Indexer};
 use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 
 pub use chunk_cache::{
@@ -224,6 +224,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// # use zarrs::array::{Array, ArrayBytes};
 /// # use zarrs::array_subset::ArraySubset;
 /// # use zarrs::array_subset::iterators::Indices;
+/// # use zarrs::indexer::Indexer;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
 /// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
 /// # let array = Array::open(store, "/group/array")?;

@@ -13,6 +13,7 @@ use crate::{
         iterators::indices_iterator::{IndicesIntoIterator, ParIndicesIntoIterator},
         ArraySubset, IncompatibleDimensionalityError,
     },
+    indexer::Indexer,
 };
 
 use super::{Indices, IndicesIterator, ParIndicesIterator};

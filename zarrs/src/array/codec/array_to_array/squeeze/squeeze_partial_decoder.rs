@@ -2,9 +2,12 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::izip;
 
-use crate::array::{
-    codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
-    ChunkRepresentation, DataType,
+use crate::{
+    array::{
+        codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
+        ChunkRepresentation, DataType,
+    },
+    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]

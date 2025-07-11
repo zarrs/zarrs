@@ -6,6 +6,7 @@ use zarrs_storage::ReadableStorageTraits;
 use crate::{
     array::ArrayBytes,
     array_subset::ArraySubset,
+    indexer::Indexer,
     storage::{ReadableWritableStorageTraits, StorageHandle},
 };
 

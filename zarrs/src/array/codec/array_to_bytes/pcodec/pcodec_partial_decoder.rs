@@ -11,6 +11,7 @@ use crate::{
         ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::ArraySubset,
+    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]
@@ -129,6 +130,13 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
         indexer: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(CodecError::InvalidArraySubsetDimensionalityError(
+                indexer.clone(),
+                self.decoded_representation.dimensionality(),
+            ));
+        }
+
         let decoded = self.input_handle.decode(options)?;
         do_partial_decode(decoded, indexer, &self.decoded_representation)
     }

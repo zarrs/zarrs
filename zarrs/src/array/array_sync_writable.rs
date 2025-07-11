@@ -7,6 +7,7 @@ use crate::{
     array::ArrayBytes,
     array_subset::ArraySubset,
     config::{global_config, MetadataEraseVersion},
+    indexer::Indexer,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits},
 };

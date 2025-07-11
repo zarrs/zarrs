@@ -7,11 +7,13 @@
 //!  - [`ContiguousLinearisedIndices`]: iterate over contiguous sets of elements in the subset with the start a linearised index.
 //!  - [`Chunks`]: iterate over regular sized chunks in the array subset.
 //!
-//! These can be created with the appropriate [`ArraySubset`](super::ArraySubset) methods including
-//! [`indices`](super::ArraySubset::indices),
-//! [`linearised_indices`](super::ArraySubset::linearised_indices),
-//! [`contiguous_indices`](super::ArraySubset::contiguous_indices),
-//! [`contiguous_linearised_indices`](super::ArraySubset::contiguous_linearised_indices), and
+//! These can be created with the appropriate [`Indexer`](crate::indexer::Indexer) methods that are implemented for [`ArraySubset`](crate::array_subset::ArraySubset) including
+//! [`indices`](crate::indexer::Indexer::indices),
+//! [`linearised_indices`](crate::indexer::Indexer::linearised_indices),
+//! [`contiguous_indices`](crate::indexer::Indexer::contiguous_indices),
+//! [`contiguous_linearised_indices`](crate::indexer::Indexer::contiguous_linearised_indices).
+//! 
+//! [`ArraySubset`](crate::array_subset::ArraySubset) additionally supports
 //! [`chunks`](super::ArraySubset::chunks).
 //!
 //! All iterators support [`into_iter()`](IntoIterator::into_iter) ([`IntoIterator`]).
@@ -46,7 +48,7 @@ mod tests {
 
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-    use crate::array_subset::ArraySubset;
+    use crate::{array_subset::ArraySubset, indexer::Indexer};
 
     #[test]
     fn array_subset_iter_indices() {

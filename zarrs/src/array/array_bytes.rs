@@ -8,6 +8,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use crate::{
     array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
     byte_range::extract_byte_ranges_concat_unchecked,
+    indexer::Indexer,
     metadata::DataTypeSize,
 };
 

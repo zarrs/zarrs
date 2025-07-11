@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
 use super::{calculate_order_decode, permute, transpose_array, TransposeOrder};
-use crate::array::{
-    codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
-    ChunkRepresentation, DataType,
+use crate::{
+    array::{
+        codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
+        ChunkRepresentation, DataType,
+    },
+    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]
