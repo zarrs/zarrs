@@ -257,11 +257,15 @@ pub trait ChunkCache: Send + Sync {
                                 let chunk_subset_bytes = if chunk_subset_overlap == chunk_subset {
                                     chunk_subset_bytes
                                 } else {
-                                    Arc::new(chunk_subset_bytes.extract_array_subset(
-                                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                        chunk_subset.shape(),
-                                        array.data_type(),
-                                    )?)
+                                    Arc::new(
+                                        chunk_subset_bytes.extract_array_subset(
+                                            &chunk_subset_overlap
+                                                .relative_to(chunk_subset.start())?
+                                                .into(),
+                                            chunk_subset.shape(),
+                                            array.data_type(),
+                                        )?,
+                                    )
                                 };
 
                                 let fixed = match chunk_subset_bytes.as_ref() {

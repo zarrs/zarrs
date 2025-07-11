@@ -698,7 +698,7 @@ mod tests {
             vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
                 .unwrap();
 
             let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
@@ -759,7 +759,7 @@ mod tests {
             vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region, &CodecOptions::default())
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
                 .await
                 .unwrap();
 

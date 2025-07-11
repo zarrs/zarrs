@@ -128,12 +128,12 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     #[allow(clippy::too_many_lines)]
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -141,7 +141,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
         let Some(shard_index) = &self.shard_index else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             return Ok(ArrayBytes::new_fill_value(
                 array_size,
@@ -180,10 +180,9 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             .concurrent_target(concurrency_limit_codec)
             .build();
 
-        // let Some(array_subset) = indexer.as_array_subset() else {
-        //     todo!("Support generic indexers")
-        // };
-        let array_subset = indexer;
+        let Some(array_subset) = indexer.as_array_subset() else {
+            todo!("Support generic indexers")
+        };
 
         let chunks = array_subset.chunks(chunk_representation.shape())?;
 
@@ -231,7 +230,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                             .partial_decode(
                                 &chunk_subset_overlap
                                     .relative_to(chunk_subset.start())
-                                    .unwrap(),
+                                    .unwrap()
+                                    .into(),
                                 &options,
                             )?
                             .into_owned()
@@ -304,7 +304,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                             .partial_decode(
                                 &chunk_subset_overlap
                                     .relative_to(chunk_subset.start())
-                                    .unwrap(),
+                                    .unwrap()
+                                    .into(),
                                 &options,
                             )?
                             .into_owned()
@@ -421,12 +422,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     #[allow(clippy::too_many_lines)]
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -434,7 +435,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         let Some(shard_index) = &self.shard_index else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             return Ok(ArrayBytes::new_fill_value(
                 array_size,
@@ -454,10 +455,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             )
         };
 
-        // let Some(array_subset) = indexer.as_array_subset() else {
-        //     todo!("Support generic indexers")
-        // };
-        let array_subset = indexer;
+        let Some(array_subset) = indexer.as_array_subset() else {
+            todo!("Support generic indexers")
+        };
 
         match self.decoded_representation.element_size() {
             DataTypeSize::Variable => {
@@ -507,7 +507,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                                 .partial_decode(
                                     &chunk_subset_overlap
                                         .relative_to(chunk_subset.start())
-                                        .unwrap(),
+                                        .unwrap()
+                                        .into(),
                                     options,
                                 )
                                 .await?
@@ -599,13 +600,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                             //     .remove(0);
                             let decoded_chunk = partial_decoder
                                 .partial_decode(
-                                    &ArraySubset::new_with_shape(chunk_subset.shape().to_vec()),
+                                    &ArraySubset::new_with_shape(chunk_subset.shape().to_vec()).into(),
                                     options,
                                 ) // TODO: Adjust options for partial decoding
                                 .await?.into_owned();
                             let decoded_chunk = decoded_chunk
                                 .extract_array_subset(
-                                    &chunk_subset_overlap.relative_to(chunk_subset.start()).unwrap(),
+                                    &chunk_subset_overlap.relative_to(chunk_subset.start()).unwrap().into(),
                                     chunk_subset.shape(),
                                     self.decoded_representation.data_type()
                                 )?

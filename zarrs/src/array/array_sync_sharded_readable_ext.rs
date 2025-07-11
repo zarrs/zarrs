@@ -32,7 +32,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
@@ -423,7 +423,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
             let bytes = partial_decoder
-                .partial_decode(&shard_subset, options)?
+                .partial_decode(&shard_subset.into(), options)?
                 .into_owned();
             Ok(bytes)
         } else {
@@ -562,7 +562,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                             let bytes = cache
                                 .retrieve(self, &shard_indices)?
                                 .partial_decode(
-                                    &shard_subset_overlap.relative_to(shard_subset.start())?,
+                                    &shard_subset_overlap
+                                        .relative_to(shard_subset.start())?
+                                        .into(),
                                     &options,
                                 )?
                                 .into_owned();
@@ -606,7 +608,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                                 let bytes = cache
                                     .retrieve(self, &shard_indices)?
                                     .partial_decode(
-                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
+                                        &shard_subset_overlap
+                                            .relative_to(shard_subset.start())?
+                                            .into(),
                                         &options,
                                     )?
                                     .into_owned();

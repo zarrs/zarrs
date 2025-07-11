@@ -6,7 +6,7 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
     byte_range::extract_byte_ranges_concat_unchecked,
     indexer::Indexer,
     metadata::DataTypeSize,
@@ -217,18 +217,18 @@ impl<'a> ArrayBytes<'a> {
     /// Panics if indices in the subset exceed [`usize::MAX`].
     pub fn extract_array_subset(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
             ArrayBytes::Variable(bytes, offsets) => {
-                let num_elements = indexer.num_elements();
+                let num_elements = indexer.len();
                 let indices: Vec<_> = indexer
                     .linearised_indices(array_shape)
                     .map_err(|_| {
-                        IncompatibleArraySubsetAndShapeError::new(
-                            indexer.clone(),
+                        IncompatibleIndexerAndShapeError::new(
+                            indexer.to_arc(),
                             array_shape.to_vec(),
                         )
                     })?
@@ -335,10 +335,10 @@ pub(crate) fn update_bytes_vlen<'a>(
     update_bytes: &RawBytes,
     update_offsets: &RawBytesOffsets,
     update_subset: &ArraySubset,
-) -> Result<ArrayBytes<'a>, IncompatibleArraySubsetAndShapeError> {
+) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
     if !update_subset.inbounds_shape(input_shape) {
-        return Err(IncompatibleArraySubsetAndShapeError::new(
-            update_subset.clone(),
+        return Err(IncompatibleIndexerAndShapeError::new(
+            update_subset.to_arc(),
             input_shape.to_vec(),
         ));
     }
@@ -410,10 +410,14 @@ pub(crate) fn update_bytes_vlen<'a>(
 pub fn update_array_bytes<'a>(
     output_bytes: ArrayBytes,
     output_shape: &[u64],
-    output_subset: &ArraySubset,
+    output_subset: &crate::indexer::IndexerImpl,
     output_subset_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
+    let Some(output_subset) = output_subset.as_array_subset() else {
+        todo!("Generic indexer support")
+    };
+
     match (output_bytes, output_subset_bytes, data_type_size) {
         (
             ArrayBytes::Variable(chunk_bytes, chunk_offsets),
@@ -531,7 +535,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
-    indexer: &ArraySubset,
+    indexer: &crate::indexer::IndexerImpl,
     array_shape: &[u64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let indices = indexer.linearised_indices(array_shape)?;
@@ -544,8 +548,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
         debug_assert!(next >= curr);
         region_bytes_len += next - curr;
     }
-    let mut region_offsets =
-        Vec::with_capacity(usize::try_from(indexer.num_elements() + 1).unwrap());
+    let mut region_offsets = Vec::with_capacity(usize::try_from(indexer.len() + 1).unwrap());
     let mut region_bytes = Vec::with_capacity(region_bytes_len);
     for index in &indices {
         region_offsets.push(region_bytes.len());

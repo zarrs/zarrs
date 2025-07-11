@@ -37,8 +37,8 @@ fn get_decoded_regions_squeezed(
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
-        return Err(CodecError::InvalidArraySubsetDimensionalityError(
-            decoded_region.clone(),
+        return Err(CodecError::InvalidIndexerDimensionalityError(
+            decoded_region.to_arc(),
             shape.len(),
         ));
     }
@@ -66,18 +66,17 @@ impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        // let Some(decoded_region) = indexer.as_array_subset() else {
-        //     todo!("Generic indexer support")
-        // };
-        let decoded_region = indexer;
+        let Some(decoded_region) = indexer.as_array_subset() else {
+            todo!("Generic indexer support")
+        };
 
         let decoded_region_squeezed =
             get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_region_squeezed, options)
+            .partial_decode(&decoded_region_squeezed.into(), options)
     }
 }
 
@@ -111,18 +110,17 @@ impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        // let Some(decoded_region) = indexer.as_array_subset() else {
-        //     todo!("Generic indexer support")
-        // };
-        let decoded_region = indexer;
+        let Some(decoded_region) = indexer.as_array_subset() else {
+            todo!("Generic indexer support")
+        };
 
         let decoded_region_squeezed =
             get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_region_squeezed, options)
+            .partial_decode(&decoded_region_squeezed.into(), options)
             .await
     }
 }

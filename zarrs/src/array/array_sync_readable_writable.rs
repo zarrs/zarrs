@@ -200,7 +200,11 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
             if options.experimental_partial_encoding() {
                 let partial_encoder = self.partial_encoder(chunk_indices, options)?;
-                Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
+                Ok(partial_encoder.partial_encode(
+                    &chunk_subset.into(),
+                    &chunk_subset_bytes,
+                    options,
+                )?)
             } else {
                 // Decode the entire chunk
                 let chunk_bytes_old = self.retrieve_chunk_opt(chunk_indices, options)?;
@@ -210,7 +214,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 let chunk_bytes_new = update_array_bytes(
                     chunk_bytes_old,
                     &chunk_shape,
-                    chunk_subset,
+                    &chunk_subset.into(),
                     &chunk_subset_bytes,
                     self.data_type().size(),
                 )?;
@@ -318,7 +322,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
                 let chunk_subset_in_array_subset = overlap.relative_to(array_subset.start())?;
                 let chunk_subset_bytes = subset_bytes.extract_array_subset(
-                    &chunk_subset_in_array_subset,
+                    &chunk_subset_in_array_subset.into(),
                     array_subset.shape(),
                     self.data_type(),
                 )?;

@@ -12,7 +12,7 @@
 //! [`linearised_indices`](crate::indexer::Indexer::linearised_indices),
 //! [`contiguous_indices`](crate::indexer::Indexer::contiguous_indices),
 //! [`contiguous_linearised_indices`](crate::indexer::Indexer::contiguous_linearised_indices).
-//! 
+//!
 //! [`ArraySubset`](crate::array_subset::ArraySubset) additionally supports
 //! [`chunks`](super::ArraySubset::chunks).
 //!

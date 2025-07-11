@@ -381,7 +381,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 let store_chunk = |chunk_indices: Vec<u64>| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
-                        &chunk_subset.relative_to(array_subset.start())?,
+                        &chunk_subset.relative_to(array_subset.start())?.into(),
                         array_subset.shape(),
                         self.data_type(),
                     )?;

@@ -10,7 +10,6 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
-    array_subset::ArraySubset,
     indexer::Indexer,
 };
 
@@ -38,16 +37,14 @@ impl PcodecPartialDecoder {
 
 fn do_partial_decode<'a>(
     decoded: Option<RawBytes<'a>>,
-    indexer: &ArraySubset,
+    indexer: &crate::indexer::IndexerImpl,
     decoded_representation: &ChunkRepresentation,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let chunk_shape = decoded_representation.shape_u64();
     match decoded {
         None => {
-            let array_size = ArraySize::new(
-                decoded_representation.data_type().size(),
-                indexer.num_elements(),
-            );
+            let array_size =
+                ArraySize::new(decoded_representation.data_type().size(), indexer.len());
             let fill_value =
                 ArrayBytes::new_fill_value(array_size, decoded_representation.fill_value());
             Ok(fill_value)
@@ -127,12 +124,12 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -172,12 +169,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }

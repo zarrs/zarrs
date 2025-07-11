@@ -365,7 +365,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     .array
                     .codecs()
                     .partial_decoder(input_handle, &chunk_representation, options)?
-                    .partial_decode(&chunk_subset, options)?
+                    .partial_decode(&chunk_subset.into(), options)?
                     .into_owned()
                     .into())
             } else {
@@ -435,7 +435,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
             Ok(chunk
                 .extract_array_subset(
-                    chunk_subset,
+                    &chunk_subset.into(),
                     &chunk_representation.shape_u64(),
                     self.array.data_type(),
                 )?
@@ -476,7 +476,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                 crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
             Ok(partial_decoder
                 .partial_decode(
-                    &crate::array::ArraySubset::new_with_shape(chunk_shape),
+                    &crate::array::ArraySubset::new_with_shape(chunk_shape).into(),
                     options,
                 )?
                 .into_owned()
@@ -500,7 +500,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                     })
                 })?;
             Ok(partial_decoder
-                .partial_decode(&chunk_subset, options)?
+                .partial_decode(&chunk_subset.into(), options)?
                 .into_owned()
                 .into())
         }

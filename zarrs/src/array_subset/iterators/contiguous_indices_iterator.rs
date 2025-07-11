@@ -6,7 +6,7 @@ use crate::{
     array::ArrayIndices,
     array_subset::{
         iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
-        IncompatibleArraySubsetAndShapeError,
+        IncompatibleIndexerAndShapeError,
     },
     indexer::Indexer,
 };
@@ -42,16 +42,16 @@ impl ContiguousIndices {
     /// Create a new contiguous indices iterator.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if `array_shape` does not encapsulate `subset`.
     pub fn new(
         subset: &ArraySubset,
         array_shape: &[u64],
-    ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<Self, IncompatibleIndexerAndShapeError> {
         if !(subset.dimensionality() == array_shape.len()
             && std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape))
         {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                subset.clone(),
+            return Err(IncompatibleIndexerAndShapeError(
+                subset.to_arc(),
                 array_shape.to_vec(),
             ));
         }

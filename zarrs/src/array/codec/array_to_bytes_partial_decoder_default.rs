@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::{ArrayBytes, ArraySize, ChunkRepresentation},
-    array_subset::ArraySubset,
+    indexer::Indexer,
 };
 
 use super::{
@@ -18,14 +18,14 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    indexer: &ArraySubset,
+    indexer: &crate::indexer::IndexerImpl,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    indexer: &ArraySubset,
+    indexer: &crate::indexer::IndexerImpl,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     // Read the entire chunk
@@ -48,10 +48,7 @@ fn partial_decode<'a>(
             .extract_array_subset(indexer, &chunk_shape, decoded_representation.data_type())
             .map(ArrayBytes::into_owned)
     } else {
-        let array_size = ArraySize::new(
-            decoded_representation.data_type().size(),
-            indexer.num_elements(),
-        );
+        let array_size = ArraySize::new(decoded_representation.data_type().size(), indexer.len());
         Ok(ArrayBytes::new_fill_value(
             array_size,
             decoded_representation.fill_value(),
@@ -93,7 +90,7 @@ impl ArrayPartialDecoderTraits for ArrayToBytesPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode(
@@ -140,7 +137,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToBytesPartialDecoderDefault {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode_async(

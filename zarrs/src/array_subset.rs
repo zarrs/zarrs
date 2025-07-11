@@ -15,6 +15,7 @@ use std::{
     fmt::{Debug, Display},
     num::NonZeroU64,
     ops::Range,
+    sync::Arc,
 };
 
 use iterators::{
@@ -249,7 +250,7 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
     ///
     /// # Panics
     /// Panics if attempting to access a byte index beyond [`usize::MAX`].
@@ -257,7 +258,7 @@ impl ArraySubset {
         &self,
         elements: &[T],
         array_shape: &[u64],
-    ) -> Result<Vec<T>, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<Vec<T>, IncompatibleIndexerAndShapeError> {
         let is_same_shape = elements.len() as u64 == array_shape.iter().product::<u64>();
         let is_correct_dimensionality = array_shape.len() == self.dimensionality();
         let is_in_bounds = self
@@ -266,8 +267,8 @@ impl ArraySubset {
             .zip(array_shape)
             .all(|(end, shape)| end <= shape);
         if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                self.clone(),
+            return Err(IncompatibleIndexerAndShapeError(
+                self.to_arc(),
                 array_shape.to_vec(),
             ));
         }
@@ -416,7 +417,7 @@ impl Indexer for ArraySubset {
     fn linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<LinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<LinearisedIndices, IncompatibleIndexerAndShapeError> {
         LinearisedIndices::new(self.clone(), array_shape.to_vec())
     }
 
@@ -424,7 +425,7 @@ impl Indexer for ArraySubset {
     fn contiguous_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<ContiguousIndices, IncompatibleIndexerAndShapeError> {
         ContiguousIndices::new(self, array_shape)
     }
 
@@ -432,7 +433,7 @@ impl Indexer for ArraySubset {
     fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerAndShapeError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
     }
 
@@ -440,7 +441,7 @@ impl Indexer for ArraySubset {
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError> {
         let mut byte_ranges: Vec<ByteRange> = Vec::new();
         let element_size = element_size as u64;
         for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
@@ -471,14 +472,14 @@ impl IncompatibleDimensionalityError {
 
 /// An incompatible array and array shape error.
 #[derive(Clone, Debug, Error, From)]
-#[error("incompatible array subset {0} with array shape {1:?}")]
-pub struct IncompatibleArraySubsetAndShapeError(ArraySubset, ArrayShape);
+#[error("incompatible indexer {0:?} with array shape {1:?}")]
+pub struct IncompatibleIndexerAndShapeError(Arc<dyn Indexer>, ArrayShape);
 
-impl IncompatibleArraySubsetAndShapeError {
+impl IncompatibleIndexerAndShapeError {
     /// Create a new incompatible array subset and shape error.
     #[must_use]
-    pub fn new(array_subset: ArraySubset, array_shape: ArrayShape) -> Self {
-        Self(array_subset, array_shape)
+    pub fn new(indexer: Arc<dyn Indexer>, array_shape: ArrayShape) -> Self {
+        Self(indexer, array_shape)
     }
 }
 

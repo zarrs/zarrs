@@ -356,7 +356,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(
-                            &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
+                            &chunk_subset
+                                .relative_to(array_subset.start())
+                                .unwrap()
+                                .into(), // FIXME: unwrap
                             array_subset.shape(),
                             self.data_type(),
                         )

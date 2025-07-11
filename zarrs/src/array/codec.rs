@@ -90,6 +90,7 @@ pub use array_to_bytes_partial_encoder_default::AsyncArrayToBytesPartialEncoderD
 use zarrs_metadata::Configuration;
 
 use crate::array_subset::IncompatibleDimensionalityError;
+use crate::indexer::Indexer;
 mod array_to_array_partial_decoder_default;
 pub use array_to_array_partial_decoder_default::ArrayToArrayPartialDecoderDefault;
 #[cfg(feature = "async")]
@@ -118,7 +119,7 @@ use zarrs_registry::ExtensionAliasesCodecV3;
 use crate::config::global_config;
 use crate::storage::{StoreKeyOffsetValue, WritableStorage};
 use crate::{
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
     byte_range::{extract_byte_ranges_read_seek, ByteOffset, ByteRange, InvalidByteRangeError},
     plugin::{Plugin, PluginCreateError},
     storage::{ReadableStorage, StorageError, StoreKey},
@@ -423,7 +424,7 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
@@ -439,13 +440,13 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or the number of elements in `array_subset` does not match the number of elements in `output_view`,
     fn partial_decode_into(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if indexer.num_elements() != output_view.num_elements() {
+        if indexer.len() != output_view.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
-                indexer.num_elements(),
+                indexer.len(),
                 output_view.num_elements(),
             )
             .into());
@@ -475,7 +476,7 @@ pub trait ArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_encode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -497,7 +498,7 @@ pub trait AsyncArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     async fn partial_encode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -556,7 +557,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
@@ -564,14 +565,14 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
     #[allow(clippy::missing_safety_doc)]
     async fn partial_decode_into(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if indexer.num_elements() != output_view.num_elements() {
+        if indexer.len() != output_view.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
                 output_view.num_elements(),
-                indexer.num_elements(),
+                indexer.len(),
             )
             .into());
         }
@@ -1369,10 +1370,10 @@ pub enum CodecError {
     InvalidByteRangeError(#[from] InvalidByteRangeError),
     /// An invalid array subset was requested.
     #[error(transparent)]
-    InvalidArraySubsetError(#[from] IncompatibleArraySubsetAndShapeError),
+    InvalidArraySubsetError(#[from] IncompatibleIndexerAndShapeError),
     /// An invalid array subset was requested with the wrong dimensionality.
-    #[error("the array subset {_0} has the wrong dimensionality, expected {_1}")]
-    InvalidArraySubsetDimensionalityError(ArraySubset, usize),
+    #[error("the indexer {_0:?} has the wrong dimensionality, expected {_1}")]
+    InvalidIndexerDimensionalityError(Arc<dyn Indexer>, usize),
     /// The decoded size of a chunk did not match what was expected.
     #[error("the size of a decoded chunk is {}, expected {}", _0.len, _0.expected_len)]
     UnexpectedChunkDecodedSize(#[from] InvalidBytesLengthError),

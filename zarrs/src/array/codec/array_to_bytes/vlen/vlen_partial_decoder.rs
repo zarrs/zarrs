@@ -8,7 +8,7 @@ use crate::{
         codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
         ArrayBytes, ArraySize, ChunkRepresentation, CodecChain, DataType, FillValue, RawBytes,
     },
-    array_subset::ArraySubset,
+    indexer::Indexer,
 };
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 
@@ -53,7 +53,7 @@ fn decode_vlen_bytes<'a>(
     index_data_type: VlenIndexDataType,
     index_location: VlenIndexLocation,
     bytes: Option<RawBytes>,
-    indexer: &ArraySubset,
+    indexer: &crate::indexer::IndexerImpl,
     fill_value: &FillValue,
     shape: &[u64],
     options: &CodecOptions,
@@ -88,7 +88,7 @@ fn decode_vlen_bytes<'a>(
     } else {
         // Chunk is empty, all decoded regions are empty
         let array_size = ArraySize::Variable {
-            num_elements: indexer.num_elements(),
+            num_elements: indexer.len(),
         };
         Ok(ArrayBytes::new_fill_value(array_size, fill_value))
     }
@@ -105,7 +105,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
@@ -166,7 +166,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)

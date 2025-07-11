@@ -31,7 +31,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
@@ -44,7 +44,7 @@ impl MaybeShardingPartialDecoder {
 
     async fn partial_decode_into(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -445,7 +445,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                 inner_chunk_shard_index_and_subset(self, cache, inner_chunk_indices)?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
             let bytes = partial_decoder
-                .partial_decode(&shard_subset, options)
+                .partial_decode(&shard_subset.into(), options)
                 .await?
                 .into_owned();
             Ok(bytes)
@@ -597,7 +597,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                     .retrieve(self, &shard_indices)
                                     .await?
                                     .partial_decode(
-                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
+                                        &shard_subset_overlap
+                                            .relative_to(shard_subset.start())?
+                                            .into(),
                                         &options,
                                     )
                                     .await?
@@ -655,7 +657,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                         .await?
                                         .partial_decode_into(
                                             &shard_subset_overlap
-                                                .relative_to(shard_subset.start())?,
+                                                .relative_to(shard_subset.start())?
+                                                .into(),
                                             &mut output_view,
                                             &options,
                                         )

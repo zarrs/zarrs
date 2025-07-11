@@ -10,7 +10,6 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
-    array_subset::ArraySubset,
     byte_range::extract_byte_ranges_concat,
     indexer::Indexer,
 };
@@ -62,15 +61,15 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -93,7 +92,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
         } else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             Ok(ArrayBytes::new_fill_value(
                 array_size,
@@ -145,7 +144,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &crate::indexer::IndexerImpl,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         use crate::indexer::Indexer;
@@ -154,8 +153,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.to_arc(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -180,7 +179,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
         } else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             Ok(ArrayBytes::new_fill_value(
                 array_size,

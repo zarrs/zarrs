@@ -7,7 +7,7 @@ use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::ArrayIndices,
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
 };
 
 /// A trait for a generic indexer.
@@ -42,45 +42,45 @@ pub trait Indexer: Send + Sync + core::fmt::Debug {
     /// Returns an iterator over the linearised indices of elements.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
     fn linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = u64>, IncompatibleArraySubsetAndShapeError>
+    ) -> Result<impl IntoIterator<Item = u64>, IncompatibleIndexerAndShapeError>
     where
         Self: Sized;
 
     /// Returns an iterator over contiguous sequences of element indices.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
     fn contiguous_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = (ArrayIndices, u64)>, IncompatibleArraySubsetAndShapeError>
+    ) -> Result<impl IntoIterator<Item = (ArrayIndices, u64)>, IncompatibleIndexerAndShapeError>
     where
         Self: Sized;
 
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
     fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = (u64, u64)>, IncompatibleArraySubsetAndShapeError>
+    ) -> Result<impl IntoIterator<Item = (u64, u64)>, IncompatibleIndexerAndShapeError>
     where
         Self: Sized;
 
     /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
     fn byte_ranges(
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError>
+    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError>
     where
         Self: Sized,
     {
