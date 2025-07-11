@@ -92,10 +92,10 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(array.retrieve_array_subset_ndarray::<u8>(&ArraySubset::new_with_ranges(&[0..5, 0..5]))?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
     assert!(array.partial_decoder(&[0]).is_err());
-    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1])], &options).is_err());
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[], &options)?, []);
-    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2])], &options)?, [vec![0, 0].into()]); // OOB -> fill value
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2]), ArraySubset::new_with_ranges(&[0..2, 1..2])], &options)?, [vec![1, 2].into(), vec![2, 6].into()]);
+    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1]).into(), &options).is_err());
+    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options)?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options)?, vec![1, 2].into());
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..2, 1..2]).into(), &options)?, vec![2, 6].into());
 
     Ok(())
 }

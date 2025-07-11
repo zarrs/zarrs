@@ -821,8 +821,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             self.codecs
                 .clone()
                 .partial_decoder(input_handle, &chunk_representation, options)?
-                .partial_decode(std::slice::from_ref(chunk_subset), options)?
-                .remove(0)
+                .partial_decode(chunk_subset, options)?
                 .into_owned()
         };
         bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
