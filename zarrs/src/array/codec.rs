@@ -475,7 +475,8 @@ pub trait ArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 }
@@ -496,7 +497,8 @@ pub trait AsyncArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     async fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 }
