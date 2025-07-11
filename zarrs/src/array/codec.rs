@@ -423,9 +423,9 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError>;
+    ) -> Result<ArrayBytes<'_>, CodecError>;
 
     /// Partially decode into a preallocated output.
     ///
@@ -439,21 +439,19 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or the number of elements in `array_subset` does not match the number of elements in `output_view`,
     fn partial_decode_into(
         &self,
-        array_subset: &ArraySubset,
+        indexer: &ArraySubset,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if array_subset.num_elements() != output_view.num_elements() {
+        if indexer.num_elements() != output_view.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
-                array_subset.num_elements(),
+                indexer.num_elements(),
                 output_view.num_elements(),
             )
             .into());
         }
 
-        let decoded_value = self
-            .partial_decode(std::slice::from_ref(array_subset), options)?
-            .remove(0);
+        let decoded_value = self.partial_decode(indexer, options)?;
         if let ArrayBytes::Fixed(decoded_value) = decoded_value {
             output_view.copy_from_slice(&decoded_value)?;
             Ok(())
@@ -556,29 +554,26 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError>;
+    ) -> Result<ArrayBytes<'_>, CodecError>;
 
     /// Async variant of [`ArrayPartialDecoderTraits::partial_decode_into`].
     #[allow(clippy::missing_safety_doc)]
     async fn partial_decode_into(
         &self,
-        array_subset: &ArraySubset,
+        indexer: &ArraySubset,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if array_subset.num_elements() != output_view.num_elements() {
+        if indexer.num_elements() != output_view.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
                 output_view.num_elements(),
-                array_subset.num_elements(),
+                indexer.num_elements(),
             )
             .into());
         }
-        let decoded_value = self
-            .partial_decode(std::slice::from_ref(array_subset), options)
-            .await?
-            .remove(0);
+        let decoded_value = self.partial_decode(indexer, options).await?;
         if let ArrayBytes::Fixed(decoded_value) = decoded_value {
             output_view.copy_from_slice(&decoded_value)?;
             Ok(())

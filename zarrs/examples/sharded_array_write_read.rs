@@ -136,21 +136,19 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // In some cases, it might be preferable to decode inner chunks in a shard directly.
     // If using the partial decoder, then the shard index will only be read once from the store.
     let partial_decoder = array.partial_decoder(&[0, 0])?;
-    let inner_chunks_to_decode = vec![
+    println!("Decoded inner chunks:");
+    for inner_chunk_subset in [
         ArraySubset::new_with_start_shape(vec![0, 0], inner_chunk_shape.clone())?,
         ArraySubset::new_with_start_shape(vec![0, 4], inner_chunk_shape.clone())?,
-    ];
-    let decoded_inner_chunks_bytes =
-        partial_decoder.partial_decode(&inner_chunks_to_decode, &options)?;
-    println!("Decoded inner chunks:");
-    for (inner_chunk_subset, decoded_inner_chunk) in
-        std::iter::zip(inner_chunks_to_decode, decoded_inner_chunks_bytes)
-    {
+    ] {
+        println!("{inner_chunk_subset}");
+        let decoded_inner_chunk_bytes =
+            partial_decoder.partial_decode(&inner_chunk_subset.into(), &options)?;
         let ndarray = bytes_to_ndarray::<u16>(
             &inner_chunk_shape,
-            decoded_inner_chunk.into_fixed()?.into_owned(),
+            decoded_inner_chunk_bytes.into_fixed()?.into_owned(),
         )?;
-        println!("{inner_chunk_subset}\n{ndarray}\n");
+        println!("{ndarray}\n");
     }
 
     // Show the hierarchy

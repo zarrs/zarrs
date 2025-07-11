@@ -54,19 +54,14 @@ impl ArrayPartialDecoderTraits for BitroundPartialDecoder {
 
     fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        let bytes = self.input_handle.partial_decode(array_subsets, options)?;
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        let bytes = self.input_handle.partial_decode(indexer, options)?;
 
-        let mut bytes_out = Vec::with_capacity(bytes.len());
-        for bytes in bytes {
-            let mut bytes = bytes.into_fixed()?;
-            round_bytes(bytes.to_mut(), &self.data_type, self.keepbits)?;
-            bytes_out.push(bytes.into());
-        }
-
-        Ok(bytes_out)
+        let mut bytes = bytes.into_fixed()?;
+        round_bytes(bytes.to_mut(), &self.data_type, self.keepbits)?;
+        Ok(bytes.into())
     }
 }
 
@@ -109,21 +104,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncBitroundPartialDecoder {
 
     async fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        let bytes = self
-            .input_handle
-            .partial_decode(array_subsets, options)
-            .await?;
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        let bytes = self.input_handle.partial_decode(indexer, options).await?;
 
-        let mut bytes_out = Vec::with_capacity(bytes.len());
-        for bytes in bytes {
-            let mut bytes = bytes.into_fixed()?;
-            round_bytes(bytes.to_mut(), &self.data_type, self.keepbits)?;
-            bytes_out.push(bytes.into());
-        }
-
-        Ok(bytes_out)
+        let mut bytes = bytes.into_fixed()?;
+        round_bytes(bytes.to_mut(), &self.data_type, self.keepbits)?;
+        Ok(bytes.into())
     }
 }

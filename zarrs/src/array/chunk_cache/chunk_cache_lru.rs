@@ -365,8 +365,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     .array
                     .codecs()
                     .partial_decoder(input_handle, &chunk_representation, options)?
-                    .partial_decode(std::slice::from_ref(chunk_subset), options)?
-                    .remove(0)
+                    .partial_decode(&chunk_subset, options)?
                     .into_owned()
                     .into())
             } else {
@@ -477,10 +476,9 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                 crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
             Ok(partial_decoder
                 .partial_decode(
-                    &[crate::array::ArraySubset::new_with_shape(chunk_shape)],
+                    &crate::array::ArraySubset::new_with_shape(chunk_shape),
                     options,
                 )?
-                .remove(0)
                 .into_owned()
                 .into())
         }
@@ -502,8 +500,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                     })
                 })?;
             Ok(partial_decoder
-                .partial_decode(std::slice::from_ref(chunk_subset), options)?
-                .remove(0)
+                .partial_decode(&chunk_subset, options)?
                 .into_owned()
                 .into())
         }

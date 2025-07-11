@@ -35,18 +35,13 @@ fn partial_encode(
     #[cfg(feature = "async")]
     let encoded_value = if _async {
         input_handle
-            .partial_decode(std::slice::from_ref(&array_subset_all), options)
+            .partial_decode(&array_subset_all, options)
             .await
     } else {
-        input_handle.partial_decode(std::slice::from_ref(&array_subset_all), options)
-    }?
-    .pop()
-    .unwrap();
+        input_handle.partial_decode(&array_subset_all, options)
+    }?;
     #[cfg(not(feature = "async"))]
-    let encoded_value = input_handle
-        .partial_decode(&[array_subset_all.clone()], options)?
-        .pop()
-        .unwrap();
+    let encoded_value = input_handle.partial_decode(&array_subset_all, options)?;
     let mut decoded_value = codec.decode(encoded_value, decoded_representation, options)?;
 
     // Validate the bytes

@@ -838,7 +838,7 @@ mod tests {
         chunk_representation: ChunkRepresentation,
         elements: Vec<f32>,
         json_array_to_bytes: &str,
-        decoded_regions: &[ArraySubset],
+        decoded_region: &ArraySubset,
         decoded_partial_chunk_true: Vec<f32>,
     ) {
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
@@ -907,14 +907,12 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), decoded.size()); // codec chain caches with most decompression codecs
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<f32>())
             .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -937,13 +935,13 @@ mod tests {
         let elements: Vec<f32> = (0..chunk_representation.num_elements())
             .map(|i| i as f32)
             .collect();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1]);
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             chunk_representation,
             elements,
             JSON_BYTES,
-            &decoded_regions,
+            &decoded_region,
             decoded_partial_chunk_true,
         );
     }
@@ -962,13 +960,13 @@ mod tests {
         let elements: Vec<f32> = (0..chunk_representation.num_elements())
             .map(|i| i as f32)
             .collect();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1]);
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             chunk_representation,
             elements,
             JSON_PCODEC,
-            &decoded_regions,
+            &decoded_region,
             decoded_partial_chunk_true,
         );
     }
