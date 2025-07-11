@@ -105,7 +105,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     #[allow(clippy::similar_names)]
     fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        chunk_subset_indexer: &ArraySubset,
+        chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
@@ -159,60 +160,58 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let mut inner_chunks_intersected = HashSet::<u64>::new();
         let mut inner_chunks_indices = HashSet::<u64>::new();
 
-        for (chunk_subset, _chunk_subset_bytes) in subsets_and_bytes {
-            // Check the subset is within the chunk shape
-            if chunk_subset
-                .end_exc()
-                .iter()
-                .zip(self.decoded_representation.shape())
-                .any(|(a, b)| *a > b.get())
-            {
-                return Err(CodecError::InvalidArraySubsetError(
-                    IncompatibleArraySubsetAndShapeError::new(
-                        (*chunk_subset).clone(),
-                        self.decoded_representation.shape_u64(),
-                    ),
-                ));
-            }
-
-            // Get the iterator over the inner chunks
-            let inner_chunks = get_inner_chunks(chunk_subset)?;
-            let inner_chunks = inner_chunks.indices();
-
-            // Get all the inner chunks intersected
-            inner_chunks_intersected.extend(
-                inner_chunks.iter().map(|inner_chunk_indices| {
-                    ravel_indices(&inner_chunk_indices, &chunks_per_shard)
-                }),
-            );
-
-            // Get all the inner chunks that need to be updated
-            inner_chunks_indices.extend(inner_chunks.iter().filter_map(|inner_chunk_indices| {
-                let inner_chunk_subset = self
-                    .chunk_grid
-                    .subset(&inner_chunk_indices)
-                    .expect("already validated")
-                    .expect("regular grid");
-
-                // Check if the inner chunk straddles the chunk subset
-                if inner_chunk_subset
-                    .start()
-                    .iter()
-                    .zip(chunk_subset.start())
-                    .any(|(a, b)| a < b)
-                    || inner_chunk_subset
-                        .end_exc()
-                        .iter()
-                        .zip(chunk_subset.end_exc())
-                        .any(|(a, b)| *a > b)
-                {
-                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
-                    Some(inner_chunk_index)
-                } else {
-                    None
-                }
-            }));
+        // Check the subset is within the chunk shape
+        if chunk_subset_indexer
+            .end_exc()
+            .iter()
+            .zip(self.decoded_representation.shape())
+            .any(|(a, b)| *a > b.get())
+        {
+            return Err(CodecError::InvalidArraySubsetError(
+                IncompatibleArraySubsetAndShapeError::new(
+                    (*chunk_subset_indexer).clone(),
+                    self.decoded_representation.shape_u64(),
+                ),
+            ));
         }
+
+        // Get the iterator over the inner chunks
+        let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
+        let inner_chunks = inner_chunks.indices();
+
+        // Get all the inner chunks intersected
+        inner_chunks_intersected.extend(
+            inner_chunks
+                .iter()
+                .map(|inner_chunk_indices| ravel_indices(&inner_chunk_indices, &chunks_per_shard)),
+        );
+
+        // Get all the inner chunks that need to be updated
+        inner_chunks_indices.extend(inner_chunks.iter().filter_map(|inner_chunk_indices| {
+            let inner_chunk_subset = self
+                .chunk_grid
+                .subset(&inner_chunk_indices)
+                .expect("already validated")
+                .expect("regular grid");
+
+            // Check if the inner chunk straddles the chunk subset
+            if inner_chunk_subset
+                .start()
+                .iter()
+                .zip(chunk_subset_indexer.start())
+                .any(|(a, b)| a < b)
+                || inner_chunk_subset
+                    .end_exc()
+                    .iter()
+                    .zip(chunk_subset_indexer.end_exc())
+                    .any(|(a, b)| *a > b)
+            {
+                let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                Some(inner_chunk_index)
+            } else {
+                None
+            }
+        }));
 
         // Get the byte ranges of the straddling inner chunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
@@ -263,60 +262,57 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Update all of the intersecting inner chunks
         //   This loop is intentionally not run in parallel so that overapping subset updates are applied incrementally rather than having a non deterministic output.
         let inner_chunks_decoded = Arc::new(Mutex::new(inner_chunks_decoded));
-        for (chunk_subset, chunk_subset_bytes) in subsets_and_bytes {
-            let inner_chunks = get_inner_chunks(chunk_subset)?;
+        let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
 
-            inner_chunks
-                .indices()
-                .into_par_iter()
-                .try_for_each(|inner_chunk_indices| {
-                    // Extract the inner chunk bytes that overlap with the chunk subset
-                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
-                    let inner_chunk_subset = self
-                        .chunk_grid
-                        .subset(&inner_chunk_indices)
-                        .expect("already validated")
-                        .expect("regular grid");
-                    let inner_chunk_subset_overlap =
-                        chunk_subset.overlap(&inner_chunk_subset).unwrap();
-                    let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
-                        &inner_chunk_subset_overlap
-                            .relative_to(chunk_subset.start())
-                            .unwrap(),
-                        chunk_subset.shape(),
-                        self.inner_chunk_representation.data_type(),
-                    )?;
+        inner_chunks
+            .indices()
+            .into_par_iter()
+            .try_for_each(|inner_chunk_indices| {
+                // Extract the inner chunk bytes that overlap with the chunk subset
+                let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                let inner_chunk_subset = self
+                    .chunk_grid
+                    .subset(&inner_chunk_indices)
+                    .expect("already validated")
+                    .expect("regular grid");
+                let inner_chunk_subset_overlap =
+                    chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
+                let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
+                    &inner_chunk_subset_overlap
+                        .relative_to(chunk_subset_indexer.start())
+                        .unwrap(),
+                    chunk_subset_indexer.shape(),
+                    self.inner_chunk_representation.data_type(),
+                )?;
 
-                    // Decode the inner chunk
-                    let inner_chunk_decoded = if let Some(inner_chunk_decoded) =
-                        inner_chunks_decoded
-                            .lock()
-                            .unwrap()
-                            .remove(&inner_chunk_index)
-                    {
-                        inner_chunk_decoded.into_owned()
-                    } else {
-                        inner_chunk_fill_value()
-                    };
+                // Decode the inner chunk
+                let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
+                    .lock()
+                    .unwrap()
+                    .remove(&inner_chunk_index)
+                {
+                    inner_chunk_decoded.into_owned()
+                } else {
+                    inner_chunk_fill_value()
+                };
 
-                    // Update the inner chunk
-                    let inner_chunk_updated = update_array_bytes(
-                        inner_chunk_decoded,
-                        &self.inner_chunk_representation.shape_u64(),
-                        &inner_chunk_subset_overlap
-                            .relative_to(inner_chunk_subset.start())
-                            .unwrap(),
-                        &inner_chunk_bytes,
-                        self.inner_chunk_representation.data_type().size(),
-                    )?;
-                    inner_chunks_decoded
-                        .lock()
-                        .unwrap()
-                        .insert(inner_chunk_index, inner_chunk_updated);
+                // Update the inner chunk
+                let inner_chunk_updated = update_array_bytes(
+                    inner_chunk_decoded,
+                    &self.inner_chunk_representation.shape_u64(),
+                    &inner_chunk_subset_overlap
+                        .relative_to(inner_chunk_subset.start())
+                        .unwrap(),
+                    &inner_chunk_bytes,
+                    self.inner_chunk_representation.data_type().size(),
+                )?;
+                inner_chunks_decoded
+                    .lock()
+                    .unwrap()
+                    .insert(inner_chunk_index, inner_chunk_updated);
 
-                    Ok::<_, CodecError>(())
-                })?;
-        }
+                Ok::<_, CodecError>(())
+            })?;
         let inner_chunks_decoded = Arc::try_unwrap(inner_chunks_decoded)
             .expect("inner_chunks_decoded should have one strong reference")
             .into_inner()

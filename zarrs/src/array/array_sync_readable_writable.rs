@@ -199,8 +199,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
             if options.experimental_partial_encoding() {
                 let partial_encoder = self.partial_encoder(chunk_indices, options)?;
-                Ok(partial_encoder
-                    .partial_encode(&[(chunk_subset, chunk_subset_bytes)], options)?)
+                Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
             } else {
                 // Decode the entire chunk
                 let chunk_bytes_old = self.retrieve_chunk_opt(chunk_indices, options)?;
