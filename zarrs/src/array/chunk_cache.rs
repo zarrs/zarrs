@@ -56,7 +56,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 /// Traits for a chunk cache.
 pub trait ChunkCache: Send + Sync {
     /// Return the array associated with the chunk cache.
-    fn array(&self) -> &Array<dyn ReadableStorageTraits>;
+    fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
 
     /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
     #[allow(clippy::missing_errors_doc)]
