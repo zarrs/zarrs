@@ -194,7 +194,7 @@ pub enum DataTypeMetadataV2 {
 }
 
 /// A Zarr V2 invalid data type endianness error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("invalid V2 data type for {_0:?} endianness, must begin with |, < or >")]
 pub struct DataTypeMetadataV2EndiannessError(DataTypeMetadataV2);
 

@@ -9,7 +9,7 @@ use thiserror::Error;
 pub struct StorePrefix(String);
 
 /// An invalid store prefix.
-#[derive(Debug, Error, From)]
+#[derive(Debug, Clone, Error, From)]
 #[error("invalid store prefix {0}")]
 pub struct StorePrefixError(String);
 

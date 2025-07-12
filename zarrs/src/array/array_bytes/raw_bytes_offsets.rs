@@ -18,7 +18,7 @@ impl Deref for RawBytesOffsets<'_> {
 }
 
 /// An error creating [`RawBytesOffsets`].
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 pub enum RawBytesOffsetsCreateError {
     /// The offsets length must be greater than zero.
     #[display("offsets length must be greater than zero")]

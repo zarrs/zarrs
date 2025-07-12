@@ -74,7 +74,7 @@ impl From<Node> for NodePath {
 }
 
 /// A node creation error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum NodeCreateError {
     /// An invalid node path.
     #[error(transparent)]

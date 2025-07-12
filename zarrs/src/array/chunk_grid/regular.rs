@@ -56,7 +56,7 @@ pub struct RegularChunkGrid {
 }
 
 /// A [`RegularChunkGrid`] creation error.
-#[derive(Debug, Clone, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("regular chunk shape: {_1:?} not compatible with array shape {_0:?}")]
 pub struct RegularChunkGridCreateError(ArrayShape, ChunkShape);
 

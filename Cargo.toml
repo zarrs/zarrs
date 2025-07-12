@@ -32,7 +32,7 @@ missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.3.2"
+version = "0.3.3"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]
@@ -44,7 +44,7 @@ version = "0.2.0"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]
-version = "0.2.1"
+version = "0.2.2"
 path = "zarrs_plugin"
 
 [workspace.dependencies.zarrs_registry]

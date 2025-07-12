@@ -123,7 +123,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         } else {
             // Streaming decompression (slower)
             zstd::decode_all(std::io::Cursor::new(&encoded_value))
-                .map_err(CodecError::IOError)
+                .map_err(CodecError::from)
                 .map(Cow::Owned)
         }
     }

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implement `Clone` for `Error` structs
+
 ### Changed
 - Clarify `FillValueMetadataV2::Null` docs
 - Bump minimum `serde` to 1.0.203

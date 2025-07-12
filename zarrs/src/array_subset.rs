@@ -497,7 +497,7 @@ pub struct IncompatibleOffsetError {
 }
 
 /// Array errors.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArraySubsetError {
     /// Incompatible dimensionality.
     #[error(transparent)]

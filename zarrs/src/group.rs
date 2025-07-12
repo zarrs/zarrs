@@ -575,7 +575,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
 }
 
 /// A group creation error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum GroupCreateError {
     /// An invalid node path
     #[error(transparent)]

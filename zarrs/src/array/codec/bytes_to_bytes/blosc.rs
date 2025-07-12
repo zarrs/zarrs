@@ -84,7 +84,7 @@ pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginC
     Ok(Codec::BytesToBytes(codec))
 }
 
-#[derive(Debug, Error, From)]
+#[derive(Clone, Debug, Error, From)]
 #[error("{0}")]
 struct BloscError(String);
 

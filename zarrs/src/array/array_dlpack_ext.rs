@@ -21,7 +21,7 @@ pub struct RawBytesDlPack {
 }
 
 /// Errors related to [`[Async]ArrayDlPackExt`](ArrayDlPackExt) methods.
-#[derive(Clone, Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ArrayDlPackExtError {
     /// The Zarr data type is not supported by `DLPack`.

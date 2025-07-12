@@ -15,7 +15,7 @@ use crate::{
 use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 
 /// An array creation error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArrayCreateError {
     /// An invalid node path
     #[error(transparent)]
@@ -71,7 +71,7 @@ pub enum ArrayCreateError {
 }
 
 /// Array errors.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[non_exhaustive]
 pub enum ArrayError {
     /// Error when a disjoint view creation cannot be done
@@ -141,7 +141,7 @@ pub enum ArrayError {
 /// An unsupported additional field error.
 ///
 /// An unsupported field in array or group metadata is an unrecognised field without `"must_understand": false`.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("unsupported additional field {name} with value {value}")]
 pub struct AdditionalFieldUnsupportedError {
     name: String,
