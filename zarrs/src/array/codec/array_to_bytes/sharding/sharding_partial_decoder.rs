@@ -1,4 +1,7 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::{
+    num::NonZeroU64,
+    sync::{Arc, OnceLock},
+};
 
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
@@ -12,8 +15,8 @@ use crate::array::{
         CodecOptions,
     },
     concurrency::{calc_concurrency_outer_inner, RecommendedConcurrency},
-    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-    ChunkShape, DataType, DataTypeSize, RawBytes,
+    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkCacheTypeDecoded,
+    ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytes,
 };
 
 #[cfg(feature = "async")]
@@ -31,6 +34,7 @@ pub(crate) struct ShardingPartialDecoder {
     chunk_shape: ChunkShape,
     inner_codecs: Arc<CodecChain>,
     shard_index: Option<Vec<u64>>,
+    inner_chunks: Vec<OnceLock<Result<ChunkCacheTypeDecoded, CodecError>>>,
 }
 
 fn inner_chunk_byte_range(
@@ -72,12 +76,19 @@ impl ShardingPartialDecoder {
             &decoded_representation,
             options,
         )?;
+        let inner_chunks = if let Some(shard_index) = &shard_index {
+            vec![OnceLock::default(); shard_index.len() / 2]
+        } else {
+            vec![]
+        };
+
         Ok(Self {
             input_handle,
             decoded_representation,
             chunk_shape,
             inner_codecs,
             shard_index,
+            inner_chunks,
         })
     }
 
@@ -192,10 +203,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                         ArraySubset,
                     )| {
                         let shard_index_idx: usize =
-                            usize::try_from(ravel_indices(&chunk_indices, &chunks_per_shard) * 2)
+                            usize::try_from(ravel_indices(&chunk_indices, &chunks_per_shard))
                                 .unwrap();
-                        let offset = shard_index[shard_index_idx];
-                        let size = shard_index[shard_index_idx + 1];
+                        let offset = shard_index[shard_index_idx * 2];
+                        let size = shard_index[shard_index_idx * 2 + 1];
 
                         // Get the subset of bytes from the chunk which intersect the array
                         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
@@ -210,33 +221,35 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                                 chunk_representation.fill_value(),
                             )
                         } else {
-                            // Partially decode the inner chunk
-                            let partial_decoder = self.inner_codecs.clone().partial_decoder(
-                                Arc::new(ByteIntervalPartialDecoder::new(
-                                    self.input_handle.clone(),
-                                    offset,
-                                    size,
-                                )),
-                                &chunk_representation,
-                                &options,
-                            )
-                            .map_err(|err| if let CodecError::InvalidByteRangeError(_) = err {
-                                CodecError::Other(
-                                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                                        .to_string(),
-                                )
-                            } else {
-                                err
-                            })?;
-                            partial_decoder
-                                .partial_decode(
-                                    &[chunk_subset_overlap
-                                        .relative_to(chunk_subset.start())
-                                        .unwrap()],
+                            self.inner_chunks.get(shard_index_idx).expect("valid shard index").get_or_init(|| {
+                                // Partially decode the inner chunk
+                                let partial_decoder = self.inner_codecs.clone().partial_decoder(
+                                    Arc::new(ByteIntervalPartialDecoder::new(
+                                        self.input_handle.clone(),
+                                        offset,
+                                        size,
+                                    )),
+                                    &chunk_representation,
                                     &options,
-                                )?
-                                .remove(0)
-                                .into_owned()
+                                )
+                                .map_err(|err| if let CodecError::InvalidByteRangeError(_) = err {
+                                    CodecError::Other(
+                                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                                            .to_string(),
+                                    )
+                                } else {
+                                    err
+                                })?;
+                                Ok(partial_decoder
+                                    .partial_decode(
+                                        &[chunk_subset_overlap
+                                            .relative_to(chunk_subset.start())
+                                            .unwrap()],
+                                        &options,
+                                    )?
+                                    .remove(0)
+                                    .into_owned())
+                            }).clone()?
                         };
                         Ok::<_, CodecError>((
                             chunk_subset_bytes,
