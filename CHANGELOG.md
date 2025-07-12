@@ -56,11 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The previous API supported misuse (e.g. using a chunk cache with different arrays)
   - **Breaking**: Add `retrieve_chunk_subset()` and `array()` methods (required)
   - Add `retrieve_{array_subset,chunks}()` methods with `_elements()` and `_ndarray()` variants (provided)
-  - Remove `array` from method parameters, the `ChunkCache` must borrow/own an `Array` instead. See below
+  - Remove `array` from method parameters, the `ChunkCache` must own an `Arc<Array>` instead. See below
   ```diff
   -  let cache = ChunkCacheEncodedLruChunkLimit::new(50);
   -  array.retrieve_chunk_opt_cached(&cache, &[0, 1], &CodecOptions::default()),
-  +  let cache = ChunkCacheEncodedLruChunkLimit::new(&array, 50);
+  +  let cache = ChunkCacheEncodedLruChunkLimit::new(array, 50);
   +  cache.retrieve_chunk(&[0, 1], &CodecOptions::default()),
   ```
 - Bump `zarrs_metadata_ext` to 0.2.0
