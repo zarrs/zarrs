@@ -64,8 +64,10 @@ mod tests {
 
         let expected = vec![vec![1, 1], vec![1, 2], vec![2, 1], vec![2, 2]];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
+        assert_eq!((&indices).par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
+        assert_eq!((&indices).into_par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.into_par_iter().collect::<Vec<_>>(), expected);
     }
 
@@ -203,8 +205,10 @@ mod tests {
             (vec![2, 1], ArraySubset::new_with_ranges(&[4..6, 3..6])),
         ];
         assert_eq!(chunks.iter().collect::<Vec<_>>(), expected);
+        assert_eq!((&chunks).par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(chunks.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(chunks.clone().into_iter().collect::<Vec<_>>(), expected);
+        assert_eq!((&chunks).into_par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(chunks.into_par_iter().collect::<Vec<_>>(), expected);
     }
 }
