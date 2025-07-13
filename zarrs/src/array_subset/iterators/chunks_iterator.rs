@@ -41,6 +41,7 @@ use super::{Indices, IndicesIterator, ParIndicesIterator};
 /// ]
 /// ```
 ///
+#[derive(Clone)]
 pub struct Chunks {
     pub(crate) indices: Indices,
     pub(crate) chunk_shape: Vec<u64>,

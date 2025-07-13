@@ -32,6 +32,7 @@ use super::IndicesIterator;
 /// ```rust,ignore
 /// [((2, 1), 2), ((3, 1), 2)]
 /// ```
+#[derive(Clone)]
 pub struct ContiguousIndices {
     subset_contiguous_start: ArraySubset,
     contiguous_elements: u64,

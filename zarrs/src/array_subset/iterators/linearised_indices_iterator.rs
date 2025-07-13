@@ -21,6 +21,7 @@ use super::IndicesIterator;
 /// 9  10  11
 /// ```
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce `[7, 8, 10, 11]`.
+#[derive(Clone)]
 pub struct LinearisedIndices {
     subset: ArraySubset,
     array_shape: ArrayShape,

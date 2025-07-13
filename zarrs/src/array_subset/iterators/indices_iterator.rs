@@ -21,6 +21,7 @@ use rayon::iter::{
 /// (3, 0)  (3, 1)  (3, 2)
 /// ```
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce `[(2, 1), (2, 2), (3, 1), (3, 2)]`.
+#[derive(Clone)]
 pub struct Indices {
     pub(crate) subset: ArraySubset,
     pub(crate) range: std::ops::Range<usize>,

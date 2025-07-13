@@ -32,6 +32,7 @@ use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIte
 /// ```rust,ignore
 /// [(7, 2), (10, 2)]
 /// ```
+#[derive(Clone)]
 pub struct ContiguousLinearisedIndices {
     inner: ContiguousIndices,
     array_shape: Vec<u64>,
