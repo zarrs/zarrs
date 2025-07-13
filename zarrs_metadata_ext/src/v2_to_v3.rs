@@ -1,5 +1,7 @@
 //! Zarr V2 to V3 conversion.
 
+use std::sync::Arc;
+
 use thiserror::Error;
 
 use crate::{
@@ -38,7 +40,7 @@ pub fn group_metadata_v2_to_v3(group_metadata_v2: &GroupMetadataV2) -> GroupMeta
 }
 
 /// An error converting Zarr V2 array metadata to Zarr V3.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArrayMetadataV2ToV3Error {
     /// Unsupported data type.
     #[error("unsupported data type {_0:?}")]
@@ -54,10 +56,16 @@ pub enum ArrayMetadataV2ToV3Error {
     UnsupportedFillValue(String, FillValueMetadataV2),
     /// Serialization/deserialization error.
     #[error("JSON serialization or deserialization error: {_0}")]
-    SerdeError(#[from] serde_json::Error),
+    SerdeError(#[from] Arc<serde_json::Error>),
     /// Other.
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<serde_json::Error> for ArrayMetadataV2ToV3Error {
+    fn from(value: serde_json::Error) -> Self {
+        Self::SerdeError(Arc::new(value))
+    }
 }
 
 /// Convert Zarr V2 codec metadata to Zarr V3.

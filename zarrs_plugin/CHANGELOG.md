@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implement `Clone` for `Error` structs
+
 ## [0.2.1] - 2025-05-16
 
 ### Added

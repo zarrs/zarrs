@@ -145,7 +145,7 @@ pub trait ConfigurationSerialize: Serialize + DeserializeOwned {
 }
 
 /// An invalid configuration error.
-#[derive(Debug, Error, From)]
+#[derive(Clone, Debug, Error, From)]
 #[error("{name} is unsupported, configuration: {configuration:?}")]
 pub struct ConfigurationError {
     name: String,

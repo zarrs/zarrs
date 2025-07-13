@@ -32,7 +32,7 @@ pub trait DataTypeExtensionBytesCodec {
 }
 
 /// A data type extension error related to the `bytes` codec.
-#[derive(Debug, thiserror::Error, derive_more::From, derive_more::Display)]
+#[derive(Debug, Clone, thiserror::Error, derive_more::From, derive_more::Display)]
 #[non_exhaustive]
 pub enum DataTypeExtensionBytesCodecError {
     /// The endianness was not specified, and it is required for this data type extension.

@@ -11,7 +11,7 @@ use thiserror::Error;
 pub struct NodePath(PathBuf);
 
 /// An invalid node path.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("invalid node path {0}")]
 pub struct NodePathError(String);
 

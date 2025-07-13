@@ -27,7 +27,7 @@ pub struct Plugin<TPlugin, TInputs> {
 }
 
 /// An unsupported plugin error
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("{plugin_type} {name} is not supported")]
 pub struct PluginUnsupportedError {
     name: String,
@@ -43,7 +43,7 @@ impl PluginUnsupportedError {
 }
 
 /// An invalid plugin metadata error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("{plugin_type} {identifier} is unsupported with metadata: {metadata}")]
 pub struct PluginMetadataInvalidError {
     identifier: &'static str,
@@ -64,7 +64,7 @@ impl PluginMetadataInvalidError {
 }
 
 /// A plugin creation error.
-#[derive(Error, Debug)]
+#[derive(Clone, Debug, Error)]
 #[allow(missing_docs)]
 pub enum PluginCreateError {
     /// An unsupported plugin.

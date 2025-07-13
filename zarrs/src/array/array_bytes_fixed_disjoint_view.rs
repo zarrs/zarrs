@@ -23,7 +23,7 @@ pub struct ArrayBytesFixedDisjointView<'a> {
 }
 
 /// Errors that can occur when creating a [`ArrayBytesFixedDisjointView`].
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 pub enum ArrayBytesFixedDisjointViewCreateError {
     /// The subset is out-of-bounds of the array shape.
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),

@@ -44,7 +44,7 @@ pub enum ArrayBytes<'a> {
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[display("Offset {offset} is out of bounds for bytes of length {len}")]
 pub struct RawBytesOffsetsOutOfBoundsError {
     offset: usize,
@@ -52,7 +52,7 @@ pub struct RawBytesOffsetsOutOfBoundsError {
 }
 
 /// Errors related to [`ArrayBytes<'_>`] and [`ArrayBytes`].
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArrayBytesError {
     /// Invalid use of a fixed length method.
     #[error("Used a fixed length (flen) method on a variable length (vlen) array")]

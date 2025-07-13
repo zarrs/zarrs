@@ -1288,7 +1288,7 @@ impl AsyncBytesPartialDecoderTraits for std::io::Cursor<Vec<u8>> {
 }
 
 /// An error indicating the length of bytes does not match the expected length.
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[display("Invalid bytes len {len}, expected {expected_len}")]
 pub struct InvalidBytesLengthError {
     len: usize,
@@ -1304,7 +1304,7 @@ impl InvalidBytesLengthError {
 }
 
 /// An error indicating the shape is not compatible with the expected number of elements.
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[display("Invalid shape {shape:?} for number of elements {expected_num_elements}")]
 pub struct InvalidArrayShapeError {
     shape: ArrayShape,
@@ -1323,7 +1323,7 @@ impl InvalidArrayShapeError {
 }
 
 /// An error indicating the length of elements does not match the expected length.
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[display("Invalid number of elements {num}, expected {expected}")]
 pub struct InvalidNumberOfElementsError {
     num: u64,
@@ -1339,7 +1339,7 @@ impl InvalidNumberOfElementsError {
 }
 
 /// An array subset is out of bounds.
-#[derive(Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[display("Subset {subset} is out of bounds of {must_be_within}")]
 pub struct SubsetOutOfBoundsError {
     subset: ArraySubset,
@@ -1359,14 +1359,14 @@ impl SubsetOutOfBoundsError {
 
 /// A codec error.
 #[non_exhaustive]
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum CodecError {
     /// An error creating a subset while decoding
     #[error(transparent)]
     IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),
     /// An IO error.
     #[error(transparent)]
-    IOError(#[from] std::io::Error),
+    IOError(#[from] Arc<std::io::Error>),
     /// An invalid byte range was requested.
     #[error(transparent)]
     InvalidByteRangeError(#[from] InvalidByteRangeError),
@@ -1424,6 +1424,12 @@ pub enum CodecError {
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),
+}
+
+impl From<std::io::Error> for CodecError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IOError(Arc::new(err))
+    }
 }
 
 impl From<&str> for CodecError {

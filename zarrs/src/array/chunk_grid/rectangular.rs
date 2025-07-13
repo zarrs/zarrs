@@ -67,7 +67,7 @@ enum RectangularChunkGridDimension {
 }
 
 /// A [`RectangularChunkGrid`] creation error.
-#[derive(Debug, Clone, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("rectangular chunk grid configuration: {_1:?} not compatible with array shape {_0:?}")]
 pub struct RectangularChunkGridCreateError(
     ArrayShape,
