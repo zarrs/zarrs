@@ -149,46 +149,6 @@ pub struct IndicesIterator<'a> {
     pub(crate) range: std::ops::Range<usize>,
 }
 
-impl Iterator for IndicesIterator<'_> {
-    type Item = ArrayIndices;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut indices = unravel_index(self.range.start as u64, self.subset.shape());
-        std::iter::zip(indices.iter_mut(), self.subset.start())
-            .for_each(|(index, start)| *index += start);
-
-        if self.range.start < self.range.end {
-            self.range.start += 1;
-            Some(indices)
-        } else {
-            None
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let length = self.range.end.saturating_sub(self.range.start);
-        (length, Some(length))
-    }
-}
-
-impl DoubleEndedIterator for IndicesIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.range.end > self.range.start {
-            self.range.end -= 1;
-            let mut indices = unravel_index(self.range.end as u64, self.subset.shape());
-            std::iter::zip(indices.iter_mut(), self.subset.start())
-                .for_each(|(index, start)| *index += start);
-            Some(indices)
-        } else {
-            None
-        }
-    }
-}
-
-impl ExactSizeIterator for IndicesIterator<'_> {}
-
-impl FusedIterator for IndicesIterator<'_> {}
-
 /// Serial indices iterator.
 ///
 /// See [`Indices`].
@@ -198,45 +158,52 @@ pub struct IndicesIntoIterator {
     pub(crate) range: std::ops::Range<usize>,
 }
 
-impl Iterator for IndicesIntoIterator {
-    type Item = ArrayIndices;
+macro_rules! impl_indices_iterator {
+    ($iterator_type:ty) => {
+        impl Iterator for $iterator_type {
+            type Item = ArrayIndices;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut indices = unravel_index(self.range.start as u64, self.subset.shape());
-        std::iter::zip(indices.iter_mut(), self.subset.start())
-            .for_each(|(index, start)| *index += start);
+            fn next(&mut self) -> Option<Self::Item> {
+                let mut indices = unravel_index(self.range.start as u64, self.subset.shape());
+                std::iter::zip(indices.iter_mut(), self.subset.start())
+                    .for_each(|(index, start)| *index += start);
 
-        if self.range.start < self.range.end {
-            self.range.start += 1;
-            Some(indices)
-        } else {
-            None
+                if self.range.start < self.range.end {
+                    self.range.start += 1;
+                    Some(indices)
+                } else {
+                    None
+                }
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                let length = self.range.end.saturating_sub(self.range.start);
+                (length, Some(length))
+            }
         }
-    }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let length = self.range.end.saturating_sub(self.range.start);
-        (length, Some(length))
-    }
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                if self.range.end > self.range.start {
+                    self.range.end -= 1;
+                    let mut indices = unravel_index(self.range.end as u64, self.subset.shape());
+                    std::iter::zip(indices.iter_mut(), self.subset.start())
+                        .for_each(|(index, start)| *index += start);
+                    Some(indices)
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
 }
 
-impl DoubleEndedIterator for IndicesIntoIterator {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.range.end > self.range.start {
-            self.range.end -= 1;
-            let mut indices = unravel_index(self.range.end as u64, self.subset.shape());
-            std::iter::zip(indices.iter_mut(), self.subset.start())
-                .for_each(|(index, start)| *index += start);
-            Some(indices)
-        } else {
-            None
-        }
-    }
-}
-
-impl ExactSizeIterator for IndicesIntoIterator {}
-
-impl FusedIterator for IndicesIntoIterator {}
+impl_indices_iterator!(IndicesIterator<'_>);
+impl_indices_iterator!(IndicesIntoIterator);
 
 /// Parallel indices iterator.
 ///
@@ -246,34 +213,49 @@ pub struct ParIndicesIterator<'a> {
     pub(crate) range: std::ops::Range<usize>,
 }
 
-impl ParallelIterator for ParIndicesIterator<'_> {
-    type Item = ArrayIndices;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-
-    fn opt_len(&self) -> Option<usize> {
-        Some(self.len())
-    }
+/// Parallel indices iterator.
+///
+/// See [`Indices`].
+pub struct ParIndicesIntoIterator {
+    pub(crate) subset: ArraySubset,
+    pub(crate) range: std::ops::Range<usize>,
 }
 
-impl IndexedParallelIterator for ParIndicesIterator<'_> {
-    fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
-        callback.callback(self)
-    }
+macro_rules! impl_par_chunks_iterator {
+    ($iterator_type:ty) => {
+        impl ParallelIterator for $iterator_type {
+            type Item = ArrayIndices;
 
-    fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        bridge(self, consumer)
-    }
+            fn drive_unindexed<C>(self, consumer: C) -> C::Result
+            where
+                C: UnindexedConsumer<Self::Item>,
+            {
+                bridge(self, consumer)
+            }
 
-    fn len(&self) -> usize {
-        self.range.end.saturating_sub(self.range.start)
-    }
+            fn opt_len(&self) -> Option<usize> {
+                Some(self.len())
+            }
+        }
+
+        impl IndexedParallelIterator for $iterator_type {
+            fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
+                callback.callback(self)
+            }
+
+            fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+                bridge(self, consumer)
+            }
+
+            fn len(&self) -> usize {
+                self.range.end.saturating_sub(self.range.start)
+            }
+        }
+    };
 }
+
+impl_par_chunks_iterator!(ParIndicesIterator<'_>);
+impl_par_chunks_iterator!(ParIndicesIntoIterator);
 
 impl<'a> Producer for ParIndicesIterator<'a> {
     type Item = ArrayIndices;
@@ -296,43 +278,6 @@ impl<'a> Producer for ParIndicesIterator<'a> {
             range: (self.range.start + index)..self.range.end,
         };
         (left, right)
-    }
-}
-
-/// Parallel indices iterator.
-///
-/// See [`Indices`].
-pub struct ParIndicesIntoIterator {
-    pub(crate) subset: ArraySubset,
-    pub(crate) range: std::ops::Range<usize>,
-}
-
-impl ParallelIterator for ParIndicesIntoIterator {
-    type Item = ArrayIndices;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-
-    fn opt_len(&self) -> Option<usize> {
-        Some(self.len())
-    }
-}
-
-impl IndexedParallelIterator for ParIndicesIntoIterator {
-    fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
-        callback.callback(self)
-    }
-
-    fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        bridge(self, consumer)
-    }
-
-    fn len(&self) -> usize {
-        self.range.end.saturating_sub(self.range.start)
     }
 }
 

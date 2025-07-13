@@ -122,32 +122,6 @@ pub struct LinearisedIndicesIterator<'a> {
     array_shape: &'a [u64],
 }
 
-impl Iterator for LinearisedIndicesIterator<'_> {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl DoubleEndedIterator for LinearisedIndicesIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
-}
-
-impl ExactSizeIterator for LinearisedIndicesIterator<'_> {}
-
-impl FusedIterator for LinearisedIndicesIterator<'_> {}
-
 /// Serial linearised indices iterator.
 ///
 /// See [`LinearisedIndices`].
@@ -156,31 +130,54 @@ pub struct LinearisedIndicesIntoIterator {
     array_shape: ArrayShape,
 }
 
-impl Iterator for LinearisedIndicesIntoIterator {
-    type Item = u64;
+macro_rules! impl_linearised_indices_iterator {
+    (private $iterator_type:ty, $qualifier:tt) => {
+        impl Iterator for $iterator_type {
+            type Item = u64;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|indices| ravel_indices(&indices, &self.array_shape))
-    }
+            fn next(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next()
+                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+            }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.inner.size_hint()
+            }
+        }
+
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next_back()
+                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
+    ($iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                $v
+            };
+        }
+        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
+    (ref $iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                &$v
+            };
+        }
+        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
 }
 
-impl DoubleEndedIterator for LinearisedIndicesIntoIterator {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|indices| ravel_indices(&indices, &self.array_shape))
-    }
-}
-
-impl ExactSizeIterator for LinearisedIndicesIntoIterator {}
-
-impl FusedIterator for LinearisedIndicesIntoIterator {}
+impl_linearised_indices_iterator!(LinearisedIndicesIterator<'_>);
+impl_linearised_indices_iterator!(ref LinearisedIndicesIntoIterator);
 
 #[cfg(test)]
 mod tests {

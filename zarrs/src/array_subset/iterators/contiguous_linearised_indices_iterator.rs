@@ -118,49 +118,6 @@ pub struct ContiguousLinearisedIndicesIterator<'a> {
     array_shape: &'a [u64],
 }
 
-impl ContiguousLinearisedIndicesIterator<'_> {
-    /// Return the number of contiguous elements (fixed on each iteration).
-    #[must_use]
-    pub fn contiguous_elements(&self) -> u64 {
-        self.inner.contiguous_elements()
-    }
-
-    /// Return the number of contiguous elements (fixed on each iteration).
-    ///
-    /// # Panics
-    /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
-    #[must_use]
-    pub fn contiguous_elements_usize(&self) -> usize {
-        self.inner.contiguous_elements_usize()
-    }
-}
-
-impl Iterator for ContiguousLinearisedIndicesIterator<'_> {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl DoubleEndedIterator for ContiguousLinearisedIndicesIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
-}
-
-impl ExactSizeIterator for ContiguousLinearisedIndicesIterator<'_> {}
-
-impl FusedIterator for ContiguousLinearisedIndicesIterator<'_> {}
-
 /// Serial contiguous linearised indices iterator.
 ///
 /// See [`ContiguousLinearisedIndices`].
@@ -169,45 +126,68 @@ pub struct ContiguousLinearisedIndicesIntoIterator {
     array_shape: ArrayShape,
 }
 
-impl ContiguousLinearisedIndicesIntoIterator {
-    /// Return the number of contiguous elements (fixed on each iteration).
-    #[must_use]
-    pub fn contiguous_elements(&self) -> u64 {
-        self.inner.contiguous_elements()
-    }
+macro_rules! impl_contiguous_linearised_indices_iterator {
+    (private $iterator_type:ty, $qualifier:tt) => {
+        impl $iterator_type {
+            /// Return the number of contiguous elements (fixed on each iteration).
+            #[must_use]
+            pub fn contiguous_elements(&self) -> u64 {
+                self.inner.contiguous_elements()
+            }
 
-    /// Return the number of contiguous elements (fixed on each iteration).
-    ///
-    /// # Panics
-    /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
-    #[must_use]
-    pub fn contiguous_elements_usize(&self) -> usize {
-        self.inner.contiguous_elements_usize()
-    }
+            /// Return the number of contiguous elements (fixed on each iteration).
+            ///
+            /// # Panics
+            /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
+            #[must_use]
+            pub fn contiguous_elements_usize(&self) -> usize {
+                self.inner.contiguous_elements_usize()
+            }
+        }
+
+        impl Iterator for $iterator_type {
+            type Item = u64;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next()
+                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.inner.size_hint()
+            }
+        }
+
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next_back()
+                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
+    ($iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                $v
+            };
+        }
+        impl_contiguous_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
+    (ref $iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                &$v
+            };
+        }
+        impl_contiguous_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
 }
 
-impl Iterator for ContiguousLinearisedIndicesIntoIterator {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|indices| ravel_indices(&indices, &self.array_shape))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl DoubleEndedIterator for ContiguousLinearisedIndicesIntoIterator {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|indices| ravel_indices(&indices, &self.array_shape))
-    }
-}
-
-impl ExactSizeIterator for ContiguousLinearisedIndicesIntoIterator {}
-
-impl FusedIterator for ContiguousLinearisedIndicesIntoIterator {}
+impl_contiguous_linearised_indices_iterator!(ContiguousLinearisedIndicesIterator<'_>);
+impl_contiguous_linearised_indices_iterator!(ref ContiguousLinearisedIndicesIntoIterator);
