@@ -21,16 +21,16 @@ use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};
 pub(crate) mod chunk_cache_lru;
 
 /// The chunk type of an encoded chunk cache.
-pub type ChunkCacheTypeEncoded = Option<RawBytes<'static>>;
+pub type ChunkCacheTypeEncoded = Option<Arc<RawBytes<'static>>>;
 
 /// The chunk type of a decoded chunk cache.
-pub type ChunkCacheTypeDecoded = ArrayBytes<'static>;
+pub type ChunkCacheTypeDecoded = Arc<ArrayBytes<'static>>;
 
 /// The chunk type of a partial decoder chunk cache.
 pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
 
 /// A chunk type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
-pub trait ChunkCacheType: Send + Sync + 'static {
+pub trait ChunkCacheType: Send + Sync + Clone + 'static {
     /// The size of the chunk in bytes.
     fn size(&self) -> usize;
 }
@@ -64,7 +64,7 @@ pub trait ChunkCache: Send + Sync {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
+    ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
 
     /// Cached variant of [`retrieve_chunk_elements_opt`](Array::retrieve_chunk_elements_opt).
     #[allow(clippy::missing_errors_doc)]
@@ -109,7 +109,7 @@ pub trait ChunkCache: Send + Sync {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
+    ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
 
     /// Cached variant of [`retrieve_chunk_subset_elements_opt`](Array::retrieve_chunk_subset_elements_opt).
     #[allow(clippy::missing_errors_doc)]
@@ -155,7 +155,7 @@ pub trait ChunkCache: Send + Sync {
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+    ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
         let array = self.array();
         if array_subset.dimensionality() != array.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
@@ -334,7 +334,7 @@ pub trait ChunkCache: Send + Sync {
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+    ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
         if chunks.dimensionality() != self.array().dimensionality() {
             return Err(IncompatibleDimensionalityError::new(
                 chunks.dimensionality(),
