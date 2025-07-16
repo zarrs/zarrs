@@ -217,7 +217,7 @@ impl<'a> ArrayBytes<'a> {
     /// Panics if indices in the subset exceed [`usize::MAX`].
     pub fn extract_array_subset(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
@@ -225,14 +225,13 @@ impl<'a> ArrayBytes<'a> {
             ArrayBytes::Variable(bytes, offsets) => {
                 let num_elements = indexer.len();
                 let indices: Vec<_> = indexer
-                    .linearised_indices(array_shape)
+                    .iter_linearised_indices(array_shape)
                     .map_err(|_| {
                         IncompatibleIndexerAndShapeError::new(
                             indexer.to_arc(),
                             array_shape.to_vec(),
                         )
                     })?
-                    .into_iter()
                     .collect();
                 let mut bytes_length = 0;
                 for index in &indices {
@@ -352,7 +351,6 @@ pub(crate) fn update_bytes_vlen<'a>(
     let size_subset_old = {
         let chunk_indices = update_subset.linearised_indices(input_shape).unwrap();
         chunk_indices
-            .iter()
             .map(|index| {
                 let index = usize::try_from(index).unwrap();
                 input_offsets[index + 1] - input_offsets[index]
@@ -410,7 +408,7 @@ pub(crate) fn update_bytes_vlen<'a>(
 pub fn update_array_bytes<'a>(
     output_bytes: ArrayBytes,
     output_shape: &[u64],
-    output_subset: &crate::indexer::IndexerImpl,
+    output_subset: &dyn crate::indexer::Indexer,
     output_subset_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -471,7 +469,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
         for (_, chunk_subset) in &chunk_bytes_and_subsets {
             // println!("{chunk_subset:?}");
             let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-            for idx in &indices {
+            for idx in indices {
                 let idx = usize::try_from(idx).unwrap();
                 element_in_input[idx] += 1;
             }
@@ -486,9 +484,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
         let chunk_offsets = chunk_bytes.offsets().unwrap();
         debug_assert_eq!(chunk_offsets.len() as u64, chunk_subset.num_elements() + 1);
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-        for (subset_idx, (curr, next)) in
-            indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
-        {
+        for (subset_idx, (curr, next)) in indices.zip_eq(chunk_offsets.iter().tuple_windows()) {
             debug_assert!(next >= curr);
             let subset_idx = usize::try_from(subset_idx).unwrap();
             element_sizes[subset_idx] = next - curr;
@@ -515,7 +511,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
         let (chunk_bytes, chunk_offsets) = chunk_bytes.into_variable()?;
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
         for (subset_idx, (&chunk_curr, &chunk_next)) in
-            indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
+            indices.zip_eq(chunk_offsets.iter().tuple_windows())
         {
             let subset_idx = usize::try_from(subset_idx).unwrap();
             let subset_curr = offsets[subset_idx];
@@ -535,10 +531,10 @@ pub(crate) fn merge_chunks_vlen<'a>(
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     array_shape: &[u64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    let indices = indexer.linearised_indices(array_shape)?;
+    let indices = indexer.iter_linearised_indices(array_shape)?;
     let indices: Vec<_> = indices.into_iter().collect();
     let mut region_bytes_len = 0;
     for index in &indices {

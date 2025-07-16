@@ -16,7 +16,6 @@ use crate::{
         ArrayBytes, ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::IncompatibleIndexerAndShapeError,
-    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]
@@ -36,7 +35,7 @@ use super::DataTypeExtensionPackBitsCodecComponents;
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
@@ -45,7 +44,7 @@ fn partial_decode<'a>(
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let DataTypeExtensionPackBitsCodecComponents {
@@ -200,7 +199,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
@@ -254,7 +253,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode_async(

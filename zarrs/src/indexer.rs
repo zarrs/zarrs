@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use enum_dispatch::enum_dispatch;
 use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
@@ -11,7 +10,6 @@ use crate::{
 };
 
 /// A trait for a generic indexer.
-#[enum_dispatch]
 pub trait Indexer: Send + Sync + core::fmt::Debug {
     /// Return an [`Arc`] wrapped version of the indexer.
     fn to_arc(&self) -> Arc<dyn Indexer>;
@@ -35,42 +33,34 @@ pub trait Indexer: Send + Sync + core::fmt::Debug {
     fn output_shape(&self) -> &[u64];
 
     /// Returns an iterator over the indices of elements.
-    fn indices(&self) -> impl IntoIterator<Item = ArrayIndices>
-    where
-        Self: Sized;
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices>>;
 
     /// Returns an iterator over the linearised indices of elements.
     ///
     /// # Errors
     /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
-    fn linearised_indices(
+    fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = u64>, IncompatibleIndexerAndShapeError>
-    where
-        Self: Sized;
+    ) -> Result<Box<dyn Iterator<Item = u64>>, IncompatibleIndexerAndShapeError>;
 
-    /// Returns an iterator over contiguous sequences of element indices.
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
-    fn contiguous_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = (ArrayIndices, u64)>, IncompatibleIndexerAndShapeError>
-    where
-        Self: Sized;
+    // /// Returns an iterator over contiguous sequences of element indices.
+    // ///
+    // /// # Errors
+    // /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    // fn iter_contiguous_indices(
+    //     &self,
+    //     array_shape: &[u64],
+    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerAndShapeError>;
 
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
     /// # Errors
     /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
-    fn contiguous_linearised_indices(
+    fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<impl IntoIterator<Item = (u64, u64)>, IncompatibleIndexerAndShapeError>
-    where
-        Self: Sized;
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)>>, IncompatibleIndexerAndShapeError>;
 
     /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
     ///
@@ -80,12 +70,9 @@ pub trait Indexer: Send + Sync + core::fmt::Debug {
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError>
-    where
-        Self: Sized,
-    {
+    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError> {
         let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
+        let contiguous_indices = self.iter_contiguous_linearised_indices(array_shape)?;
         for (array_index, contiguous_elements) in contiguous_indices {
             let byte_index = array_index * element_size as u64;
             byte_ranges.push(ByteRange::FromStart(
@@ -100,18 +87,4 @@ pub trait Indexer: Send + Sync + core::fmt::Debug {
     ///
     /// Returns [`None`] if the indexer is not an [`ArraySubset`].
     fn as_array_subset(&self) -> Option<&ArraySubset>;
-}
-
-/// Concrete implementations of generic indexers.
-#[enum_dispatch(Indexer)]
-#[derive(Debug)]
-pub enum IndexerImpl {
-    /// An [`ArraySubset`] indexer.
-    ArraySubset(ArraySubset),
-}
-
-impl From<&ArraySubset> for IndexerImpl {
-    fn from(value: &ArraySubset) -> Self {
-        Self::ArraySubset(value.clone())
-    }
 }

@@ -6,7 +6,6 @@ use crate::{
     array::ArrayBytes,
     array_subset::ArraySubset,
     config::{global_config, MetadataEraseVersion},
-    indexer::Indexer,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{AsyncBytes, AsyncWritableStorageTraits, StorageError, StorageHandle},
 };
@@ -356,10 +355,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(
-                            &chunk_subset
-                                .relative_to(array_subset.start())
-                                .unwrap()
-                                .into(), // FIXME: unwrap
+                            &chunk_subset.relative_to(array_subset.start()).unwrap(), // FIXME: unwrap
                             array_subset.shape(),
                             self.data_type(),
                         )

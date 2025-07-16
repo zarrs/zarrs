@@ -8,10 +8,10 @@
 //!  - [`Chunks`]: iterate over regular sized chunks in the array subset.
 //!
 //! These can be created with the appropriate [`Indexer`](crate::indexer::Indexer) methods that are implemented for [`ArraySubset`](crate::array_subset::ArraySubset) including
-//! [`indices`](crate::indexer::Indexer::indices),
-//! [`linearised_indices`](crate::indexer::Indexer::linearised_indices),
-//! [`contiguous_indices`](crate::indexer::Indexer::contiguous_indices),
-//! [`contiguous_linearised_indices`](crate::indexer::Indexer::contiguous_linearised_indices).
+//! [`indices`](crate::indexer::Indexer::iter_indices),
+//! [`linearised_indices`](crate::indexer::Indexer::iter_linearised_indices),
+// //! [`contiguous_indices`](crate::indexer::Indexer::iter_contiguous_indices),
+//! [`contiguous_linearised_indices`](crate::indexer::Indexer::iter_contiguous_linearised_indices).
 //!
 //! [`ArraySubset`](crate::array_subset::ArraySubset) additionally supports
 //! [`chunks`](super::ArraySubset::chunks).
@@ -48,7 +48,7 @@ mod tests {
 
     use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-    use crate::{array_subset::ArraySubset, indexer::Indexer};
+    use crate::array_subset::ArraySubset;
 
     #[test]
     fn array_subset_iter_indices() {

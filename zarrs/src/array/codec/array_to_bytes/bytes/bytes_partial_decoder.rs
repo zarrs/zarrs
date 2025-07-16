@@ -8,7 +8,6 @@ use crate::{
         ArrayBytes, ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::IncompatibleIndexerAndShapeError,
-    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]
@@ -49,7 +48,7 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(data_type_size) = self.data_type().fixed_size() else {
@@ -132,7 +131,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(data_type_size) = self.data_type().fixed_size() else {

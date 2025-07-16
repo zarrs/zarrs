@@ -2,10 +2,7 @@ use std::{num::NonZero, sync::Arc};
 
 use zarrs_metadata::DataTypeSize;
 
-use crate::{
-    array::{ArrayBytes, ChunkRepresentation, RawBytesOffsets},
-    indexer::Indexer,
-};
+use crate::array::{ArrayBytes, ChunkRepresentation, RawBytesOffsets};
 
 use super::{ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, CodecError, CodecOptions};
 
@@ -17,14 +14,14 @@ use crate::array::codec::AsyncArrayPartialDecoderTraits;
     input_handle: &Arc<dyn AsyncArrayPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn ArrayPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let output_shape = indexer
@@ -102,7 +99,7 @@ impl ArrayPartialDecoderTraits for ArrayToArrayPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode(
@@ -150,7 +147,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToArrayPartialDecoderDefault {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode_async(

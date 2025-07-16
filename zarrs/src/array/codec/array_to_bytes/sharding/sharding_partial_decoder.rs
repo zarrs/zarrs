@@ -4,19 +4,16 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::ByteRange;
 
-use crate::{
-    array::{
-        array_bytes::merge_chunks_vlen,
-        codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
-            ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
-            CodecOptions,
-        },
-        concurrency::{calc_concurrency_outer_inner, RecommendedConcurrency},
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-        ChunkShape, DataType, DataTypeSize, RawBytes,
+use crate::array::{
+    array_bytes::merge_chunks_vlen,
+    codec::{
+        ArrayCodecTraits, ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
+        ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
+        CodecOptions,
     },
-    indexer::Indexer,
+    concurrency::{calc_concurrency_outer_inner, RecommendedConcurrency},
+    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
+    ChunkShape, DataType, DataTypeSize, RawBytes,
 };
 
 #[cfg(feature = "async")]
@@ -128,7 +125,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     #[allow(clippy::too_many_lines)]
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
@@ -230,8 +227,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                             .partial_decode(
                                 &chunk_subset_overlap
                                     .relative_to(chunk_subset.start())
-                                    .unwrap()
-                                    .into(),
+                                    .unwrap(),
                                 &options,
                             )?
                             .into_owned()
@@ -304,8 +300,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
                             .partial_decode(
                                 &chunk_subset_overlap
                                     .relative_to(chunk_subset.start())
-                                    .unwrap()
-                                    .into(),
+                                    .unwrap(),
                                 &options,
                             )?
                             .into_owned()
@@ -422,7 +417,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     #[allow(clippy::too_many_lines)]
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
@@ -507,8 +502,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                                 .partial_decode(
                                     &chunk_subset_overlap
                                         .relative_to(chunk_subset.start())
-                                        .unwrap()
-                                        .into(),
+                                        .unwrap(),
                                     options,
                                 )
                                 .await?
@@ -600,13 +594,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
                             //     .remove(0);
                             let decoded_chunk = partial_decoder
                                 .partial_decode(
-                                    &ArraySubset::new_with_shape(chunk_subset.shape().to_vec()).into(),
+                                    &ArraySubset::new_with_shape(chunk_subset.shape().to_vec()),
                                     options,
                                 ) // TODO: Adjust options for partial decoding
                                 .await?.into_owned();
                             let decoded_chunk = decoded_chunk
                                 .extract_array_subset(
-                                    &chunk_subset_overlap.relative_to(chunk_subset.start()).unwrap().into(),
+                                    &chunk_subset_overlap.relative_to(chunk_subset.start()).unwrap(),
                                     chunk_subset.shape(),
                                     self.decoded_representation.data_type()
                                 )?

@@ -8,7 +8,6 @@ use crate::{
         iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator, ArraySubset,
         IncompatibleIndexerAndShapeError,
     },
-    indexer::Indexer,
 };
 
 use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIterator};

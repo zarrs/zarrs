@@ -622,7 +622,7 @@ impl ShardingCodec {
                     let chunk_subset =
                         self.chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice());
                     let bytes = decoded_value.extract_array_subset(
-                        &chunk_subset.into(),
+                        &chunk_subset,
                         &shard_shape,
                         chunk_representation.data_type(),
                     )?;
@@ -738,7 +738,7 @@ impl ShardingCodec {
                 self.chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice());
 
             let bytes = decoded_value.extract_array_subset(
-                &chunk_subset.into(),
+                &chunk_subset,
                 &shard_shape,
                 chunk_representation.data_type(),
             );

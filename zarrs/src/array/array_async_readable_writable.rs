@@ -169,7 +169,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             let chunk_bytes_new = update_array_bytes(
                 chunk_bytes_old,
                 &chunk_shape,
-                &chunk_subset.into(),
+                chunk_subset,
                 &chunk_subset_bytes,
                 self.data_type().size(),
             )?;
@@ -293,7 +293,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     overlap.relative_to(chunk_subset.start()).unwrap();
                 let chunk_subset_bytes = subset_bytes
                     .extract_array_subset(
-                        &chunk_subset_in_array_subset.into(),
+                        &chunk_subset_in_array_subset,
                         array_subset.shape(),
                         self.data_type(),
                     )

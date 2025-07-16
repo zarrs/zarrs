@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    array::{array_bytes::update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation},
-    indexer::Indexer,
-};
+use crate::array::{array_bytes::update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation};
 
 use super::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -21,7 +18,7 @@ use crate::array::codec::{
     output_handle: &Arc<dyn AsyncBytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    chunk_subset_indexer: &crate::indexer::IndexerImpl,
+    chunk_subset_indexer: &dyn crate::indexer::Indexer,
     chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 )))]
@@ -30,7 +27,7 @@ fn partial_encode(
     output_handle: &Arc<dyn BytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    chunk_subset_indexer: &crate::indexer::IndexerImpl,
+    chunk_subset_indexer: &dyn crate::indexer::Indexer,
     chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
@@ -136,7 +133,7 @@ impl ArrayPartialEncoderTraits for ArrayToBytesPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -189,7 +186,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToBytesPartialEncoderDefault {
 
     async fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {

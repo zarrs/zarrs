@@ -195,7 +195,7 @@ mod tests {
             vec![8.0, 9.0, 12.0, 13.0],
         ]) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .partial_decode(&decoded_region, &CodecOptions::default())
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),

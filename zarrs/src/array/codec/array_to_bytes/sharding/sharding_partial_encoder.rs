@@ -106,7 +106,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     #[allow(clippy::similar_names)]
     fn partial_encode(
         &self,
-        chunk_subset_indexer: &crate::indexer::IndexerImpl,
+        chunk_subset_indexer: &dyn crate::indexer::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -288,8 +288,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
                     &inner_chunk_subset_overlap
                         .relative_to(chunk_subset_indexer.start())
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                     chunk_subset_indexer.shape(),
                     self.inner_chunk_representation.data_type(),
                 )?;
@@ -311,8 +310,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     &self.inner_chunk_representation.shape_u64(),
                     &inner_chunk_subset_overlap
                         .relative_to(inner_chunk_subset.start())
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                     &inner_chunk_bytes,
                     self.inner_chunk_representation.data_type().size(),
                 )?;

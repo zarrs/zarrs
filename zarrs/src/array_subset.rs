@@ -28,7 +28,6 @@ use itertools::izip;
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
     indexer::Indexer,
-    storage::byte_range::ByteRange,
 };
 
 /// An array subset.
@@ -389,6 +388,47 @@ impl ArraySubset {
         }
         true
     }
+
+    /// Returns an iterator over the indices of elements within the subset.
+    #[must_use]
+    pub fn indices(&self) -> Indices {
+        Indices::new(self.clone())
+    }
+
+    /// Returns an iterator over the linearised indices of elements within the subset.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    pub fn linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = u64>>, IncompatibleIndexerAndShapeError> {
+        Ok(Box::new(
+            LinearisedIndices::new(self.clone(), array_shape.to_vec())?.into_iter(),
+        ))
+    }
+
+    /// Returns an iterator over the indices of contiguous elements within the subset.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    pub fn contiguous_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<ContiguousIndices, IncompatibleIndexerAndShapeError> {
+        ContiguousIndices::new(self, array_shape)
+    }
+
+    /// Returns an iterator over the linearised indices of contiguous elements within the subset.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    pub fn contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerAndShapeError> {
+        ContiguousLinearisedIndices::new(self, array_shape.to_vec())
+    }
 }
 
 impl Indexer for ArraySubset {
@@ -408,48 +448,31 @@ impl Indexer for ArraySubset {
         self.shape()
     }
 
-    #[allow(refining_impl_trait)]
-    fn indices(&self) -> Indices {
-        Indices::new(self.clone())
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices>> {
+        Box::new(Indices::new(self.clone()).into_iter())
     }
 
-    #[allow(refining_impl_trait)]
-    fn linearised_indices(
+    fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<LinearisedIndices, IncompatibleIndexerAndShapeError> {
-        LinearisedIndices::new(self.clone(), array_shape.to_vec())
+    ) -> Result<Box<dyn Iterator<Item = u64>>, IncompatibleIndexerAndShapeError> {
+        Ok(Box::new(self.linearised_indices(array_shape)?))
     }
 
-    #[allow(refining_impl_trait)]
-    fn contiguous_indices(
-        &self,
-        array_shape: &[u64],
-    ) -> Result<ContiguousIndices, IncompatibleIndexerAndShapeError> {
-        ContiguousIndices::new(self, array_shape)
-    }
+    // fn iter_contiguous_indices(
+    //     &self,
+    //     array_shape: &[u64],
+    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerAndShapeError> {
+    //     Ok(Box::new(self.contiguous_indices(array_shape)?.into_iter()))
+    // }
 
-    #[allow(refining_impl_trait)]
-    fn contiguous_linearised_indices(
+    fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerAndShapeError> {
-        ContiguousLinearisedIndices::new(self, array_shape.to_vec())
-    }
-
-    fn byte_ranges(
-        &self,
-        array_shape: &[u64],
-        element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError> {
-        let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let element_size = element_size as u64;
-        for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
-            let byte_index = array_index * element_size;
-            let byte_length = contiguous_elements * element_size;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length)));
-        }
-        Ok(byte_ranges)
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)>>, IncompatibleIndexerAndShapeError> {
+        Ok(Box::new(
+            self.contiguous_linearised_indices(array_shape)?.into_iter(),
+        ))
     }
 
     fn as_array_subset(&self) -> Option<&ArraySubset> {
@@ -522,6 +545,8 @@ impl From<ArraySubsetError> for ArrayError {
 
 #[cfg(test)]
 mod tests {
+    use zarrs_storage::byte_range::ByteRange;
+
     use super::*;
 
     #[test]

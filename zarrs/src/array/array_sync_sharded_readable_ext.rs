@@ -18,7 +18,6 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, DataTypeSize};
 use crate::array::codec::StoragePartialDecoder;
-use crate::indexer::Indexer;
 use crate::storage::ReadableStorageTraits;
 use crate::{array::codec::ArrayPartialDecoderTraits, array_subset::ArraySubset};
 
@@ -32,7 +31,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
@@ -423,7 +422,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
             let bytes = partial_decoder
-                .partial_decode(&shard_subset.into(), options)?
+                .partial_decode(&shard_subset, options)?
                 .into_owned();
             Ok(bytes)
         } else {
@@ -562,9 +561,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                             let bytes = cache
                                 .retrieve(self, &shard_indices)?
                                 .partial_decode(
-                                    &shard_subset_overlap
-                                        .relative_to(shard_subset.start())?
-                                        .into(),
+                                    &shard_subset_overlap.relative_to(shard_subset.start())?,
                                     &options,
                                 )?
                                 .into_owned();
@@ -608,9 +605,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                                 let bytes = cache
                                     .retrieve(self, &shard_indices)?
                                     .partial_decode(
-                                        &shard_subset_overlap
-                                            .relative_to(shard_subset.start())?
-                                            .into(),
+                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
                                         &options,
                                     )?
                                     .into_owned();

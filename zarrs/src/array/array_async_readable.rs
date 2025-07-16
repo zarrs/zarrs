@@ -767,7 +767,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .clone()
                 .async_partial_decoder(input_handle, &chunk_representation, options)
                 .await?
-                .partial_decode(&chunk_subset.into(), options)
+                .partial_decode(chunk_subset, options)
                 .await?
                 .into_owned()
         };
@@ -811,7 +811,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .clone()
                 .async_partial_decoder(input_handle, &chunk_representation, options)
                 .await?
-                .partial_decode_into(&chunk_subset.into(), output_view, options)
+                .partial_decode_into(chunk_subset, output_view, options)
                 .await?;
             Ok(())
         }

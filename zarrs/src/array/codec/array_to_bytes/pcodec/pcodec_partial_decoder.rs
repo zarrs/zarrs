@@ -2,15 +2,12 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::PCODEC;
 
-use crate::{
-    array::{
-        codec::{
-            ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError,
-            CodecOptions, RawBytes,
-        },
-        ArraySize, ChunkRepresentation, DataType,
+use crate::array::{
+    codec::{
+        ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
+        RawBytes,
     },
-    indexer::Indexer,
+    ArraySize, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -37,7 +34,7 @@ impl PcodecPartialDecoder {
 
 fn do_partial_decode<'a>(
     decoded: Option<RawBytes<'a>>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     decoded_representation: &ChunkRepresentation,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let chunk_shape = decoded_representation.shape_u64();
@@ -58,7 +55,7 @@ fn do_partial_decode<'a>(
                     let decoded_chunk: ArrayBytes = decoded_chunk.into();
                     let bytes_subset = decoded_chunk
                         .extract_array_subset(
-                            &indexer,
+                            indexer,
                             &chunk_shape,
                             decoded_representation.data_type(),
                         )?
@@ -124,7 +121,7 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
@@ -169,7 +166,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {

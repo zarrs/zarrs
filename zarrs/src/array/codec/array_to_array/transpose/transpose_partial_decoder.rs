@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
 use super::{calculate_order_decode, permute, transpose_array, TransposeOrder};
-use crate::{
-    array::{
-        codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
-        ChunkRepresentation, DataType,
-    },
-    indexer::Indexer,
+use crate::array::{
+    codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
+    ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -35,7 +32,7 @@ impl TransposePartialDecoder {
 }
 
 fn validate_regions(
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     dimensionality: usize,
 ) -> Result<(), CodecError> {
     if indexer.dimensionality() == dimensionality {
@@ -106,7 +103,7 @@ impl ArrayPartialDecoderTraits for TransposePartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         validate_regions(indexer, self.decoded_representation.dimensionality())?;
@@ -118,7 +115,7 @@ impl ArrayPartialDecoderTraits for TransposePartialDecoder {
         let decoded_region_transposed = get_decoded_regions_transposed(&self.order, decoded_region);
         let encoded_value = self
             .input_handle
-            .partial_decode(&decoded_region_transposed.into(), options)?;
+            .partial_decode(&decoded_region_transposed, options)?;
         do_transpose(
             encoded_value,
             decoded_region,
@@ -161,7 +158,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         validate_regions(indexer, self.decoded_representation.dimensionality())?;
@@ -173,7 +170,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
         let decoded_region_transposed = get_decoded_regions_transposed(&self.order, decoded_region);
         let encoded_value = self
             .input_handle
-            .partial_decode(&decoded_region_transposed.into(), options)
+            .partial_decode(&decoded_region_transposed, options)
             .await?;
         do_transpose(
             encoded_value,

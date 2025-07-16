@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    array::{ArrayBytes, ArraySize, ChunkRepresentation},
-    indexer::Indexer,
-};
+use crate::array::{ArrayBytes, ArraySize, ChunkRepresentation};
 
 use super::{
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecError,
@@ -18,14 +15,14 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     // Read the entire chunk
@@ -90,7 +87,7 @@ impl ArrayPartialDecoderTraits for ArrayToBytesPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode(
@@ -137,7 +134,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToBytesPartialDecoderDefault {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode_async(

@@ -66,7 +66,7 @@ impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(decoded_region) = indexer.as_array_subset() else {
@@ -76,7 +76,7 @@ impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
         let decoded_region_squeezed =
             get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_region_squeezed.into(), options)
+            .partial_decode(&decoded_region_squeezed, options)
     }
 }
 
@@ -110,7 +110,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(decoded_region) = indexer.as_array_subset() else {
@@ -120,7 +120,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
         let decoded_region_squeezed =
             get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_region_squeezed.into(), options)
+            .partial_decode(&decoded_region_squeezed, options)
             .await
     }
 }

@@ -313,7 +313,7 @@ mod tests {
                 .unwrap();
             assert_eq!(partial_decoder.size(), input_handle.size()); // packbits partial decoder does not hold bytes
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .partial_decode(&decoded_region, &CodecOptions::default())
                 .unwrap();
             let decoded_partial_chunk =
                 bool::from_array_bytes(&data_type, decoded_partial_chunk).unwrap();

@@ -2,13 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::{
-    array::{
-        array_bytes::extract_decoded_regions_vlen,
-        codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-        ArrayBytes, ArraySize, ChunkRepresentation, DataType, DataTypeSize, FillValue, RawBytes,
-    },
-    indexer::Indexer,
+use crate::array::{
+    array_bytes::extract_decoded_regions_vlen,
+    codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
+    ArrayBytes, ArraySize, ChunkRepresentation, DataType, DataTypeSize, FillValue, RawBytes,
 };
 
 #[cfg(feature = "async")]
@@ -35,7 +32,7 @@ impl VlenV2PartialDecoder {
 
 fn decode_vlen_bytes<'a>(
     bytes: Option<RawBytes>,
-    indexer: &crate::indexer::IndexerImpl,
+    indexer: &dyn crate::indexer::Indexer,
     data_type_size: DataTypeSize,
     fill_value: &FillValue,
     shape: &[u64],
@@ -62,7 +59,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
@@ -107,7 +104,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)

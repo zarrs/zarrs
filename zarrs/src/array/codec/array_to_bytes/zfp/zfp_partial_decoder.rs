@@ -11,7 +11,6 @@ use crate::{
         ArraySize, ChunkRepresentation, DataType,
     },
     byte_range::extract_byte_ranges_concat,
-    indexer::Indexer,
 };
 
 #[cfg(feature = "async")]
@@ -61,7 +60,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
@@ -144,11 +143,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        use crate::indexer::Indexer;
-
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
@@ -162,8 +159,6 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
         let encoded_value = self.input_handle.decode(options).await?;
         let chunk_shape = self.decoded_representation.shape_u64();
         if let Some(mut encoded_value) = encoded_value {
-            use crate::indexer::Indexer;
-
             let decoded_value = zfp_decode(
                 &self.mode,
                 self.write_header,

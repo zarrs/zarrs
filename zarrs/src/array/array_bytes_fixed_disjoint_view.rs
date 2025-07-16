@@ -2,12 +2,9 @@ use derive_more::derive::Display;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use crate::{
-    array_subset::{
-        iterators::{ContiguousIndices, ContiguousLinearisedIndices},
-        ArraySubset, IncompatibleIndexerAndShapeError,
-    },
-    indexer::Indexer,
+use crate::array_subset::{
+    iterators::{ContiguousIndices, ContiguousLinearisedIndices},
+    ArraySubset, IncompatibleIndexerAndShapeError,
 };
 
 use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};

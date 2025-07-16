@@ -16,7 +16,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
         output_handle: &Arc<dyn AsyncArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         codec: &Arc<dyn ArrayToArrayCodecTraits>,
-        chunk_subset_indexer: &crate::indexer::IndexerImpl,
+        chunk_subset_indexer: &dyn crate::indexer::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
 )))]
@@ -25,7 +25,7 @@ fn partial_encode(
     output_handle: &Arc<dyn ArrayPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    chunk_subset_indexer: &crate::indexer::IndexerImpl,
+    chunk_subset_indexer: &dyn crate::indexer::Indexer,
     chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
@@ -35,13 +35,13 @@ fn partial_encode(
     #[cfg(feature = "async")]
     let encoded_value = if _async {
         input_handle
-            .partial_decode(&array_subset_all.clone().into(), options)
+            .partial_decode(&array_subset_all, options)
             .await
     } else {
-        input_handle.partial_decode(&array_subset_all.clone().into(), options)
+        input_handle.partial_decode(&array_subset_all, options)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_value = input_handle.partial_decode(&array_subset_all.clone().into(), options)?;
+    let encoded_value = input_handle.partial_decode(&array_subset_all, options)?;
     let mut decoded_value = codec.decode(encoded_value, decoded_representation, options)?;
 
     // Validate the bytes
@@ -96,13 +96,13 @@ fn partial_encode(
         #[cfg(feature = "async")]
         if _async {
             output_handle
-                .partial_encode(&array_subset_all.into(), &encoded_value, options)
+                .partial_encode(&array_subset_all, &encoded_value, options)
                 .await
         } else {
-            output_handle.partial_encode(&array_subset_all.into(), &encoded_value, options)
+            output_handle.partial_encode(&array_subset_all, &encoded_value, options)
         }
         #[cfg(not(feature = "async"))]
-        output_handle.partial_encode(&array_subset_all.into(), &encoded_value, options)
+        output_handle.partial_encode(&array_subset_all, &encoded_value, options)
     }
 }
 
@@ -139,7 +139,7 @@ impl ArrayPartialEncoderTraits for ArrayToArrayPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -192,7 +192,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToArrayPartialEncoderDefault {
 
     async fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {

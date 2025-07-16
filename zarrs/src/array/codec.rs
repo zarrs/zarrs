@@ -424,7 +424,7 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
@@ -440,7 +440,7 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or the number of elements in `array_subset` does not match the number of elements in `output_view`,
     fn partial_decode_into(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -476,7 +476,7 @@ pub trait ArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -498,7 +498,7 @@ pub trait AsyncArrayPartialEncoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     async fn partial_encode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -557,7 +557,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
@@ -565,7 +565,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + Send + Sync {
     #[allow(clippy::missing_safety_doc)]
     async fn partial_decode_into(
         &self,
-        indexer: &crate::indexer::IndexerImpl,
+        indexer: &dyn crate::indexer::Indexer,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
