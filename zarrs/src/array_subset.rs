@@ -8,7 +8,9 @@
 //! This module also provides convenience functions for:
 //!  - computing the byte ranges of array subsets within an array with a fixed element size.
 
+pub mod indexers;
 pub mod iterators;
+use serde_json::value::Index;
 use thiserror::Error;
 
 use std::{
@@ -17,6 +19,7 @@ use std::{
     ops::Range,
 };
 
+use indexers::{IndexerEnum, RangeSubset};
 use iterators::{
     Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
 };
@@ -26,16 +29,19 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
+    array_subset::indexers::Indexer,
     storage::byte_range::ByteRange,
 };
 
 /// An array subset.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ArraySubset {
-    /// The start of the array subset.
-    start: ArrayIndices,
-    /// The shape of the array subset.
-    shape: ArrayShape,
+    indexer: IndexerEnum,
+}
+impl From<IndexerEnum> for ArraySubset {
+    fn from(indexer: IndexerEnum) -> Self {
+        Self { indexer }
+    }
 }
 
 impl Display for ArraySubset {
@@ -46,11 +52,9 @@ impl Display for ArraySubset {
 
 impl<T: IntoIterator<Item = Range<u64>>> From<T> for ArraySubset {
     fn from(ranges: T) -> Self {
-        let (start, shape) = ranges
-            .into_iter()
-            .map(|range| (range.start, range.end.saturating_sub(range.start)))
-            .unzip();
-        Self { start, shape }
+        Self {
+            indexer: IndexerEnum::RangeSubset(ranges.into()),
+        }
     }
 }
 
@@ -59,27 +63,23 @@ impl ArraySubset {
     #[must_use]
     pub fn new_empty(dimensionality: usize) -> Self {
         Self {
-            start: vec![0; dimensionality],
-            shape: vec![0; dimensionality],
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_empty(dimensionality)),
         }
     }
 
     /// Create a new array subset from a list of [`Range`]s.
     #[must_use]
     pub fn new_with_ranges(ranges: &[Range<u64>]) -> Self {
-        let (start, shape) = ranges
-            .iter()
-            .map(|range| (range.start, range.end.saturating_sub(range.start)))
-            .unzip();
-        Self { start, shape }
+        Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_ranges(ranges)),
+        }
     }
 
     /// Create a new array subset with `size` starting at the origin.
     #[must_use]
     pub fn new_with_shape(shape: ArrayShape) -> Self {
         Self {
-            start: vec![0; shape.len()],
-            shape,
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_shape(shape)),
         }
     }
 
@@ -92,14 +92,9 @@ impl ArraySubset {
         start: ArrayIndices,
         shape: ArrayShape,
     ) -> Result<Self, IncompatibleDimensionalityError> {
-        if start.len() == shape.len() {
-            Ok(Self { start, shape })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                start.len(),
-                shape.len(),
-            ))
-        }
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_shape(start, shape)?),
+        })
     }
 
     /// Create a new array subset from a start and end (inclusive).
@@ -110,15 +105,9 @@ impl ArraySubset {
         start: ArrayIndices,
         end: ArrayIndices,
     ) -> Result<Self, IncompatibleStartEndIndicesError> {
-        if start.len() != end.len() || std::iter::zip(&start, &end).any(|(start, end)| end < start)
-        {
-            Err(IncompatibleStartEndIndicesError::from((start, end)))
-        } else {
-            let shape = std::iter::zip(&start, end)
-                .map(|(&start, end)| end.saturating_sub(start) + 1)
-                .collect();
-            Ok(Self { start, shape })
-        }
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_inc(start, end)?),
+        })
     }
 
     /// Create a new array subset from a start and end (exclusive).
@@ -129,23 +118,19 @@ impl ArraySubset {
         start: ArrayIndices,
         end: ArrayIndices,
     ) -> Result<Self, IncompatibleStartEndIndicesError> {
-        if start.len() != end.len() || std::iter::zip(&start, &end).any(|(start, end)| end < start)
-        {
-            Err(IncompatibleStartEndIndicesError::from((start, end)))
-        } else {
-            let shape = std::iter::zip(&start, end)
-                .map(|(&start, end)| end.saturating_sub(start))
-                .collect();
-            Ok(Self { start, shape })
-        }
+        Ok(Self {
+            indexer: IndexerEnum::RangeSubset(RangeSubset::new_with_start_end_exc(start, end)?),
+        })
     }
 
     /// Return the array subset as a vec of ranges.
     #[must_use]
     pub fn to_ranges(&self) -> Vec<Range<u64>> {
-        std::iter::zip(&self.start, &self.shape)
-            .map(|(&start, &size)| start..start + size)
-            .collect()
+        if let IndexerEnum::RangeSubset(range_subset) = &self.indexer {
+            range_subset.to_ranges()
+        } else {
+            todo!("Delete this API? Unused?")
+        }
     }
 
     /// Bound the array subset to the domain within `end` (exclusive).
@@ -153,29 +138,23 @@ impl ArraySubset {
     /// # Errors
     /// Returns an error if `end` does not match the array subset dimensionality.
     pub fn bound(&self, end: &[u64]) -> Result<Self, ArraySubsetError> {
-        if end.len() == self.dimensionality() {
-            let start = std::iter::zip(self.start(), end)
-                .map(|(&a, &b)| std::cmp::min(a, b))
-                .collect();
-            let end = std::iter::zip(self.end_exc(), end)
-                .map(|(a, &b)| std::cmp::min(a, b))
-                .collect();
-            Ok(Self::new_with_start_end_exc(start, end)?)
+        if let IndexerEnum::RangeSubset(range_subset) = &self.indexer {
+            Ok(IndexerEnum::RangeSubset(range_subset.bound(end)?).into())
         } else {
-            Err(IncompatibleDimensionalityError(end.len(), self.dimensionality()).into())
+            todo!("Delete this API? Unused?")
         }
     }
 
     /// Return the start of the array subset.
     #[must_use]
     pub fn start(&self) -> &[u64] {
-        &self.start
+        self.indexer.start()
     }
 
     /// Return the shape of the array subset.
     #[must_use]
     pub fn shape(&self) -> &[u64] {
-        &self.shape
+        self.indexer.shape()
     }
 
     /// Return the shape of the array subset.
@@ -184,22 +163,19 @@ impl ArraySubset {
     /// Panics if a dimension exceeds [`usize::MAX`].
     #[must_use]
     pub fn shape_usize(&self) -> Vec<usize> {
-        self.shape
-            .iter()
-            .map(|d| usize::try_from(*d).unwrap())
-            .collect()
+        self.indexer.shape_usize()
     }
 
     /// Returns if the array subset is empty (i.e. has a zero element in its shape).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.shape.iter().any(|i| i == &0)
+        self.indexer.is_empty()
     }
 
     /// Return the dimensionality of the array subset.
     #[must_use]
     pub fn dimensionality(&self) -> usize {
-        self.start.len()
+        self.indexer.dimensionality()
     }
 
     /// Return the end (inclusive) of the array subset.
@@ -207,23 +183,13 @@ impl ArraySubset {
     /// Returns [`None`] if the array subset is empty.
     #[must_use]
     pub fn end_inc(&self) -> Option<ArrayIndices> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(
-                std::iter::zip(&self.start, &self.shape)
-                    .map(|(start, size)| start + size - 1)
-                    .collect(),
-            )
-        }
+        self.indexer.end_inc()
     }
 
     /// Return the end (exclusive) of the array subset.
     #[must_use]
     pub fn end_exc(&self) -> ArrayIndices {
-        std::iter::zip(&self.start, &self.shape)
-            .map(|(start, size)| start + size)
-            .collect()
+        self.indexer.end_exc()
     }
 
     /// Return the number of elements of the array subset.
@@ -231,7 +197,7 @@ impl ArraySubset {
     /// Equal to the product of the components of its shape.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        self.shape.iter().product()
+        self.indexer.num_elements()
     }
 
     /// Return the number of elements of the array subset as a `usize`.
@@ -241,13 +207,13 @@ impl ArraySubset {
     /// Panics if [`num_elements()`](Self::num_elements()) is greater than [`usize::MAX`].
     #[must_use]
     pub fn num_elements_usize(&self) -> usize {
-        usize::try_from(self.num_elements()).unwrap()
+        self.indexer.num_elements_usize()
     }
 
     /// Returns [`true`] if the array subset contains `indices`.
     #[must_use]
     pub fn contains(&self, indices: &[u64]) -> bool {
-        izip!(indices, &self.start, &self.shape).all(|(&i, &o, &s)| i >= o && i < o + s)
+        self.indexer.contains(indices)
     }
 
     /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
@@ -260,14 +226,7 @@ impl ArraySubset {
         array_shape: &[u64],
         element_size: usize,
     ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
-        let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
-        let byte_length = contiguous_indices.contiguous_elements_usize() * element_size;
-        for array_index in &contiguous_indices {
-            let byte_index = array_index * element_size as u64;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length as u64)));
-        }
-        Ok(byte_ranges)
+        self.indexer.byte_ranges(array_shape, element_size)
     }
 
     /// Return the elements in this array subset from an array with shape `array_shape`.
@@ -283,36 +242,11 @@ impl ArraySubset {
         elements: &[T],
         array_shape: &[u64],
     ) -> Result<Vec<T>, IncompatibleArraySubsetAndShapeError> {
-        let is_same_shape = elements.len() as u64 == array_shape.iter().product::<u64>();
-        let is_correct_dimensionality = array_shape.len() == self.dimensionality();
-        let is_in_bounds = self
-            .end_exc()
-            .iter()
-            .zip(array_shape)
-            .all(|(end, shape)| end <= shape);
-        if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                self.clone(),
-                array_shape.to_vec(),
-            ));
+        if let IndexerEnum::RangeSubset(range_subset) = &self.indexer {
+            range_subset.extract_elements(elements, array_shape)
+        } else {
+            todo!("Delete this API? Unused?")
         }
-        let num_elements = usize::try_from(self.num_elements()).unwrap();
-        let mut elements_subset = Vec::with_capacity(num_elements);
-        let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
-        let mut subset_offset = 0;
-        // SAFETY: `array_shape` is encapsulated by an array with `array_shape`.
-        let contiguous_elements = self.contiguous_linearised_indices(array_shape)?;
-        let element_length = contiguous_elements.contiguous_elements_usize();
-        for array_index in &contiguous_elements {
-            let element_offset = usize::try_from(array_index).unwrap();
-            debug_assert!(element_offset + element_length <= elements.len());
-            debug_assert!(subset_offset + element_length <= num_elements);
-            elements_subset_slice[subset_offset..subset_offset + element_length]
-                .copy_from_slice(&elements[element_offset..element_offset + element_length]);
-            subset_offset += element_length;
-        }
-        unsafe { elements_subset.set_len(num_elements) };
-        Ok(elements_subset)
     }
 
     /// Returns an iterator over the indices of elements within the subset.
@@ -342,7 +276,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError> {
-        ContiguousIndices::new(self, array_shape)
+        self.indexer.contiguous_indices(array_shape)
     }
 
     /// Returns an iterator over the linearised indices of contiguous elements within the subset.
@@ -368,7 +302,7 @@ impl ArraySubset {
         &self,
         chunk_shape: &[NonZeroU64],
     ) -> Result<Chunks, IncompatibleDimensionalityError> {
-        Chunks::new(self, chunk_shape)
+        self.indexer.chunks(chunk_shape)
     }
 
     /// Return the overlapping subset between this array subset and `subset_other`.
@@ -377,25 +311,7 @@ impl ArraySubset {
     ///
     /// Returns [`IncompatibleDimensionalityError`] if the dimensionality of `subset_other` does not match the dimensionality of this array subset.
     pub fn overlap(&self, subset_other: &Self) -> Result<Self, IncompatibleDimensionalityError> {
-        if subset_other.dimensionality() == self.dimensionality() {
-            let ranges = izip!(
-                &self.start,
-                &self.shape,
-                subset_other.start(),
-                subset_other.shape(),
-            )
-            .map(|(start, size, other_start, other_size)| {
-                let overlap_start = *std::cmp::max(start, other_start);
-                let overlap_end = std::cmp::min(start + size, other_start + other_size);
-                overlap_start..overlap_end
-            });
-            Ok(Self::from(ranges))
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                subset_other.dimensionality(),
-                self.dimensionality(),
-            ))
-        }
+        self.indexer.overlap(subset_other)
     }
 
     /// Return the subset relative to `offset`.
@@ -405,55 +321,27 @@ impl ArraySubset {
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if the length of `start` does not match the dimensionality of this array subset.
     pub fn relative_to(&self, offset: &[u64]) -> Result<Self, ArraySubsetError> {
-        if offset.len() != self.dimensionality() {
-            Err(IncompatibleDimensionalityError::new(offset.len(), self.dimensionality()).into())
-        } else if std::iter::zip(self.start(), offset.iter()).any(|(start, offset)| start < offset)
-        {
-            Err(IncompatibleOffsetError {
-                offset: offset.to_vec(),
-                start: self.start.clone(),
-            }
-            .into())
-        } else {
-            Ok(Self {
-                start: std::iter::zip(self.start(), offset)
-                    .map(|(start, offset)| start - offset)
-                    .collect::<Vec<_>>(),
-                shape: self.shape().to_vec(),
-            })
-        }
+        self.indexer.relative_to(offset).map_err(|e| e.into())
     }
 
     /// Returns true if this array subset is within the bounds of `subset`.
     #[must_use]
     pub fn inbounds(&self, subset: &ArraySubset) -> bool {
-        if self.dimensionality() != subset.dimensionality() {
-            return false;
-        }
-
-        for (self_start, self_shape, other_start, other_shape) in
-            izip!(self.start(), self.shape(), subset.start(), subset.shape())
-        {
-            if self_start < other_start || self_start + self_shape > other_start + other_shape {
-                return false;
-            }
-        }
-        true
+        self.indexer.inbounds(subset)
     }
 
     /// Returns true if the array subset is within the bounds of an `ArraySubset` with zero origin and a shape of `array_shape`.
     #[must_use]
     pub fn inbounds_shape(&self, array_shape: &[u64]) -> bool {
-        if self.dimensionality() != array_shape.len() {
-            return false;
-        }
+        self.indexer.inbounds_shape(array_shape)
+    }
 
-        for (subset_start, subset_shape, shape) in izip!(self.start(), self.shape(), array_shape) {
-            if subset_start + subset_shape > *shape {
-                return false;
-            }
-        }
-        true
+    pub fn is_compatible_shape(&self, array_shape: &[u64]) -> bool {
+        self.indexer.is_compatible_shape(array_shape)
+    }
+
+    pub fn find_linearised_index(&self, index: usize) -> ArrayIndices {
+        self.indexer.find_linearised_index(index)
     }
 }
 

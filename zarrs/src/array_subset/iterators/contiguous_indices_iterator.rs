@@ -4,7 +4,7 @@ use itertools::izip;
 
 use crate::{
     array::ArrayIndices,
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{indexers::{Indexer, IndexerEnum, RangeSubset, VIndex}, ArraySubset, IncompatibleArraySubsetAndShapeError},
 };
 
 use super::IndicesIterator;
@@ -34,23 +34,45 @@ pub struct ContiguousIndices {
     contiguous_elements: u64,
 }
 
+fn check_subset_array_shape(
+    subset: &impl Indexer,
+    array_shape: &[u64],
+)-> Result<(), IncompatibleArraySubsetAndShapeError> {
+    if !(subset.dimensionality() == array_shape.len()
+            && std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape))
+        {
+            let indexer_enum: IndexerEnum = subset.clone().to_enum();
+            return Err(IncompatibleArraySubsetAndShapeError(
+                indexer_enum.into(),
+                array_shape.to_vec(),
+            ));
+        }
+    Ok(())
+}
+
 impl ContiguousIndices {
+
+    pub fn new_from_discontinuous(
+        subset: &VIndex,
+        array_shape: &[u64],
+    ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
+        if let Err(err) = check_subset_array_shape(subset, array_shape) {
+            return Err(err);
+        }
+        Ok(Self { subset_contiguous_start: IndexerEnum::VIndex(subset.clone()).into(), contiguous_elements: 1 })
+    }
+
     /// Create a new contiguous indices iterator.
     ///
     /// # Errors
     /// Returns [`IncompatibleArraySubsetAndShapeError`] if `array_shape` does not encapsulate `subset`.
-    pub fn new(
-        subset: &ArraySubset,
+    pub fn new_from_range_subset(
+        subset: &RangeSubset,
         array_shape: &[u64],
     ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
-        if !(subset.dimensionality() == array_shape.len()
-            && std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape))
-        {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                subset.clone(),
-                array_shape.to_vec(),
-            ));
-        }
+        if let Err(err) = check_subset_array_shape(subset, array_shape) {
+            return Err(err);
+        } // TODO: certainly there is a cleaner way to do this?
         let mut contiguous = true;
         let mut contiguous_elements = 1;
         let mut shape_out: Vec<u64> = Vec::with_capacity(array_shape.len());
@@ -175,3 +197,56 @@ impl DoubleEndedIterator for ContiguousIndicesIterator<'_> {
 impl ExactSizeIterator for ContiguousIndicesIterator<'_> {}
 
 impl FusedIterator for ContiguousIndicesIterator<'_> {}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::array_subset::indexers::{IndexerEnum, VIndex};
+
+    use super::*;
+
+    #[test]
+    fn fully_contiguous() {
+        let indices =
+            ContiguousIndices::new_from_range_subset(&RangeSubset::new_with_ranges(&[0..4, 0..8]), &[4, 8]).unwrap();
+        assert_eq!(indices.len(), 1);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(vec![0, 0]));
+        assert_eq!(iter.contiguous_elements(), 32);
+    }
+
+    #[test]
+    fn discontinuous_range_subset() {
+        let indices =
+            ContiguousIndices::new_from_range_subset(&RangeSubset::new_with_ranges(&[0..4, 0..7]), &[4, 8]).unwrap();
+        assert_eq!(indices.len(), 4);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(vec![0, 0]));
+        assert_eq!(iter.contiguous_elements(), 7);
+        assert_eq!(iter.next(), Some(vec![1, 0]));
+        assert_eq!(iter.next(), Some(vec![2, 0]));
+        assert_eq!(iter.next_back(), Some(vec![3, 0]));
+    }
+
+    #[test]
+    fn vindex() {
+        let indices =
+            ContiguousIndices::new_from_discontinuous(&VIndex::new_from_dimension_first_indices(vec![vec![0, 2, 3], vec![1, 2, 6]]).unwrap(), &[4, 8]).unwrap();
+        assert_eq!(indices.len(), 3);
+        let mut iter = indices.iter();
+        assert_eq!(iter.next(), Some(vec![0, 1]));
+        assert_eq!(iter.contiguous_elements(), 1);
+        assert_eq!(iter.next(), Some(vec![2, 2]));
+        assert_eq!(iter.next_back(), Some(vec![3, 6]));
+    }
+
+    #[test]
+    fn vindex_bad_end() {
+        assert!(ContiguousIndices::new_from_discontinuous(&VIndex::new_from_dimension_first_indices(vec![vec![0, 2, 3], vec![1, 2, 9]]).unwrap(), &[4, 8]).is_err());
+    }
+
+    #[test]
+    fn range_susbet_bad_end() {
+        assert!(ContiguousIndices::new_from_range_subset(&RangeSubset::new_with_ranges(&[0..4, 0..9]), &[4, 8]).is_err());
+    }
+}
