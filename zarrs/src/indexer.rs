@@ -25,7 +25,7 @@ pub trait Indexer: Send + Sync + core::fmt::Debug {
 
     /// Returns the output shape of the indexer.
     #[must_use]
-    fn output_shape(&self) -> &[u64];
+    fn output_shape(&self) -> Vec<u64>;
 
     /// Returns an iterator over the indices of elements.
     fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices>>;
