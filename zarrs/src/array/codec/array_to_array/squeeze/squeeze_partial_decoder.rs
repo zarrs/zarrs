@@ -38,7 +38,7 @@ fn get_decoded_regions_squeezed(
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
         return Err(CodecError::InvalidIndexerDimensionalityError(
-            decoded_region.to_arc(),
+            decoded_region.dimensionality(),
             shape.len(),
         ));
     }

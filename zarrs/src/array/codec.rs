@@ -90,7 +90,6 @@ pub use array_to_bytes_partial_encoder_default::AsyncArrayToBytesPartialEncoderD
 use zarrs_metadata::Configuration;
 
 use crate::array_subset::IncompatibleDimensionalityError;
-use crate::indexer::Indexer;
 mod array_to_array_partial_decoder_default;
 pub use array_to_array_partial_decoder_default::ArrayToArrayPartialDecoderDefault;
 #[cfg(feature = "async")]
@@ -1372,8 +1371,8 @@ pub enum CodecError {
     #[error(transparent)]
     InvalidArraySubsetError(#[from] IncompatibleIndexerAndShapeError),
     /// An invalid array subset was requested with the wrong dimensionality.
-    #[error("the indexer {_0:?} has the wrong dimensionality, expected {_1}")]
-    InvalidIndexerDimensionalityError(Arc<dyn Indexer>, usize),
+    #[error("the indexer has the wrong dimensionality {_0}, expected {_1}")]
+    InvalidIndexerDimensionalityError(usize, usize),
     /// The decoded size of a chunk did not match what was expected.
     #[error("the size of a decoded chunk is {}, expected {}", _0.len, _0.expected_len)]
     UnexpectedChunkDecodedSize(#[from] InvalidBytesLengthError),

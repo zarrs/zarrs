@@ -39,7 +39,7 @@ fn validate_regions(
         Ok(())
     } else {
         Err(CodecError::InvalidIndexerDimensionalityError(
-            indexer.to_arc(),
+            indexer.dimensionality(),
             dimensionality,
         ))
     }

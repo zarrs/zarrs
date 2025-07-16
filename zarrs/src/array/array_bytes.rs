@@ -8,7 +8,6 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use crate::{
     array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
     byte_range::extract_byte_ranges_concat_unchecked,
-    indexer::Indexer,
     metadata::DataTypeSize,
 };
 
@@ -226,12 +225,7 @@ impl<'a> ArrayBytes<'a> {
                 let num_elements = indexer.len();
                 let indices: Vec<_> = indexer
                     .iter_linearised_indices(array_shape)
-                    .map_err(|_| {
-                        IncompatibleIndexerAndShapeError::new(
-                            indexer.to_arc(),
-                            array_shape.to_vec(),
-                        )
-                    })?
+                    .map_err(|_| IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))?
                     .collect();
                 let mut bytes_length = 0;
                 for index in &indices {
@@ -336,10 +330,7 @@ pub(crate) fn update_bytes_vlen<'a>(
     update_subset: &ArraySubset,
 ) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
     if !update_subset.inbounds_shape(input_shape) {
-        return Err(IncompatibleIndexerAndShapeError::new(
-            update_subset.to_arc(),
-            input_shape.to_vec(),
-        ));
+        return Err(IncompatibleIndexerAndShapeError::new(input_shape.to_vec()));
     }
 
     // Get the current and new length of the bytes in the chunk subset

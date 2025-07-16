@@ -68,7 +68,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(CodecError::InvalidIndexerDimensionalityError(
-                indexer.to_arc(),
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -151,7 +151,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(CodecError::InvalidIndexerDimensionalityError(
-                indexer.to_arc(),
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }

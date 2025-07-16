@@ -15,7 +15,6 @@ use std::{
     fmt::{Debug, Display},
     num::NonZeroU64,
     ops::Range,
-    sync::Arc,
 };
 
 use iterators::{
@@ -266,10 +265,7 @@ impl ArraySubset {
             .zip(array_shape)
             .all(|(end, shape)| end <= shape);
         if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
-            return Err(IncompatibleIndexerAndShapeError(
-                self.to_arc(),
-                array_shape.to_vec(),
-            ));
+            return Err(IncompatibleIndexerAndShapeError(array_shape.to_vec()));
         }
         let num_elements = usize::try_from(self.num_elements()).unwrap();
         let mut elements_subset = Vec::with_capacity(num_elements);
@@ -432,10 +428,6 @@ impl ArraySubset {
 }
 
 impl Indexer for ArraySubset {
-    fn to_arc(&self) -> std::sync::Arc<dyn crate::indexer::Indexer> {
-        std::sync::Arc::new(self.clone())
-    }
-
     fn dimensionality(&self) -> usize {
         self.start.len()
     }
@@ -495,14 +487,14 @@ impl IncompatibleDimensionalityError {
 
 /// An incompatible array and array shape error.
 #[derive(Clone, Debug, Error, From)]
-#[error("incompatible indexer {0:?} with array shape {1:?}")]
-pub struct IncompatibleIndexerAndShapeError(Arc<dyn Indexer>, ArrayShape);
+#[error("indexer is incompatible with array shape {0:?}")]
+pub struct IncompatibleIndexerAndShapeError(ArrayShape);
 
 impl IncompatibleIndexerAndShapeError {
     /// Create a new incompatible array subset and shape error.
     #[must_use]
-    pub fn new(indexer: Arc<dyn Indexer>, array_shape: ArrayShape) -> Self {
-        Self(indexer, array_shape)
+    pub fn new(array_shape: ArrayShape) -> Self {
+        Self(array_shape)
     }
 }
 

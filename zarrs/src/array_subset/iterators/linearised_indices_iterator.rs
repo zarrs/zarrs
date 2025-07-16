@@ -44,10 +44,7 @@ impl LinearisedIndices {
                 array_shape,
             })
         } else {
-            Err(IncompatibleIndexerAndShapeError(
-                subset.to_arc(),
-                array_shape,
-            ))
+            Err(IncompatibleIndexerAndShapeError(array_shape))
         }
     }
 

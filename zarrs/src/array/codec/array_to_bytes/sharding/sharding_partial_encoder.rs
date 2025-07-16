@@ -137,7 +137,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 .chunks_in_array_subset(chunk_subset)
                 .map_err(|_| {
                     CodecError::InvalidArraySubsetError(IncompatibleIndexerAndShapeError::new(
-                        (*chunk_subset).to_arc(),
                         chunks_per_shard.clone(),
                     ))
                 })?
@@ -173,10 +172,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .any(|(a, b)| *a > b.get())
         {
             return Err(CodecError::InvalidArraySubsetError(
-                IncompatibleIndexerAndShapeError::new(
-                    (*chunk_subset_indexer).to_arc(),
-                    self.decoded_representation.shape_u64(),
-                ),
+                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64()),
             ));
         }
 

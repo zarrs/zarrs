@@ -80,9 +80,7 @@ fn partial_decode<'a>(
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
         .byte_ranges(&chunk_shape, element_size_bits_usize)
-        .map_err(|_| {
-            IncompatibleIndexerAndShapeError::from((indexer.to_arc(), chunk_shape.clone()))
-        })?;
+        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?;
 
     // Convert to byte ranges, skipping the padding encoding byte
     let byte_ranges: Vec<ByteRange> = bit_ranges

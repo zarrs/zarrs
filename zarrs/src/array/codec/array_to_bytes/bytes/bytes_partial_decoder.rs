@@ -63,10 +63,7 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
         let byte_ranges = indexer
             .byte_ranges(&chunk_shape, data_type_size)
             .map_err(|_| {
-                IncompatibleIndexerAndShapeError::from((
-                    indexer.to_arc(),
-                    self.decoded_representation.shape_u64(),
-                ))
+                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64())
             })?;
 
         // Decode
@@ -143,7 +140,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
 
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(CodecError::InvalidIndexerDimensionalityError(
-                indexer.to_arc(),
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -154,10 +151,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         let byte_ranges = indexer
             .byte_ranges(&chunk_shape, data_type_size)
             .map_err(|_| {
-                IncompatibleIndexerAndShapeError::from((
-                    indexer.to_arc(),
-                    self.decoded_representation.shape_u64(),
-                ))
+                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64())
             })?;
 
         // Decode

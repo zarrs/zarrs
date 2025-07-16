@@ -50,10 +50,7 @@ impl ContiguousIndices {
         if !(subset.dimensionality() == array_shape.len()
             && std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape))
         {
-            return Err(IncompatibleIndexerAndShapeError(
-                subset.to_arc(),
-                array_shape.to_vec(),
-            ));
+            return Err(IncompatibleIndexerAndShapeError(array_shape.to_vec()));
         }
         let mut contiguous = true;
         let mut contiguous_elements = 1;

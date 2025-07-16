@@ -130,7 +130,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(CodecError::InvalidIndexerDimensionalityError(
-                indexer.to_arc(),
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }
@@ -422,7 +422,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(CodecError::InvalidIndexerDimensionalityError(
-                indexer.to_arc(),
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }

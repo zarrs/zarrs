@@ -1,7 +1,5 @@
 //! Generic indexer support.
 
-use std::sync::Arc;
-
 use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
@@ -11,9 +9,6 @@ use crate::{
 
 /// A trait for a generic indexer.
 pub trait Indexer: Send + Sync + core::fmt::Debug {
-    /// Return an [`Arc`] wrapped version of the indexer.
-    fn to_arc(&self) -> Arc<dyn Indexer>;
-
     /// Return the dimensionality of the indexer.
     #[must_use]
     fn dimensionality(&self) -> usize;
