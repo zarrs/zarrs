@@ -109,16 +109,22 @@ fn calculate_chunks_per_shard(
         .map(|(s, c)| {
             let s = s.get();
             let c = c.get();
-            if num::Integer::is_multiple_of(&s, &c) {
-                Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
-            } else {
-                Err(CodecError::Other(
-                    format!("invalid inner chunk shape {chunk_shape:?}, it must evenly divide {shard_shape:?}")
-                ))
+            unsafe { 
+                // SAFETY: s and c are nonzero
+                NonZeroU64::new_unchecked(s.div_ceil(c))
             }
+            // if num::Integer::is_multiple_of(&s, &c) {
+            //     Ok(unsafe { NonZeroU64::new_unchecked(s / c) })
+            // } else {
+            //     Err(CodecError::Other(
+            //         format!("invalid inner chunk shape {chunk_shape:?}, it must evenly divide {shard_shape:?}")
+            //     ))
+            // }
         })
-        .collect::<Result<Vec<_>, _>>()?
-        .into())
+        .collect::<Vec<_>>()
+        // .collect::<Result<Vec<_>, _>>()?
+        .into()
+    )
 }
 
 fn sharding_index_decoded_representation(chunks_per_shard: &[NonZeroU64]) -> ChunkRepresentation {

@@ -389,3 +389,48 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[cfg(feature = "sharding")]
+#[test]
+#[cfg_attr(miri, ignore)]
+fn array_sync_read_shard_compress_inner_chunking_not_evenly_divisible() -> Result<(), Box<dyn std::error::Error>> {
+    use itertools::Itertools;
+
+    let store = std::sync::Arc::new(MemoryStore::default());
+    let array_path = "/array";
+    let mut builder = ArrayBuilder::new(
+        vec![4, 4], // array shape
+        vec![3, 3], // regular chunk shape
+        DataType::UInt8,
+        0u8,
+    );
+    builder.array_to_bytes_codec(Arc::new(
+        zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
+            vec![2, 2].try_into().unwrap(),
+        )
+        .bytes_to_bytes_codecs(vec![
+            #[cfg(feature = "gzip")]
+            Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+        ])
+        .build(),
+    ));
+    // .storage_transformers(vec![].into())
+
+    let array = builder.build(store, array_path).unwrap();
+
+    let chunk_representation =
+        array.chunk_array_representation(&vec![0; array.dimensionality()])?;
+    assert_eq!(
+        array
+            .codecs()
+            .partial_decode_granularity(&chunk_representation),
+        [2, 2].try_into().unwrap()
+    );
+
+    let elements: Vec<u8> = (0..4*4).collect_vec();
+    array.store_array_subset_elements(&array.subset_all(), &elements)?;
+    let result = array.retrieve_array_subset_elements::<u8>(&array.subset_all())?;
+    assert_eq!(elements, result);
+
+    Ok(())
+}
