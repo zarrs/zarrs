@@ -48,10 +48,6 @@ component_management:
       name: zarrs_object_store
       paths:
         - zarrs_object_store/**
-    - component_id: zarrs_opendal
-      name: zarrs_opendal
-      paths:
-        - zarrs_opendal/**
     - component_id: zarrs_plugin
       name: zarrs_plugin
       paths:

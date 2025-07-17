@@ -98,11 +98,9 @@ features = ["bytemuck"]
 chrono = "0.4.39"
 criterion = "0.6.0"
 object_store = { workspace = true, features = ["http"] }
-opendal = { workspace = true, features = ["services-fs", "services-http"] }
 tempfile = "3"
 tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 walkdir = "2.3.2"
-zarrs_opendal.workspace = true
 zarrs_object_store.workspace = true
 zarrs_filesystem.workspace = true
 zarrs_zip.workspace = true
