@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_opendal"
-version = "0.7.2"
+version = "0.8.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.80"
@@ -18,7 +18,7 @@ workspace = true
 [dependencies]
 async-trait = "0.1.74"
 futures = "0.3.29"
-opendal = { version = ">=0.51,<0.54", default-features = false }
+opendal = { version = ">=0.54,<0.55", default-features = false, features=["blocking"] }
 zarrs_storage = { workspace = true, features = ["async"] }
 
 [dev-dependencies]

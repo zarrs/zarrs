@@ -1,3 +1,5 @@
+use futures::stream::TryStreamExt;
+use futures::{future, StreamExt};
 use opendal::Operator;
 
 use zarrs_storage::{
@@ -12,13 +14,24 @@ use crate::{handle_result, handle_result_notfound};
 /// An asynchronous store backed by an [`opendal::Operator`].
 pub struct AsyncOpendalStore {
     operator: Operator,
+    concurrent_stat_requests: usize,
 }
 
 impl AsyncOpendalStore {
     /// Create a new [`AsyncOpendalStore`].
     #[must_use]
     pub fn new(operator: Operator) -> Self {
-        Self { operator }
+        Self {
+            operator,
+            concurrent_stat_requests: 32,
+        }
+    }
+
+    /// Set the number of concurrent stat requests.
+    #[must_use]
+    pub fn with_concurrent_stat_requests(mut self, concurrent_stat_requests: usize) -> Self {
+        self.concurrent_stat_requests = concurrent_stat_requests;
+        self
     }
 }
 
@@ -157,43 +170,24 @@ impl AsyncListableStorageTraits for AsyncOpendalStore {
     }
 
     async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        let Some(files) = handle_result_notfound(
+        let lister = handle_result(
             self.operator
-                .list_with(prefix.as_str())
+                .lister_with(prefix.as_str())
                 .recursive(true)
                 .await,
-        )?
-        else {
-            return Ok(0);
-        };
+        )?;
 
-        if self
-            .operator
-            .info()
-            .full_capability()
-            .list_has_content_length
-        {
-            let size = files
-                .into_iter()
-                .filter_map(|entry| {
-                    if entry.metadata().is_file() {
-                        Some(entry.metadata().content_length())
-                    } else {
-                        None
-                    }
-                })
-                .sum::<u64>();
-            Ok(size)
-        } else {
-            // TODO: concurrent
-            let mut size = 0;
-            for entry in files {
-                let meta = handle_result(self.operator.stat(entry.path()).await)?;
-                if meta.is_file() {
-                    size += meta.content_length();
-                }
-            }
-            Ok(size)
-        }
+        let total_size = lister
+            .try_filter(|entry| future::ready(entry.metadata().mode().is_file()))
+            .map(move |entry_result| async move {
+                let entry = handle_result(entry_result)?;
+                let metadata = handle_result(self.operator.stat(entry.path()).await)?;
+                Ok::<_, StorageError>(metadata.content_length())
+            })
+            .buffer_unordered(self.concurrent_stat_requests)
+            .try_fold(0, |acc, size| future::ready(Ok(acc + size)))
+            .await?;
+
+        Ok(total_size)
     }
 }

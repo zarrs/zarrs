@@ -31,10 +31,8 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_opendal/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 mod r#async;
-mod sync;
 
 pub use r#async::AsyncOpendalStore;
-pub use sync::OpendalStore;
 
 pub use opendal;
 
