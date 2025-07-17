@@ -79,7 +79,7 @@ path = "zarrs_zip"
 version = "0.12"
 
 [workspace.dependencies.opendal]
-version = "0.53.0"
+version = "0.54.0"
 
 [workspace.dependencies.zip]
 version = "4.0.0"

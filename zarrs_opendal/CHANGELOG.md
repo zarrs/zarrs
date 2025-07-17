@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Changed
 - Bump `zarrs_storage` to 0.4.0
 
+## [0.8.0] - 2025-07-17
+
+## Changed
+- **Breaking**: Bump `opendal` to 0.54
+
+## Removed
+- **Breaking**: Remove `OpendalStore`
+  - Use `AsyncOpendalStore` with the `AsyncToSyncStorageAdapter` instead
+
 ## [0.7.2] - 2025-05-16
 
 ## Changed
@@ -70,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_opendal-v0.7.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_opendal-v0.8.0...HEAD
+[0.8.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_opendal-v0.8.0
 [0.7.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_opendal-v0.7.2
 [0.7.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_opendal-v0.7.1
 [0.7.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_opendal-v0.7.0
