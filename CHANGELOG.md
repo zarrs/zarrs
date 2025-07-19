@@ -57,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
 - **Breaking**: Add `size()` method to `{Array,Bytes}PartialDecoderTraits`
-- **Breaking:: Refactor the `ChunkCache` trait
+- **Breaking**: Refactor the `ChunkCache` trait
   - The previous API supported misuse (e.g. using a chunk cache with different arrays)
   - **Breaking**: Add `retrieve_chunk_subset()` and `array()` methods (required)
   - Add `retrieve_{array_subset,chunks}()` methods with `_elements()` and `_ndarray()` variants (provided)
@@ -68,14 +68,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   +  let cache = ChunkCacheEncodedLruChunkLimit::new(array, 50);
   +  cache.retrieve_chunk(&[0, 1], &CodecOptions::default()),
   ```
+- **Breaking**: Change `byte_range::extract_byte_ranges_read_seek` to take `T` instead of `&mut T`
+- **Breaking**: Auto implement `[Async]BytesPartialDecoderTraits` for `T: AsRef<[u8]> + ...`
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
 - Move `zarrs_opendal` to a new repository: `zarrs/zarrs_opendal`
 
 ### Removed
-- Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
-- Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
+- **Breaking**: Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
+- **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
+- **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
