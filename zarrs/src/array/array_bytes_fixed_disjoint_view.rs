@@ -157,14 +157,16 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         let fill_value_contiguous = fill_value.repeat(self.num_contiguous_elements());
         let length = self.contiguous_bytes_len();
         debug_assert_eq!(fill_value_contiguous.len(), length);
-        self.contiguous_linearised_indices.iter().for_each(|index| {
-            let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
-            unsafe {
-                self.bytes
-                    .index_mut(offset..offset + length)
-                    .copy_from_slice(&fill_value_contiguous);
-            }
-        });
+        self.contiguous_linearised_indices
+            .iter()
+            .for_each(|(index, _contiguous_elements)| {
+                let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
+                unsafe {
+                    self.bytes
+                        .index_mut(offset..offset + length)
+                        .copy_from_slice(&fill_value_contiguous);
+                }
+            });
         Ok(())
     }
 
@@ -184,17 +186,14 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
                 self.bytes_in_subset_len,
             ));
         }
-
-        let length = self
-            .contiguous_linearised_indices
-            .contiguous_elements_usize()
-            * self.data_type_size;
-
+        let data_type_size = self.data_type_size as u64;
         let bytes_copied = self.contiguous_linearised_indices.iter().fold(
             0,
-            |subset_offset: usize, array_subset_element_index: u64| {
+            |subset_offset: usize,
+             (array_subset_element_index, contiguous_elements): (u64, u64)| {
                 let output_offset =
-                    usize::try_from(array_subset_element_index).unwrap() * self.data_type_size;
+                    usize::try_from(array_subset_element_index * data_type_size).unwrap();
+                let length = usize::try_from(contiguous_elements * data_type_size).unwrap();
                 debug_assert!((output_offset + length) <= self.bytes.len());
                 debug_assert!((subset_offset + length) <= subset_bytes.len());
                 let subset_offset_end = subset_offset + length;

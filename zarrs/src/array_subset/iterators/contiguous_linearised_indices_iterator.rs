@@ -87,7 +87,7 @@ impl ContiguousLinearisedIndices {
 }
 
 impl<'a> IntoIterator for &'a ContiguousLinearisedIndices {
-    type Item = u64;
+    type Item = (u64, u64);
     type IntoIter = ContiguousLinearisedIndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -99,7 +99,7 @@ impl<'a> IntoIterator for &'a ContiguousLinearisedIndices {
 }
 
 impl IntoIterator for ContiguousLinearisedIndices {
-    type Item = u64;
+    type Item = (u64, u64);
     type IntoIter = ContiguousLinearisedIndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -146,12 +146,15 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
         }
 
         impl Iterator for $iterator_type {
-            type Item = u64;
+            type Item = (u64, u64);
 
             fn next(&mut self) -> Option<Self::Item> {
-                self.inner
-                    .next()
-                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+                self.inner.next().map(|indices| {
+                    (
+                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape)),
+                        indices.1,
+                    )
+                })
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
@@ -161,9 +164,12 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                self.inner
-                    .next_back()
-                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+                self.inner.next_back().map(|indices| {
+                    (
+                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape)),
+                        indices.1,
+                    )
+                })
             }
         }
 
