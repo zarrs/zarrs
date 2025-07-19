@@ -303,7 +303,7 @@ mod tests {
 
             // Partial decoding
             let decoded_regions = [ArraySubset::new_with_ranges(&[1..4, 1..4])];
-            let input_handle = Arc::new(std::io::Cursor::new(encoded));
+            let input_handle = Arc::new(encoded);
             let partial_decoder = codec
                 .partial_decoder(
                     input_handle.clone(),

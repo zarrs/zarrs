@@ -294,7 +294,7 @@ pub unsafe fn extract_byte_ranges_concat_unchecked(
 ///
 /// Panics if a byte has length exceeding [`usize::MAX`].
 pub fn extract_byte_ranges_read_seek<T: Read + Seek>(
-    bytes: &mut T,
+    mut bytes: T,
     byte_ranges: &[ByteRange],
 ) -> std::io::Result<Vec<Vec<u8>>> {
     let len: u64 = bytes.seek(SeekFrom::End(0))?;

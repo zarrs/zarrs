@@ -439,7 +439,7 @@ mod tests {
             ArraySubset::new_with_ranges(&[3..5]),
             ArraySubset::new_with_ranges(&[17..21]),
         ];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded.into_fixed().unwrap()));
+        let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
             .partial_decoder(
@@ -499,7 +499,7 @@ mod tests {
             ArraySubset::new_with_ranges(&[3..5]),
             ArraySubset::new_with_ranges(&[17..21]),
         ];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded.into_fixed().unwrap()));
+        let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
             .async_partial_decoder(

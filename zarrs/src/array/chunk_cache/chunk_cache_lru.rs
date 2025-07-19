@@ -357,8 +357,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
 
             if let Some(chunk_encoded) = chunk_encoded.as_ref() {
                 let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
-                let input_handle =
-                    Arc::new(std::io::Cursor::new(chunk_encoded.clone().into_owned())); // FIXME: avoid this clone
+                let input_handle = Arc::new(chunk_encoded.clone().into_owned()); // FIXME: avoid this clone
                 Ok(self
                     .array
                     .codecs()

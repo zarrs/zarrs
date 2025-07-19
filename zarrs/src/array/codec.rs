@@ -1179,9 +1179,12 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     }
 }
 
-impl BytesPartialDecoderTraits for std::io::Cursor<&'static [u8]> {
+impl<T> BytesPartialDecoderTraits for T
+where
+    T: AsRef<[u8]> + Send + Sync + 'static,
+{
     fn size(&self) -> usize {
-        self.get_ref().len()
+        self.as_ref().len()
     }
 
     fn partial_decode(
@@ -1190,45 +1193,7 @@ impl BytesPartialDecoderTraits for std::io::Cursor<&'static [u8]> {
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
-    }
-}
-
-impl BytesPartialDecoderTraits for std::io::Cursor<RawBytes<'static>> {
-    fn size(&self) -> usize {
-        self.get_ref().len()
-    }
-
-    fn partial_decode(
-        &self,
-        decoded_regions: &[ByteRange],
-        _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
-    }
-}
-
-impl BytesPartialDecoderTraits for std::io::Cursor<Vec<u8>> {
-    fn size(&self) -> usize {
-        self.get_ref().len()
-    }
-
-    fn partial_decode(
-        &self,
-        decoded_regions: &[ByteRange],
-        _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
+            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
                 .into_iter()
                 .map(Cow::Owned)
                 .collect(),
@@ -1238,48 +1203,17 @@ impl BytesPartialDecoderTraits for std::io::Cursor<Vec<u8>> {
 
 #[cfg(feature = "async")]
 #[async_trait::async_trait]
-impl AsyncBytesPartialDecoderTraits for std::io::Cursor<&'static [u8]> {
+impl<T> AsyncBytesPartialDecoderTraits for T
+where
+    T: AsRef<[u8]> + Send + Sync + 'static,
+{
     async fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
-    }
-}
-
-#[cfg(feature = "async")]
-#[async_trait::async_trait]
-impl AsyncBytesPartialDecoderTraits for std::io::Cursor<RawBytes<'static>> {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &[ByteRange],
-        _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
-    }
-}
-
-#[cfg(feature = "async")]
-#[async_trait::async_trait]
-impl AsyncBytesPartialDecoderTraits for std::io::Cursor<Vec<u8>> {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &[ByteRange],
-        _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(&mut self.clone(), decoded_regions)?
+            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
                 .into_iter()
                 .map(Cow::Owned)
                 .collect(),
