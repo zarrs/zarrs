@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 
 ### Changed
-- **Breaking**: Refactor `ArrayBuilder`
+- **Major Breaking**: Refactor `ArrayBuilder`
   - All fields are now private
   - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata,attributes_mut}()`
   - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
@@ -42,11 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   )
   .build()
   ```
-- **Breaking**: change the `{Array,Chunk}Representation::new[_unchecked]` `fill_value` parameter to take `impl Into<FillValue>` instead of `FillValue`
+- **Major Breaking**: change the `{Array,Chunk}Representation::new[_unchecked]` `fill_value` parameter to take `impl Into<FillValue>` instead of `FillValue`
   ```diff
   -  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
   +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
   ```
+- **Major Breaking**: change the `[Async]ArrayPartialDecoderTraits::partial_decode[_into]()` trait method:
+  - `array_subsets: &[ArraySubset]` parameter changed to `indexer: &ArraySubset`
+  - Returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
+- **Major Breaking**: change the `ArrayPartialEncoderTraits::partial_encode()` trait method:
+   - `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` parameter changed to `indexer: &ArraySubset` and `bytes: &ArrayBytes<'_>`
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape

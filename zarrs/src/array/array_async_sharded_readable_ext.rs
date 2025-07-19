@@ -30,34 +30,32 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     async fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
             Self::Sharding(partial_decoder) => {
-                partial_decoder.partial_decode(array_subsets, options).await
+                partial_decoder.partial_decode(indexer, options).await
             }
-            Self::Other(partial_decoder) => {
-                partial_decoder.partial_decode(array_subsets, options).await
-            }
+            Self::Other(partial_decoder) => partial_decoder.partial_decode(indexer, options).await,
         }
     }
 
     async fn partial_decode_into(
         &self,
-        array_subset: &ArraySubset,
+        indexer: &ArraySubset,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         match self {
             Self::Sharding(partial_decoder) => {
                 partial_decoder
-                    .partial_decode_into(array_subset, output_view, options)
+                    .partial_decode_into(indexer, output_view, options)
                     .await
             }
             Self::Other(partial_decoder) => {
                 partial_decoder
-                    .partial_decode_into(array_subset, output_view, options)
+                    .partial_decode_into(indexer, output_view, options)
                     .await
             }
         }
@@ -446,9 +444,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                 inner_chunk_shard_index_and_subset(self, cache, inner_chunk_indices)?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
             let bytes = partial_decoder
-                .partial_decode(&[shard_subset], options)
+                .partial_decode(&shard_subset, options)
                 .await?
-                .remove(0)
                 .into_owned();
             Ok(bytes)
         } else {
@@ -599,12 +596,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                     .retrieve(self, &shard_indices)
                                     .await?
                                     .partial_decode(
-                                        &[shard_subset_overlap
-                                            .relative_to(shard_subset.start())?],
+                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
                                         &options,
                                     )
                                     .await?
-                                    .remove(0)
                                     .into_owned();
                                 Ok::<_, ArrayError>((
                                     bytes,

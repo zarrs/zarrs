@@ -31,14 +31,12 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
-            Self::Sharding(partial_decoder) => {
-                partial_decoder.partial_decode(array_subsets, options)
-            }
-            Self::Other(partial_decoder) => partial_decoder.partial_decode(array_subsets, options),
+            Self::Sharding(partial_decoder) => partial_decoder.partial_decode(indexer, options),
+            Self::Other(partial_decoder) => partial_decoder.partial_decode(indexer, options),
         }
     }
 }
@@ -424,8 +422,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
             let bytes = partial_decoder
-                .partial_decode(&[shard_subset], options)?
-                .remove(0)
+                .partial_decode(&shard_subset, options)?
                 .into_owned();
             Ok(bytes)
         } else {
@@ -564,10 +561,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                             let bytes = cache
                                 .retrieve(self, &shard_indices)?
                                 .partial_decode(
-                                    &[shard_subset_overlap.relative_to(shard_subset.start())?],
+                                    &shard_subset_overlap.relative_to(shard_subset.start())?,
                                     &options,
                                 )?
-                                .remove(0)
                                 .into_owned();
                             Ok((
                                 bytes,
@@ -609,11 +605,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                                 let bytes = cache
                                     .retrieve(self, &shard_indices)?
                                     .partial_decode(
-                                        &[shard_subset_overlap
-                                            .relative_to(shard_subset.start())?],
+                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
                                         &options,
                                     )?
-                                    .remove(0)
                                     .into_owned();
                                 let mut output_view = unsafe {
                                     // SAFETY: chunks represent disjoint array subsets

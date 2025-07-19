@@ -17,60 +17,54 @@ use crate::array::codec::AsyncArrayPartialDecoderTraits;
     input_handle: &Arc<dyn AsyncArrayPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    array_subsets: &[ArraySubset],
+    indexer: &ArraySubset,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn ArrayPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    array_subsets: &[ArraySubset],
+    indexer: &ArraySubset,
     options: &CodecOptions,
-) -> Result<Vec<ArrayBytes<'a>>, CodecError> {
+) -> Result<ArrayBytes<'a>, CodecError> {
+    let output_shape = indexer
+        .shape()
+        .iter()
+        .map(|f| NonZero::try_from(*f))
+        .collect();
+
     // Read the subsets
     #[cfg(feature = "async")]
-    let chunk_bytes: Vec<_> = if _async {
-        input_handle.partial_decode(array_subsets, options).await
+    let chunk_bytes: ArrayBytes = if _async {
+        input_handle.partial_decode(indexer, options).await
     } else {
-        input_handle.partial_decode(array_subsets, options)
+        input_handle.partial_decode(indexer, options)
     }?;
     #[cfg(not(feature = "async"))]
-    let chunk_bytes = input_handle.partial_decode(array_subsets, options)?;
+    let chunk_bytes = input_handle.partial_decode(indexer, options)?;
 
     // Decode the subsets
-    chunk_bytes
-        .into_iter()
-        .zip(array_subsets)
-        .map(|(bytes, subset)| {
-            if let Ok(shape) = subset
-                .shape()
-                .iter()
-                .map(|f| NonZero::try_from(*f))
-                .collect()
-            {
-                codec
-                    .decode(
-                        bytes,
-                        &ChunkRepresentation::new(
-                            shape,
-                            decoded_representation.data_type().clone(),
-                            decoded_representation.fill_value().clone(),
-                        )
-                        .expect("data type and fill value are compatible"),
-                        options,
-                    )
-                    .map(ArrayBytes::into_owned)
-            } else {
-                Ok(match decoded_representation.data_type().size() {
-                    DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
-                    DataTypeSize::Variable => {
-                        ArrayBytes::new_vlen(vec![], RawBytesOffsets::new(vec![0]).unwrap())
-                            .unwrap()
-                    }
-                })
+    if let Ok(shape) = output_shape {
+        codec
+            .decode(
+                chunk_bytes,
+                &ChunkRepresentation::new(
+                    shape,
+                    decoded_representation.data_type().clone(),
+                    decoded_representation.fill_value().clone(),
+                )
+                .expect("data type and fill value are compatible"),
+                options,
+            )
+            .map(ArrayBytes::into_owned)
+    } else {
+        Ok(match decoded_representation.data_type().size() {
+            DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
+            DataTypeSize::Variable => {
+                ArrayBytes::new_vlen(vec![], RawBytesOffsets::new(vec![0]).unwrap()).unwrap()
             }
         })
-        .collect()
+    }
 }
 
 /// The default array to array partial decoder. Decodes the entire chunk, and decodes the regions of interest.
@@ -108,14 +102,14 @@ impl ArrayPartialDecoderTraits for ArrayToArrayPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &super::CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, super::CodecError> {
+    ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode(
             &self.input_handle,
             &self.decoded_representation,
             &self.codec,
-            array_subsets,
+            indexer,
             options,
         )
     }
@@ -156,14 +150,14 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToArrayPartialDecoderDefault {
 
     async fn partial_decode(
         &self,
-        array_subsets: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &super::CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, super::CodecError> {
+    ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode_async(
             &self.input_handle,
             &self.decoded_representation,
             &self.codec,
-            array_subsets,
+            indexer,
             options,
         )
         .await

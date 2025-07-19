@@ -530,20 +530,18 @@ mod tests {
         let encoded = codec
             .encode(bytes.clone(), &chunk_representation, options)
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(input_handle, &chunk_representation, options)
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, options)
+            .partial_decode(&decoded_region, options)
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -612,22 +610,20 @@ mod tests {
         let encoded = codec
             .encode(bytes.clone(), &chunk_representation, options)
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(input_handle, &chunk_representation, options)
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, options)
+            .partial_decode(&decoded_region, options)
             .await
+            .unwrap()
+            .into_fixed()
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -675,7 +671,7 @@ mod tests {
         let encoded = codec
             .encode(bytes, &chunk_representation, &CodecOptions::default())
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
@@ -689,14 +685,12 @@ mod tests {
             input_handle.size() + size_of::<u64>() * 2 * 2 * 2 * 2
         ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
         println!("decoded_partial_chunk {decoded_partial_chunk:?}");
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u16>())
             .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -720,7 +714,7 @@ mod tests {
         let encoded = codec
             .encode(bytes, &chunk_representation, &CodecOptions::default())
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
@@ -734,14 +728,12 @@ mod tests {
             input_handle.size() + size_of::<u64>() * 2 * 2 * 2
         ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();

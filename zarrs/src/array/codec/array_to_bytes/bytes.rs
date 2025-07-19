@@ -310,7 +310,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
@@ -321,14 +321,12 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // bytes partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -354,7 +352,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
@@ -365,15 +363,13 @@ mod tests {
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .await
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();

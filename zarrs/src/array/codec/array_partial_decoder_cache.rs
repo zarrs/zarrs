@@ -25,12 +25,9 @@ impl ArrayPartialDecoderCache {
     ) -> Result<Self, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &[ArraySubset::new_with_shape(
-                    decoded_representation.shape_u64(),
-                )],
+                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
                 options,
             )?
-            .remove(0)
             .into_owned();
         Ok(Self {
             decoded_representation,
@@ -50,13 +47,10 @@ impl ArrayPartialDecoderCache {
     ) -> Result<ArrayPartialDecoderCache, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &[ArraySubset::new_with_shape(
-                    decoded_representation.shape_u64(),
-                )],
+                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
                 options,
             )
             .await?
-            .remove(0)
             .into_owned();
         Ok(Self {
             decoded_representation,
@@ -76,19 +70,15 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         _options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        let mut out = Vec::with_capacity(decoded_regions.len());
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         let array_shape = self.decoded_representation.shape_u64();
-        for array_subset in decoded_regions {
-            out.push(self.cache.extract_array_subset(
-                array_subset,
-                &array_shape,
-                self.decoded_representation.data_type(),
-            )?);
-        }
-        Ok(out)
+        self.cache.extract_array_subset(
+            indexer,
+            &array_shape,
+            self.decoded_representation.data_type(),
+        )
     }
 }
 
@@ -101,9 +91,9 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     async fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        ArrayPartialDecoderTraits::partial_decode(self, decoded_regions, options)
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        ArrayPartialDecoderTraits::partial_decode(self, indexer, options)
     }
 }

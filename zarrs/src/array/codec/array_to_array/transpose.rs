@@ -245,11 +245,6 @@ mod tests {
         let encoded = codec
             .encode(bytes, &chunk_representation, &CodecOptions::default())
             .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[0..4, 0..4]),
-            ArraySubset::new_with_ranges(&[1..3, 1..4]),
-            ArraySubset::new_with_ranges(&[2..4, 0..2]),
-        ];
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
@@ -267,15 +262,11 @@ mod tests {
             )
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // transpose partial decoder does not hold bytes
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .unwrap();
-        let decoded_partial_chunk = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| {
-                crate::array::convert_from_bytes_slice::<f32>(&bytes.into_fixed().unwrap())
-            })
-            .collect::<Vec<_>>();
+        let decoded_regions = [
+            ArraySubset::new_with_ranges(&[0..4, 0..4]),
+            ArraySubset::new_with_ranges(&[1..3, 1..4]),
+            ArraySubset::new_with_ranges(&[2..4, 0..2]),
+        ];
         let answer: &[Vec<f32>] = &[
             vec![
                 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
@@ -284,7 +275,15 @@ mod tests {
             vec![5.0, 6.0, 7.0, 9.0, 10.0, 11.0],
             vec![8.0, 9.0, 12.0, 13.0],
         ];
-        assert_eq!(answer, decoded_partial_chunk);
+        for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .unwrap();
+            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
+                &decoded_partial_chunk.into_fixed().unwrap(),
+            );
+            assert_eq!(expected, &decoded_partial_chunk);
+        }
     }
 
     #[cfg(feature = "async")]
@@ -309,11 +308,6 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[0..4, 0..4]),
-            ArraySubset::new_with_ranges(&[1..3, 1..4]),
-            ArraySubset::new_with_ranges(&[2..4, 0..2]),
-        ];
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
@@ -332,18 +326,11 @@ mod tests {
             )
             .await
             .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .await
-            .unwrap();
-        let decoded_partial_chunk = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| {
-                crate::array::transmute_from_bytes_vec::<f32>(
-                    bytes.into_fixed().unwrap().into_owned(),
-                )
-            })
-            .collect::<Vec<_>>();
+        let decoded_regions = [
+            ArraySubset::new_with_ranges(&[0..4, 0..4]),
+            ArraySubset::new_with_ranges(&[1..3, 1..4]),
+            ArraySubset::new_with_ranges(&[2..4, 0..2]),
+        ];
         let answer: &[Vec<f32>] = &[
             vec![
                 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
@@ -352,6 +339,15 @@ mod tests {
             vec![5.0, 6.0, 7.0, 9.0, 10.0, 11.0],
             vec![8.0, 9.0, 12.0, 13.0],
         ];
-        assert_eq!(answer, decoded_partial_chunk);
+        for (decoded_region, answer) in decoded_regions.into_iter().zip(answer.iter()) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .await
+                .unwrap();
+            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
+                &decoded_partial_chunk.into_fixed().unwrap(),
+            );
+            assert_eq!(answer, &decoded_partial_chunk);
+        }
     }
 }

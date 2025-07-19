@@ -18,7 +18,8 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
         output_handle: &Arc<dyn AsyncArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         codec: &Arc<dyn ArrayToArrayCodecTraits>,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        chunk_subset_indexer: &ArraySubset,
+        chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
 )))]
 fn partial_encode(
@@ -26,7 +27,8 @@ fn partial_encode(
     output_handle: &Arc<dyn ArrayPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
-    subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+    chunk_subset_indexer: &ArraySubset,
+    chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
     // Read the entire chunk
@@ -35,18 +37,13 @@ fn partial_encode(
     #[cfg(feature = "async")]
     let encoded_value = if _async {
         input_handle
-            .partial_decode(std::slice::from_ref(&array_subset_all), options)
+            .partial_decode(&array_subset_all, options)
             .await
     } else {
-        input_handle.partial_decode(std::slice::from_ref(&array_subset_all), options)
-    }?
-    .pop()
-    .unwrap();
+        input_handle.partial_decode(&array_subset_all, options)
+    }?;
     #[cfg(not(feature = "async"))]
-    let encoded_value = input_handle
-        .partial_decode(&[array_subset_all.clone()], options)?
-        .pop()
-        .unwrap();
+    let encoded_value = input_handle.partial_decode(&array_subset_all, options)?;
     let mut decoded_value = codec.decode(encoded_value, decoded_representation, options)?;
 
     // Validate the bytes
@@ -56,36 +53,32 @@ fn partial_encode(
     )?;
 
     // Update the chunk
-    // TODO: More efficient update for multiple chunk subsets?
-    for (chunk_subset, chunk_subset_bytes) in subsets_and_bytes {
-        // Check the subset is within the chunk shape
-        if chunk_subset
-            .end_exc()
-            .iter()
-            .zip(decoded_representation.shape())
-            .any(|(a, b)| *a > b.get())
-        {
-            return Err(CodecError::InvalidArraySubsetError(
-                IncompatibleArraySubsetAndShapeError::new(
-                    (*chunk_subset).clone(),
-                    decoded_representation.shape_u64(),
-                ),
-            ));
-        }
-
-        chunk_subset_bytes.validate(
-            chunk_subset.num_elements(),
-            decoded_representation.data_type().size(),
-        )?;
-
-        decoded_value = update_array_bytes(
-            decoded_value,
-            &chunk_shape,
-            chunk_subset,
-            chunk_subset_bytes,
-            decoded_representation.data_type().size(),
-        )?;
+    if chunk_subset_indexer
+        .end_exc()
+        .iter()
+        .zip(decoded_representation.shape())
+        .any(|(a, b)| *a > b.get())
+    {
+        return Err(CodecError::InvalidArraySubsetError(
+            IncompatibleArraySubsetAndShapeError::new(
+                (*chunk_subset_indexer).clone(),
+                decoded_representation.shape_u64(),
+            ),
+        ));
     }
+
+    chunk_subset_bytes.validate(
+        chunk_subset_indexer.num_elements(),
+        decoded_representation.data_type().size(),
+    )?;
+
+    decoded_value = update_array_bytes(
+        decoded_value,
+        &chunk_shape,
+        chunk_subset_indexer,
+        chunk_subset_bytes,
+        decoded_representation.data_type().size(),
+    )?;
 
     let is_fill_value = !options.store_empty_chunks()
         && decoded_value.is_fill_value(decoded_representation.fill_value());
@@ -104,13 +97,13 @@ fn partial_encode(
         #[cfg(feature = "async")]
         if _async {
             output_handle
-                .partial_encode(&[(&array_subset_all, encoded_value)], options)
+                .partial_encode(&array_subset_all, &encoded_value, options)
                 .await
         } else {
-            output_handle.partial_encode(&[(&array_subset_all, encoded_value)], options)
+            output_handle.partial_encode(&array_subset_all, &encoded_value, options)
         }
         #[cfg(not(feature = "async"))]
-        output_handle.partial_encode(&[(&array_subset_all, encoded_value)], options)
+        output_handle.partial_encode(&array_subset_all, &encoded_value, options)
     }
 }
 
@@ -147,7 +140,8 @@ impl ArrayPartialEncoderTraits for ArrayToArrayPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode(
@@ -155,7 +149,8 @@ impl ArrayPartialEncoderTraits for ArrayToArrayPartialEncoderDefault {
             &self.output_handle,
             &self.decoded_representation,
             &self.codec,
-            subsets_and_bytes,
+            indexer,
+            bytes,
             options,
         )
     }
@@ -198,7 +193,8 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToArrayPartialEncoderDefault {
 
     async fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_async(
@@ -206,7 +202,8 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToArrayPartialEncoderDefault {
             &self.output_handle,
             &self.decoded_representation,
             &self.codec,
-            subsets_and_bytes,
+            indexer,
+            bytes,
             options,
         )
         .await
