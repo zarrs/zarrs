@@ -29,26 +29,26 @@ type ChunkIndices = ArrayIndices;
 /// A chunk cache with a fixed chunk capacity.
 pub struct ChunkCacheLruChunkLimit<T: ChunkCacheType> {
     array: Arc<Array<dyn ReadableStorageTraits>>,
-    cache: Cache<ChunkIndices, Arc<T>>,
+    cache: Cache<ChunkIndices, T>,
 }
 
 /// A thread local chunk cache with a fixed chunk capacity per thread.
 pub struct ChunkCacheLruChunkLimitThreadLocal<T: ChunkCacheType> {
     array: Arc<Array<dyn ReadableStorageTraits>>,
-    cache: ThreadLocal<Mutex<LruCache<ChunkIndices, Arc<T>>>>,
+    cache: ThreadLocal<Mutex<LruCache<ChunkIndices, T>>>,
     capacity: u64,
 }
 
 /// A chunk cache with a fixed size capacity.
 pub struct ChunkCacheLruSizeLimit<T: ChunkCacheType> {
     array: Arc<Array<dyn ReadableStorageTraits>>,
-    cache: Cache<ChunkIndices, Arc<T>>,
+    cache: Cache<ChunkIndices, T>,
 }
 
 /// A thread local chunk cache with a fixed chunk capacity per thread.
 pub struct ChunkCacheLruSizeLimitThreadLocal<T: ChunkCacheType> {
     array: Arc<Array<dyn ReadableStorageTraits>>,
-    cache: ThreadLocal<Mutex<LruCache<ChunkIndices, Arc<T>>>>,
+    cache: ThreadLocal<Mutex<LruCache<ChunkIndices, T>>>,
     capacity: usize,
     size: ThreadLocal<AtomicUsize>,
 }
@@ -107,11 +107,11 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
         Self { array, cache }
     }
 
-    // fn get(&self, chunk_indices: &[u64]) -> Option<Arc<CT>> {
+    // fn get(&self, chunk_indices: &[u64]) -> Option<CT> {
     //     self.cache.get(&chunk_indices.to_vec())
     // }
 
-    // fn insert(&self, chunk_indices: ChunkIndices, chunk: Arc<CT>) {
+    // fn insert(&self, chunk_indices: ChunkIndices, chunk: CT) {
     //     self.cache.insert(chunk_indices, chunk);
     // }
 
@@ -119,9 +119,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
         &self,
         chunk_indices: Vec<u64>,
         f: F,
-    ) -> Result<Arc<CT>, Arc<ArrayError>>
+    ) -> Result<CT, Arc<ArrayError>>
     where
-        F: FnOnce() -> Result<Arc<CT>, ArrayError>,
+        F: FnOnce() -> Result<CT, ArrayError>,
     {
         self.cache.try_get_with(chunk_indices, f)
     }
@@ -139,7 +139,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
         }
     }
 
-    fn cache(&self) -> &Mutex<LruCache<ChunkIndices, Arc<CT>>> {
+    fn cache(&self) -> &Mutex<LruCache<ChunkIndices, CT>> {
         self.cache.get_or(|| {
             Mutex::new(LruCache::new(
                 NonZeroUsize::new(usize::try_from(self.capacity).unwrap_or(usize::MAX).max(1))
@@ -148,7 +148,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
         })
     }
 
-    // fn get(&self, chunk_indices: &[u64]) -> Option<Arc<CT>> {
+    // fn get(&self, chunk_indices: &[u64]) -> Option<CT> {
     //     self.cache()
     //         .lock()
     //         .unwrap()
@@ -156,7 +156,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
     //         .cloned()
     // }
 
-    // fn insert(&self, chunk_indices: ChunkIndices, chunk: Arc<CT>) {
+    // fn insert(&self, chunk_indices: ChunkIndices, chunk: CT) {
     //     self.cache().lock().unwrap().push(chunk_indices, chunk);
     // }
 
@@ -164,9 +164,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
         &self,
         chunk_indices: Vec<u64>,
         f: F,
-    ) -> Result<Arc<CT>, Arc<ArrayError>>
+    ) -> Result<CT, Arc<ArrayError>>
     where
-        F: FnOnce() -> Result<Arc<CT>, ArrayError>,
+        F: FnOnce() -> Result<CT, ArrayError>,
     {
         self.cache()
             .lock()
@@ -183,16 +183,16 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     pub fn new(array: Arc<Array<dyn ReadableStorageTraits>>, capacity: u64) -> Self {
         let cache = CacheBuilder::new(capacity)
             .eviction_policy(EvictionPolicy::lru())
-            .weigher(|_k, v: &Arc<CT>| u32::try_from(v.size()).unwrap_or(u32::MAX))
+            .weigher(|_k, v: &CT| u32::try_from(v.size()).unwrap_or(u32::MAX))
             .build();
         Self { array, cache }
     }
 
-    // fn get(&self, chunk_indices: &[u64]) -> Option<Arc<CT>> {
+    // fn get(&self, chunk_indices: &[u64]) -> Option<CT> {
     //     self.cache.get(&chunk_indices.to_vec())
     // }
 
-    // fn insert(&self, chunk_indices: ChunkIndices, chunk: Arc<CT>) {
+    // fn insert(&self, chunk_indices: ChunkIndices, chunk: CT) {
     //     self.cache.insert(chunk_indices, chunk);
     // }
 
@@ -200,9 +200,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
         &self,
         chunk_indices: Vec<u64>,
         f: F,
-    ) -> Result<Arc<CT>, Arc<ArrayError>>
+    ) -> Result<CT, Arc<ArrayError>>
     where
-        F: FnOnce() -> Result<Arc<CT>, ArrayError>,
+        F: FnOnce() -> Result<CT, ArrayError>,
     {
         self.cache.try_get_with(chunk_indices, f)
     }
@@ -221,11 +221,11 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
         }
     }
 
-    fn cache(&self) -> &Mutex<LruCache<ChunkIndices, Arc<CT>>> {
+    fn cache(&self) -> &Mutex<LruCache<ChunkIndices, CT>> {
         self.cache.get_or(|| Mutex::new(LruCache::unbounded()))
     }
 
-    fn get(&self, chunk_indices: &[u64]) -> Option<Arc<CT>> {
+    fn get(&self, chunk_indices: &[u64]) -> Option<CT> {
         self.cache()
             .lock()
             .unwrap()
@@ -233,7 +233,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
             .cloned()
     }
 
-    fn insert(&self, chunk_indices: ChunkIndices, chunk: Arc<CT>) {
+    fn insert(&self, chunk_indices: ChunkIndices, chunk: CT) {
         let size = self.size.get_or_default();
         let size_old = size.fetch_add(chunk.size(), atomic::Ordering::SeqCst);
         if size_old + chunk.size() > self.capacity {
@@ -253,9 +253,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimitThreadLocal<CT> {
         &self,
         chunk_indices: Vec<u64>,
         f: F,
-    ) -> Result<Arc<CT>, Arc<ArrayError>>
+    ) -> Result<CT, Arc<ArrayError>>
     where
-        F: FnOnce() -> Result<Arc<CT>, ArrayError>,
+        F: FnOnce() -> Result<CT, ArrayError>,
     {
         if let Some(value) = self.get(&chunk_indices) {
             Ok(value)
@@ -293,14 +293,13 @@ macro_rules! impl_ChunkCacheLruEncoded {
             &self,
             chunk_indices: &[u64],
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(
-                        self.array
-                            .retrieve_encoded_chunk(chunk_indices)?
-                            .map(Cow::Owned),
-                    ))
+                    Ok(self
+                        .array
+                        .retrieve_encoded_chunk(chunk_indices)?
+                        .map(|chunk| Arc::new(Cow::Owned(chunk))))
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
@@ -339,14 +338,13 @@ macro_rules! impl_ChunkCacheLruEncoded {
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-            let chunk_encoded = self
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+            let chunk_encoded: ChunkCacheTypeEncoded = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(
-                        self.array
-                            .retrieve_encoded_chunk(chunk_indices)?
-                            .map(Cow::Owned),
-                    ))
+                    Ok(self
+                        .array
+                        .retrieve_encoded_chunk(chunk_indices)?
+                        .map(|chunk| Arc::new(Cow::Owned(chunk))))
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
@@ -355,13 +353,12 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     })
                 })?;
 
-            if let Some(chunk_encoded) = chunk_encoded.as_ref() {
+            if let Some(chunk_encoded) = chunk_encoded {
                 let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
-                let input_handle = Arc::new(chunk_encoded.clone().into_owned()); // FIXME: avoid this clone
                 Ok(self
                     .array
                     .codecs()
-                    .partial_decoder(input_handle, &chunk_representation, options)?
+                    .partial_decoder(chunk_encoded, &chunk_representation, options)?
                     .partial_decode(std::slice::from_ref(chunk_subset), options)?
                     .remove(0)
                     .into_owned()
@@ -394,7 +391,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             &self,
             chunk_indices: &[u64],
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             self.try_get_or_insert_with(chunk_indices.to_vec(), || {
                 Ok(Arc::new(
                     self.array
@@ -415,7 +412,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
                     Ok(Arc::new(
@@ -459,10 +456,10 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             &self,
             chunk_indices: &[u64],
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(self.array.partial_decoder(chunk_indices)?))
+                    self.array.partial_decoder(chunk_indices)
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
@@ -484,10 +481,10 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
             options: &crate::array::codec::CodecOptions,
-        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(self.array.partial_decoder(chunk_indices)?))
+                    self.array.partial_decoder(chunk_indices)
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
