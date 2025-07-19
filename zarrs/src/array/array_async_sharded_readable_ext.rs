@@ -740,9 +740,8 @@ mod tests {
     use super::*;
 
     async fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
-        let builder = opendal::services::Memory::default();
-        let op = opendal::Operator::new(builder)?.finish();
-        let store = Arc::new(zarrs_opendal::AsyncOpendalStore::new(op));
+        let store = object_store::memory::InMemory::new();
+        let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(store));
         let array_path = "/array";
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
@@ -952,9 +951,8 @@ mod tests {
     async fn array_sharded_ext_impl_transpose(
         valid_inner_chunk_shape: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let builder = opendal::services::Memory::default();
-        let op = opendal::Operator::new(builder)?.finish();
-        let store = Arc::new(zarrs_opendal::AsyncOpendalStore::new(op));
+        let store = object_store::memory::InMemory::new();
+        let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(store));
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
 
         let array_path = "/array";

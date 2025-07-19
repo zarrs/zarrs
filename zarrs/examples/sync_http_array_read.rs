@@ -23,7 +23,7 @@ impl AsyncToSyncBlockOn for TokioBlockOn {
 }
 
 enum Backend {
-    OpenDAL,
+    // OpenDAL,
     ObjectStore,
 }
 
@@ -36,12 +36,12 @@ fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableStorage = Arc::new(store::HTTPStore::new(HTTP_URL)?);
     let block_on = TokioBlockOn(tokio::runtime::Runtime::new()?);
     let mut store: ReadableStorage = match backend {
-        Backend::OpenDAL => {
-            let builder = opendal::services::Http::default().endpoint(HTTP_URL);
-            let operator = opendal::Operator::new(builder)?.finish();
-            let store = Arc::new(zarrs_opendal::AsyncOpendalStore::new(operator));
-            Arc::new(AsyncToSyncStorageAdapter::new(store, block_on))
-        }
+        // Backend::OpenDAL => {
+        //     let builder = opendal::services::Http::default().endpoint(HTTP_URL);
+        //     let operator = opendal::Operator::new(builder)?.finish();
+        //     let store = Arc::new(zarrs_opendal::AsyncOpendalStore::new(operator));
+        //     Arc::new(AsyncToSyncStorageAdapter::new(store, block_on))
+        // }
         Backend::ObjectStore => {
             let options = object_store::ClientOptions::new().with_allow_http(true);
             let store = object_store::http::HttpBuilder::new()
@@ -93,7 +93,7 @@ fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------ object_store backend ------------");
     http_array_read(Backend::ObjectStore)?;
-    println!("------------   opendal backend    ------------");
-    http_array_read(Backend::OpenDAL)?;
+    // println!("------------   opendal backend    ------------");
+    // http_array_read(Backend::OpenDAL)?;
     Ok(())
 }

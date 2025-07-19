@@ -172,13 +172,13 @@ impl<'a> ArrayBytes<'a> {
         }
     }
 
-    /// Convert into owned [`ArrayBytes<'_>`].
+    /// Convert into owned [`ArrayBytes<'static>`].
     #[must_use]
-    pub fn into_owned<'b>(self) -> ArrayBytes<'b> {
+    pub fn into_owned(self) -> ArrayBytes<'static> {
         match self {
-            Self::Fixed(bytes) => ArrayBytes::<'b>::Fixed(bytes.into_owned().into()),
+            Self::Fixed(bytes) => ArrayBytes::Fixed(bytes.into_owned().into()),
             Self::Variable(bytes, offsets) => {
-                ArrayBytes::<'b>::Variable(bytes.into_owned().into(), offsets.into_owned())
+                ArrayBytes::Variable(bytes.into_owned().into(), offsets.into_owned())
             }
         }
     }
