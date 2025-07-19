@@ -181,40 +181,37 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
             // Get all the inner chunks intersected
             inner_chunks_intersected.extend(
-                inner_chunks.into_iter().map(|inner_chunk_indices| {
+                inner_chunks.iter().map(|inner_chunk_indices| {
                     ravel_indices(&inner_chunk_indices, &chunks_per_shard)
                 }),
             );
 
             // Get all the inner chunks that need to be updated
-            inner_chunks_indices.extend(inner_chunks.into_iter().filter_map(
-                |inner_chunk_indices| {
-                    let inner_chunk_subset = self
-                        .chunk_grid
-                        .subset(&inner_chunk_indices)
-                        .expect("already validated")
-                        .expect("regular grid");
+            inner_chunks_indices.extend(inner_chunks.iter().filter_map(|inner_chunk_indices| {
+                let inner_chunk_subset = self
+                    .chunk_grid
+                    .subset(&inner_chunk_indices)
+                    .expect("already validated")
+                    .expect("regular grid");
 
-                    // Check if the inner chunk straddles the chunk subset
-                    if inner_chunk_subset
-                        .start()
+                // Check if the inner chunk straddles the chunk subset
+                if inner_chunk_subset
+                    .start()
+                    .iter()
+                    .zip(chunk_subset.start())
+                    .any(|(a, b)| a < b)
+                    || inner_chunk_subset
+                        .end_exc()
                         .iter()
-                        .zip(chunk_subset.start())
-                        .any(|(a, b)| a < b)
-                        || inner_chunk_subset
-                            .end_exc()
-                            .iter()
-                            .zip(chunk_subset.end_exc())
-                            .any(|(a, b)| *a > b)
-                    {
-                        let inner_chunk_index =
-                            ravel_indices(&inner_chunk_indices, &chunks_per_shard);
-                        Some(inner_chunk_index)
-                    } else {
-                        None
-                    }
-                },
-            ));
+                        .zip(chunk_subset.end_exc())
+                        .any(|(a, b)| *a > b)
+                {
+                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                    Some(inner_chunk_index)
+                } else {
+                    None
+                }
+            }));
         }
 
         // Get the byte ranges of the straddling inner chunk indices

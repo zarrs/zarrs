@@ -3,17 +3,19 @@ use std::{iter::FusedIterator, num::NonZeroU64};
 use itertools::izip;
 use rayon::iter::{
     plumbing::{bridge, Consumer, Producer, ProducerCallback, UnindexedConsumer},
-    IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
+use zarrs_metadata::ArrayShape;
 
 use crate::{
     array::{chunk_shape_to_array_shape, ArrayIndices},
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
+    array_subset::{
+        iterators::indices_iterator::{IndicesIntoIterator, ParIndicesIntoIterator},
+        ArraySubset, IncompatibleDimensionalityError,
+    },
 };
 
-use super::{
-    indices_iterator::ParIndicesIteratorProducer, Indices, IndicesIterator, ParIndicesIterator,
-};
+use super::{Indices, IndicesIterator, ParIndicesIterator};
 
 /// Iterates over the regular sized chunks overlapping this array subset.
 ///
@@ -39,9 +41,10 @@ use super::{
 /// ]
 /// ```
 ///
+#[derive(Clone)]
 pub struct Chunks {
-    indices: Indices,
-    chunk_shape: Vec<u64>,
+    pub(crate) indices: Indices,
+    pub(crate) chunk_shape: Vec<u64>,
 }
 
 impl Chunks {
@@ -107,7 +110,22 @@ impl<'a> IntoIterator for &'a Chunks {
 
     fn into_iter(self) -> Self::IntoIter {
         ChunksIterator {
-            inner: self.indices.into_iter(),
+            inner: self.indices.iter(),
+            chunk_shape: &self.chunk_shape,
+        }
+    }
+}
+
+impl<'a> IntoParallelRefIterator<'a> for &'a Chunks {
+    type Item = (ArrayIndices, ArraySubset);
+    type Iter = ParChunksIterator<'a>;
+
+    fn par_iter(&self) -> Self::Iter {
+        ParChunksIterator {
+            inner: ParIndicesIterator {
+                subset: &self.indices.subset,
+                range: self.indices.range.clone(),
+            },
             chunk_shape: &self.chunk_shape,
         }
     }
@@ -119,8 +137,35 @@ impl<'a> IntoParallelIterator for &'a Chunks {
 
     fn into_par_iter(self) -> Self::Iter {
         ParChunksIterator {
-            inner: self.indices.into_par_iter(),
+            inner: ParIndicesIterator {
+                subset: &self.indices.subset,
+                range: self.indices.range.clone(),
+            },
             chunk_shape: &self.chunk_shape,
+        }
+    }
+}
+
+impl IntoIterator for Chunks {
+    type Item = (ArrayIndices, ArraySubset);
+    type IntoIter = ChunksIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ChunksIntoIterator {
+            inner: self.indices.into_iter(),
+            chunk_shape: self.chunk_shape,
+        }
+    }
+}
+
+impl IntoParallelIterator for Chunks {
+    type Item = (ArrayIndices, ArraySubset);
+    type Iter = ParChunksIntoIterator;
+
+    fn into_par_iter(self) -> Self::Iter {
+        ParChunksIntoIterator {
+            inner: self.indices.into_par_iter(),
+            chunk_shape: self.chunk_shape,
         }
     }
 }
@@ -133,40 +178,74 @@ pub struct ChunksIterator<'a> {
     chunk_shape: &'a [u64],
 }
 
-impl ChunksIterator<'_> {
-    fn chunk_indices_with_subset(&self, chunk_indices: Vec<u64>) -> (Vec<u64>, ArraySubset) {
-        let ranges =
-            std::iter::zip(&chunk_indices, self.chunk_shape).map(|(i, c)| ((i * c)..(i * c) + c));
-        let chunk_subset = ArraySubset::from(ranges);
-        (chunk_indices, chunk_subset)
-    }
+/// Serial chunks iterator.
+///
+/// See [`Chunks`].
+pub struct ChunksIntoIterator {
+    inner: IndicesIntoIterator,
+    chunk_shape: ArrayShape,
 }
 
-impl Iterator for ChunksIterator<'_> {
-    type Item = (ArrayIndices, ArraySubset);
+macro_rules! impl_chunks_iterator {
+    (private $iterator_type:ty, $qualifier:tt) => {
+        impl $iterator_type {
+            fn chunk_indices_with_subset(
+                &self,
+                chunk_indices: Vec<u64>,
+            ) -> (Vec<u64>, ArraySubset) {
+                let ranges = std::iter::zip(&chunk_indices, $qualifier!(self.chunk_shape))
+                    .map(|(i, c)| ((i * c)..(i * c) + c));
+                let chunk_subset = ArraySubset::from(ranges);
+                (chunk_indices, chunk_subset)
+            }
+        }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|chunk_indices| self.chunk_indices_with_subset(chunk_indices))
-    }
+        impl Iterator for $iterator_type {
+            type Item = (ArrayIndices, ArraySubset);
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
+            fn next(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next()
+                    .map(|chunk_indices| self.chunk_indices_with_subset(chunk_indices))
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.inner.size_hint()
+            }
+        }
+
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next_back()
+                    .map(|chunk_indices| self.chunk_indices_with_subset(chunk_indices))
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
+    ($iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                $v
+            };
+        }
+        impl_chunks_iterator! {private $iterator_type, qualifier}
+    };
+    (ref $iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                &$v
+            };
+        }
+        impl_chunks_iterator! {private $iterator_type, qualifier}
+    };
 }
 
-impl DoubleEndedIterator for ChunksIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|chunk_indices| self.chunk_indices_with_subset(chunk_indices))
-    }
-}
-
-impl ExactSizeIterator for ChunksIterator<'_> {}
-
-impl FusedIterator for ChunksIterator<'_> {}
+impl_chunks_iterator!(ChunksIterator<'_>);
+impl_chunks_iterator!(ref ChunksIntoIterator);
 
 /// Parallel chunks iterator.
 ///
@@ -176,61 +255,72 @@ pub struct ParChunksIterator<'a> {
     chunk_shape: &'a [u64],
 }
 
-impl ParallelIterator for ParChunksIterator<'_> {
+/// Parallel chunks iterator.
+///
+/// See [`Chunks`].
+pub struct ParChunksIntoIterator {
+    pub(crate) inner: ParIndicesIntoIterator,
+    pub(crate) chunk_shape: ArrayShape,
+}
+
+macro_rules! impl_par_chunks_iterator {
+    ($iterator_type:ty) => {
+        impl ParallelIterator for $iterator_type {
+            type Item = (Vec<u64>, ArraySubset);
+
+            fn drive_unindexed<C>(self, consumer: C) -> C::Result
+            where
+                C: UnindexedConsumer<Self::Item>,
+            {
+                bridge(self, consumer)
+            }
+
+            fn opt_len(&self) -> Option<usize> {
+                Some(self.len())
+            }
+        }
+
+        impl IndexedParallelIterator for $iterator_type {
+            fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
+                callback.callback(self)
+            }
+
+            fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+                bridge(self, consumer)
+            }
+
+            fn len(&self) -> usize {
+                self.inner.len()
+            }
+        }
+    };
+}
+
+impl_par_chunks_iterator!(ParChunksIterator<'_>);
+impl_par_chunks_iterator!(ParChunksIntoIterator);
+
+impl Producer for ParChunksIterator<'_> {
     type Item = (Vec<u64>, ArraySubset);
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        bridge(self, consumer)
-    }
-
-    fn opt_len(&self) -> Option<usize> {
-        Some(self.len())
-    }
-}
-
-impl IndexedParallelIterator for ParChunksIterator<'_> {
-    fn with_producer<CB: ProducerCallback<Self::Item>>(self, callback: CB) -> CB::Output {
-        let producer = ParChunksIteratorProducer::from(&self);
-        callback.callback(producer)
-    }
-
-    fn drive<C: Consumer<Self::Item>>(self, consumer: C) -> C::Result {
-        bridge(self, consumer)
-    }
-
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-}
-
-#[derive(Debug)]
-struct ParChunksIteratorProducer<'a> {
-    inner: ParIndicesIteratorProducer<'a>,
-    chunk_shape: &'a [u64],
-}
-
-impl<'a> Producer for ParChunksIteratorProducer<'a> {
-    type Item = (Vec<u64>, ArraySubset);
-    type IntoIter = ChunksIterator<'a>;
+    type IntoIter = ChunksIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        ChunksIterator {
-            inner: IndicesIterator::new_with_start_end(self.inner.subset, self.inner.range),
-            chunk_shape: self.chunk_shape,
+        ChunksIntoIterator {
+            inner: IndicesIntoIterator {
+                subset: self.inner.subset.clone(),
+                range: self.inner.range,
+            },
+            chunk_shape: self.chunk_shape.to_vec(),
         }
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
         let (left, right) = self.inner.split_at(index);
         (
-            ParChunksIteratorProducer {
+            ParChunksIterator {
                 inner: left,
                 chunk_shape: self.chunk_shape,
             },
-            ParChunksIteratorProducer {
+            ParChunksIterator {
                 inner: right,
                 chunk_shape: self.chunk_shape,
             },
@@ -238,11 +328,31 @@ impl<'a> Producer for ParChunksIteratorProducer<'a> {
     }
 }
 
-impl<'a> From<&'a ParChunksIterator<'_>> for ParChunksIteratorProducer<'a> {
-    fn from(iterator: &'a ParChunksIterator<'_>) -> Self {
-        Self {
-            inner: ParIndicesIteratorProducer::from(&iterator.inner),
-            chunk_shape: iterator.chunk_shape,
+impl Producer for ParChunksIntoIterator {
+    type Item = (Vec<u64>, ArraySubset);
+    type IntoIter = ChunksIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ChunksIntoIterator {
+            inner: IndicesIntoIterator {
+                subset: self.inner.subset.clone(),
+                range: self.inner.range,
+            },
+            chunk_shape: self.chunk_shape.clone(),
         }
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let (left, right) = self.inner.split_at(index);
+        (
+            ParChunksIntoIterator {
+                inner: left,
+                chunk_shape: self.chunk_shape.clone(),
+            },
+            ParChunksIntoIterator {
+                inner: right,
+                chunk_shape: self.chunk_shape,
+            },
+        )
     }
 }
