@@ -683,7 +683,7 @@ mod tests {
             ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
         ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
@@ -742,7 +742,7 @@ mod tests {
             ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
         ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,

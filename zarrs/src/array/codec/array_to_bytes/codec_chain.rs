@@ -896,7 +896,7 @@ mod tests {
         // }
         // assert_eq!(bytes, decoded);
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .clone()
             .partial_decoder(

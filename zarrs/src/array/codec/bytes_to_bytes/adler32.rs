@@ -144,7 +144,7 @@ mod tests {
                 .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-            let input_handle = Arc::new(std::io::Cursor::new(encoded));
+            let input_handle = Arc::new(encoded);
             let partial_decoder = codec
                 .partial_decoder(
                     input_handle.clone(),
@@ -185,7 +185,7 @@ mod tests {
                 .encode(Cow::Owned(bytes.clone()), &CodecOptions::default())
                 .unwrap();
             let decoded_regions = [ByteRange::FromStart(3, Some(2))];
-            let input_handle = Arc::new(std::io::Cursor::new(encoded));
+            let input_handle = Arc::new(encoded);
             let partial_decoder = codec
                 .async_partial_decoder(
                     input_handle,
