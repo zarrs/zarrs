@@ -261,11 +261,11 @@ impl ArraySubset {
         element_size: usize,
     ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
         let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
-        let byte_length = contiguous_indices.contiguous_elements_usize() * element_size;
-        for array_index in &contiguous_indices {
-            let byte_index = array_index * element_size as u64;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length as u64)));
+        let element_size = element_size as u64;
+        for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
+            let byte_index = array_index * element_size;
+            let byte_length = contiguous_elements * element_size;
+            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length)));
         }
         Ok(byte_ranges)
     }
@@ -301,10 +301,12 @@ impl ArraySubset {
         let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
         let mut subset_offset = 0;
         // SAFETY: `array_shape` is encapsulated by an array with `array_shape`.
-        let contiguous_elements = self.contiguous_linearised_indices(array_shape)?;
-        let element_length = contiguous_elements.contiguous_elements_usize();
-        for array_index in &contiguous_elements {
+        for (array_index, contiguous_elements) in
+            &self.contiguous_linearised_indices(array_shape)?
+        {
             let element_offset = usize::try_from(array_index).unwrap();
+            let element_length =
+                usize::try_from(contiguous_elements * size_of::<T>() as u64).unwrap();
             debug_assert!(element_offset + element_length <= elements.len());
             debug_assert!(subset_offset + element_length <= num_elements);
             elements_subset_slice[subset_offset..subset_offset + element_length]
