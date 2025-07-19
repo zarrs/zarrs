@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change `byte_range::extract_byte_ranges_read_seek` to take `T` instead of `&mut T`
 - **Breaking**: Auto implement `[Async]BytesPartialDecoderTraits` for `T: AsRef<[u8]> + ...`
 - **Breaking**: `Arc` the `ChunkCache` types
+- **Breaking**: Change `Contiguous[Linearised]Indices` iterators to include the number of contiguous indices in their `Item`
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
