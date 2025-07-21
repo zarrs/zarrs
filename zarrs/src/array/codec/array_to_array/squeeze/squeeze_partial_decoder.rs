@@ -49,7 +49,7 @@ fn get_squeezed_array_subset(
         shape.iter()
     )
     .filter(|(_, _, &shape)| shape.get() > 1)
-    .map(|(rstart, rshape, _)| (*rstart..rstart + rshape));
+    .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
 
     let decoded_region_squeeze = ArraySubset::from(ranges);
     Ok(decoded_region_squeeze)

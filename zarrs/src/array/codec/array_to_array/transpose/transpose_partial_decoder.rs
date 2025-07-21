@@ -56,7 +56,7 @@ fn get_transposed_array_subset(
 ) -> ArraySubset {
     let start = permute(decoded_region.start(), &order.0);
     let size = permute(decoded_region.shape(), &order.0);
-    let ranges = start.iter().zip(size).map(|(&st, si)| (st..(st + si)));
+    let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
     ArraySubset::from(ranges)
 }
 
