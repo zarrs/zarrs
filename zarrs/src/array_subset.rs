@@ -26,8 +26,8 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
-    storage::byte_range::ByteRange,
     indexer::Indexer,
+    storage::byte_range::ByteRange,
 };
 
 /// An array subset.
