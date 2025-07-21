@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Into[Parallel]Iterator` for `Indices` and `IntoParallelRefIterator` for `&Indices`
   - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
+- Add initial generic indexing support to partial decoders
+  - Add `Indexer` trait with implementations for `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
+  - Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
+- Add `IncompatibleIndexerAndShapeError`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -48,10 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
   ```
 - **Major Breaking**: change the `[Async]ArrayPartialDecoderTraits::partial_decode[_into]()` trait method:
-  - `array_subsets: &[ArraySubset]` parameter changed to `indexer: &ArraySubset`
+  - `array_subsets: &[ArraySubset]` parameter changed to `indexer: &dyn Indexer`
   - Returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
 - **Major Breaking**: change the `ArrayPartialEncoderTraits::partial_encode()` trait method:
-   - `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` parameter changed to `indexer: &ArraySubset` and `bytes: &ArrayBytes<'_>`
+   - `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` parameter changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
@@ -86,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
 - **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
 - **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
+- **Breaking**: Remove `IncompatibleArraySubsetAndShapeError`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one

@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, ops::IndexMut};
 
 use derive_more::derive::Display;
 use itertools::Itertools;
@@ -6,8 +6,9 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
     byte_range::extract_byte_ranges_concat_unchecked,
+    indexer::Indexer,
     metadata::DataTypeSize,
 };
 
@@ -216,22 +217,16 @@ impl<'a> ArrayBytes<'a> {
     /// Panics if indices in the subset exceed [`usize::MAX`].
     pub fn extract_array_subset(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
             ArrayBytes::Variable(bytes, offsets) => {
-                let num_elements = indexer.num_elements();
+                let num_elements = indexer.len();
                 let indices: Vec<_> = indexer
-                    .linearised_indices(array_shape)
-                    .map_err(|_| {
-                        IncompatibleArraySubsetAndShapeError::new(
-                            indexer.clone(),
-                            array_shape.to_vec(),
-                        )
-                    })?
-                    .into_iter()
+                    .iter_linearised_indices(array_shape)
+                    .map_err(|_| IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))?
                     .collect();
                 let mut bytes_length = 0;
                 for index in &indices {
@@ -327,19 +322,16 @@ fn validate_bytes(
     }
 }
 
-pub(crate) fn update_bytes_vlen<'a>(
+fn update_bytes_vlen_array_subset<'a>(
     input_bytes: &RawBytes,
     input_offsets: &RawBytesOffsets,
     input_shape: &[u64],
     update_bytes: &RawBytes,
     update_offsets: &RawBytesOffsets,
     update_subset: &ArraySubset,
-) -> Result<ArrayBytes<'a>, IncompatibleArraySubsetAndShapeError> {
+) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
     if !update_subset.inbounds_shape(input_shape) {
-        return Err(IncompatibleArraySubsetAndShapeError::new(
-            update_subset.clone(),
-            input_shape.to_vec(),
-        ));
+        return Err(IncompatibleIndexerAndShapeError::new(input_shape.to_vec()));
     }
 
     // Get the current and new length of the bytes in the chunk subset
@@ -397,53 +389,177 @@ pub(crate) fn update_bytes_vlen<'a>(
     Ok(array_bytes)
 }
 
-/// Update a subset of an array.
+fn update_bytes_vlen_indexer<'a>(
+    input_bytes: &RawBytes,
+    input_offsets: &RawBytesOffsets,
+    input_shape: &[u64],
+    update_bytes: &RawBytes,
+    update_offsets: &RawBytesOffsets,
+    update_indexer: &dyn Indexer,
+) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
+    // Get the size of the new bytes
+    let updated_size_new = update_bytes.len();
+    debug_assert_eq!(
+        updated_size_new,
+        update_offsets
+            .iter()
+            .tuple_windows()
+            .map(|(curr, next)| next - curr)
+            .sum::<usize>()
+    );
+
+    // Get the indices of elements to update and the size of the old bytes being replaced
+    let num_elements = usize::try_from(input_shape.iter().product::<u64>()).unwrap();
+    let update_indices = update_indexer.iter_linearised_indices(input_shape)?;
+    let mut element_indices_update: Vec<Option<usize>> = vec![None; num_elements];
+    let mut updated_size_old = 0;
+    for (update_index, input_index) in update_indices.enumerate() {
+        let input_index = usize::try_from(input_index).unwrap();
+        updated_size_old += input_offsets[input_index + 1] - input_offsets[input_index];
+        element_indices_update[input_index] = Some(update_index);
+    }
+
+    // Populate new offsets and bytes
+    let mut offsets_new = Vec::with_capacity(input_offsets.len());
+    let bytes_new_len = (input_bytes.len() + updated_size_new)
+        .checked_sub(updated_size_old)
+        .unwrap();
+    let mut bytes_new = Vec::with_capacity(bytes_new_len);
+    for input_index in 0..num_elements {
+        offsets_new.push(bytes_new.len());
+        if let Some(update_index) = element_indices_update[input_index] {
+            let start = update_offsets[update_index];
+            let end = update_offsets[update_index + 1];
+            bytes_new.extend_from_slice(&update_bytes[start..end]);
+        } else {
+            let start = input_offsets[input_index];
+            let end = input_offsets[input_index + 1];
+            bytes_new.extend_from_slice(&input_bytes[start..end]);
+        }
+    }
+    offsets_new.push(bytes_new.len());
+    let offsets_new = unsafe {
+        // SAFETY: The offsets are monotonically increasing.
+        RawBytesOffsets::new_unchecked(offsets_new)
+    };
+    let array_bytes = unsafe {
+        // SAFETY: The last offset is equal to the length of the bytes
+        ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)
+    };
+    Ok(array_bytes)
+}
+
+/// Update array bytes. Specialised for `ArraySubset`.
+///
+/// # Errors
+/// Returns a [`CodecError`] if
+/// - `bytes` are not compatible with the `shape` and `data_type_size`,
+/// - `output_subset_bytes` are not compatible with the `output_subset` and `data_type_size`,
+/// - `output_subset` is not within the bounds of `shape`
+fn update_array_bytes_array_subset<'a>(
+    bytes: ArrayBytes,
+    shape: &[u64],
+    update_subset: &ArraySubset,
+    update_bytes: &ArrayBytes,
+    data_type_size: DataTypeSize,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    match (bytes, update_bytes, data_type_size) {
+        (
+            ArrayBytes::Variable(bytes, offsets),
+            ArrayBytes::Variable(update_bytes, update_offsets),
+            DataTypeSize::Variable,
+        ) => Ok(update_bytes_vlen_array_subset(
+            &bytes,
+            &offsets,
+            shape,
+            update_bytes,
+            update_offsets,
+            update_subset,
+        )?),
+        (
+            ArrayBytes::Fixed(bytes),
+            ArrayBytes::Fixed(update_bytes),
+            DataTypeSize::Fixed(data_type_size),
+        ) => {
+            let mut bytes = bytes.into_owned();
+            let mut output_view: ArrayBytesFixedDisjointView<'_> = unsafe {
+                // SAFETY: Only one view is created, so it is disjoint
+                ArrayBytesFixedDisjointView::new(
+                    UnsafeCellSlice::new(&mut bytes),
+                    data_type_size,
+                    shape,
+                    update_subset.clone(),
+                )
+            }
+            .map_err(CodecError::from)?;
+            output_view.copy_from_slice(update_bytes)?;
+            Ok(ArrayBytes::new_flen(bytes))
+        }
+        (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
+        (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
+    }
+}
+
+/// Update array bytes.
 ///
 /// This function is used internally by [`crate::array::Array::store_chunk_subset_opt`] and [`crate::array::Array::async_store_chunk_subset_opt`].
 ///
 /// # Errors
 /// Returns a [`CodecError`] if
-/// - `output_bytes` are not compatible with the `output_shape` and `data_type_size`,
+/// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `output_subset_bytes` are not compatible with the `output_subset` and `data_type_size`,
-/// - `output_subset` is not within the bounds of `output_shape`
+/// - `output_subset` is not within the bounds of `shape`
+///
+/// # Panics
+/// Panics if the indexer references bytes beyond [`usize::MAX`].
 pub fn update_array_bytes<'a>(
-    output_bytes: ArrayBytes,
-    output_shape: &[u64],
-    output_subset: &ArraySubset,
-    output_subset_bytes: &ArrayBytes,
+    bytes: ArrayBytes,
+    shape: &[u64],
+    update_indexer: &dyn crate::indexer::Indexer,
+    update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    match (output_bytes, output_subset_bytes, data_type_size) {
-        (
-            ArrayBytes::Variable(chunk_bytes, chunk_offsets),
-            ArrayBytes::Variable(chunk_subset_bytes, chunk_subset_offsets),
-            DataTypeSize::Variable,
-        ) => Ok(update_bytes_vlen(
-            &chunk_bytes,
-            &chunk_offsets,
-            output_shape,
-            chunk_subset_bytes,
-            chunk_subset_offsets,
+    if let Some(output_subset) = update_indexer.as_array_subset() {
+        return update_array_bytes_array_subset(
+            bytes,
+            shape,
             output_subset,
+            update_bytes,
+            data_type_size,
+        );
+    }
+
+    match (bytes, update_bytes, data_type_size) {
+        (
+            ArrayBytes::Variable(bytes, offsets),
+            ArrayBytes::Variable(update_bytes, update_offsets),
+            DataTypeSize::Variable,
+        ) => Ok(update_bytes_vlen_indexer(
+            &bytes,
+            &offsets,
+            shape,
+            update_bytes,
+            update_offsets,
+            update_indexer,
         )?),
         (
-            ArrayBytes::Fixed(chunk_bytes),
-            ArrayBytes::Fixed(chunk_subset_bytes),
+            ArrayBytes::Fixed(bytes),
+            ArrayBytes::Fixed(update_bytes),
             DataTypeSize::Fixed(data_type_size),
         ) => {
-            let mut chunk_bytes = chunk_bytes.into_owned();
-            let mut output_view = unsafe {
-                // SAFETY: Only one view is created, so it is disjoint
-                ArrayBytesFixedDisjointView::new(
-                    UnsafeCellSlice::new(&mut chunk_bytes),
-                    data_type_size,
-                    output_shape,
-                    output_subset.clone(),
-                )
+            let mut bytes = bytes.into_owned();
+            let byte_ranges = update_indexer.byte_ranges(shape, data_type_size)?; // FIXME: Prefer not to collect here, and go parallel
+            let mut offset: usize = 0;
+            // TODO: Add `is_disjoint()` to indexer, so that this could go parallel
+            for byte_range in byte_ranges {
+                let byte_range_len =
+                    usize::try_from(byte_range.length(bytes.len() as u64)).unwrap();
+                bytes
+                    .index_mut(byte_range.to_range_usize(bytes.len() as u64))
+                    .copy_from_slice(&update_bytes[offset..offset + byte_range_len]);
+                offset += byte_range_len;
             }
-            .map_err(CodecError::from)?;
-            output_view.copy_from_slice(chunk_subset_bytes)?;
-            Ok(ArrayBytes::new_flen(chunk_bytes))
+            Ok(ArrayBytes::new_flen(bytes))
         }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
@@ -466,7 +582,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
         for (_, chunk_subset) in &chunk_bytes_and_subsets {
             // println!("{chunk_subset:?}");
             let indices = chunk_subset.linearised_indices(array_shape).unwrap();
-            for idx in &indices {
+            for idx in indices {
                 let idx = usize::try_from(idx).unwrap();
                 element_in_input[idx] += 1;
             }
@@ -530,10 +646,10 @@ pub(crate) fn merge_chunks_vlen<'a>(
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
     array_shape: &[u64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    let indices = indexer.linearised_indices(array_shape)?;
+    let indices = indexer.iter_linearised_indices(array_shape)?;
     let indices: Vec<_> = indices.into_iter().collect();
     let mut region_bytes_len = 0;
     for index in &indices {
@@ -543,8 +659,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
         debug_assert!(next >= curr);
         region_bytes_len += next - curr;
     }
-    let mut region_offsets =
-        Vec::with_capacity(usize::try_from(indexer.num_elements() + 1).unwrap());
+    let mut region_offsets = Vec::with_capacity(usize::try_from(indexer.len() + 1).unwrap());
     let mut region_bytes = Vec::with_capacity(region_bytes_len);
     for index in &indices {
         region_offsets.push(region_bytes.len());

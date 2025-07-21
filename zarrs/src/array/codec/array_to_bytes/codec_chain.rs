@@ -907,7 +907,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), decoded.size()); // codec chain caches with most decompression codecs
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_region, &CodecOptions::default())
+            .partial_decode(decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
