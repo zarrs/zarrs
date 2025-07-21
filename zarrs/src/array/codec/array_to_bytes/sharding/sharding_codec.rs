@@ -29,9 +29,13 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 
 use super::{
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_decoded_representation, sharding_partial_decoder, sharding_partial_encoder,
-    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
+    sharding_index_decoded_representation, sharding_partial_decoder_sync::ShardingPartialDecoder,
+    sharding_partial_encoder, ShardingCodecConfiguration, ShardingCodecConfigurationV1,
+    ShardingIndexLocation,
 };
+
+#[cfg(feature = "async")]
+use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
@@ -422,17 +426,15 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            sharding_partial_decoder::ShardingPartialDecoder::new(
-                input_handle,
-                decoded_representation.clone(),
-                self.chunk_shape.clone(),
-                self.inner_codecs.clone(),
-                &self.index_codecs,
-                self.index_location,
-                options,
-            )?,
-        ))
+        Ok(Arc::new(ShardingPartialDecoder::new(
+            input_handle,
+            decoded_representation.clone(),
+            &self.chunk_shape,
+            self.inner_codecs.clone(),
+            &self.index_codecs,
+            self.index_location,
+            options,
+        )?))
     }
 
     #[cfg(feature = "async")]
@@ -443,10 +445,10 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            sharding_partial_decoder::AsyncShardingPartialDecoder::new(
+            AsyncShardingPartialDecoder::new(
                 input_handle,
                 decoded_representation.clone(),
-                self.chunk_shape.clone(),
+                &self.chunk_shape,
                 self.inner_codecs.clone(),
                 &self.index_codecs,
                 self.index_location,

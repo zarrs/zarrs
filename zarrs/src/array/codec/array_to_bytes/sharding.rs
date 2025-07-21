@@ -54,7 +54,9 @@
 
 mod sharding_codec;
 mod sharding_codec_builder;
-mod sharding_partial_decoder;
+#[cfg(feature = "async")]
+mod sharding_partial_decoder_async;
+mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
 use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
@@ -65,10 +67,10 @@ pub use zarrs_metadata_ext::codec::sharding::{
 
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
-pub(crate) use sharding_partial_decoder::ShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder::AsyncShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
 use crate::{
     array::{
@@ -76,8 +78,11 @@ use crate::{
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
             CodecPlugin,
         },
-        BytesRepresentation, ChunkRepresentation, ChunkShape, CodecChain, DataType,
+        concurrency::calc_concurrency_outer_inner,
+        ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
+        ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
+    array_subset::ArraySubset,
     byte_range::ByteRange,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -195,6 +200,61 @@ fn get_index_byte_range(
         ShardingIndexLocation::Start => ByteRange::FromStart(0, Some(index_encoded_size)),
         ShardingIndexLocation::End => ByteRange::Suffix(index_encoded_size),
     })
+}
+
+fn inner_chunk_byte_range(
+    shard_index: Option<&[u64]>,
+    shard_shape: &[NonZeroU64],
+    chunk_shape: &[NonZeroU64],
+    chunk_indices: &[u64],
+) -> Result<Option<ByteRange>, CodecError> {
+    if let Some(shard_index) = shard_index {
+        let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
+        let chunks_per_shard = chunks_per_shard.to_array_shape();
+
+        let shard_index_idx: usize =
+            usize::try_from(ravel_indices(chunk_indices, &chunks_per_shard) * 2).unwrap();
+        let offset = shard_index[shard_index_idx];
+        let size = shard_index[shard_index_idx + 1];
+        Ok(Some(ByteRange::new(offset..offset + size)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn partial_decode_empty_shard<'a>(
+    shard_representation: &ChunkRepresentation,
+    indexer: &ArraySubset,
+) -> ArrayBytes<'a> {
+    let array_size = ArraySize::new(
+        shard_representation.data_type().size(),
+        indexer.num_elements(),
+    );
+    ArrayBytes::new_fill_value(array_size, shard_representation.fill_value())
+}
+
+fn get_concurrent_target_and_codec_options(
+    inner_codecs: &CodecChain,
+    chunk_representation: &ChunkRepresentation,
+    chunks_per_shard: &[u64],
+    options: &CodecOptions,
+) -> Result<(usize, CodecOptions), CodecError> {
+    let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
+
+    // Calculate inner chunk/codec concurrency
+    let (inner_chunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
+        options.concurrent_target(),
+        &RecommendedConcurrency::new_maximum(std::cmp::min(
+            options.concurrent_target(),
+            num_chunks,
+        )),
+        &inner_codecs.recommended_concurrency(chunk_representation)?,
+    );
+    let options = options
+        .into_builder()
+        .concurrent_target(concurrency_limit_codec)
+        .build();
+    Ok((inner_chunk_concurrent_limit, options))
 }
 
 /// Returns `None` if there is no shard.

@@ -164,7 +164,7 @@ impl AsyncArrayShardedReadableExtCache {
                 AsyncShardingPartialDecoder::new(
                     input_handle,
                     chunk_representation,
-                    sharding_codec.chunk_shape.clone(),
+                    &sharding_codec.chunk_shape,
                     sharding_codec.inner_codecs.clone(),
                     &sharding_codec.index_codecs,
                     sharding_codec.index_location,
