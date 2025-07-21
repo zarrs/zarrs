@@ -82,7 +82,6 @@ use crate::{
         ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
         ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
-    array_subset::ArraySubset,
     byte_range::ByteRange,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -224,12 +223,9 @@ fn inner_chunk_byte_range(
 
 fn partial_decode_empty_shard<'a>(
     shard_representation: &ChunkRepresentation,
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
 ) -> ArrayBytes<'a> {
-    let array_size = ArraySize::new(
-        shard_representation.data_type().size(),
-        indexer.num_elements(),
-    );
+    let array_size = ArraySize::new(shard_representation.data_type().size(), indexer.len());
     ArrayBytes::new_fill_value(array_size, shard_representation.fill_value())
 }
 

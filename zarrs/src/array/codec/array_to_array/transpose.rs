@@ -277,7 +277,7 @@ mod tests {
         ];
         for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .partial_decode(&decoded_region, &CodecOptions::default())
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
                 &decoded_partial_chunk.into_fixed().unwrap(),
@@ -341,7 +341,7 @@ mod tests {
         ];
         for (decoded_region, answer) in decoded_regions.into_iter().zip(answer.iter()) {
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .partial_decode(&decoded_region, &CodecOptions::default())
                 .await
                 .unwrap();
             let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(

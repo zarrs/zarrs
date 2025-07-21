@@ -224,6 +224,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// # use zarrs::array::{Array, ArrayBytes};
 /// # use zarrs::array_subset::ArraySubset;
 /// # use zarrs::array_subset::iterators::Indices;
+/// # use zarrs::indexer::Indexer;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
 /// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
 /// # let array = Array::open(store, "/group/array")?;

@@ -4,15 +4,18 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
-use crate::array::{
-    array_bytes::merge_chunks_vlen,
-    codec::{
-        ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-        AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain, CodecError,
-        CodecOptions,
+use crate::{
+    array::{
+        array_bytes::merge_chunks_vlen,
+        codec::{
+            ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+            AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
+            CodecError, CodecOptions,
+        },
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySize,
+        ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
     },
-    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-    ChunkShape, DataType, DataTypeSize, RawBytes,
+    indexer::Indexer,
 };
 
 use super::{calculate_chunks_per_shard, ShardingIndexLocation};
@@ -104,22 +107,30 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.shard_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.dimensionality(),
                 self.shard_representation.dimensionality(),
             ));
         }
 
         match self.shard_representation.element_size() {
             DataTypeSize::Fixed(data_type_size) => {
-                partial_decode_fixed_array_subset(self, indexer, options, data_type_size).await
+                if let Some(subset) = indexer.as_array_subset() {
+                    partial_decode_fixed_array_subset(self, subset, options, data_type_size).await
+                } else {
+                    partial_decode_fixed_indexer(self, indexer, options, data_type_size).await
+                }
             }
             DataTypeSize::Variable => {
-                partial_decode_variable_array_subset(self, indexer, options).await
+                if let Some(subset) = indexer.as_array_subset() {
+                    partial_decode_variable_array_subset(self, subset, options).await
+                } else {
+                    partial_decode_variable_indexer(self, indexer, options).await
+                }
             }
         }
     }
@@ -382,4 +393,167 @@ async fn partial_decode_variable_array_subset(
     // Convert into an array
     let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?;
     Ok(out_array_subset)
+}
+
+async fn partial_decode_fixed_indexer(
+    partial_decoder: &AsyncShardingPartialDecoder,
+    indexer: &dyn Indexer,
+    options: &CodecOptions,
+    data_type_size: usize,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let Some(shard_index) = &partial_decoder.shard_index else {
+        return Ok(super::partial_decode_empty_shard(
+            &partial_decoder.shard_representation,
+            indexer,
+        ));
+    };
+    let chunks_per_shard = calculate_chunks_per_shard(
+        partial_decoder.shard_representation.shape(),
+        partial_decoder.chunk_representation.shape(),
+    )?
+    .to_array_shape();
+    // let (inner_chunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+    //     &partial_decoder.inner_codecs,
+    //     &partial_decoder.chunk_representation,
+    //     &chunks_per_shard,
+    //     options,
+    // )?;
+    let options = &options;
+
+    let output_len = usize::try_from(indexer.len() * data_type_size as u64).unwrap();
+    let mut output: Vec<u8> = Vec::with_capacity(output_len);
+    let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    // FIXME: Parallel iter indices
+    for indices in indexer.iter_indices() {
+        // Get intersected index
+        if indices.len() != partial_decoder.chunk_representation.dimensionality() {
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indices.len(),
+                partial_decoder.chunk_representation.dimensionality(),
+            ));
+        }
+        let chunk_index: ArrayIndices = indices
+            .iter()
+            .zip(partial_decoder.chunk_representation.shape())
+            .map(|(&i, &cs)| i / cs)
+            .collect();
+        // FIXME: Check chunk is within the expected number of chunks
+        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard);
+
+        // Get the partial decoder
+        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
+        let inner_partial_decoder_entry = inner_chunk_partial_decoders
+            .entry(chunk_index_1d)
+            .or_try_insert_with(get_inner_chunk_partial_decoder(
+                partial_decoder,
+                options,
+                offset,
+                size,
+            ))
+            .await
+            .map_err(Arc::unwrap_or_clone)?;
+        let inner_partial_decoder = inner_partial_decoder_entry.value();
+
+        // Get the element index
+        let indices_in_inner_chunk: ArrayIndices = indices
+            .iter()
+            .zip(partial_decoder.chunk_representation.shape())
+            .map(|(&i, &cs)| i - (i / cs) * cs.get())
+            .collect();
+
+        let element_bytes = inner_partial_decoder
+            .partial_decode(&[indices_in_inner_chunk], options)
+            .await?
+            .into_fixed()
+            .expect("fixed data");
+        output.extend_from_slice(&element_bytes);
+    }
+
+    debug_assert_eq!(output.len(), output_len);
+
+    Ok(output.into())
+}
+
+async fn partial_decode_variable_indexer(
+    partial_decoder: &AsyncShardingPartialDecoder,
+    indexer: &dyn Indexer,
+    options: &CodecOptions,
+) -> Result<ArrayBytes<'static>, CodecError> {
+    let Some(shard_index) = &partial_decoder.shard_index else {
+        return Ok(super::partial_decode_empty_shard(
+            &partial_decoder.shard_representation,
+            indexer,
+        ));
+    };
+    let chunks_per_shard = calculate_chunks_per_shard(
+        partial_decoder.shard_representation.shape(),
+        partial_decoder.chunk_representation.shape(),
+    )?
+    .to_array_shape();
+    // let (inner_chunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+    //     &partial_decoder.inner_codecs,
+    //     &partial_decoder.chunk_representation,
+    //     &chunks_per_shard,
+    //     options,
+    // )?;
+    let options = &options;
+
+    let offsets_len = usize::try_from(indexer.len() + 1).unwrap();
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut offsets: Vec<usize> = Vec::with_capacity(offsets_len);
+    offsets.push(0);
+    let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    // FIXME: Parallel iter indices
+    for indices in indexer.iter_indices() {
+        // Get intersected index
+        if indices.len() != partial_decoder.chunk_representation.dimensionality() {
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indices.len(),
+                partial_decoder.chunk_representation.dimensionality(),
+            ));
+        }
+        let chunk_index: ArrayIndices = indices
+            .iter()
+            .zip(partial_decoder.chunk_representation.shape())
+            .map(|(&i, &cs)| i / cs)
+            .collect();
+        // FIXME: Check chunk is within the expected number of chunks
+        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard);
+
+        // Get the partial decoder
+        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
+        let inner_partial_decoder_entry = inner_chunk_partial_decoders
+            .entry(chunk_index_1d)
+            .or_try_insert_with(get_inner_chunk_partial_decoder(
+                partial_decoder,
+                options,
+                offset,
+                size,
+            ))
+            .await
+            .map_err(Arc::unwrap_or_clone)?;
+        let inner_partial_decoder = inner_partial_decoder_entry.value();
+
+        // Get the element index
+        let indices_in_inner_chunk: ArrayIndices = indices
+            .iter()
+            .zip(partial_decoder.chunk_representation.shape())
+            .map(|(&i, &cs)| i - (i / cs) * cs.get())
+            .collect();
+
+        let (element_bytes, element_offsets) = inner_partial_decoder
+            .partial_decode(&[indices_in_inner_chunk], options)
+            .await?
+            .into_variable()
+            .expect("fixed data");
+        debug_assert_eq!(element_offsets.len(), 2);
+        bytes.extend_from_slice(&element_bytes);
+        offsets.push(bytes.len());
+    }
+
+    Ok(ArrayBytes::new_vlen(bytes, RawBytesOffsets::new(offsets)?)?)
 }
