@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![cfg(feature = "async")]
 
 use std::{num::NonZeroU64, sync::Arc};
 
@@ -43,7 +44,7 @@ fn indexer_array_subsets() {
     )
 }
 
-#[cfg_attr(feature = "async", async_generic::async_generic)]
+#[async_generic::async_generic]
 fn indexer_array_subsets_impl<T: ElementOwned>(
     codec: Arc<dyn ArrayToBytesCodecTraits>,
     shape: &ChunkShape,
@@ -97,8 +98,7 @@ fn indexer_array_subsets_impl<T: ElementOwned>(
     .unwrap()
 }
 
-#[cfg_attr(feature = "async", tokio::test)]
-#[cfg_attr(not(feature = "async"), test)]
+#[tokio::test]
 async fn async_indexer_array_subsets_fixed() {
     let shape: ChunkShape = vec![
         NonZeroU64::new(1).unwrap(),
@@ -166,8 +166,8 @@ async fn async_indexer_array_subsets_fixed() {
     }
 }
 
-#[cfg_attr(feature = "async", tokio::test)]
-#[cfg_attr(not(feature = "async"), test)]
+#[cfg(feature = "async")]
+#[tokio::test]
 async fn async_indexer_array_subsets_variable() {
     let shape: ChunkShape = vec![
         NonZeroU64::new(1).unwrap(),
@@ -237,7 +237,6 @@ async fn async_indexer_array_subsets_variable() {
             ),
             expected
         );
-        #[cfg(feature = "async")]
         assert_eq!(
             indexer_array_subsets_impl_async(codec, &shape, &indexer, DataType::String, &elements)
                 .await,
