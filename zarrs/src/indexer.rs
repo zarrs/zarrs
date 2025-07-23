@@ -61,7 +61,6 @@ pub trait Indexer: Send + Sync {
     ///
     /// # Errors
     /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    // FIXME: Prefer to remove this? Or at least return an iterator
     fn byte_ranges(
         &self,
         array_shape: &[u64],
