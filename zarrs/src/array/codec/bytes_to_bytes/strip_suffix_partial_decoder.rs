@@ -37,17 +37,18 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let bytes = self.input_handle.partial_decode(decoded_regions, options)?;
+        let decoded_regions_collected = decoded_regions.collect::<Vec<ByteRange>>();
+        let bytes = self.input_handle.partial_decode(&mut decoded_regions_collected.clone().into_iter(), options)?;
         let Some(bytes) = bytes else {
             return Ok(None);
         };
 
         // Drop suffix of length `suffix_size`
         let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
+        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions_collected) {
             let bytes = match byte_range {
                 ByteRange::FromStart(_, Some(_)) => bytes,
                 ByteRange::FromStart(_, None) => {
@@ -93,12 +94,13 @@ impl AsyncStripSuffixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+        let decoded_regions_collected = decoded_regions.collect::<Vec<ByteRange>>();
         let bytes = self
             .input_handle
-            .partial_decode(decoded_regions, options)
+            .partial_decode(&mut decoded_regions_collected.clone().into_iter(), options)
             .await?;
         let Some(bytes) = bytes else {
             return Ok(None);
@@ -106,7 +108,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
 
         // Drop trailing checksum
         let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
+        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions_collected) {
             let bytes = match byte_range {
                 ByteRange::FromStart(_, Some(_)) => bytes,
                 ByteRange::FromStart(_, None) => {

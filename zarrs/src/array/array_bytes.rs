@@ -7,7 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
     array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
-    byte_range::extract_byte_ranges_concat_unchecked,
+    byte_range::extract_byte_ranges_concat,
     indexer::Indexer,
     metadata::DataTypeSize,
 };
@@ -259,7 +259,7 @@ impl<'a> ArrayBytes<'a> {
             ArrayBytes::Fixed(bytes) => {
                 let byte_ranges =
                     indexer.byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = unsafe { extract_byte_ranges_concat_unchecked(bytes, &byte_ranges) };
+                let bytes = extract_byte_ranges_concat(bytes, byte_ranges).unwrap(); // FIXME: remove unwrap
                 Ok(ArrayBytes::new_flen(bytes))
             }
         }

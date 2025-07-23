@@ -80,27 +80,27 @@ fn partial_decode<'a>(
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
         .byte_ranges(&chunk_shape, element_size_bits_usize)
-        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?;
+        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?
+        .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte
-    let byte_ranges: Vec<ByteRange> = bit_ranges
+    let mut byte_ranges = bit_ranges
         .iter()
         .map(|bit_range| {
             let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
             let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
             ByteRange::new(byte_start..byte_end)
-        })
-        .collect();
+        });
 
     // Retrieve those bytes
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
-        input_handle.partial_decode(&byte_ranges, options).await
+        input_handle.partial_decode(&mut byte_ranges, options).await
     } else {
-        input_handle.partial_decode(&byte_ranges, options)
+        input_handle.partial_decode(&mut byte_ranges, options)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode(&byte_ranges, options)?;
+    let encoded_bytes = input_handle.partial_decode(&mut byte_ranges, options)?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {
