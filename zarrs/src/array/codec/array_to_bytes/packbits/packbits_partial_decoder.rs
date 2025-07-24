@@ -80,24 +80,24 @@ fn partial_decode<'a>(
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
         .byte_ranges(&chunk_shape, element_size_bits_usize)
-        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?
-        .collect::<Vec<_>>();
+        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?;
 
     // Convert to byte ranges, skipping the padding encoding byte
-    let mut byte_ranges = bit_ranges
+    let byte_ranges = bit_ranges
         .iter()
         .map(|bit_range| {
             let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
             let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
             ByteRange::new(byte_start..byte_end)
-        });
+        })
+        .collect::<Vec<_>>();
 
     // Retrieve those bytes
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
-        input_handle.partial_decode(&mut byte_ranges, options).await
+        input_handle.partial_decode(&byte_ranges, options).await
     } else {
-        input_handle.partial_decode(&mut byte_ranges, options)
+        input_handle.partial_decode(&byte_ranges, options)
     }?;
     #[cfg(not(feature = "async"))]
     let encoded_bytes = input_handle.partial_decode(&mut byte_ranges, options)?;
@@ -107,7 +107,7 @@ fn partial_decode<'a>(
         let mut bytes_dec: Vec<u8> =
             vec![0; usize::try_from(indexer.len() * data_type_size_dec as u64).unwrap()];
         let mut component_idx_outer = 0;
-        for (packed_elements, bit_range) in encoded_bytes.into_iter().zip(bit_ranges) {
+        for (packed_elements, bit_range) in encoded_bytes.into_iter().zip(bit_ranges.iter()) {
             // Get the bit range within the entire chunk
             let bit_start = bit_range.start(encoded_length_bits);
             let bit_end = bit_range.end(encoded_length_bits);

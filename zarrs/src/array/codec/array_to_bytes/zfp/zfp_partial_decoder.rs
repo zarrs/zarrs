@@ -86,7 +86,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
-                byte_ranges,
+                &*byte_ranges,
             )?))
         } else {
             let array_size = ArraySize::new(
@@ -169,7 +169,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
-                byte_ranges,
+                &*byte_ranges,
             )?))
         } else {
             let array_size = ArraySize::new(

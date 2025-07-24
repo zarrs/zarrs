@@ -41,7 +41,7 @@ use futures::{StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
-    async_store_set_partial_values, byte_range::ByteRange, AsyncBytes, AsyncListableStorageTraits,
+    async_store_set_partial_values, byte_range::ByteRangeIndexer, AsyncBytes, AsyncListableStorageTraits,
     AsyncReadableStorageTraits, AsyncWritableStorageTraits, MaybeAsyncBytes, StorageError,
     StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
 };
@@ -100,12 +100,13 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send)
+        byte_ranges: &dyn ByteRangeIndexer
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
         };
         let ranges = byte_ranges
+            .iter()
             .map(|byte_range| byte_range.to_range(size))
             .collect::<Vec<_>>();
         let get_ranges = self

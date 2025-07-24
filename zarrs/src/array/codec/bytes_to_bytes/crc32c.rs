@@ -135,7 +135,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // crc32c partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&mut decoded_regions.into_iter(), &CodecOptions::default())
+            .partial_decode(&decoded_regions, &CodecOptions::default())
             .unwrap()
             .unwrap();
         let answer: &[Vec<u8>] = &[vec![3, 4]];
@@ -172,7 +172,7 @@ mod tests {
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&mut decoded_regions.into_iter(), &CodecOptions::default())
+            .partial_decode(&decoded_regions, &CodecOptions::default())
             .await
             .unwrap()
             .unwrap();

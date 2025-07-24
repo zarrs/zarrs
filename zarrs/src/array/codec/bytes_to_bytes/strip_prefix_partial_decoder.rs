@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
+use zarrs_storage::byte_range::ByteRangeIndexer;
 
 use crate::{
     array::{
@@ -39,19 +40,20 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions
+        let decoded_regions = decoded_regions
+            .iter()
             .map(|range| match range {
                 ByteRange::FromStart(offset, length) => ByteRange::FromStart(
                     offset.checked_add(self.prefix_size as u64).unwrap(),
-                    length,
+                    *length,
                 ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(length),
+                ByteRange::Suffix(length) => ByteRange::Suffix(*length),
             });
 
-        self.input_handle.partial_decode(&mut decoded_regions, options)
+        self.input_handle.partial_decode(&decoded_regions.collect::<Vec<ByteRange>>(), options)
     }
 }
 
@@ -81,20 +83,21 @@ impl AsyncStripPrefixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions
+        let decoded_regions = decoded_regions
+            .iter()
             .map(|range| match range {
                 ByteRange::FromStart(offset, length) => ByteRange::FromStart(
                     offset.checked_add(self.prefix_size as u64).unwrap(),
-                    length,
+                    *length,
                 ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(length),
-            });
+                ByteRange::Suffix(length) => ByteRange::Suffix(*length),
+            }).collect::<Vec<ByteRange>>();
 
         self.input_handle
-            .partial_decode(&mut decoded_regions, options)
+            .partial_decode(&decoded_regions, options)
             .await
     }
 }

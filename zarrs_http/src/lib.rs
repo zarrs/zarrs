@@ -15,7 +15,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_http/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::ByteRange, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
+    byte_range::{ByteRange, ByteRangeIndexer}, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
 };
 
 use itertools::{multiunzip, Itertools};
@@ -101,14 +101,14 @@ impl ReadableStorageTraits for HTTPStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let url = self.key_to_url(key).map_err(handle_url_error)?;
         let Some(size) = self.size_key(key)? else {
             return Ok(None);
         };
         let (bytes_strs, bytes_lengths, bytes_start_end): (Vec<String>, Vec<usize>, Vec<(usize, usize)>) = multiunzip(byte_ranges
-            .map(|byte_range| (format!("{}-{}", byte_range.start(size), byte_range.end(size) - 1), usize::try_from(byte_range.length(size)).unwrap(), (usize::try_from(byte_range.start(size)).unwrap(), usize::try_from(byte_range.end(size)).unwrap()))));
+            .iter().map(|byte_range| (format!("{}-{}", byte_range.start(size), byte_range.end(size) - 1), usize::try_from(byte_range.length(size)).unwrap(), (usize::try_from(byte_range.start(size)).unwrap(), usize::try_from(byte_range.end(size)).unwrap()))));
         let bytes_strs = bytes_strs.join(", ");
 
         let range = HeaderValue::from_str(&format!("bytes={bytes_strs}")).unwrap();
@@ -226,7 +226,7 @@ mod tests {
         assert!(store
             .get_partial_values_key(
                 &"zarr.json".try_into().unwrap(),
-                &mut [ByteRange::FromStart(0, None)].into_iter()
+                &[ByteRange::FromStart(0, None)]
             )
             .is_err());
         assert!(store.size_key(&"zarr.json".try_into().unwrap()).is_err());

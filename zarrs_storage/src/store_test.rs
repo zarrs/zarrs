@@ -67,7 +67,7 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
     assert_eq!(
         store.get_partial_values_key(
             &"a/b".try_into()?,
-            &mut [ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter()
+            &[ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)]
         )?,
         Some(vec![vec![1].into(), vec![3].into()])
     );
@@ -251,7 +251,7 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
         store
             .get_partial_values_key(
                 &"a/b".try_into()?,
-                &mut [ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter()
+                &[ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)]
             )
             .await?,
         Some(vec![vec![1].into(), vec![3].into()])

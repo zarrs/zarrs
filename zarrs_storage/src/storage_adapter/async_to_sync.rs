@@ -5,7 +5,7 @@
 //! The docs for the [`AsyncToSyncBlockOn`] trait include an example implementation for the `tokio` runtime.
 
 use crate::{
-    byte_range::ByteRange, AsyncListableStorageTraits, AsyncReadableStorageTraits,
+    byte_range::ByteRangeIndexer, AsyncListableStorageTraits, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -59,7 +59,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.block_on(self.storage.get_partial_values_key(key, byte_ranges))
     }

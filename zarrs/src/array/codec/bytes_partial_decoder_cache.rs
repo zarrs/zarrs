@@ -2,6 +2,8 @@
 
 use std::borrow::Cow;
 
+use zarrs_storage::byte_range::ByteRangeIndexer;
+
 use crate::{
     array::RawBytes,
     byte_range::{extract_byte_ranges, ByteRange},
@@ -27,7 +29,7 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
+            .partial_decode(&[ByteRange::FromStart(0, None)], options)?
             .map(|mut bytes| bytes.remove(0).into_owned());
         Ok(Self { cache })
     }
@@ -42,7 +44,7 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<BytesPartialDecoderCache, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
+            .partial_decode(&[ByteRange::FromStart(0, None)], options)
             .await?
             .map(|mut bytes| bytes.remove(0).into_owned());
         Ok(Self { cache })
@@ -56,7 +58,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
@@ -77,7 +79,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode(self, decoded_regions, options)

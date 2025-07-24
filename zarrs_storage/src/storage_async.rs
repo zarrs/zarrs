@@ -5,7 +5,7 @@ use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
 use super::{
-    byte_range::ByteRange, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
+    byte_range::{ByteRange, ByteRangeIndexer}, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
     StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
@@ -24,7 +24,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
         Ok(self
-            .get_partial_values_key(key, &mut vec![ByteRange::FromStart(0, None)].into_iter())
+            .get_partial_values_key(key, &ByteRange::FromStart(0, None))
             .await?
             .map(|mut v| v.remove(0)))
     }
@@ -39,7 +39,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
@@ -91,7 +91,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
                 let bytes = (self
-                    .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())
+                    .get_partial_values_key(last_key.unwrap(), &byte_ranges_key)
                     .await?)
                     .map_or_else(
                         || vec![None; byte_ranges_key.len()],
@@ -108,7 +108,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
             let bytes = (self
-                .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())
+                .get_partial_values_key(last_key.unwrap(), &byte_ranges_key)
                 .await?)
                 .map_or_else(
                     || vec![None; byte_ranges_key.len()],

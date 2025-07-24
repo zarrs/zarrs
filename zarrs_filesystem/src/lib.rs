@@ -8,7 +8,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange},
+    byte_range::{ByteOffset, ByteRange, ByteRangeIndexer},
     store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
     StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
     StorePrefixes, WritableStorageTraits,
@@ -253,7 +253,7 @@ impl ReadableStorageTraits for FilesystemStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
@@ -268,13 +268,13 @@ impl ReadableStorageTraits for FilesystemStore {
             }
         };
         
-        let out = byte_ranges.map(|byte_range| {
+        let out = byte_ranges.iter().map(|byte_range| {
             let bytes = {
                 // Seek
                 match byte_range {
-                    ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
+                    ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(*offset)),
                     ByteRange::Suffix(length) => {
-                        file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
+                        file.seek(SeekFrom::End(-(i64::try_from(*length).unwrap())))
                     }
                 }?;
 
@@ -286,7 +286,7 @@ impl ReadableStorageTraits for FilesystemStore {
                         buffer
                     }
                     ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
-                        let length = usize::try_from(length).unwrap();
+                        let length = usize::try_from(*length).unwrap();
                         let mut buffer = vec![0; length];
                         file.read_exact(&mut buffer)?;
                         buffer

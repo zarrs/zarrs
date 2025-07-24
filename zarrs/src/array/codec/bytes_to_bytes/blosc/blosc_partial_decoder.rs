@@ -1,5 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
+use zarrs_storage::byte_range::ByteRangeIndexer;
+
 use crate::{
     array::{
         codec::{
@@ -34,7 +36,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
@@ -46,7 +48,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
             let nbytes = blosc_nbytes(&encoded_value);
             let typesize = blosc_typesize(&encoded_value);
             if let (Some(nbytes), Some(typesize)) = (nbytes, typesize) {
-                let decoded_byte_ranges = decoded_regions.map(|byte_range| {
+                let decoded_byte_ranges = decoded_regions.iter().map(|byte_range| {
                     let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
                     let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
                     blosc_decompress_bytes_partial(
@@ -83,7 +85,7 @@ impl AsyncBloscPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
@@ -95,7 +97,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
             let nbytes = blosc_nbytes(&encoded_value);
             let typesize = blosc_typesize(&encoded_value);
             if let (Some(nbytes), Some(typesize)) = (nbytes, typesize) {
-                let decoded_byte_ranges = decoded_regions.map(|byte_range| {
+                let decoded_byte_ranges = decoded_regions.iter().map(|byte_range| {
                     let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
                     let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
                     blosc_decompress_bytes_partial(
