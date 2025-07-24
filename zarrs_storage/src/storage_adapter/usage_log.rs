@@ -98,13 +98,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         key: &StoreKey,
         byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let byte_ranges_collected = byte_ranges.collect::<Vec<ByteRange>>();
-        let result = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter());
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
+        let result = self.storage.get_partial_values_key(key, &mut byte_ranges.iter().copied());
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
-            byte_ranges_collected.iter().format(", "),
+            byte_ranges.iter().format(", "),
             result.as_ref().map(|v| {
                 v.as_ref()
                     .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
@@ -306,13 +306,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        let byte_ranges_collected: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
-        let result = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter()).await;
+        let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
+        let result = self.storage.get_partial_values_key(key, &mut byte_ranges.iter().copied()).await;
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
-            byte_ranges_collected.iter().format(", "),
+            byte_ranges.iter().format(", "),
             result.as_ref().map(|v| {
                 v.as_ref()
                     .map_or(vec![], |v| v.iter().map(AsyncBytes::len).collect_vec())
