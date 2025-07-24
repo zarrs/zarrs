@@ -40,31 +40,30 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let decoded_regions_collected = decoded_regions.collect::<Vec<ByteRange>>();
-        let bytes = self.input_handle.partial_decode(&mut decoded_regions_collected.clone().into_iter(), options)?;
-        let Some(bytes) = bytes else {
-            return Ok(None);
-        };
-
-        // Drop suffix of length `suffix_size`
-        let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions_collected) {
-            let bytes = match byte_range {
-                ByteRange::FromStart(_, Some(_)) => bytes,
-                ByteRange::FromStart(_, None) => {
-                    let length = bytes.len() - self.suffix_size;
-                    Cow::Owned(bytes[..length].to_vec())
-                }
-                ByteRange::Suffix(_) => {
-                    let length = bytes.len() as u64 - (self.suffix_size as u64);
-                    let length = usize::try_from(length).unwrap();
-                    Cow::Owned(bytes[..length].to_vec())
-                }
-            };
-            output.push(bytes);
-        }
-
-        Ok(Some(output))
+        decoded_regions
+            .map(|decoded_region| {
+                let mut bytes = self
+                    .input_handle
+                    .partial_decode(&mut [decoded_region].into_iter(), options)?;
+                Ok::<_, CodecError>(if let Some(bytes) = &mut bytes {
+                    let bytes = bytes.pop().expect("retrieved one region");
+                    Some(match decoded_region {
+                        ByteRange::FromStart(_, Some(_)) => bytes,
+                        ByteRange::FromStart(_, None) => {
+                            let length = bytes.len() - self.suffix_size;
+                            Cow::Owned(bytes[..length].to_vec())
+                        }
+                        ByteRange::Suffix(_) => {
+                            let length = bytes.len() as u64 - (self.suffix_size as u64);
+                            let length = usize::try_from(length).unwrap();
+                            Cow::Owned(bytes[..length].to_vec())
+                        }
+                    })
+                } else {
+                    None
+                })
+            })
+            .collect()
     }
 }
 
@@ -97,33 +96,36 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let decoded_regions_collected = decoded_regions.collect::<Vec<ByteRange>>();
-        let bytes = self
-            .input_handle
-            .partial_decode(&mut decoded_regions_collected.clone().into_iter(), options)
+        use futures::{StreamExt, TryStreamExt};
+
+        let futures = decoded_regions.map(|decoded_region| async move {
+            match decoded_region {
+                ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
+                    self.input_handle
+                        .partial_decode(&mut [decoded_region].into_iter(), options)
+                        .await?
+                        .map(|mut v| v.pop().expect("one region")),
+                ),
+                ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
+                    let bytes = self
+                        .input_handle
+                        .partial_decode(&mut [decoded_region].into_iter(), options)
+                        .await?
+                        .map(|mut v| v.pop().expect("one region"));
+                    if let Some(bytes) = bytes {
+                        let length = bytes.len() - self.suffix_size;
+                        Ok(Some(Cow::Owned(bytes[..length].to_vec())))
+                    } else {
+                        Ok(None)
+                    }
+                }
+            }
+        });
+        let results: Vec<Option<_>> = futures::stream::iter(futures)
+            .buffered(options.concurrent_target())
+            .try_collect()
             .await?;
-        let Some(bytes) = bytes else {
-            return Ok(None);
-        };
-
-        // Drop trailing checksum
-        let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions_collected) {
-            let bytes = match byte_range {
-                ByteRange::FromStart(_, Some(_)) => bytes,
-                ByteRange::FromStart(_, None) => {
-                    let length = bytes.len() - self.suffix_size;
-                    Cow::Owned(bytes[..length].to_vec())
-                }
-                ByteRange::Suffix(_) => {
-                    let length = bytes.len() as u64 - (self.suffix_size as u64);
-                    let length = usize::try_from(length).unwrap();
-                    Cow::Owned(bytes[..length].to_vec())
-                }
-            };
-            output.push(bytes);
-        }
-
-        Ok(Some(output))
+        let results: Option<Vec<_>> = results.into_iter().collect();
+        Ok(results)
     }
 }
