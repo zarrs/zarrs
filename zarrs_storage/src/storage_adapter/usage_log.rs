@@ -8,7 +8,7 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::ByteRangeIndexer, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
     StorePrefix, WritableStorageTraits,
 };
@@ -96,7 +96,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges:&dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let result = self.storage.get_partial_values_key(key, byte_ranges);
         writeln!(
@@ -303,7 +303,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let result = self.storage.get_partial_values_key(key, byte_ranges).await;
         writeln!(

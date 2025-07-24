@@ -1,9 +1,7 @@
 //! A storage transformer which records performance metrics.
 
 use crate::{
-    Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    byte_range::{ByteRange,ByteRangeIndexer}, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits
 };
 
 #[cfg(feature = "async")]
@@ -111,14 +109,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[crate::byte_range::ByteRange],
+        byte_ranges:&dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        let byte_ranges_collected = byte_ranges.iter().collect::<Vec<&ByteRange>>();
         let values = self.storage.get_partial_values_key(key, byte_ranges)?;
         if let Some(values) = &values {
             let bytes_read = values.iter().map(Bytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
         }
-        self.reads.fetch_add(byte_ranges.len(), Ordering::Relaxed);
+        self.reads.fetch_add(byte_ranges_collected.len(), Ordering::Relaxed);
         Ok(values)
     }
 
@@ -222,7 +221,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[crate::byte_range::ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let values = self
             .storage
@@ -231,7 +230,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         if let Some(values) = &values {
             let bytes_read = values.iter().map(AsyncBytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(byte_ranges.len(), Ordering::Relaxed);
+            self.reads.fetch_add(values.len(), Ordering::Relaxed);
         }
         Ok(values)
     }

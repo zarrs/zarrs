@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
+use zarrs_storage::byte_range::ByteRangeIndexer;
 
 use crate::{
     array::{
@@ -39,7 +40,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let decoded_regions = decoded_regions
@@ -50,10 +51,9 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
                     *length,
                 ),
                 ByteRange::Suffix(length) => ByteRange::Suffix(*length),
-            })
-            .collect_vec();
+            });
 
-        self.input_handle.partial_decode(&decoded_regions, options)
+        self.input_handle.partial_decode(&decoded_regions.collect::<Vec<ByteRange>>(), options)
     }
 }
 
@@ -83,7 +83,7 @@ impl AsyncStripPrefixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let decoded_regions = decoded_regions
@@ -94,8 +94,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
                     *length,
                 ),
                 ByteRange::Suffix(length) => ByteRange::Suffix(*length),
-            })
-            .collect_vec();
+            }).collect::<Vec<ByteRange>>();
 
         self.input_handle
             .partial_decode(&decoded_regions, options)

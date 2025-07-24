@@ -88,6 +88,7 @@ pub use array_to_bytes_partial_encoder_default::ArrayToBytesPartialEncoderDefaul
 #[cfg(feature = "async")]
 pub use array_to_bytes_partial_encoder_default::AsyncArrayToBytesPartialEncoderDefault;
 use zarrs_metadata::Configuration;
+use zarrs_storage::byte_range::ByteRangeIndexer;
 
 use crate::array_subset::IncompatibleDimensionalityError;
 mod array_to_array_partial_decoder_default;
@@ -325,7 +326,7 @@ pub trait BytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
 
@@ -339,7 +340,7 @@ pub trait BytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_decode_concat(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -372,7 +373,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
 
@@ -384,7 +385,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     async fn partial_decode_concat(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -605,7 +606,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(self
@@ -640,7 +641,7 @@ impl AsyncStoragePartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(self
@@ -1186,7 +1187,7 @@ where
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
@@ -1206,7 +1207,7 @@ where
 {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions:&dyn ByteRangeIndexer,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(

@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    byte_range::ByteRange,
+    byte_range::{ByteRange,ByteRangeIndexer},
 };
 
 #[cfg(feature = "async")]
@@ -37,7 +37,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let bytes = self.input_handle.partial_decode(decoded_regions, options)?;
@@ -47,7 +47,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 
         // Drop suffix of length `suffix_size`
         let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
+        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions.iter()) {
             let bytes = match byte_range {
                 ByteRange::FromStart(_, Some(_)) => bytes,
                 ByteRange::FromStart(_, None) => {
@@ -93,7 +93,7 @@ impl AsyncStripSuffixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let bytes = self
@@ -106,7 +106,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
 
         // Drop trailing checksum
         let mut output = Vec::with_capacity(bytes.len());
-        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
+        for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions.iter()) {
             let bytes = match byte_range {
                 ByteRange::FromStart(_, Some(_)) => bytes,
                 ByteRange::FromStart(_, None) => {

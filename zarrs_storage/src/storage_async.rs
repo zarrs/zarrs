@@ -5,9 +5,11 @@ use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
 use super::{
-    byte_range::ByteRange, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
+    byte_range::{ByteRange, ByteRangeIndexer}, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
     StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
+
+
 
 /// Async readable storage traits.
 #[cfg_attr(feature = "async", async_trait::async_trait)]
@@ -22,7 +24,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
         Ok(self
-            .get_partial_values_key(key, &[ByteRange::FromStart(0, None)])
+            .get_partial_values_key(key, &ByteRange::FromStart(0, None))
             .await?
             .map(|mut v| v.remove(0)))
     }
@@ -37,7 +39,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].

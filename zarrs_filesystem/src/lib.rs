@@ -8,7 +8,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange},
+    byte_range::{ByteOffset, ByteRange, ByteRangeIndexer},
     store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
     StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
     StorePrefixes, WritableStorageTraits,
@@ -253,7 +253,7 @@ impl ReadableStorageTraits for FilesystemStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
@@ -267,9 +267,8 @@ impl ReadableStorageTraits for FilesystemStore {
                 return Err(err.into());
             }
         };
-
-        let mut out = Vec::with_capacity(byte_ranges.len());
-        for byte_range in byte_ranges {
+        
+        let out = byte_ranges.iter().map(|byte_range| {
             let bytes = {
                 // Seek
                 match byte_range {
@@ -294,8 +293,8 @@ impl ReadableStorageTraits for FilesystemStore {
                     }
                 }
             };
-            out.push(Bytes::from(bytes));
-        }
+            Ok(Bytes::from(bytes))
+        }).collect::<Result<Vec<Bytes>, StorageError>>()?;
 
         Ok(Some(out))
     }

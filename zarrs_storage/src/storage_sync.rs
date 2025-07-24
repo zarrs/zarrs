@@ -3,6 +3,8 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
+use crate::byte_range::ByteRangeIndexer;
+
 use super::{
     byte_range::ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
     StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
@@ -32,7 +34,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges:&dyn ByteRangeIndexer,
     ) -> Result<Option<Vec<Bytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].

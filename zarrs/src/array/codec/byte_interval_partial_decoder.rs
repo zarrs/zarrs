@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::RawBytes,
-    byte_range::{ByteLength, ByteOffset, ByteRange},
+    byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIndexer},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -41,10 +41,10 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 
     fn partial_decode(
         &self,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let byte_ranges: Vec<ByteRange> = byte_ranges
+        let byte_ranges = byte_ranges
             .iter()
             .map(|byte_range| match byte_range {
                 ByteRange::FromStart(offset, None) => {
@@ -54,11 +54,10 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
                     ByteRange::FromStart(self.byte_offset + offset, Some(*length))
                 }
                 ByteRange::Suffix(length) => ByteRange::FromStart(
-                    self.byte_offset + self.byte_length - *length,
+                    self.byte_offset + self.byte_length - length,
                     Some(*length),
                 ),
-            })
-            .collect();
+            }).collect::<Vec<ByteRange>>();
         self.inner.partial_decode(&byte_ranges, options)
     }
 }
@@ -94,10 +93,10 @@ impl AsyncByteIntervalPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
     async fn partial_decode(
         &self,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &dyn ByteRangeIndexer,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let byte_ranges: Vec<ByteRange> = byte_ranges
+        let byte_ranges = byte_ranges
             .iter()
             .map(|byte_range| match byte_range {
                 ByteRange::FromStart(offset, None) => {
@@ -107,11 +106,10 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
                     ByteRange::FromStart(self.byte_offset + offset, Some(*length))
                 }
                 ByteRange::Suffix(length) => ByteRange::FromStart(
-                    self.byte_offset + self.byte_length - *length,
+                    self.byte_offset + self.byte_length - length,
                     Some(*length),
                 ),
-            })
-            .collect();
+            }).collect::<Vec<ByteRange>>();
         self.inner.partial_decode(&byte_ranges, options).await
     }
 }
