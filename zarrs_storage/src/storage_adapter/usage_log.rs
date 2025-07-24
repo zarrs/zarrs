@@ -8,7 +8,7 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::{ByteRange, ByteRangeIndexer}, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::ByteRangeIndexer, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
     StorePrefix, WritableStorageTraits,
 };

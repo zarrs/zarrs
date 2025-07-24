@@ -15,10 +15,10 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_http/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::{ByteRange, ByteRangeIndexer}, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
+    byte_range::ByteRangeIndexer, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
 };
 
-use itertools::{multiunzip, Itertools};
+use itertools::multiunzip;
 use reqwest::{
     header::{HeaderValue, CONTENT_LENGTH, RANGE},
     StatusCode, Url,
