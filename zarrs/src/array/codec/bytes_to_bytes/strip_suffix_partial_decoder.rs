@@ -42,11 +42,10 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
-                let mut bytes = self
+                let bytes = self
                     .input_handle
-                    .partial_decode(&mut [decoded_region].into_iter(), options)?;
-                Ok::<_, CodecError>(if let Some(bytes) = &mut bytes {
-                    let bytes = bytes.pop().expect("retrieved one region");
+                    .partial_decode_concat(&mut [decoded_region].into_iter(), options)?;
+                Ok::<_, CodecError>(if let Some(bytes) = bytes {
                     Some(match decoded_region {
                         ByteRange::FromStart(_, Some(_)) => bytes,
                         ByteRange::FromStart(_, None) => {
@@ -102,16 +101,14 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             match decoded_region {
                 ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
                     self.input_handle
-                        .partial_decode(&mut [decoded_region].into_iter(), options)
-                        .await?
-                        .map(|mut v| v.pop().expect("one region")),
+                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .await?,
                 ),
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode(&mut [decoded_region].into_iter(), options)
-                        .await?
-                        .map(|mut v| v.pop().expect("one region"));
+                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
                         Ok(Some(Cow::Owned(bytes[..length].to_vec())))
