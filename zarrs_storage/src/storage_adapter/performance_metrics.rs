@@ -1,7 +1,7 @@
 //! A storage transformer which records performance metrics.
 
 use crate::{
-    byte_range::{ByteRange,ByteRangeIndexer}, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits
+    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits
 };
 
 #[cfg(feature = "async")]
@@ -109,10 +109,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&dyn ByteRangeIndexer,
+        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let byte_ranges_collected = byte_ranges.iter().collect::<Vec<&ByteRange>>();
-        let values = self.storage.get_partial_values_key(key, byte_ranges)?;
+        let byte_ranges_collected = byte_ranges.collect::<Vec<ByteRange>>();
+        let values = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter())?;
         if let Some(values) = &values {
             let bytes_read = values.iter().map(Bytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
@@ -221,16 +221,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &dyn ByteRangeIndexer,
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+        let byte_ranges_collected: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let values = self
             .storage
-            .get_partial_values_key(key, byte_ranges)
+            .get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter())
             .await?;
         if let Some(values) = &values {
             let bytes_read = values.iter().map(AsyncBytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(values.len(), Ordering::Relaxed);
+            self.reads.fetch_add(byte_ranges_collected.len(), Ordering::Relaxed);
         }
         Ok(values)
     }
