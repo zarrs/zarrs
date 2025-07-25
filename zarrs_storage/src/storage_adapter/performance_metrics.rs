@@ -111,13 +111,16 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         key: &StoreKey,
         byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let byte_ranges_collected = byte_ranges.collect::<Vec<ByteRange>>();
-        let values = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter())?;
+        let size_hint_lower_bound = byte_ranges.size_hint().0;
+        let values = self.storage.get_partial_values_key(key, byte_ranges)?;
         if let Some(values) = &values {
             let bytes_read = values.iter().map(Bytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
+            self.reads.fetch_add(values.len(), Ordering::Relaxed);
+        } else if size_hint_lower_bound > 0 {
+            // If the key is found to be empty, consider that as a read
+            self.reads.fetch_add(1, Ordering::Relaxed);
         }
-        self.reads.fetch_add(byte_ranges_collected.len(), Ordering::Relaxed);
         Ok(values)
     }
 
@@ -223,15 +226,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        let byte_ranges_collected: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
+        let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self
             .storage
-            .get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter())
+            .get_partial_values_key(key, byte_ranges)
             .await?;
         if let Some(values) = &values {
             let bytes_read = values.iter().map(AsyncBytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(byte_ranges_collected.len(), Ordering::Relaxed);
+            self.reads.fetch_add(values.len(), Ordering::Relaxed);
+        } else if size_hint_lower_bound > 0 {
+            // If the key is found to be empty, consider that as a read
+            self.reads.fetch_add(1, Ordering::Relaxed);
         }
         Ok(values)
     }
