@@ -259,7 +259,7 @@ impl<'a> ArrayBytes<'a> {
             ArrayBytes::Fixed(bytes) => {
                 let byte_ranges =
                     indexer.byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = extract_byte_ranges_concat(bytes, byte_ranges).unwrap(); // FIXME: remove unwrap
+                let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
         }
