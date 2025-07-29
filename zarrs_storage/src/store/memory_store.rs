@@ -4,7 +4,7 @@ use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
 use std::sync::Mutex;
 
 use crate::{
-    byte_range::{ByteOffset, ByteRange, ByteRangeIndexer, InvalidByteRangeError},
+    byte_range::{ByteOffset, ByteRange, InvalidByteRangeError},
     Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
     StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -78,7 +78,7 @@ impl ReadableStorageTraits for MemoryStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&dyn ByteRangeIndexer,
+        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
@@ -86,11 +86,11 @@ impl ReadableStorageTraits for MemoryStore {
             let data = data.clone();
             drop(data_map);
             let data = data.read();
-            let out = byte_ranges.iter().map(|byte_range| {
+            let out = byte_ranges.map(|byte_range| {
                 let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
                 let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
                 if end > data.len() {
-                    return Err(InvalidByteRangeError::new(byte_range.clone(), data.len() as u64));
+                    return Err(InvalidByteRangeError::new(byte_range, data.len() as u64));
                 }
                 Ok(data[start..end].to_vec().into())
             }).collect::<Result<Vec<Bytes>, InvalidByteRangeError>>()?;

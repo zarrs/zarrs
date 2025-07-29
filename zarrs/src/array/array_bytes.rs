@@ -259,7 +259,7 @@ impl<'a> ArrayBytes<'a> {
             ArrayBytes::Fixed(bytes) => {
                 let byte_ranges =
                     indexer.byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = extract_byte_ranges_concat(bytes, &*byte_ranges).unwrap(); // FIXME: remove unwrap
+                let bytes = extract_byte_ranges_concat(bytes, byte_ranges).unwrap(); // FIXME: remove unwrap
                 Ok(ArrayBytes::new_flen(bytes))
             }
         }
@@ -551,7 +551,7 @@ pub fn update_array_bytes<'a>(
             let byte_ranges = update_indexer.byte_ranges(shape, data_type_size)?; // FIXME: Prefer not to collect here, and go parallel
             let mut offset: usize = 0;
             // TODO: Add `is_disjoint()` to indexer, so that this could go parallel
-            for byte_range in byte_ranges.iter() {
+            for byte_range in byte_ranges {
                 let byte_range_len =
                     usize::try_from(byte_range.length(bytes.len() as u64)).unwrap();
                 bytes

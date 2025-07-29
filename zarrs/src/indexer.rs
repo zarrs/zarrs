@@ -1,6 +1,6 @@
 //! Generic indexer support.
 
-use zarrs_storage::byte_range::{ByteRange, ByteRangeIndexer};
+use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{ravel_indices, ArrayIndices},
@@ -65,7 +65,7 @@ pub trait Indexer: Send + Sync {
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Box<dyn ByteRangeIndexer>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerAndShapeError> {
         let element_size_u64 = element_size as u64;
         let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
             move |(array_index, contiguous_elements)| {
@@ -76,7 +76,7 @@ pub trait Indexer: Send + Sync {
                 )
             }
         );
-        Ok(Box::new(byte_ranges.collect::<Vec<ByteRange>>())) // TODO: Figure out ByteRangeIndexer for an already-made-iterator?
+        Ok(Box::new(byte_ranges))
     }
 
     /// Return the indexer as an [`ArraySubset`].

@@ -3,8 +3,6 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
-use crate::byte_range::ByteRangeIndexer;
-
 use super::{
     byte_range::ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
     StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
@@ -21,7 +19,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     /// Returns a [`StorageError`] if there is an underlying storage error.
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         Ok(self
-            .get_partial_values_key(key, &[ByteRange::FromStart(0, None)])?
+            .get_partial_values_key(key, &mut [ByteRange::FromStart(0, None)].into_iter())?
             .map(|mut v| v.remove(0)))
     }
 
@@ -34,7 +32,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&dyn ByteRangeIndexer,
+        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
@@ -83,7 +81,7 @@ pub trait ReadableStorageTraits: Send + Sync {
 
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self.get_partial_values_key(last_key.unwrap(), &byte_ranges_key)?)
+                let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())?)
                     .map_or_else(
                         || vec![None; byte_ranges_key.len()],
                         |partial_values| partial_values.into_iter().map(Some).collect(),
@@ -98,7 +96,7 @@ pub trait ReadableStorageTraits: Send + Sync {
 
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
-            let bytes = (self.get_partial_values_key(last_key.unwrap(), &byte_ranges_key)?)
+            let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())?)
                 .map_or_else(
                     || vec![None; byte_ranges_key.len()],
                     |partial_values| partial_values.into_iter().map(Some).collect(),

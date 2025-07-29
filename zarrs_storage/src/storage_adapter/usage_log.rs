@@ -8,7 +8,7 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::{ByteRange, ByteRangeIndexer}, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
     StorePrefix, WritableStorageTraits,
 };
@@ -96,14 +96,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&dyn ByteRangeIndexer,
+        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let result = self.storage.get_partial_values_key(key, byte_ranges);
+        let byte_ranges_collected = byte_ranges.collect::<Vec<ByteRange>>();
+        let result = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter());
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
-            byte_ranges.iter().format(", "),
+            byte_ranges_collected.iter().format(", "),
             result.as_ref().map(|v| {
                 v.as_ref()
                     .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
@@ -303,14 +304,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &dyn ByteRangeIndexer,
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        let result = self.storage.get_partial_values_key(key, byte_ranges).await;
+        let byte_ranges_collected: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
+        let result = self.storage.get_partial_values_key(key, &mut byte_ranges_collected.clone().into_iter()).await;
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
-            byte_ranges.iter().format(", "),
+            byte_ranges_collected.iter().format(", "),
             result.as_ref().map(|v| {
                 v.as_ref()
                     .map_or(vec![], |v| v.iter().map(AsyncBytes::len).collect_vec())
