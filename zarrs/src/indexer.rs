@@ -61,22 +61,22 @@ pub trait Indexer: Send + Sync {
     ///
     /// # Errors
     /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    // FIXME: Prefer to remove this? Or at least return an iterator
     fn byte_ranges(
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError> {
-        let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let contiguous_indices = self.iter_contiguous_linearised_indices(array_shape)?;
-        for (array_index, contiguous_elements) in contiguous_indices {
-            let byte_index = array_index * element_size as u64;
-            byte_ranges.push(ByteRange::FromStart(
-                byte_index,
-                Some(contiguous_elements * element_size as u64),
-            ));
-        }
-        Ok(byte_ranges)
+    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+        let element_size_u64 = element_size as u64;
+        let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
+            move |(array_index, contiguous_elements)| {
+                let byte_index = array_index * element_size_u64;
+                ByteRange::FromStart(
+                    byte_index,
+                    Some(contiguous_elements * element_size_u64),
+                )
+            }
+        );
+        Ok(Box::new(byte_ranges))
     }
 
     /// Return the indexer as an [`ArraySubset`].

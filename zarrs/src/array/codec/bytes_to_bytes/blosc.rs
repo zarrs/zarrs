@@ -268,8 +268,7 @@ mod tests {
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             ArrayRepresentation, BytesRepresentation, DataType,
         },
-        array_subset::ArraySubset,
-        byte_range::ByteRange,
+        array_subset::ArraySubset, indexer::Indexer,
     };
 
     use super::*;
@@ -383,7 +382,7 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
         let input_handle = Arc::new(encoded);
@@ -396,7 +395,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // blosc partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_concat(&decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
             .unwrap()
             .unwrap();
 
@@ -414,6 +413,8 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_blosc_async_partial_decode() {
+        use crate::indexer::Indexer;
+
         let array_representation =
             ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
@@ -430,7 +431,7 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
         let input_handle = Arc::new(encoded);
@@ -443,7 +444,7 @@ mod tests {
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_concat(&decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
             .await
             .unwrap()
             .unwrap();

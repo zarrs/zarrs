@@ -234,7 +234,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling inner chunks
         let inner_chunks_encoded = self
             .input_handle
-            .partial_decode(&byte_ranges, options)?
+            .partial_decode(&mut byte_ranges.into_iter(), options)?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
         // Decode the straddling inner chunks

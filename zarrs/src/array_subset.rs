@@ -27,7 +27,6 @@ use itertools::izip;
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
     indexer::Indexer,
-    storage::byte_range::ByteRange,
 };
 
 /// An array subset.
@@ -249,26 +248,6 @@ impl ArraySubset {
     #[must_use]
     pub fn contains(&self, indices: &[u64]) -> bool {
         izip!(indices, &self.start, &self.shape).all(|(&i, &o, &s)| i >= o && i < o + s)
-    }
-
-    /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn byte_ranges(
-        &self,
-        array_shape: &[u64],
-        element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleIndexerAndShapeError> {
-        let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let element_size = element_size as u64;
-        for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
-            let byte_index = array_index * element_size;
-            let byte_length = contiguous_elements * element_size;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length)));
-        }
-        Ok(byte_ranges)
     }
 
     /// Return the elements in this array subset from an array with shape `array_shape`.
@@ -569,6 +548,8 @@ impl From<ArraySubsetError> for ArrayError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::byte_range::ByteRange;
+
 
     #[test]
     fn array_subset() {
@@ -628,17 +609,10 @@ mod tests {
         let array_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
 
         assert!(array_subset.byte_ranges(&[1, 1], 1).is_err());
+        let ranges = array_subset.byte_ranges(&[4, 4], 1).unwrap().collect::<Vec<ByteRange>>();
 
         assert_eq!(
-            array_subset.byte_ranges(&[4, 4], 1).unwrap(),
-            vec![
-                ByteRange::FromStart(5, Some(2)),
-                ByteRange::FromStart(9, Some(2))
-            ]
-        );
-
-        assert_eq!(
-            array_subset.byte_ranges(&[4, 4], 1).unwrap(),
+            ranges,
             vec![
                 ByteRange::FromStart(5, Some(2)),
                 ByteRange::FromStart(9, Some(2))
