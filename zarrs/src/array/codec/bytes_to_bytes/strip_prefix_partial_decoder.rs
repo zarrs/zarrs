@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use itertools::Itertools;
 
 use crate::{
     array::{

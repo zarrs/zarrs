@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use zarrs_registry::codec::BYTES;
-use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{

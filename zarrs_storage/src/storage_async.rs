@@ -24,7 +24,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
         Ok(self
-            .get_partial_values_key(key, &mut vec![ByteRange::FromStart(0, None)].into_iter())
+            .get_partial_values_key(key, &mut [ByteRange::FromStart(0, None)].into_iter())
             .await?
             .map(|mut v| v.remove(0)))
     }
@@ -91,7 +91,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
                 let bytes = (self
-                    .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())
+                    .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())
                     .await?)
                     .map_or_else(
                         || vec![None; byte_ranges_key.len()],
@@ -108,7 +108,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
             let bytes = (self
-                .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())
+                .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())
                 .await?)
                 .map_or_else(
                     || vec![None; byte_ranges_key.len()],

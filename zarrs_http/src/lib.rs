@@ -18,7 +18,7 @@ use zarrs_storage::{
     byte_range::ByteRange, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
 };
 
-use itertools::{multiunzip, Itertools};
+use itertools::multiunzip;
 use reqwest::{
     header::{HeaderValue, CONTENT_LENGTH, RANGE},
     StatusCode, Url,

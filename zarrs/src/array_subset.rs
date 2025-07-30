@@ -27,7 +27,6 @@ use itertools::izip;
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
     indexer::Indexer,
-    storage::byte_range::ByteRange,
 };
 
 /// An array subset.
@@ -549,6 +548,8 @@ impl From<ArraySubsetError> for ArrayError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::byte_range::ByteRange;
+
 
     #[test]
     fn array_subset() {

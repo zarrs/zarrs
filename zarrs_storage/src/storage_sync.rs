@@ -81,7 +81,7 @@ pub trait ReadableStorageTraits: Send + Sync {
 
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())?)
+                let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())?)
                     .map_or_else(
                         || vec![None; byte_ranges_key.len()],
                         |partial_values| partial_values.into_iter().map(Some).collect(),
@@ -96,7 +96,7 @@ pub trait ReadableStorageTraits: Send + Sync {
 
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
-            let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.clone().into_iter())?)
+            let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())?)
                 .map_or_else(
                     || vec![None; byte_ranges_key.len()],
                     |partial_values| partial_values.into_iter().map(Some).collect(),

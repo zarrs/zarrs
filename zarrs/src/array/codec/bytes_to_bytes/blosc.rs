@@ -268,8 +268,7 @@ mod tests {
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             ArrayRepresentation, BytesRepresentation, DataType,
         },
-        array_subset::ArraySubset,
-        byte_range::ByteRange, indexer::Indexer,
+        array_subset::ArraySubset, indexer::Indexer,
     };
 
     use super::*;
