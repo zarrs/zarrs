@@ -43,7 +43,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         &self,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
@@ -92,7 +92,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         &self,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))

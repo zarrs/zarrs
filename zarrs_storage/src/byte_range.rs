@@ -194,7 +194,7 @@ fn is_valid(byte_range: ByteRange, bytes_len: u64) -> bool {
 pub fn extract_byte_ranges(
     bytes: &[u8],
     byte_ranges: impl Iterator<Item = ByteRange>,
-) -> Result<Vec<Vec<u8>>, InvalidByteRangeError> {
+) -> Result<Vec<u8>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
     byte_ranges
         .map(|byte_range| {
@@ -204,9 +204,10 @@ pub fn extract_byte_ranges(
             }
             let start = usize::try_from(byte_range.start(bytes.len() as u64)).unwrap();
             let end = usize::try_from(byte_range.end(bytes.len() as u64)).unwrap();
-            Ok(bytes[start..end].to_vec())
+            Ok(bytes[start..end].iter().copied())
         })
-        .collect::<Result<Vec<Vec<u8>>, InvalidByteRangeError>>()
+        .flatten_ok()
+        .collect::<Result<Vec<u8>, InvalidByteRangeError>>()
 }
 
 /// Extract byte ranges from bytes and concatenate.
@@ -277,7 +278,7 @@ pub fn extract_byte_ranges_concat(
 pub fn extract_byte_ranges_read_seek<T: Read + Seek>(
     mut bytes: T,
     byte_ranges: impl Iterator<Item = ByteRange>,
-) -> std::io::Result<Vec<Vec<u8>>> {
+) -> std::io::Result<Vec<u8>> {
     let len: u64 = bytes.seek(SeekFrom::End(0))?;
     byte_ranges
         .map(|byte_range| {
@@ -306,7 +307,8 @@ pub fn extract_byte_ranges_read_seek<T: Read + Seek>(
             };
             Ok(data)
         })
-        .collect::<std::io::Result<Vec<Vec<u8>>>>()
+        .flatten_ok()
+        .collect::<std::io::Result<Vec<u8>>>()
 }
 
 /// Extract byte ranges from bytes implementing [`Read`].

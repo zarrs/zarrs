@@ -23,7 +23,7 @@ fn partial_decode<'a>(
     codec: &Arc<dyn BytesToBytesCodecTraits>,
     decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
     options: &CodecOptions,
-) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+) -> Result<Option<RawBytes<'a>>, CodecError> {
     #[cfg(feature = "async")]
     let encoded_value = if _async {
         input_handle.decode(options).await
@@ -43,10 +43,8 @@ fn partial_decode<'a>(
 
     Ok(Some(
         extract_byte_ranges(&decoded_value, decoded_regions)
-            .map_err(CodecError::InvalidByteRangeError)?
-            .into_iter()
             .map(Cow::Owned)
-            .collect(),
+            .map_err(CodecError::InvalidByteRangeError)?,
     ))
 }
 
@@ -82,7 +80,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialDecoderDefault {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         partial_decode(
             &self.input_handle,
             &self.decoded_representation,
@@ -125,7 +123,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         partial_decode_async(
             &self.input_handle,
             &self.decoded_representation,

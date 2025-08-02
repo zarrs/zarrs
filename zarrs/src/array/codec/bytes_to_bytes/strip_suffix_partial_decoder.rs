@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     array::{
@@ -39,26 +39,31 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        decoded_regions
-            .map(|decoded_region| {
-                let bytes = self
-                    .input_handle
-                    .partial_decode_concat(&mut [decoded_region].into_iter(), options)?;
-                Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
-                    ByteRange::FromStart(_, Some(_)) => bytes,
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+        let mut bytes_out = Vec::new();
+        for decoded_region in decoded_regions {
+            let bytes = self
+                .input_handle
+                .partial_decode(&mut [decoded_region].into_iter(), options)?;
+            if let Some(bytes) = bytes {
+                let bytes_stripped = match decoded_region {
+                    ByteRange::FromStart(_, Some(_)) => &bytes[..],
                     ByteRange::FromStart(_, None) => {
                         let length = bytes.len() - self.suffix_size;
-                        Cow::Owned(bytes[..length].to_vec())
+                        &bytes[..length]
                     }
                     ByteRange::Suffix(_) => {
                         let length = bytes.len() as u64 - (self.suffix_size as u64);
                         let length = usize::try_from(length).unwrap();
-                        Cow::Owned(bytes[..length].to_vec())
+                        &bytes[..length]
                     }
-                }))
-            })
-            .collect()
+                };
+                bytes_out.extend_from_slice(bytes_stripped);
+            } else {
+                return Ok(None);
+            }
+        }
+        Ok(Some(bytes_out.into()))
     }
 }
 
@@ -90,22 +95,24 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        use futures::{StreamExt, TryStreamExt};
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+        use futures::StreamExt;
 
         let futures = decoded_regions.map(|decoded_region| async move {
             match decoded_region {
                 ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
                     self.input_handle
-                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .partial_decode(&mut [decoded_region].into_iter(), options)
                         .await?,
                 ),
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .partial_decode(&mut [decoded_region].into_iter(), options)
                         .await?;
                     if let Some(bytes) = bytes {
+                        use std::borrow::Cow;
+
                         let length = bytes.len() - self.suffix_size;
                         Ok(Some(Cow::Owned(bytes[..length].to_vec())))
                     } else {
@@ -114,11 +121,16 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                 }
             }
         });
-        let results: Vec<Option<_>> = futures::stream::iter(futures)
-            .buffered(options.concurrent_target())
-            .try_collect()
-            .await?;
-        let results: Option<Vec<_>> = results.into_iter().collect();
-        Ok(results)
+        let mut futures = futures::stream::iter(futures).buffered(options.concurrent_target());
+        let mut output = Vec::new();
+        while let Some(region) = futures.next().await {
+            let region = region?;
+            if let Some(region) = region {
+                output.extend_from_slice(&region);
+            } else {
+                return Ok(None);
+            }
+        }
+        Ok(Some(output.into()))
     }
 }

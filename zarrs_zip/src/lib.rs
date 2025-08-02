@@ -94,7 +94,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let mut zip_archive = self.zip_archive.lock().unwrap();
         let mut file = {
             let zip_file = zip_archive.by_name(&self.key_str_to_zip_path(key.as_str()));
@@ -110,7 +110,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
 
         let out = extract_byte_ranges_read(&mut file, size, byte_ranges)?
             .into_iter()
-            .map(Bytes::from)
+            .flat_map(Bytes::from)
             .collect();
         Ok(Some(out))
     }
@@ -128,7 +128,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         self.get_impl(key, byte_ranges)
     }
 

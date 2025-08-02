@@ -84,7 +84,7 @@ fn partial_decode<'a>(
         .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte
-    let mut byte_ranges = bit_ranges.iter().map(|bit_range| {
+    let byte_ranges = bit_ranges.iter().map(|bit_range| {
         let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
         let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
         ByteRange::new(byte_start..byte_end)
@@ -93,19 +93,27 @@ fn partial_decode<'a>(
     // Retrieve those bytes
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
-        input_handle.partial_decode(&mut byte_ranges, options).await
+        input_handle
+            .partial_decode(&mut byte_ranges.clone(), options)
+            .await
     } else {
-        input_handle.partial_decode(&mut byte_ranges, options)
+        input_handle.partial_decode(&mut byte_ranges.clone(), options)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode(&mut byte_ranges, options)?;
+    let encoded_bytes = input_handle.partial_decode(&mut byte_ranges.clone(), options)?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {
         let mut bytes_dec: Vec<u8> =
             vec![0; usize::try_from(indexer.len() * data_type_size_dec as u64).unwrap()];
         let mut component_idx_outer = 0;
-        for (packed_elements, bit_range) in encoded_bytes.into_iter().zip(bit_ranges) {
+        let mut encoded_bytes_offset = 0;
+        for (byte_range, bit_range) in byte_ranges.into_iter().zip(&bit_ranges) {
+            let byte_range_length = byte_range.length(encoded_bytes.len() as u64);
+            let packed_elements = &encoded_bytes[usize::try_from(encoded_bytes_offset).unwrap()
+                ..usize::try_from(encoded_bytes_offset + byte_range_length).unwrap()];
+            encoded_bytes_offset += byte_range_length;
+
             // Get the bit range within the entire chunk
             let bit_start = bit_range.start(encoded_length_bits);
             let bit_end = bit_range.end(encoded_length_bits);
