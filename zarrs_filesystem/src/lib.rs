@@ -7,6 +7,7 @@
 //! - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
+use itertools::Itertools;
 use zarrs_storage::{
     byte_range::{ByteOffset, ByteRange},
     store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
@@ -254,7 +255,7 @@ impl ReadableStorageTraits for FilesystemStore {
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
 
@@ -294,9 +295,11 @@ impl ReadableStorageTraits for FilesystemStore {
                         }
                     }
                 };
-                Ok(Bytes::from(bytes))
+                Ok(bytes)
             })
-            .collect::<Result<Vec<Bytes>, StorageError>>()?;
+            .flatten_ok()
+            .collect::<Result<Vec<_>, StorageError>>()?
+            .into();
 
         Ok(Some(out))
     }

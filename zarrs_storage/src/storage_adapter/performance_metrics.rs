@@ -2,8 +2,8 @@
 
 use crate::{
     byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
@@ -112,31 +112,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_partial_values_key(key, byte_ranges)?;
+    ) -> Result<Option<Bytes>, StorageError> {
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
+        let values = self
+            .storage
+            .get_partial_values_key(key, &mut byte_ranges.iter().copied())?;
         if let Some(values) = &values {
-            let bytes_read = values.iter().map(Bytes::len).sum();
+            let bytes_read = values.len();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
+            self.reads.fetch_add(byte_ranges.len(), Ordering::Relaxed);
+        } else if !byte_ranges.is_empty() {
             // If the key is found to be empty, consider that as a read
             self.reads.fetch_add(1, Ordering::Relaxed);
         }
-        Ok(values)
-    }
-
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges)?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, Bytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
         Ok(values)
     }
 
@@ -227,34 +215,20 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        let size_hint_lower_bound = byte_ranges.size_hint().0;
+    ) -> Result<Option<AsyncBytes>, StorageError> {
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let values = self
             .storage
-            .get_partial_values_key(key, byte_ranges)
+            .get_partial_values_key(key, &mut byte_ranges.iter().copied())
             .await?;
         if let Some(values) = &values {
-            let bytes_read = values.iter().map(AsyncBytes::len).sum();
+            let bytes_read = values.len();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-            self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
+            self.reads.fetch_add(byte_ranges.len(), Ordering::Relaxed);
+        } else if !byte_ranges.is_empty() {
             // If the key is found to be empty, consider that as a read
             self.reads.fetch_add(1, Ordering::Relaxed);
         }
-        Ok(values)
-    }
-
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges).await?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, AsyncBytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
         Ok(values)
     }
 

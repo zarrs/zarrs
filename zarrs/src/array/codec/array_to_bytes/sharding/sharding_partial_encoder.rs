@@ -234,8 +234,23 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling inner chunks
         let inner_chunks_encoded = self
             .input_handle
-            .partial_decode(&mut byte_ranges.into_iter(), options)?
-            .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
+            .partial_decode(&mut byte_ranges.iter().copied(), options)?;
+        let inner_chunks_encoded = inner_chunks_encoded.as_ref().map(|inner_chunks_encoded| {
+            byte_ranges
+                .iter()
+                .scan(0usize, |offset, byte_range| {
+                    let ByteRange::FromStart(_offset, Some(length)) = byte_range else {
+                        unreachable!(
+                            "sharding byte ranges always have an explicit offset and length"
+                        )
+                    };
+                    let length = usize::try_from(*length).unwrap();
+                    let inner_chunk_encoded = &inner_chunks_encoded[*offset..*offset + length];
+                    *offset += length;
+                    Some(inner_chunk_encoded)
+                })
+                .collect_vec()
+        });
 
         // Decode the straddling inner chunks
         let inner_chunks_decoded: HashMap<_, _> =
@@ -247,7 +262,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         Ok((
                             inner_chunk_index,
                             self.inner_codecs.decode(
-                                Cow::Owned(inner_chunk_encoded),
+                                Cow::Borrowed(inner_chunk_encoded),
                                 &self.inner_chunk_representation,
                                 options,
                             )?,

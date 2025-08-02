@@ -69,7 +69,7 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(&mut byte_ranges, options)?
+            .partial_decode(&mut byte_ranges, options)?
             .map_or_else(
                 || {
                     let array_size = ArraySize::new(
@@ -157,7 +157,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(&mut byte_ranges, options)
+            .partial_decode(&mut byte_ranges, options)
             .await?
             .map_or_else(
                 || {

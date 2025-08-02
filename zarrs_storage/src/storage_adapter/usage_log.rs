@@ -9,8 +9,8 @@ use itertools::Itertools;
 
 use crate::{
     byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
@@ -97,7 +97,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
@@ -107,30 +107,29 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
-            })
+            result
+                .as_ref()
+                .map(|v| { v.as_ref().map_or(0, Bytes::len) })
         )?;
         result
     }
 
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let result = self.storage.get_partial_values(key_ranges);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get_partial_values([{}]) -> len={:?}",
-            (self.prefix_func)(),
-            key_ranges.iter().format(", "),
-            result
-                .as_ref()
-                .map(|v| { v.iter().map(|v| v.iter().map(Bytes::len).collect_vec()) })
-        )?;
-        result
-    }
+    // fn get_partial_values(
+    //     &self,
+    //     key_ranges: &[StoreKeyRange],
+    // ) -> Result<Vec<MaybeBytes>, StorageError> {
+    //     let result = self.storage.get_partial_values(key_ranges);
+    //     writeln!(
+    //         self.handle.lock().unwrap(),
+    //         "{}get_partial_values([{}]) -> len={:?}",
+    //         (self.prefix_func)(),
+    //         key_ranges.iter().format(", "),
+    //         result
+    //             .as_ref()
+    //             .map(|v| { v.iter().map(|v| v.iter().map(Bytes::len).collect_vec()) })
+    //     )?;
+    //     result
+    // }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         let result = self.storage.size_key(key);
@@ -307,7 +306,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+    ) -> Result<Option<AsyncBytes>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
@@ -318,31 +317,30 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(AsyncBytes::len).collect_vec())
-            })
+            result
+                .as_ref()
+                .map(|v| { v.as_ref().map_or(0, AsyncBytes::len) })
         )?;
         result
     }
 
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let result = self.storage.get_partial_values(key_ranges).await;
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get_partial_values([{}]) -> len={:?}",
-            (self.prefix_func)(),
-            key_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.iter()
-                    .map(|v| v.iter().map(AsyncBytes::len).collect_vec())
-            })
-        )?;
-        result
-    }
+    // async fn get_partial_values(
+    //     &self,
+    //     key_ranges: &[StoreKeyRange],
+    // ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
+    //     let result = self.storage.get_partial_values(key_ranges).await;
+    //     writeln!(
+    //         self.handle.lock().unwrap(),
+    //         "{}get_partial_values([{}]) -> len={:?}",
+    //         (self.prefix_func)(),
+    //         key_ranges.iter().format(", "),
+    //         result.as_ref().map(|v| {
+    //             v.iter()
+    //                 .map(|v| v.iter().map(AsyncBytes::len).collect_vec())
+    //         })
+    //     )?;
+    //     result
+    // }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         let result = self.storage.size_key(key).await;

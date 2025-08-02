@@ -1,5 +1,6 @@
 //! A synchronous in-memory store.
 
+use itertools::Itertools;
 use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
 use std::sync::Mutex;
 
@@ -79,7 +80,7 @@ impl ReadableStorageTraits for MemoryStore {
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
         if let Some(data) = data {
@@ -93,9 +94,11 @@ impl ReadableStorageTraits for MemoryStore {
                     if end > data.len() {
                         return Err(InvalidByteRangeError::new(byte_range, data.len() as u64));
                     }
-                    Ok(data[start..end].to_vec().into())
+                    Ok(data[start..end].iter().copied())
                 })
-                .collect::<Result<Vec<Bytes>, InvalidByteRangeError>>()?;
+                .flatten_ok()
+                .collect::<Result<Vec<_>, _>>()?
+                .into();
             Ok(Some(out))
         } else {
             Ok(None)

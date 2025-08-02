@@ -2,7 +2,7 @@ use std::error::Error;
 
 use crate::{
     byte_range::ByteRange, ListableStorageTraits, ReadableStorageTraits, StoreKeyOffsetValue,
-    StoreKeyRange, StorePrefix, WritableStorageTraits,
+    StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
@@ -69,35 +69,37 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
             &"a/b".try_into()?,
             &mut [ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter()
         )?,
-        Some(vec![vec![1].into(), vec![3].into()])
+        Some(vec![1, 3].into())
     );
     assert_eq!(
-        store.get_partial_values(&[
-            StoreKeyRange::new("a/b".try_into()?, ByteRange::FromStart(1, None)),
-            StoreKeyRange::new("a/b".try_into()?, ByteRange::Suffix(2)),
-            StoreKeyRange::new("i/j/k".try_into()?, ByteRange::FromStart(1, Some(1))),
-        ])?,
-        vec![
-            Some(vec![1, 2, 3].into()),
-            Some(vec![2, 3].into()),
-            Some(vec![1].into())
-        ]
+        store.get_partial_values_key(
+            &"a/b".try_into()?,
+            &mut [ByteRange::FromStart(1, None), ByteRange::Suffix(2)].into_iter()
+        )?,
+        Some(vec![/* FromStart */ 1, 2, 3, /* Suffix */ 2, 3].into())
+    );
+    assert_eq!(
+        store.get_partial_values_key(
+            &"i/j/k".try_into()?,
+            &mut [ByteRange::FromStart(1, Some(1))].into_iter()
+        )?,
+        Some(vec![1].into())
     );
     assert!(store
-        .get_partial_values(&[StoreKeyRange::new(
-            "a/b".try_into()?,
-            ByteRange::FromStart(1, Some(10))
-        ),])
+        .get_partial_values_key(
+            &"a/b".try_into()?,
+            &mut [ByteRange::FromStart(1, Some(10))].into_iter()
+        )
         .is_err());
 
     assert_eq!(
         store
-            .get_partial_values(&[StoreKeyRange::new(
-                "notfound".try_into()?,
-                ByteRange::FromStart(1, Some(10))
-            ),])
+            .get_partial_values_key(
+                &"notfound".try_into()?,
+                &mut [ByteRange::FromStart(1, Some(10))].into_iter()
+            )
             .unwrap(),
-        vec![None]
+        None
     );
 
     Ok(())
@@ -254,39 +256,43 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
                 &mut [ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter()
             )
             .await?,
-        Some(vec![vec![1].into(), vec![3].into()])
+        Some(vec![1, 3].into())
     );
     assert_eq!(
         store
-            .get_partial_values(&[
-                StoreKeyRange::new("a/b".try_into()?, ByteRange::FromStart(1, None)),
-                StoreKeyRange::new("a/b".try_into()?, ByteRange::Suffix(2)),
-                StoreKeyRange::new("i/j/k".try_into()?, ByteRange::FromStart(1, Some(1))),
-            ])
+            .get_partial_values_key(
+                &"a/b".try_into()?,
+                &mut [ByteRange::FromStart(1, None), ByteRange::Suffix(2)].into_iter()
+            )
             .await?,
-        vec![
-            Some(vec![1, 2, 3].into()),
-            Some(vec![2, 3].into()),
-            Some(vec![1].into())
-        ]
+        Some(vec![/* FromStart */ 1, 2, 3, /* Suffix */ 2, 3].into())
+    );
+    assert_eq!(
+        store
+            .get_partial_values_key(
+                &"i/j/k".try_into()?,
+                &mut [ByteRange::FromStart(1, Some(1))].into_iter()
+            )
+            .await?,
+        Some(vec![1].into())
     );
     assert!(store
-        .get_partial_values(&[StoreKeyRange::new(
-            "a/b".try_into()?,
-            ByteRange::FromStart(1, Some(10))
-        ),])
+        .get_partial_values_key(
+            &"a/b".try_into()?,
+            &mut [ByteRange::FromStart(1, Some(10))].into_iter()
+        )
         .await
         .is_err());
 
     assert_eq!(
         store
-            .get_partial_values(&[StoreKeyRange::new(
-                "notfound".try_into()?,
-                ByteRange::FromStart(1, Some(10))
-            ),])
+            .get_partial_values_key(
+                &"notfound".try_into()?,
+                &mut [ByteRange::FromStart(1, Some(10))].into_iter()
+            )
             .await
             .unwrap(),
-        vec![None]
+        None
     );
 
     Ok(())

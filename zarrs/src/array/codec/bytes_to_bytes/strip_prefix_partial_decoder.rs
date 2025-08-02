@@ -39,7 +39,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
@@ -80,7 +80,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)

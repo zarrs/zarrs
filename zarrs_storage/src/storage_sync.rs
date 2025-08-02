@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use super::{
     byte_range::ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
-    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Readable storage traits.
@@ -18,9 +18,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        Ok(self
-            .get_partial_values_key(key, &mut [ByteRange::FromStart(0, None)].into_iter())?
-            .map(|mut v| v.remove(0)))
+        self.get_partial_values_key(key, &mut [ByteRange::FromStart(0, None)].into_iter())
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -33,24 +31,24 @@ pub trait ReadableStorageTraits: Send + Sync {
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError>;
+    ) -> Result<Option<Bytes>, StorageError>;
 
-    /// Retrieve partial bytes from a list of [`StoreKeyRange`].
-    ///
-    /// # Parameters
-    /// * `key_ranges`: ordered set of ([`StoreKey`], [`ByteRange`]) pairs. A key may occur multiple times with different ranges.
-    ///
-    /// # Output
-    /// A a list of values in the order of the `key_ranges`. It will be [`None`] for missing keys.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        self.get_partial_values_batched_by_key(key_ranges)
-    }
+    // /// Retrieve partial bytes from a list of [`StoreKeyRange`].
+    // ///
+    // /// # Parameters
+    // /// * `key_ranges`: ordered set of ([`StoreKey`], [`ByteRange`]) pairs. A key may occur multiple times with different ranges.
+    // ///
+    // /// # Output
+    // /// A list of values in the order of the `key_ranges`. It will be [`None`] for missing keys.
+    // ///
+    // /// # Errors
+    // /// Returns a [`StorageError`] if there is an underlying storage error.
+    // fn get_partial_values(
+    //     &self,
+    //     key_ranges: &[StoreKeyRange],
+    // ) -> Result<Vec<MaybeBytes>, StorageError> {
+    //     self.get_partial_values_batched_by_key(key_ranges)
+    // }
 
     /// Return the size in bytes of the value at `key`.
     ///
@@ -60,56 +58,52 @@ pub trait ReadableStorageTraits: Send + Sync {
     /// Returns a [`StorageError`] if there is an underlying storage error.
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError>;
 
-    /// A utility method with the same input and output as [`get_partial_values`](ReadableStorageTraits::get_partial_values) that internally calls [`get_partial_values_key`](ReadableStorageTraits::get_partial_values_key) with byte ranges grouped by key.
-    ///
-    /// Readable storage can use this function in the implementation of [`get_partial_values`](ReadableStorageTraits::get_partial_values) if that is optimal.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn get_partial_values_batched_by_key(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let mut out: Vec<MaybeBytes> = Vec::with_capacity(key_ranges.len());
-        let mut last_key = None;
-        let mut byte_ranges_key = Vec::new();
-        for key_range in key_ranges {
-            if last_key.is_none() {
-                last_key = Some(&key_range.key);
-            }
-            let last_key_val = last_key.unwrap();
+    // /// A utility method with the same input and output as [`get_partial_values`](ReadableStorageTraits::get_partial_values) that internally calls [`get_partial_values_key`](ReadableStorageTraits::get_partial_values_key) with byte ranges grouped by key.
+    // ///
+    // /// Readable storage can use this function in the implementation of [`get_partial_values`](ReadableStorageTraits::get_partial_values) if that is optimal.
+    // ///
+    // /// # Errors
+    // /// Returns a [`StorageError`] if there is an underlying storage error.
+    // fn get_partial_values_batched_by_key(
+    //     &self,
+    //     key_ranges: &[StoreKeyRange],
+    // ) -> Result<Vec<MaybeBytes>, StorageError> {
+    //     let mut out: Vec<MaybeBytes> = Vec::with_capacity(key_ranges.len());
+    //     let mut last_key = None;
+    //     let mut byte_ranges_key = Vec::new();
+    //     for key_range in key_ranges {
+    //         if last_key.is_none() {
+    //             last_key = Some(&key_range.key);
+    //         }
+    //         let last_key_val = last_key.unwrap();
 
-            if key_range.key != *last_key_val {
-                // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self.get_partial_values_key(
-                    last_key.unwrap(),
-                    &mut byte_ranges_key.iter().copied(),
-                )?)
-                .map_or_else(
-                    || vec![None; byte_ranges_key.len()],
-                    |partial_values| partial_values.into_iter().map(Some).collect(),
-                );
-                out.extend(bytes);
-                last_key = Some(&key_range.key);
-                byte_ranges_key.clear();
-            }
+    //         if key_range.key != *last_key_val {
+    //             // Found a new key, so do a batched get of the byte ranges of the last key
+    //             let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())?)
+    //                 .map_or_else(
+    //                     || vec![None; byte_ranges_key.len()],
+    //                     |partial_values| partial_values.into_iter().map(Some).collect(),
+    //                 );
+    //             out.extend(bytes);
+    //             last_key = Some(&key_range.key);
+    //             byte_ranges_key.clear();
+    //         }
 
-            byte_ranges_key.push(key_range.byte_range);
-        }
+    //         byte_ranges_key.push(key_range.byte_range);
+    //     }
 
-        if !byte_ranges_key.is_empty() {
-            // Get the byte ranges of the last key
-            let bytes = (self
-                .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())?)
-            .map_or_else(
-                || vec![None; byte_ranges_key.len()],
-                |partial_values| partial_values.into_iter().map(Some).collect(),
-            );
-            out.extend(bytes);
-        }
+    //     if !byte_ranges_key.is_empty() {
+    //         // Get the byte ranges of the last key
+    //         let bytes = (self.get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())?)
+    //             .map_or_else(
+    //                 || vec![None; byte_ranges_key.len()],
+    //                 |partial_values| partial_values.into_iter().map(Some).collect(),
+    //             );
+    //         out.extend(bytes);
+    //     }
 
-        Ok(out)
-    }
+    //     Ok(out)
+    // }
 }
 
 /// Listable storage traits.

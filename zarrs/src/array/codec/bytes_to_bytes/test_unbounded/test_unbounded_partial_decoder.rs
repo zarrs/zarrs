@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     array::{
@@ -32,7 +32,7 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -41,9 +41,7 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
         Ok(Some(
             extract_byte_ranges(&encoded_value, decoded_regions)
                 .map_err(CodecError::InvalidByteRangeError)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
+                .into(),
         ))
     }
 }
@@ -69,7 +67,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -78,9 +76,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
         Ok(Some(
             extract_byte_ranges(&encoded_value, decoded_regions)
                 .map_err(CodecError::InvalidByteRangeError)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
+                .into(),
         ))
     }
 }

@@ -157,14 +157,8 @@ mod tests {
                 .partial_decode(&mut decoded_regions.into_iter(), &CodecOptions::default())
                 .unwrap()
                 .unwrap();
-            let answer: &[Vec<u8>] = &[vec![3, 4]];
-            assert_eq!(
-                answer,
-                decoded_partial_chunk
-                    .into_iter()
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<_>>()
-            );
+            let answer = vec![3, 4];
+            assert_eq!(answer, *decoded_partial_chunk);
         }
     }
 
@@ -199,14 +193,8 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap();
-            let answer: &[Vec<u8>] = &[vec![3, 4]];
-            assert_eq!(
-                answer,
-                decoded_partial_chunk
-                    .into_iter()
-                    .map(|v| v.to_vec())
-                    .collect::<Vec<_>>()
-            );
+            let answer = vec![3, 4];
+            assert_eq!(answer, *decoded_partial_chunk);
         }
     }
 }

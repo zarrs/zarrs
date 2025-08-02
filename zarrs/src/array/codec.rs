@@ -327,25 +327,7 @@ pub trait BytesPartialDecoderTraits: Any + Send + Sync {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
-
-    /// Partially decode bytes and concatenate.
-    ///
-    /// Returns [`None`] if partial decoding of the input handle returns [`None`].
-    ///
-    /// Codecs can manually implement this method with a preallocated array to reduce internal allocations.
-    ///
-    /// # Errors
-    /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
-    fn partial_decode_concat(
-        &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
-        options: &CodecOptions,
-    ) -> Result<Option<RawBytes<'_>>, CodecError> {
-        Ok(self
-            .partial_decode(decoded_regions, options)?
-            .map(|vecs| Cow::Owned(vecs.concat())))
-    }
+    ) -> Result<Option<RawBytes<'_>>, CodecError>;
 
     /// Decode all bytes.
     ///
@@ -354,9 +336,7 @@ pub trait BytesPartialDecoderTraits: Any + Send + Sync {
     /// # Errors
     /// Returns [`CodecError`] if a codec fails.
     fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
-        Ok(self
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
-            .map(|mut v| v.remove(0)))
+        self.partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
     }
 }
 
@@ -374,24 +354,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
-
-    /// Partially decode bytes and concatenate.
-    ///
-    /// Returns [`None`] if partial decoding of the input handle returns [`None`].
-    ///
-    /// # Errors
-    /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
-    async fn partial_decode_concat(
-        &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
-        options: &CodecOptions,
-    ) -> Result<Option<RawBytes<'_>>, CodecError> {
-        Ok(self
-            .partial_decode(decoded_regions, options)
-            .await?
-            .map(|vecs| Cow::Owned(vecs.concat())))
-    }
+    ) -> Result<Option<RawBytes<'_>>, CodecError>;
 
     /// Decode all bytes.
     ///
@@ -400,10 +363,8 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
     /// # Errors
     /// Returns [`CodecError`] if a codec fails.
     async fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
-        Ok(self
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
-            .await?
-            .map(|mut v| v.remove(0)))
+        self.partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
+            .await
     }
 }
 
@@ -607,16 +568,11 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
             .storage
             .get_partial_values_key(&self.key, decoded_regions)?
-            .map(|vec_bytes| {
-                vec_bytes
-                    .into_iter()
-                    .map(|bytes| Cow::Owned(bytes.to_vec()))
-                    .collect()
-            }))
+            .map(|v| Cow::Owned(v.into())))
     }
 }
 
@@ -642,17 +598,12 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
             .storage
             .get_partial_values_key(&self.key, decoded_regions)
             .await?
-            .map(|vec_bytes| {
-                vec_bytes
-                    .into_iter()
-                    .map(|bytes| Cow::Owned(bytes.to_vec()))
-                    .collect()
-            }))
+            .map(|v| Cow::Owned(v.into())))
     }
 }
 
@@ -1188,13 +1139,11 @@ where
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+        Ok(Some(Cow::Owned(extract_byte_ranges_read_seek(
+            std::io::Cursor::new(self),
+            decoded_regions,
+        )?)))
     }
 }
 
@@ -1208,13 +1157,11 @@ where
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(Some(
-            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
-                .into_iter()
-                .map(Cow::Owned)
-                .collect(),
-        ))
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+        Ok(Some(Cow::Owned(extract_byte_ranges_read_seek(
+            std::io::Cursor::new(self),
+            decoded_regions,
+        )?)))
     }
 }
 
