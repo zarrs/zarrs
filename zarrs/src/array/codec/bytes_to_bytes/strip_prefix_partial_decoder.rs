@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use itertools::Itertools;
-
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
@@ -39,21 +37,18 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let decoded_regions = decoded_regions
-            .iter()
-            .map(|range| match range {
-                ByteRange::FromStart(offset, length) => ByteRange::FromStart(
-                    offset.checked_add(self.prefix_size as u64).unwrap(),
-                    *length,
-                ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(*length),
-            })
-            .collect_vec();
+        let mut decoded_regions = decoded_regions.map(|range| match range {
+            ByteRange::FromStart(offset, length) => {
+                ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
+            }
+            ByteRange::Suffix(length) => ByteRange::Suffix(length),
+        });
 
-        self.input_handle.partial_decode(&decoded_regions, options)
+        self.input_handle
+            .partial_decode(&mut decoded_regions, options)
     }
 }
 
@@ -83,22 +78,18 @@ impl AsyncStripPrefixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let decoded_regions = decoded_regions
-            .iter()
-            .map(|range| match range {
-                ByteRange::FromStart(offset, length) => ByteRange::FromStart(
-                    offset.checked_add(self.prefix_size as u64).unwrap(),
-                    *length,
-                ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(*length),
-            })
-            .collect_vec();
+        let mut decoded_regions = decoded_regions.map(|range| match range {
+            ByteRange::FromStart(offset, length) => {
+                ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
+            }
+            ByteRange::Suffix(length) => ByteRange::Suffix(length),
+        });
 
         self.input_handle
-            .partial_decode(&decoded_regions, options)
+            .partial_decode(&mut decoded_regions, options)
             .await
     }
 }

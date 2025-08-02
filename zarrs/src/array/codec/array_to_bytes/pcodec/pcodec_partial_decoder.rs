@@ -2,15 +2,12 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::PCODEC;
 
-use crate::{
-    array::{
-        codec::{
-            ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError,
-            CodecOptions, RawBytes,
-        },
-        ArraySize, ChunkRepresentation, DataType,
+use crate::array::{
+    codec::{
+        ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
+        RawBytes,
     },
-    array_subset::ArraySubset,
+    ArraySize, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -37,16 +34,14 @@ impl PcodecPartialDecoder {
 
 fn do_partial_decode<'a>(
     decoded: Option<RawBytes<'a>>,
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
     decoded_representation: &ChunkRepresentation,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let chunk_shape = decoded_representation.shape_u64();
     match decoded {
         None => {
-            let array_size = ArraySize::new(
-                decoded_representation.data_type().size(),
-                indexer.num_elements(),
-            );
+            let array_size =
+                ArraySize::new(decoded_representation.data_type().size(), indexer.len());
             let fill_value =
                 ArrayBytes::new_fill_value(array_size, decoded_representation.fill_value());
             Ok(fill_value)
@@ -60,7 +55,7 @@ fn do_partial_decode<'a>(
                     let decoded_chunk: ArrayBytes = decoded_chunk.into();
                     let bytes_subset = decoded_chunk
                         .extract_array_subset(
-                            &indexer,
+                            indexer,
                             &chunk_shape,
                             decoded_representation.data_type(),
                         )?
@@ -126,9 +121,16 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.dimensionality(),
+                self.decoded_representation.dimensionality(),
+            ));
+        }
+
         let decoded = self.input_handle.decode(options)?;
         do_partial_decode(decoded, indexer, &self.decoded_representation)
     }
@@ -164,12 +166,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(CodecError::InvalidIndexerDimensionalityError(
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
             ));
         }

@@ -30,7 +30,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
@@ -43,7 +43,7 @@ impl MaybeShardingPartialDecoder {
 
     async fn partial_decode_into(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         output_view: &mut ArrayBytesFixedDisjointView<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {

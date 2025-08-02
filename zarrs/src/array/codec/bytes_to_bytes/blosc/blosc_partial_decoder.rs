@@ -34,7 +34,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
@@ -46,21 +46,15 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
             let nbytes = blosc_nbytes(&encoded_value);
             let typesize = blosc_typesize(&encoded_value);
             if let (Some(nbytes), Some(typesize)) = (nbytes, typesize) {
-                let mut decoded_byte_ranges = Vec::with_capacity(decoded_regions.len());
-                for byte_range in decoded_regions {
-                    let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
-                    let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
-                    decoded_byte_ranges.push(
-                        blosc_decompress_bytes_partial(
-                            &encoded_value,
-                            start,
-                            end - start,
-                            typesize,
-                        )
-                        .map(Cow::Owned)
-                        .map_err(|err| CodecError::from(err.to_string()))?,
-                    );
-                }
+                let decoded_byte_ranges = decoded_regions
+                    .map(|byte_range| {
+                        let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
+                        let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
+                        blosc_decompress_bytes_partial(&encoded_value, start, end - start, typesize)
+                            .map(Cow::Owned)
+                            .map_err(|err| CodecError::from(err.to_string()))
+                    })
+                    .collect::<Result<Vec<_>, CodecError>>()?;
                 return Ok(Some(decoded_byte_ranges));
             }
         }
@@ -86,7 +80,7 @@ impl AsyncBloscPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &[ByteRange],
+        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
@@ -98,21 +92,15 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
             let nbytes = blosc_nbytes(&encoded_value);
             let typesize = blosc_typesize(&encoded_value);
             if let (Some(nbytes), Some(typesize)) = (nbytes, typesize) {
-                let mut decoded_byte_ranges = Vec::with_capacity(decoded_regions.len());
-                for byte_range in decoded_regions {
-                    let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
-                    let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
-                    decoded_byte_ranges.push(
-                        blosc_decompress_bytes_partial(
-                            &encoded_value,
-                            start,
-                            end - start,
-                            typesize,
-                        )
-                        .map(Cow::Owned)
-                        .map_err(|err| CodecError::from(err.to_string()))?,
-                    );
-                }
+                let decoded_byte_ranges = decoded_regions
+                    .map(|byte_range| {
+                        let start = usize::try_from(byte_range.start(nbytes as u64)).unwrap();
+                        let end = usize::try_from(byte_range.end(nbytes as u64)).unwrap();
+                        blosc_decompress_bytes_partial(&encoded_value, start, end - start, typesize)
+                            .map(Cow::Owned)
+                            .map_err(|err| CodecError::from(err.to_string()))
+                    })
+                    .collect::<Result<Vec<_>, CodecError>>()?;
                 return Ok(Some(decoded_byte_ranges));
             }
         }
