@@ -8,7 +8,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange},
+    byte_range::{extract_byte_ranges_read_seek, ByteOffset, ByteRange},
     store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
     StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
     StorePrefixes, WritableStorageTraits,
@@ -22,7 +22,7 @@ use walkdir::WalkDir;
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -254,11 +254,11 @@ impl ReadableStorageTraits for FilesystemStore {
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
 
-        let mut file = match File::open(self.key_to_fspath(key)) {
+        let file = match File::open(self.key_to_fspath(key)) {
             Ok(file) => file,
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::NotFound {
@@ -268,37 +268,8 @@ impl ReadableStorageTraits for FilesystemStore {
             }
         };
 
-        let out = byte_ranges
-            .map(|byte_range| {
-                let bytes = {
-                    // Seek
-                    match byte_range {
-                        ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
-                        ByteRange::Suffix(length) => {
-                            file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
-                        }
-                    }?;
-
-                    // Read
-                    match byte_range {
-                        ByteRange::FromStart(_, None) => {
-                            let mut buffer = Vec::new();
-                            file.read_to_end(&mut buffer)?;
-                            buffer
-                        }
-                        ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
-                            let length = usize::try_from(length).unwrap();
-                            let mut buffer = vec![0; length];
-                            file.read_exact(&mut buffer)?;
-                            buffer
-                        }
-                    }
-                };
-                Ok(Bytes::from(bytes))
-            })
-            .collect::<Result<Vec<Bytes>, StorageError>>()?;
-
-        Ok(Some(out))
+        let out = extract_byte_ranges_read_seek(file, byte_ranges)?;
+        Ok(Some(out.into()))
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {

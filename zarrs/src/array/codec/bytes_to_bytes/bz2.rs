@@ -136,7 +136,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // bz2 partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode(&mut decoded_regions, &CodecOptions::default())
             .unwrap()
             .unwrap();
 
@@ -184,7 +184,7 @@ mod tests {
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode(&mut decoded_regions, &CodecOptions::default())
             .await
             .unwrap()
             .unwrap();

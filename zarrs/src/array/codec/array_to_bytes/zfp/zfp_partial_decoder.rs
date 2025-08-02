@@ -10,7 +10,7 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
-    storage::byte_range::extract_byte_ranges_concat,
+    storage::byte_range::extract_byte_ranges,
 };
 
 #[cfg(feature = "async")]
@@ -84,7 +84,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
                 false, // FIXME
             )?;
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
-            Ok(ArrayBytes::from(extract_byte_ranges_concat(
+            Ok(ArrayBytes::from(extract_byte_ranges(
                 &decoded_value,
                 byte_ranges,
             )?))
@@ -167,7 +167,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
                 false, // FIXME
             )?;
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
-            Ok(ArrayBytes::from(extract_byte_ranges_concat(
+            Ok(ArrayBytes::from(extract_byte_ranges(
                 &decoded_value,
                 byte_ranges,
             )?))

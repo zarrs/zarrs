@@ -28,7 +28,7 @@ impl BytesPartialDecoderCache {
     ) -> Result<Self, CodecError> {
         let cache = input_handle
             .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
-            .map(|mut bytes| bytes.remove(0).into_owned());
+            .map(Cow::into_owned);
         Ok(Self { cache })
     }
 
@@ -44,7 +44,7 @@ impl BytesPartialDecoderCache {
         let cache = input_handle
             .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
             .await?
-            .map(|mut bytes| bytes.remove(0).into_owned());
+            .map(Cow::into_owned);
         Ok(Self { cache })
     }
 }
@@ -58,15 +58,12 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(match &self.cache {
-            Some(bytes) => Some(
+            Some(bytes) => Some(Cow::Owned(
                 extract_byte_ranges(bytes, decoded_regions)
-                    .map_err(CodecError::InvalidByteRangeError)?
-                    .into_iter()
-                    .map(Cow::Owned)
-                    .collect(),
-            ),
+                    .map_err(CodecError::InvalidByteRangeError)?,
+            )),
             None => None,
         })
     }
@@ -79,7 +76,7 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         &self,
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<RawBytes<'_>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode(self, decoded_regions, options)
     }
 }

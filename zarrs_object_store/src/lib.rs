@@ -38,6 +38,7 @@
 pub use object_store;
 
 use futures::{StreamExt, TryStreamExt};
+use itertools::Itertools;
 use object_store::path::Path;
 
 use zarrs_storage::{
@@ -101,7 +102,7 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+    ) -> Result<Option<AsyncBytes>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
         };
@@ -127,7 +128,9 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
                             )))
                         }
                     })
-                    .collect::<Result<_, StorageError>>()?,
+                    .flatten_ok()
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into(),
             )),
             Err(err) => {
                 if matches!(err, object_store::Error::NotFound { .. }) {

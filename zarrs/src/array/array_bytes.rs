@@ -9,7 +9,7 @@ use crate::{
     array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
     indexer::Indexer,
     metadata::DataTypeSize,
-    storage::byte_range::extract_byte_ranges_concat,
+    storage::byte_range::extract_byte_ranges,
 };
 
 use super::{
@@ -259,7 +259,7 @@ impl<'a> ArrayBytes<'a> {
             ArrayBytes::Fixed(bytes) => {
                 let byte_ranges =
                     indexer.byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
+                let bytes = extract_byte_ranges(bytes, byte_ranges)?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
         }
