@@ -45,22 +45,18 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                 let bytes = self
                     .input_handle
                     .partial_decode_concat(&mut [decoded_region].into_iter(), options)?;
-                Ok::<_, CodecError>(if let Some(bytes) = bytes {
-                    Some(match decoded_region {
-                        ByteRange::FromStart(_, Some(_)) => bytes,
-                        ByteRange::FromStart(_, None) => {
-                            let length = bytes.len() - self.suffix_size;
-                            Cow::Owned(bytes[..length].to_vec())
-                        }
-                        ByteRange::Suffix(_) => {
-                            let length = bytes.len() as u64 - (self.suffix_size as u64);
-                            let length = usize::try_from(length).unwrap();
-                            Cow::Owned(bytes[..length].to_vec())
-                        }
-                    })
-                } else {
-                    None
-                })
+                Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
+                    ByteRange::FromStart(_, Some(_)) => bytes,
+                    ByteRange::FromStart(_, None) => {
+                        let length = bytes.len() - self.suffix_size;
+                        Cow::Owned(bytes[..length].to_vec())
+                    }
+                    ByteRange::Suffix(_) => {
+                        let length = bytes.len() as u64 - (self.suffix_size as u64);
+                        let length = usize::try_from(length).unwrap();
+                        Cow::Owned(bytes[..length].to_vec())
+                    }
+                }))
             })
             .collect()
     }

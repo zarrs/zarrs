@@ -188,6 +188,9 @@ fn is_valid(byte_range: ByteRange, bytes_len: u64) -> bool {
 ///
 /// # Errors
 /// Returns [`InvalidByteRangeError`] if any bytes are requested beyond the end of `bytes`.
+///
+/// # Panics
+/// Panics if requesting bytes beyond [`usize::MAX`].
 pub fn extract_byte_ranges(
     bytes: &[u8],
     byte_ranges: impl Iterator<Item = ByteRange>,
@@ -210,6 +213,9 @@ pub fn extract_byte_ranges(
 ///
 /// # Errors
 /// Returns [`InvalidByteRangeError`] if any bytes are requested beyond the end of `bytes`.
+///
+/// # Panics
+/// Panics if requesting bytes beyond [`usize::MAX`].
 pub fn extract_byte_ranges_concat(
     bytes: &[u8],
     byte_ranges: impl Iterator<Item = ByteRange>,
