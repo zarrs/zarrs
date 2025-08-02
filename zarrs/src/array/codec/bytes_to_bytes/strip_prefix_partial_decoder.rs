@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
@@ -41,16 +40,15 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions
-            .map(|range| match range {
-                ByteRange::FromStart(offset, length) => ByteRange::FromStart(
-                    offset.checked_add(self.prefix_size as u64).unwrap(),
-                    length,
-                ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(length),
-            });
+        let mut decoded_regions = decoded_regions.map(|range| match range {
+            ByteRange::FromStart(offset, length) => {
+                ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
+            }
+            ByteRange::Suffix(length) => ByteRange::Suffix(length),
+        });
 
-        self.input_handle.partial_decode(&mut decoded_regions, options)
+        self.input_handle
+            .partial_decode(&mut decoded_regions, options)
     }
 }
 
@@ -83,14 +81,12 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions
-            .map(|range| match range {
-                ByteRange::FromStart(offset, length) => ByteRange::FromStart(
-                    offset.checked_add(self.prefix_size as u64).unwrap(),
-                    length,
-                ),
-                ByteRange::Suffix(length) => ByteRange::Suffix(length),
-            });
+        let mut decoded_regions = decoded_regions.map(|range| match range {
+            ByteRange::FromStart(offset, length) => {
+                ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
+            }
+            ByteRange::Suffix(length) => ByteRange::Suffix(length),
+        });
 
         self.input_handle
             .partial_decode(&mut decoded_regions, options)

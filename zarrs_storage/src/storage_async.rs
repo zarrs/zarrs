@@ -9,8 +9,6 @@ use super::{
     StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
-
-
 /// Async readable storage traits.
 #[cfg_attr(feature = "async", async_trait::async_trait)]
 #[auto_impl(Arc)]

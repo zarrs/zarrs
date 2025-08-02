@@ -550,7 +550,6 @@ mod tests {
     use super::*;
     use crate::storage::byte_range::ByteRange;
 
-
     #[test]
     fn array_subset() {
         assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10]).is_ok());
@@ -609,7 +608,10 @@ mod tests {
         let array_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
 
         assert!(array_subset.byte_ranges(&[1, 1], 1).is_err());
-        let ranges = array_subset.byte_ranges(&[4, 4], 1).unwrap().collect::<Vec<ByteRange>>();
+        let ranges = array_subset
+            .byte_ranges(&[4, 4], 1)
+            .unwrap()
+            .collect::<Vec<ByteRange>>();
 
         assert_eq!(
             ranges,

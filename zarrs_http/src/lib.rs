@@ -107,8 +107,20 @@ impl ReadableStorageTraits for HTTPStore {
         let Some(size) = self.size_key(key)? else {
             return Ok(None);
         };
-        let (bytes_strs, bytes_lengths, bytes_start_end): (Vec<String>, Vec<usize>, Vec<(usize, usize)>) = multiunzip(byte_ranges
-            .map(|byte_range| (format!("{}-{}", byte_range.start(size), byte_range.end(size) - 1), usize::try_from(byte_range.length(size)).unwrap(), (usize::try_from(byte_range.start(size)).unwrap(), usize::try_from(byte_range.end(size)).unwrap()))));
+        let (bytes_strs, bytes_lengths, bytes_start_end): (
+            Vec<String>,
+            Vec<usize>,
+            Vec<(usize, usize)>,
+        ) = multiunzip(byte_ranges.map(|byte_range| {
+            (
+                format!("{}-{}", byte_range.start(size), byte_range.end(size) - 1),
+                usize::try_from(byte_range.length(size)).unwrap(),
+                (
+                    usize::try_from(byte_range.start(size)).unwrap(),
+                    usize::try_from(byte_range.end(size)).unwrap(),
+                ),
+            )
+        }));
         let bytes_strs = bytes_strs.join(", ");
 
         let range = HeaderValue::from_str(&format!("bytes={bytes_strs}")).unwrap();

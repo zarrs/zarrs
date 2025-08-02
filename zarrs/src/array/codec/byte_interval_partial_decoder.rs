@@ -44,19 +44,17 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut byte_ranges = byte_ranges
-            .map(|byte_range| match byte_range {
-                ByteRange::FromStart(offset, None) => {
-                    ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
-                }
-                ByteRange::FromStart(offset, Some(length)) => {
-                    ByteRange::FromStart(self.byte_offset + offset, Some(length))
-                }
-                ByteRange::Suffix(length) => ByteRange::FromStart(
-                    self.byte_offset + self.byte_length - length,
-                    Some(length),
-                ),
-            });
+        let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
+            ByteRange::FromStart(offset, None) => {
+                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
+            }
+            ByteRange::FromStart(offset, Some(length)) => {
+                ByteRange::FromStart(self.byte_offset + offset, Some(length))
+            }
+            ByteRange::Suffix(length) => {
+                ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
+            }
+        });
         self.inner.partial_decode(&mut byte_ranges, options)
     }
 }
@@ -95,19 +93,17 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut byte_ranges = byte_ranges
-            .map(|byte_range| match byte_range {
-                ByteRange::FromStart(offset, None) => {
-                    ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
-                }
-                ByteRange::FromStart(offset, Some(length)) => {
-                    ByteRange::FromStart(self.byte_offset + offset, Some(length))
-                }
-                ByteRange::Suffix(length) => ByteRange::FromStart(
-                    self.byte_offset + self.byte_length - length,
-                    Some(length),
-                ),
-            });
+        let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
+            ByteRange::FromStart(offset, None) => {
+                ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
+            }
+            ByteRange::FromStart(offset, Some(length)) => {
+                ByteRange::FromStart(self.byte_offset + offset, Some(length))
+            }
+            ByteRange::Suffix(length) => {
+                ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
+            }
+        });
         self.inner.partial_decode(&mut byte_ranges, options).await
     }
 }
