@@ -65,16 +65,14 @@ pub trait Indexer: Send + Sync {
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerAndShapeError>
+    {
         let element_size_u64 = element_size as u64;
         let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
             move |(array_index, contiguous_elements)| {
                 let byte_index = array_index * element_size_u64;
-                ByteRange::FromStart(
-                    byte_index,
-                    Some(contiguous_elements * element_size_u64),
-                )
-            }
+                ByteRange::FromStart(byte_index, Some(contiguous_elements * element_size_u64))
+            },
         );
         Ok(Box::new(byte_ranges))
     }

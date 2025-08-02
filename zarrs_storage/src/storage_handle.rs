@@ -32,7 +32,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges)
     }

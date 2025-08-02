@@ -84,13 +84,11 @@ fn partial_decode<'a>(
         .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte
-    let mut byte_ranges = bit_ranges
-        .iter()
-        .map(|bit_range| {
-            let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
-            let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
-            ByteRange::new(byte_start..byte_end)
-        });
+    let mut byte_ranges = bit_ranges.iter().map(|bit_range| {
+        let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
+        let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
+        ByteRange::new(byte_start..byte_end)
+    });
 
     // Retrieve those bytes
     #[cfg(feature = "async")]

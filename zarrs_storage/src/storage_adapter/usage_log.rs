@@ -96,10 +96,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges:&mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
-        let result = self.storage.get_partial_values_key(key, &mut byte_ranges.iter().copied());
+        let result = self
+            .storage
+            .get_partial_values_key(key, &mut byte_ranges.iter().copied());
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
@@ -307,7 +309,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
-        let result = self.storage.get_partial_values_key(key, &mut byte_ranges.iter().copied()).await;
+        let result = self
+            .storage
+            .get_partial_values_key(key, &mut byte_ranges.iter().copied())
+            .await;
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
