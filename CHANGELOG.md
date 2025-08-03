@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Into[Parallel]Iterator` for `Indices` and `IntoParallelRefIterator` for `&Indices`
   - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
-- Add `ChunkKeySeparator::as_char()`
+- Impl `From<ChunkKeySeparator>` for `char`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -78,7 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Auto implement `[Async]BytesPartialDecoderTraits` for `T: AsRef<[u8]> + ...`
 - **Breaking**: `Arc` the `ChunkCache` types
 - **Breaking**: Change `Contiguous[Linearised]Indices` iterators to include the number of contiguous indices in their `Item`
-- **Breaking**: Change `ChunkKeySeparator` discriminators to their underlying character
 - Optimised chunk key encoders
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0

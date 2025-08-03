@@ -2,21 +2,21 @@ use derive_more::Display;
 
 /// A chunk key separator. `/` or `.`.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
-#[repr(u8)]
 pub enum ChunkKeySeparator {
     /// The slash '/' character.
     #[display("/")]
-    Slash = b'/',
+    Slash,
     /// The dot '.' character.
     #[display(".")]
-    Dot = b'.',
+    Dot,
 }
 
-impl ChunkKeySeparator {
-    /// Return the chunk key separator ass a `char`.
-    #[must_use]
-    pub fn as_char(&self) -> char {
-        (*self as u8) as char
+impl From<ChunkKeySeparator> for char {
+    fn from(value: ChunkKeySeparator) -> Self {
+        match value {
+            ChunkKeySeparator::Slash => '/',
+            ChunkKeySeparator::Dot => '.',
+        }
     }
 }
 
