@@ -1,5 +1,6 @@
 //! The default chunk key encoding.
 
+use itertools::Itertools;
 use zarrs_registry::chunk_key_encoding::DEFAULT;
 
 use crate::{
@@ -89,16 +90,27 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {
-        let mut key = "c".to_string();
-        if !chunk_grid_indices.is_empty() {
-            key = key
-                + &self.separator.to_string()
-                + &chunk_grid_indices
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(&self.separator.to_string());
-        }
+        const PREFIX: &str = "c";
+
+        let key = if chunk_grid_indices.is_empty() {
+            PREFIX.to_string()
+        } else {
+            // Avoid a heap allocation of the chunk key separator
+            let mut separator_str: [u8; 4] = [0; 4];
+            let separator_char: char = self.separator.into();
+            let separator_str: &str = separator_char.encode_utf8(&mut separator_str);
+
+            // Use itoa for integer conversion, faster than format!
+            let mut buffers = vec![itoa::Buffer::new(); chunk_grid_indices.len()];
+
+            let iter = chunk_grid_indices
+                .iter()
+                .zip(&mut buffers)
+                .map(|(&n, buffer)| buffer.format(n));
+            #[allow(clippy::let_and_return)]
+            let out = [PREFIX].into_iter().chain(iter).join(separator_str);
+            out
+        };
         unsafe { StoreKey::new_unchecked(key) }
     }
 }

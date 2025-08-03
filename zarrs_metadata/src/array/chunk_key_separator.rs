@@ -11,6 +11,15 @@ pub enum ChunkKeySeparator {
     Dot,
 }
 
+impl From<ChunkKeySeparator> for char {
+    fn from(value: ChunkKeySeparator) -> Self {
+        match value {
+            ChunkKeySeparator::Slash => '/',
+            ChunkKeySeparator::Dot => '.',
+        }
+    }
+}
+
 impl TryFrom<char> for ChunkKeySeparator {
     type Error = char;
 
