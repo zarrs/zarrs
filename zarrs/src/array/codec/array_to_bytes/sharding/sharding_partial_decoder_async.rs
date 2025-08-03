@@ -4,16 +4,19 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
-use crate::array::{
-    array_bytes::merge_chunks_vlen,
-    chunk_grid::{ChunkGridTraits, RegularChunkGrid},
-    codec::{
-        ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-        AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain, CodecError,
-        CodecOptions,
+use crate::{
+    array::{
+        array_bytes::merge_chunks_vlen,
+        chunk_grid::RegularChunkGrid,
+        codec::{
+            ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+            AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
+            CodecError, CodecOptions,
+        },
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
+        ChunkShape, DataType, DataTypeSize, RawBytes,
     },
-    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-    ChunkShape, DataType, DataTypeSize, RawBytes,
+    array_subset::IncompatibleDimensionalityError,
 };
 
 use super::{calculate_chunks_per_shard, ShardingIndexLocation};
@@ -180,13 +183,11 @@ async fn partial_decode_fixed_array_subset(
         partial_decoder.shard_representation.shape_u64(),
         partial_decoder.chunk_representation.shape().into(),
     )
-    .expect("matching dimensionality");
+    .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
     // Find filled / non filled chunks
     let chunk_info = shard_chunk_grid
-        .chunks_in_array_subset(array_subset)
-        .expect("matching dimensionality")
-        .expect("chunks_in_array_subset is determinate for a regular chunk grid")
+        .chunks_in_array_subset(array_subset)?
         .indices()
         .into_iter()
         .map(|chunk_indices: Vec<u64>| {
@@ -195,8 +196,7 @@ async fn partial_decode_fixed_array_subset(
 
             let chunk_subset = shard_chunk_grid
                 .subset(&chunk_indices)
-                .expect("matching dimensionality")
-                .expect("chunk subset is determinate for a regular chunk grid");
+                .expect("matching dimensionality");
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];
@@ -396,16 +396,12 @@ async fn partial_decode_variable_array_subset(
     };
 
     // Decode the inner chunk subsets
-    let chunks = shard_chunk_grid
-        .chunks_in_array_subset(array_subset)
-        .expect("matching dimensionality")
-        .expect("chunks_in_array_subset is determinate for a regular chunk grid");
+    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
     let chunk_bytes_and_subsets =
         futures::future::try_join_all(chunks.indices().into_iter().map(|chunk_indices| {
             let chunk_subset = shard_chunk_grid
                 .subset(&chunk_indices)
-                .expect("matching dimensionality")
-                .expect("subset is determinate for a regular chunk grid");
+                .expect("matching dimensionality");
             decode_inner_chunk_subset(chunk_indices, chunk_subset)
         }))
         .await?;

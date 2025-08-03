@@ -4,16 +4,19 @@ use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
-use crate::array::{
-    array_bytes::merge_chunks_vlen,
-    chunk_grid::{ChunkGridTraits, RegularChunkGrid},
-    codec::{
-        ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
-        ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
-        CodecOptions,
+use crate::{
+    array::{
+        array_bytes::merge_chunks_vlen,
+        chunk_grid::RegularChunkGrid,
+        codec::{
+            ArrayPartialDecoderTraits, ArraySubset, ArrayToBytesCodecTraits,
+            ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
+            CodecOptions,
+        },
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
+        ChunkShape, DataType, DataTypeSize, RawBytes,
     },
-    ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, ChunkRepresentation,
-    ChunkShape, DataType, DataTypeSize, RawBytes,
+    array_subset::IncompatibleDimensionalityError,
 };
 
 use super::{calculate_chunks_per_shard, ShardingIndexLocation};
@@ -187,7 +190,7 @@ fn partial_decode_fixed_array_subset(
         partial_decoder.shard_representation.shape_u64(),
         partial_decoder.chunk_representation.shape().into(),
     )
-    .expect("matching dimensionality");
+    .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
     let decode_inner_chunk_subset_into_slice = |chunk_indices: Vec<u64>| {
         let shard_index_idx: usize =
@@ -199,8 +202,7 @@ fn partial_decode_fixed_array_subset(
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid
             .subset(&chunk_indices)
-            .expect("matching dimensionality")
-            .expect("subset is determinate for a regular chunk grid");
+            .expect("matching dimensionality");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
 
         let decoded_bytes = if offset == u64::MAX && size == u64::MAX {
@@ -239,10 +241,7 @@ fn partial_decode_fixed_array_subset(
             .map_err(CodecError::from)
     };
 
-    let chunks = shard_chunk_grid
-        .chunks_in_array_subset(array_subset)
-        .expect("matching dimensionality")
-        .expect("chunks_in_array_subset is determinate for a regular chunk grid");
+    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
     rayon_iter_concurrent_limit::iter_concurrent_limit!(
         inner_chunk_concurrent_limit,
         chunks.indices(),
@@ -292,8 +291,7 @@ fn partial_decode_variable_array_subset(
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid
             .subset(&chunk_indices)
-            .expect("matching dimensionality")
-            .expect("subset is determinate for a regular chunk grid");
+            .expect("matching dimensionality");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
 
         let chunk_subset_bytes = if offset == u64::MAX && size == u64::MAX {
@@ -323,10 +321,7 @@ fn partial_decode_variable_array_subset(
         ))
     };
     // Decode the inner chunk subsets
-    let chunks = shard_chunk_grid
-        .chunks_in_array_subset(array_subset)
-        .expect("matching dimensionality")
-        .expect("chunks_in_array_subset is determinate for a regular chunk grid");
+    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
     let chunk_bytes_and_subsets = rayon_iter_concurrent_limit::iter_concurrent_limit!(
         inner_chunk_concurrent_limit,
         chunks.indices(),

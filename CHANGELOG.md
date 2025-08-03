@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 - Impl `From<ChunkKeySeparator>` for `char`
+- Add `RegularChunkGrid::{chunk_origin,chunk_indices,subset,chunks_in_array_subset}()`
+  - These are variants of `ChunkGridTraits` methods that do not return `Option`
+- Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -88,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
 - **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
 - **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
+- **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
