@@ -6,6 +6,7 @@ use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 use crate::array::{
     array_bytes::merge_chunks_vlen,
+    chunk_grid::{ChunkGridTraits, RegularChunkGrid},
     codec::{
         ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
         AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain, CodecError,
@@ -175,13 +176,27 @@ async fn partial_decode_fixed_array_subset(
     )?
     .to_array_shape();
 
+    let shard_chunk_grid = RegularChunkGrid::new(
+        partial_decoder.shard_representation.shape_u64(),
+        partial_decoder.chunk_representation.shape().into(),
+    )
+    .expect("matching dimensionality");
+
     // Find filled / non filled chunks
-    let chunk_info = array_subset
-        .chunks(partial_decoder.chunk_representation.shape())?
+    let chunk_info = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)
+        .expect("matching dimensionality")
+        .expect("chunks_in_array_subset is determinate for a regular chunk grid")
+        .indices()
         .into_iter()
-        .map(|(chunk_indices, chunk_subset)| {
+        .map(|chunk_indices: Vec<u64>| {
             let chunk_index = ravel_indices(&chunk_indices, &chunks_per_shard);
             let chunk_index = usize::try_from(chunk_index).unwrap();
+
+            let chunk_subset = shard_chunk_grid
+                .subset(&chunk_indices)
+                .expect("matching dimensionality")
+                .expect("chunk subset is determinate for a regular chunk grid");
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];
@@ -334,7 +349,13 @@ async fn partial_decode_variable_array_subset(
     )?
     .to_array_shape();
 
-    let decode_inner_chunk_subset = |(chunk_indices, chunk_subset): (Vec<u64>, _)| {
+    let shard_chunk_grid = RegularChunkGrid::new(
+        partial_decoder.shard_representation.shape_u64(),
+        partial_decoder.chunk_representation.shape().into(),
+    )
+    .expect("matching dimensionality");
+
+    let decode_inner_chunk_subset = |chunk_indices: Vec<u64>, chunk_subset| {
         let shard_index_idx: usize =
             usize::try_from(ravel_indices(&chunk_indices, &chunks_per_shard) * 2).unwrap();
         let chunk_representation = partial_decoder.chunk_representation.clone();
@@ -375,9 +396,19 @@ async fn partial_decode_variable_array_subset(
     };
 
     // Decode the inner chunk subsets
-    let chunks = array_subset.chunks(partial_decoder.chunk_representation.shape())?;
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)
+        .expect("matching dimensionality")
+        .expect("chunks_in_array_subset is determinate for a regular chunk grid");
     let chunk_bytes_and_subsets =
-        futures::future::try_join_all(chunks.iter().map(decode_inner_chunk_subset)).await?;
+        futures::future::try_join_all(chunks.indices().into_iter().map(|chunk_indices| {
+            let chunk_subset = shard_chunk_grid
+                .subset(&chunk_indices)
+                .expect("matching dimensionality")
+                .expect("subset is determinate for a regular chunk grid");
+            decode_inner_chunk_subset(chunk_indices, chunk_subset)
+        }))
+        .await?;
 
     // Convert into an array
     let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?;
