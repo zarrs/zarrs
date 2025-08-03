@@ -16,9 +16,7 @@ use std::{
     ops::Range,
 };
 
-use iterators::{
-    ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
-};
+use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 
 use derive_more::From;
 use itertools::izip;
