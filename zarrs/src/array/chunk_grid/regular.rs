@@ -60,6 +60,12 @@ pub struct RegularChunkGrid {
 #[error("regular chunk shape: {_1:?} not compatible with array shape {_0:?}")]
 pub struct RegularChunkGridCreateError(ArrayShape, ChunkShape);
 
+impl From<RegularChunkGridCreateError> for IncompatibleDimensionalityError {
+    fn from(value: RegularChunkGridCreateError) -> Self {
+        Self::new(value.1.len(), value.0.len())
+    }
+}
+
 impl RegularChunkGrid {
     /// Create a new `regular` chunk grid with chunk shape `chunk_shape`.
     ///
