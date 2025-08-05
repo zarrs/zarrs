@@ -20,8 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 - Impl `From<ChunkKeySeparator>` for `char`
-- Add `RegularChunkGrid::{chunk_origin,chunk_indices,subset,chunks_in_array_subset}()`
-  - These are variants of `ChunkGridTraits` methods that do not return `Option`
 - Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
 
 ### Changed
