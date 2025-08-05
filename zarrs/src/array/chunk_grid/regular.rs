@@ -109,11 +109,8 @@ impl RegularChunkGrid {
             .collect::<ArrayShape>()
     }
 
-    /// Return the origin of the chunk at `chunk_indices`.
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
-    pub fn chunk_origin(
+    /// Determinate version of [`ChunkGridTraits::chunk_origin`].
+    pub(crate) fn chunk_origin(
         &self,
         chunk_indices: &[u64],
     ) -> Result<ArrayIndices, IncompatibleDimensionalityError> {
@@ -129,11 +126,8 @@ impl RegularChunkGrid {
         }
     }
 
-    /// The indices of a chunk which has the element at `array_indices`.
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `array_indices` do not match the dimensionality of the chunk grid.
-    fn chunk_indices(
+    /// Determinate version of [`ChunkGridTraits::chunk_indices`].
+    pub(crate) fn chunk_indices(
         &self,
         array_indices: &[u64],
     ) -> Result<ArrayIndices, IncompatibleDimensionalityError> {
@@ -149,11 +143,8 @@ impl RegularChunkGrid {
         }
     }
 
-    /// Return the [`ArraySubset`] of the chunk at `chunk_indices`.
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
-    pub fn subset(
+    /// Determinate version of [`ChunkGridTraits::subset`].
+    pub(crate) fn subset(
         &self,
         chunk_indices: &[u64],
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
@@ -165,11 +156,8 @@ impl RegularChunkGrid {
         Ok(ArraySubset::from(ranges))
     }
 
-    /// Return an array subset indicating the chunks intersecting `array_subset`.
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `array_subset` does not match the dimensionality of the chunk grid.
-    pub fn chunks_in_array_subset(
+    /// Determinate version of [`ChunkGridTraits::chunks_in_array_subset`].
+    pub(crate) fn chunks_in_array_subset(
         &self,
         array_subset: &ArraySubset,
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
@@ -208,6 +196,13 @@ impl ChunkGridTraits for RegularChunkGrid {
 
     fn grid_shape(&self) -> &ArrayShape {
         &self.grid_shape
+    }
+
+    fn subset(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
+        Ok(Some(self.subset(chunk_indices)?))
     }
 
     /// The chunk shape. Fixed for a `regular` grid.
