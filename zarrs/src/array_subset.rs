@@ -13,13 +13,10 @@ use thiserror::Error;
 
 use std::{
     fmt::{Debug, Display},
-    num::NonZeroU64,
     ops::Range,
 };
 
-use iterators::{
-    Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
-};
+use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 
 use derive_more::From;
 use itertools::izip;
@@ -334,20 +331,6 @@ impl ArraySubset {
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerAndShapeError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
-    }
-
-    /// Returns the [`Chunks`] with `chunk_shape` in the array subset which can be iterated over.
-    ///
-    /// All chunks overlapping the array subset are returned, and they all have the same shape `chunk_shape`.
-    /// Thus, the subsets of the chunks may extend out over the subset.
-    ///
-    /// # Errors
-    /// Returns an error if `chunk_shape` does not match the array subset dimensionality.
-    pub fn chunks(
-        &self,
-        chunk_shape: &[NonZeroU64],
-    ) -> Result<Chunks, IncompatibleDimensionalityError> {
-        Chunks::new(self, chunk_shape)
     }
 
     /// Return the overlapping subset between this array subset and `subset_other`.

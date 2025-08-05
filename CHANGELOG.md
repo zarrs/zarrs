@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 - Impl `From<ChunkKeySeparator>` for `char`
+- Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
 - Add initial generic indexing support to partial decoders
   - Add `Indexer` trait with implementations for `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
@@ -92,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
 - **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
 - **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
+- **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
 - **Breaking**: Remove `IncompatibleArraySubsetAndShapeError`
 
 ### Fixed

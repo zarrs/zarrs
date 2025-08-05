@@ -12,7 +12,7 @@ use rayon::iter::{
 use crate::{
     array::{
         array_bytes::update_array_bytes,
-        chunk_grid::{ChunkGridTraits, RegularChunkGrid},
+        chunk_grid::RegularChunkGrid,
         codec::{
             array_to_bytes::sharding::{calculate_chunks_per_shard, compute_index_encoded_size},
             ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -138,11 +138,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     CodecError::InvalidArraySubsetError(IncompatibleIndexerAndShapeError::new(
                         chunks_per_shard.clone(),
                     ))
-                })?
-                .ok_or_else(|| {
-                    CodecError::Other(
-                        "Cannot determine the inner chunk of a chunk subset".to_string(),
-                    )
                 })
         };
         let inner_chunk_fill_value = || {
@@ -180,38 +175,37 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let inner_chunks = inner_chunks.indices();
 
         // Get all the inner chunks intersected
-        inner_chunks_intersected.extend(
-            inner_chunks
-                .iter()
-                .map(|inner_chunk_indices| ravel_indices(&inner_chunk_indices, &chunks_per_shard)),
-        );
+        inner_chunks_intersected.extend(inner_chunks.iter().map(
+            |inner_chunk_indices: Vec<u64>| ravel_indices(&inner_chunk_indices, &chunks_per_shard),
+        ));
 
         // Get all the inner chunks that need to be updated
-        inner_chunks_indices.extend(inner_chunks.iter().filter_map(|inner_chunk_indices| {
-            let inner_chunk_subset = self
-                .chunk_grid
-                .subset(&inner_chunk_indices)
-                .expect("already validated")
-                .expect("regular grid");
+        inner_chunks_indices.extend(inner_chunks.iter().filter_map(
+            |inner_chunk_indices: Vec<u64>| {
+                let inner_chunk_subset = self
+                    .chunk_grid
+                    .subset(&inner_chunk_indices)
+                    .expect("matching dimensionality");
 
-            // Check if the inner chunk straddles the chunk subset
-            if inner_chunk_subset
-                .start()
-                .iter()
-                .zip(chunk_subset_indexer.start())
-                .any(|(a, b)| a < b)
-                || inner_chunk_subset
-                    .end_exc()
+                // Check if the inner chunk straddles the chunk subset
+                if inner_chunk_subset
+                    .start()
                     .iter()
-                    .zip(chunk_subset_indexer.end_exc())
-                    .any(|(a, b)| *a > b)
-            {
-                let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
-                Some(inner_chunk_index)
-            } else {
-                None
-            }
-        }));
+                    .zip(chunk_subset_indexer.start())
+                    .any(|(a, b)| a < b)
+                    || inner_chunk_subset
+                        .end_exc()
+                        .iter()
+                        .zip(chunk_subset_indexer.end_exc())
+                        .any(|(a, b)| *a > b)
+                {
+                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                    Some(inner_chunk_index)
+                } else {
+                    None
+                }
+            },
+        ));
 
         // Get the byte ranges of the straddling inner chunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
@@ -266,14 +260,13 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         inner_chunks
             .indices()
             .into_par_iter()
-            .try_for_each(|inner_chunk_indices| {
+            .try_for_each(|inner_chunk_indices: Vec<u64>| {
                 // Extract the inner chunk bytes that overlap with the chunk subset
                 let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
                 let inner_chunk_subset = self
                     .chunk_grid
                     .subset(&inner_chunk_indices)
-                    .expect("already validated")
-                    .expect("regular grid");
+                    .expect("matching dimensionality");
                 let inner_chunk_subset_overlap =
                     chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
                 let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
