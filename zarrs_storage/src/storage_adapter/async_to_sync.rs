@@ -56,12 +56,12 @@ impl<TStorage: ?Sized, TBlockOn: AsyncToSyncBlockOn> AsyncToSyncStorageAdapter<T
 impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
     ReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Bytes>, StorageError> {
-        self.block_on(self.storage.get_partial_values_key(key, byte_ranges))
+        self.block_on(self.storage.get_partial_values(key, byte_ranges))
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {

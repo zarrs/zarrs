@@ -121,7 +121,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
 impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     for ZipStorageAdapter<TStorage>
 {
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),

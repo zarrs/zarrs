@@ -573,7 +573,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
             .storage
-            .get_partial_values_key(&self.key, decoded_regions)?
+            .get_partial_values(&self.key, decoded_regions)?
             .map(|v| Cow::Owned(v.into())))
     }
 }
@@ -603,7 +603,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
             .storage
-            .get_partial_values_key(&self.key, decoded_regions)
+            .get_partial_values(&self.key, decoded_regions)
             .await?
             .map(|v| Cow::Owned(v.into())))
     }

@@ -97,7 +97,7 @@ impl ReadableStorageTraits for HTTPStore {
         }
     }
 
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
@@ -219,7 +219,7 @@ mod tests {
         let store = HTTPStore::new("https://raw.githubusercontent.com/bad").unwrap();
         assert!(store.get(&"zarr.json".try_into().unwrap()).is_err());
         assert!(store
-            .get_partial_values_key(
+            .get_partial_values(
                 &"zarr.json".try_into().unwrap(),
                 &mut [ByteRange::FromStart(0, None)].into_iter()
             )

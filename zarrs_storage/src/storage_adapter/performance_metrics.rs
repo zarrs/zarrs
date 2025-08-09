@@ -108,7 +108,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         value
     }
 
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
@@ -117,7 +117,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         let n_byte_ranges = byte_ranges.len();
         let values = self
             .storage
-            .get_partial_values_key(key, &mut byte_ranges.iter().copied())?;
+            .get_partial_values(key, &mut byte_ranges.iter().copied())?;
         if let Some(values) = &values {
             let bytes_read = values.len();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
@@ -212,7 +212,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         value
     }
 
-    async fn get_partial_values_key(
+    async fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
@@ -220,7 +220,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let values = self
             .storage
-            .get_partial_values_key(key, &mut byte_ranges.iter().copied())
+            .get_partial_values(key, &mut byte_ranges.iter().copied())
             .await?;
         if let Some(values) = &values {
             let bytes_read = values.len();
