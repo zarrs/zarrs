@@ -29,20 +29,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         self.0.get(key)
     }
 
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Bytes>, StorageError> {
-        self.0.get_partial_values_key(key, byte_ranges)
+        self.0.get_partial_values(key, byte_ranges)
     }
-
-    // fn get_partial_values(
-    //     &self,
-    //     key_ranges: &[super::StoreKeyRange],
-    // ) -> Result<Vec<MaybeBytes>, StorageError> {
-    //     self.0.get_partial_values(key_ranges)
-    // }
 
     fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key)
@@ -111,20 +104,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         self.0.get(key).await
     }
 
-    async fn get_partial_values_key(
+    async fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<AsyncBytes>, StorageError> {
-        self.0.get_partial_values_key(key, byte_ranges).await
+        self.0.get_partial_values(key, byte_ranges).await
     }
-
-    // async fn get_partial_values(
-    //     &self,
-    //     key_ranges: &[super::StoreKeyRange],
-    // ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-    //     self.0.get_partial_values(key_ranges).await
-    // }
 
     async fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key).await

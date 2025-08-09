@@ -68,7 +68,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
         let len = buf.len() as u64;
         let data = self
             .storage
-            .get_partial_values_key(
+            .get_partial_values(
                 &self.key,
                 &mut [ByteRange::FromStart(self.pos, Some(len))].into_iter(),
             )

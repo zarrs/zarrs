@@ -251,7 +251,7 @@ impl FilesystemStore {
 }
 
 impl ReadableStorageTraits for FilesystemStore {
-    fn get_partial_values_key(
+    fn get_partial_values(
         &self,
         key: &StoreKey,
         byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
