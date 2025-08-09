@@ -7,7 +7,7 @@ use zarrs_metadata::v3::FillValueMetadataV3;
 
 /// A data type and fill value metadata incompatibility error.
 #[derive(Clone, Debug, Error)]
-#[error("incompatible fill value {} for data type {}", _1.to_string(), _0.to_string())]
+#[error("incompatible fill value {} for data type {}", _1.to_string(), _0.clone())]
 pub struct DataTypeFillValueMetadataError(String, FillValueMetadataV3);
 
 impl DataTypeFillValueMetadataError {
