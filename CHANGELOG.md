@@ -84,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
 - Bump `criterion` (dev) to 0.7.0
+- Bump `float8` to 0.4.1
 - Move `zarrs_opendal` to a new repository: `zarrs/zarrs_opendal`
 
 ### Removed
