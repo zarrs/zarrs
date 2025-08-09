@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use super::{byte_range::ByteRange, ReadableStorageTraits, StoreKey};
+use super::{ByteRange, ReadableStorageTraits, StoreKey};
 
 /// Provides a [`Read`] interface to a storage value.
 #[derive(Clone)]

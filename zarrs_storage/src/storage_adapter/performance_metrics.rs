@@ -1,9 +1,9 @@
 //! A storage transformer which records performance metrics.
 
 use crate::{
-    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    byte_range::{ByteRange, ByteRangeIterator},
+    Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
+    StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
@@ -111,7 +111,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Bytes>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let n_byte_ranges = byte_ranges.len();
@@ -215,7 +215,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<AsyncBytes>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let values = self

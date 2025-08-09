@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::RawBytes,
-    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -41,7 +41,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 
     fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
@@ -90,7 +90,7 @@ impl AsyncByteIntervalPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
     async fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {

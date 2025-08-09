@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    storage::byte_range::ByteRange,
+    storage::byte_range::{ByteRange, ByteRangeIterator},
 };
 
 #[cfg(feature = "async")]
@@ -37,7 +37,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut bytes_out = Vec::new();
@@ -93,7 +93,7 @@ impl AsyncStripSuffixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         use futures::StreamExt;

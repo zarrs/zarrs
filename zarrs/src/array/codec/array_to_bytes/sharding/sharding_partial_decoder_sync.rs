@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 use crate::{
     array::{
@@ -18,6 +17,7 @@ use crate::{
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::Indexer,
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
 };
 
 use super::{calculate_chunks_per_shard, ShardingIndexLocation};

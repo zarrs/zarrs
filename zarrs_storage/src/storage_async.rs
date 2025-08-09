@@ -4,9 +4,11 @@ use auto_impl::auto_impl;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
+use crate::ByteRangeIterator;
+
 use super::{
-    byte_range::ByteRange, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    AsyncBytes, ByteRange, MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
@@ -35,7 +37,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     async fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<AsyncBytes>, StorageError>;
 
     /// Return the size in bytes of the value at `key`.

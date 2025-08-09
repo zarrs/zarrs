@@ -88,6 +88,7 @@ pub use array_to_bytes_partial_encoder_default::ArrayToBytesPartialEncoderDefaul
 #[cfg(feature = "async")]
 pub use array_to_bytes_partial_encoder_default::AsyncArrayToBytesPartialEncoderDefault;
 use zarrs_metadata::Configuration;
+use zarrs_storage::byte_range::ByteRangeIterator;
 
 use crate::array_subset::IncompatibleDimensionalityError;
 mod array_to_array_partial_decoder_default;
@@ -327,7 +328,7 @@ pub trait BytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError>;
 
@@ -354,7 +355,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + Send + Sync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError>;
 
@@ -568,7 +569,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -598,7 +599,7 @@ impl AsyncStoragePartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -1139,7 +1140,7 @@ where
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         _parallel: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(Some(Cow::Owned(extract_byte_ranges_read_seek(
@@ -1157,7 +1158,7 @@ where
 {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         _parallel: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(Some(Cow::Owned(extract_byte_ranges_read_seek(

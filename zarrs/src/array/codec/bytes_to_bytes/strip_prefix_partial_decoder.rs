@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    storage::byte_range::ByteRange,
+    storage::byte_range::{ByteRange, ByteRangeIterator},
 };
 
 #[cfg(feature = "async")]
@@ -37,7 +37,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {
@@ -78,7 +78,7 @@ impl AsyncStripPrefixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {

@@ -3,9 +3,11 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
+use crate::ByteRangeIterator;
+
 use super::{
-    byte_range::ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
-    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Readable storage traits.
@@ -30,7 +32,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Bytes>, StorageError>;
 
     /// Return the size in bytes of the value at `key`.

@@ -1,8 +1,9 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_storage::byte_range::{extract_byte_ranges, ByteRange};
-
-use crate::array::{BytesRepresentation, RawBytes};
+use crate::{
+    array::{BytesRepresentation, RawBytes},
+    storage::byte_range::{extract_byte_ranges, ByteRangeIterator},
+};
 
 use super::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecOptions};
 
@@ -14,14 +15,14 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 ) -> Result<Option<RawBytes<'a>>, CodecError> {
     #[cfg(feature = "async")]
@@ -78,7 +79,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         partial_decode(
@@ -121,7 +122,7 @@ impl AsyncBytesToBytesPartialDecoderDefault {
 impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         partial_decode_async(

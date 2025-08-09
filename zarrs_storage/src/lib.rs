@@ -21,7 +21,7 @@ mod store_key;
 mod store_prefix;
 
 pub mod byte_range;
-use byte_range::{ByteOffset, ByteRange, InvalidByteRangeError};
+use byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 
 #[cfg(feature = "async")]
 mod storage_async;

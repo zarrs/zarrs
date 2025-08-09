@@ -9,7 +9,7 @@
 
 use itertools::Itertools;
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange},
+    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
     store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
     StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
     StorePrefixes, WritableStorageTraits,
@@ -254,7 +254,7 @@ impl ReadableStorageTraits for FilesystemStore {
     fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Bytes>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();

@@ -23,6 +23,11 @@ pub type ByteOffset = u64;
 /// A byte length.
 pub type ByteLength = u64;
 
+/// A [`ByteRange`] iterator.
+pub trait ByteRangeIterator: Iterator<Item = ByteRange> + Send {}
+
+impl<T> ByteRangeIterator for T where T: Iterator<Item = ByteRange> + Send {}
+
 /// A byte range.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ByteRange {

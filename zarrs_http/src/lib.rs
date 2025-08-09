@@ -15,7 +15,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_http/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::ByteRange, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
+    byte_range::ByteRangeIterator, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
 };
 
 use reqwest::{
@@ -100,7 +100,7 @@ impl ReadableStorageTraits for HTTPStore {
     fn get_partial_values(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Bytes>, StorageError> {
         let url = self.key_to_url(key).map_err(handle_url_error)?;
         let Some(size) = self.size_key(key)? else {
@@ -188,6 +188,8 @@ pub enum HTTPStoreCreateError {
 
 #[cfg(test)]
 mod tests {
+    use zarrs_storage::byte_range::ByteRange;
+
     use super::*;
     use std::error::Error;
 

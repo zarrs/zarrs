@@ -5,7 +5,6 @@ use std::{ops::Div, sync::Arc};
 use num::Integer;
 
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{
@@ -16,6 +15,7 @@ use crate::{
         ArrayBytes, ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::IncompatibleIndexerAndShapeError,
+    storage::byte_range::ByteRange,
 };
 
 #[cfg(feature = "async")]
