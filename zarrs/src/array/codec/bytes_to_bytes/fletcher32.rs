@@ -77,7 +77,7 @@ mod tests {
             },
             BytesRepresentation,
         },
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;

@@ -11,7 +11,7 @@ use crate::{
         ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::ArraySubset,
-    byte_range::extract_byte_ranges_concat,
+    storage::byte_range::extract_byte_ranges_concat,
 };
 
 #[cfg(feature = "async")]

@@ -22,7 +22,7 @@ use crate::{
         CodecChain, RawBytes,
     },
     array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
-    byte_range::ByteRange,
+    storage::byte_range::ByteRange,
 };
 
 use super::{sharding_index_decoded_representation, ShardingIndexLocation};

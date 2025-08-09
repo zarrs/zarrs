@@ -83,9 +83,9 @@ use crate::{
         ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
     array_subset::ArraySubset,
-    byte_range::ByteRange,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
+    storage::byte_range::ByteRange,
 };
 use zarrs_registry::codec::SHARDING;
 

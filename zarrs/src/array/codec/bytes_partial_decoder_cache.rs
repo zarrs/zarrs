@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     array::RawBytes,
-    byte_range::{extract_byte_ranges, ByteRange},
+    storage::byte_range::{extract_byte_ranges, ByteRange},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};

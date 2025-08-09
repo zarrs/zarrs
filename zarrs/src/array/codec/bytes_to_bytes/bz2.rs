@@ -76,7 +76,7 @@ mod tests {
             ArrayRepresentation, BytesRepresentation, DataType,
         },
         array_subset::ArraySubset,
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;

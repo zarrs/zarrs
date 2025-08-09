@@ -8,7 +8,7 @@ use crate::{
         },
         RawBytes,
     },
-    byte_range::ByteRange,
+    storage::byte_range::ByteRange,
 };
 
 #[cfg(feature = "async")]

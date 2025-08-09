@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::RawBytes,
-    byte_range::{ByteLength, ByteOffset, ByteRange},
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
