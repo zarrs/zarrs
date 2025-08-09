@@ -10,7 +10,7 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
-    byte_range::extract_byte_ranges_concat,
+    storage::byte_range::extract_byte_ranges_concat,
 };
 
 #[cfg(feature = "async")]

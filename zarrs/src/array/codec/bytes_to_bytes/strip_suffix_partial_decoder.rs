@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    byte_range::ByteRange,
+    storage::byte_range::ByteRange,
 };
 
 #[cfg(feature = "async")]

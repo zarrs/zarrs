@@ -72,7 +72,7 @@ mod tests {
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             BytesRepresentation,
         },
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;

@@ -119,8 +119,10 @@ use crate::config::global_config;
 use crate::storage::{StoreKeyOffsetValue, WritableStorage};
 use crate::{
     array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
-    byte_range::{extract_byte_ranges_read_seek, ByteOffset, ByteRange, InvalidByteRangeError},
     plugin::{Plugin, PluginCreateError},
+    storage::byte_range::{
+        extract_byte_ranges_read_seek, ByteOffset, ByteRange, InvalidByteRangeError,
+    },
     storage::{ReadableStorage, StorageError, StoreKey},
 };
 

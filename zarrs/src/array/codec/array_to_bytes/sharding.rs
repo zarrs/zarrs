@@ -82,9 +82,9 @@ use crate::{
         ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
         ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
-    byte_range::ByteRange,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
+    storage::byte_range::ByteRange,
 };
 use zarrs_registry::codec::SHARDING;
 

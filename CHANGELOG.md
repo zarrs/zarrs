@@ -94,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
 - **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
 - **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
+- **Breaking**: Remove `storage::byte_range` re-export
 - **Breaking**: Remove `IncompatibleArraySubsetAndShapeError`
 
 ### Fixed

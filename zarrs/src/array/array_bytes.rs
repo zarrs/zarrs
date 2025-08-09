@@ -7,9 +7,9 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
     array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
-    byte_range::extract_byte_ranges_concat,
     indexer::Indexer,
     metadata::DataTypeSize,
+    storage::byte_range::extract_byte_ranges_concat,
 };
 
 use super::{

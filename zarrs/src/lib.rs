@@ -239,9 +239,6 @@ pub use zarrs_storage as storage;
 #[cfg(feature = "filesystem")]
 pub use zarrs_filesystem as filesystem;
 
-// Re-export byte_range for compat with <17.0.0
-pub use storage::byte_range;
-
 /// Get a mutable slice of the spare capacity in a vector.
 fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
     let spare_capacity = vec.spare_capacity_mut();
