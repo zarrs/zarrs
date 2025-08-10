@@ -2,12 +2,9 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::BITROUND;
 
-use crate::{
-    array::{
-        codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions},
-        DataType,
-    },
-    array_subset::ArraySubset,
+use crate::array::{
+    codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions},
+    DataType,
 };
 
 #[cfg(feature = "async")]
@@ -54,7 +51,7 @@ impl ArrayPartialDecoderTraits for BitroundPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let bytes = self.input_handle.partial_decode(indexer, options)?;
@@ -104,7 +101,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBitroundPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let bytes = self.input_handle.partial_decode(indexer, options).await?;

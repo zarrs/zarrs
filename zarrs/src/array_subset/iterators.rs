@@ -6,11 +6,11 @@
 //!  - [`ContiguousIndices`]: iterate over contiguous sets of elements in the subset with the start a multidimensional index.
 //!  - [`ContiguousLinearisedIndices`]: iterate over contiguous sets of elements in the subset with the start a linearised index.
 //!
-//! These can be created with the appropriate [`ArraySubset`](super::ArraySubset) methods including
-//! [`indices`](super::ArraySubset::indices),
-//! [`linearised_indices`](super::ArraySubset::linearised_indices),
-//! [`contiguous_indices`](super::ArraySubset::contiguous_indices), and
-//! [`contiguous_linearised_indices`](super::ArraySubset::contiguous_linearised_indices)
+//! These can be created with the appropriate [`Indexer`](crate::indexer::Indexer) methods that are implemented for [`ArraySubset`](crate::array_subset::ArraySubset) including
+//! [`indices`](crate::indexer::Indexer::iter_indices),
+//! [`linearised_indices`](crate::indexer::Indexer::iter_linearised_indices),
+// //! [`contiguous_indices`](crate::indexer::Indexer::iter_contiguous_indices),
+//! [`contiguous_linearised_indices`](crate::indexer::Indexer::iter_contiguous_linearised_indices).
 //!
 //! All iterators support [`into_iter()`](IntoIterator::into_iter) ([`IntoIterator`]).
 //! The [`Indices`] iterator also supports [`rayon`]'s [`into_par_iter()`](rayon::iter::IntoParallelIterator::into_par_iter) ([`IntoParallelIterator`](rayon::iter::IntoParallelIterator)).

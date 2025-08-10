@@ -59,7 +59,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.block_on(self.storage.get_partial_values_key(key, byte_ranges))
     }

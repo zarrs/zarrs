@@ -70,7 +70,7 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let array_shape = self.decoded_representation.shape_u64();
@@ -91,7 +91,7 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         ArrayPartialDecoderTraits::partial_decode(self, indexer, options)
