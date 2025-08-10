@@ -247,6 +247,8 @@ impl ChunkGridTraits for RegularChunkGrid {
 
 #[cfg(test)]
 mod tests {
+    use rayon::iter::ParallelIterator;
+
     use crate::array_subset::ArraySubset;
 
     use super::*;
@@ -364,5 +366,24 @@ mod tests {
 
         let chunk_indices: ArrayShape = vec![3, 1, 1000];
         assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
+    }
+
+    #[test]
+    fn chunk_grid_regular_iterators() {
+        let array_shape: ArrayShape = vec![2, 2, 6];
+        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
+
+        let iter = chunk_grid.iter_chunk_indices();
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+        );
+
+        let iter = chunk_grid.par_iter_chunk_indices();
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+        );
     }
 }
