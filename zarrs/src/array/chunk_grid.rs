@@ -25,6 +25,7 @@ pub use regular::RegularChunkGrid;
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
 
+use crate::array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
@@ -377,6 +378,28 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
                 )
             }
             None => Ok(Some(ArraySubset::new_empty(self.dimensionality()))),
+        }
+    }
+
+    /// Return a serial iterator over the chunk indices of the chunk grid.
+    fn iter_chunk_indices(&self) -> IndicesIntoIterator {
+        let shape = self.grid_shape().clone();
+        let n_chunks = shape.iter().sum::<u64>();
+        let n_chunks = usize::try_from(n_chunks).unwrap();
+        IndicesIntoIterator {
+            subset: ArraySubset::new_with_shape(shape),
+            range: 0..n_chunks,
+        }
+    }
+
+    /// Return a parallel iterator over the chunk indices of the chunk grid.
+    fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
+        let shape = self.grid_shape().clone();
+        let n_chunks = shape.iter().sum::<u64>();
+        let n_chunks = usize::try_from(n_chunks).unwrap();
+        ParIndicesIntoIterator {
+            subset: ArraySubset::new_with_shape(shape),
+            range: 0..n_chunks,
         }
     }
 }

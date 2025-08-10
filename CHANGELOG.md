@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 - Impl `From<ChunkKeySeparator>` for `char`
 - Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
+- Add `ChunkGridTraits::[par_]iter_chunk_indices()`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
