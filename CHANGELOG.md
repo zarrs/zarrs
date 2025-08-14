@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
 - Add `ChunkGridTraits::[par_]iter_chunk_indices()`
 - Add `ArraySubset::chunk_shape()`
+- Impl `IntoIterator` for `ChunkShape`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`

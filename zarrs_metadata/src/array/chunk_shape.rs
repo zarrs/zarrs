@@ -61,6 +61,24 @@ impl ChunkShape {
     }
 }
 
+impl IntoIterator for ChunkShape {
+    type Item = NonZeroU64;
+    type IntoIter = std::vec::IntoIter<NonZeroU64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ChunkShape {
+    type Item = &'a NonZeroU64;
+    type IntoIter = std::slice::Iter<'a, NonZeroU64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.as_slice().iter()
+    }
+}
+
 impl From<ChunkShape> for Vec<NonZeroU64> {
     fn from(val: ChunkShape) -> Self {
         val.0
