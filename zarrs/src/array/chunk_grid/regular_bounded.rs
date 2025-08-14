@@ -85,19 +85,6 @@ impl RegularBoundedChunkGrid {
             chunk_shape,
         })
     }
-
-    /// Return the shape of a chunk as an [`ArrayShape`] ([`Vec<u64>`]).
-    ///
-    /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
-    pub fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        Ok(self
-            .chunk_shape(chunk_indices)?
-            .map(|c| c.into_iter().map(NonZeroU64::get).collect::<ArrayShape>()))
-    }
 }
 
 impl ChunkGridTraits for RegularBoundedChunkGrid {
@@ -139,7 +126,21 @@ impl ChunkGridTraits for RegularBoundedChunkGrid {
 
     unsafe fn chunk_shape_u64_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayShape> {
         debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        self.chunk_shape_u64(chunk_indices).unwrap()
+        izip!(
+            self.chunk_shape.as_slice(),
+            &self.array_shape,
+            chunk_indices
+        )
+        .map(|(chunk_shape, &array_shape, chunk_indices)| {
+            let start = (chunk_indices * chunk_shape.get()).min(array_shape);
+            let end = (start + chunk_shape.get()).min(array_shape);
+            if end > start {
+                Some(end - start)
+            } else {
+                None
+            }
+        })
+        .collect::<Option<Vec<_>>>()
     }
 
     unsafe fn chunk_origin_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayIndices> {
