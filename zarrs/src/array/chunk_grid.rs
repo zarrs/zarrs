@@ -11,6 +11,7 @@
 
 pub mod rectangular;
 pub mod regular;
+pub(crate) mod regular_bounded;
 
 use std::sync::Arc;
 
@@ -21,6 +22,8 @@ pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 pub use rectangular::RectangularChunkGrid;
 pub use regular::RegularChunkGrid;
+#[allow(unused_imports)]
+pub(crate) use regular_bounded::RegularBoundedChunkGrid;
 
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
