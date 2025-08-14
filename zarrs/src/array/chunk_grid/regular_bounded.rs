@@ -260,6 +260,7 @@ mod tests {
             let chunk_grid =
                 RegularBoundedChunkGrid::new(array_shape.clone(), chunk_shape.clone()).unwrap();
             assert_eq!(chunk_grid.dimensionality(), 3);
+            assert_eq!(chunk_grid.array_shape(), &array_shape);
             assert_eq!(
                 chunk_grid.chunk_origin(&[1, 1, 1]).unwrap(),
                 Some(vec![1, 2, 3])
@@ -267,6 +268,10 @@ mod tests {
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(),
                 Some(chunk_shape.clone())
+            );
+            assert_eq!(
+                chunk_grid.chunk_shape_u64(&[0, 0, 0]).unwrap(),
+                Some(chunk_shape.iter().map(|u| u.get()).collect())
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
