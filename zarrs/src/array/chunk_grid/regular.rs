@@ -148,12 +148,19 @@ impl RegularChunkGrid {
         &self,
         chunk_indices: &[u64],
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
-        let chunk_origin = self.chunk_origin(chunk_indices)?;
-        let ranges = chunk_origin
-            .iter()
-            .zip(self.chunk_shape.iter())
-            .map(|(&o, &s)| o..(o + s.get()));
-        Ok(ArraySubset::from(ranges))
+        if chunk_indices.len() == self.dimensionality() {
+            let ranges =
+                std::iter::zip(chunk_indices, self.chunk_shape.as_slice()).map(|(i, s)| {
+                    let start = i * s.get();
+                    start..(start + s.get())
+                });
+            Ok(ArraySubset::from(ranges))
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
     /// Determinate version of [`ChunkGridTraits::chunks_in_array_subset`].
