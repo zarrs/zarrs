@@ -38,7 +38,7 @@
 //! - *Core*: defined in the Zarr V3 specification and are fully supported.
 //! - *Registered*: specified at <https://github.com/zarr-developers/zarr-extensions/>
 //!   - Registered extensions listed in the below tables are fully supported unless otherwise indicated.
-//! - *Experimental*: **recommended for evaluation only** and are ~~striked out~~ in the tables below.
+//! - *Experimental*: indicated by 🚧 in the tables below and **recommended for evaluation only**.
 //!   - Experimental extensions are either pending registration or have no formal specification outside of the `zarrs` docs.
 //!   - Experimental extensions may be unrecognised or incompatible with other Zarr implementations.
 //!   - Experimental extensions may change in future releases without maintaining backwards compatibility.

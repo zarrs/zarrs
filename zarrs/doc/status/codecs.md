@@ -1,30 +1,30 @@
 | Codec Type     | V3 `name`                          | V2 `id`                             | Feature Flag* |
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
 | Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
-|                | ~~[`numcodecs.fixedscaleoffset`]~~ | `fixedscaleoffset`                  |               |
-|                | ~~[`numcodecs.bitround`]~~†        | `bitround`                          | bitround      |
-|                | ~~[`zarrs.squeeze`]~~              | -                                   |               |
+|                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
+|                | 🚧[`numcodecs.bitround`]†          | `bitround`                          | bitround      |
+|                | 🚧[`zarrs.squeeze`]                | -                                   |               |
 | Array to Bytes | [`bytes`]                          | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   | **sharding**  |
-|                | ~~[`vlen-array`]~~                 | `vlen-array`                        |               |
+|                | 🚧[`vlen-array`]                   | `vlen-array`                        |               |
 |                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
 |                | [`vlen-utf8`]                      | `vlen-utf8`                         |               |
 |                | [`packbits`]                       | `packbits`                          |               |
-|                | ~~[`numcodecs.pcodec`]~~           | `pcodec`                            | pcodec        |
-|                | ~~[`numcodecs.zfpy`]~~             | `zfpy`                              | zfp           |
-|                | ~~[`zarrs.vlen`]~~                 | -                                   |               |
-|                | ~~[`zarrs.vlen_v2`]~~              | -                                   |               |
+|                | 🚧[`numcodecs.pcodec`]             | `pcodec`                            | pcodec        |
+|                | 🚧[`numcodecs.zfpy`]               | `zfpy`                              | zfp           |
+|                | 🚧[`zarrs.vlen`]                   | -                                   |               |
+|                | 🚧[`zarrs.vlen_v2`]                | -                                   |               |
 |                | [`zfp`]                            | -                                   | zfp           |
 | Bytes to Bytes | [`blosc`]                          | `blosc`                             | **blosc**     |
 |                | [`crc32c`]                         | `crc32c`                            | **crc32c**    |
 |                | [`gzip`]                           | `gzip`                              | **gzip**      |
 |                | [`zstd`]                           | `zstd`                              | **zstd**      |
-|                | ~~[`numcodecs.adler32`]~~          | `adler32`                           | adler32       |
-|                | ~~[`numcodecs.bz2`]~~              | `bz2`                               | bz2           |
-|                | ~~[`numcodecs.fletcher32`]~~       | `fletcher32`                        | fletcher32    |
-|                | ~~[`numcodecs.shuffle`]~~          | `shuffle`                           |               |
-|                | ~~[`numcodecs.zlib`]~~             | `zlib`                              | zlib          |
-|                | ~~[`zarrs.gdeflate`]~~             | -                                   | gdeflate      |
+|                | 🚧[`numcodecs.adler32`]            | `adler32`                           | adler32       |
+|                | 🚧[`numcodecs.bz2`]                | `bz2`                               | bz2           |
+|                | 🚧[`numcodecs.fletcher32`]         | `fletcher32`                        | fletcher32    |
+|                | 🚧[`numcodecs.shuffle`]            | `shuffle`                           |               |
+|                | 🚧[`numcodecs.zlib`]               | `zlib`                              | zlib          |
+|                | 🚧[`zarrs.gdeflate`]               | -                                   | gdeflate      |
 
 <sup>\* Bolded feature flags are part of the default set of features.</sup>
 <sup>† `numcodecs.bitround` supports additional data types not supported by `zarr-python`/`numcodecs`</sup>
