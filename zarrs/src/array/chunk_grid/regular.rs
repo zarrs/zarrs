@@ -256,6 +256,7 @@ impl ChunkGridTraits for RegularChunkGrid {
 mod tests {
     use rayon::iter::ParallelIterator;
 
+    use crate::array::chunk_grid::ChunkGridTraitsIterators;
     use crate::array_subset::ArraySubset;
 
     use super::*;
@@ -391,6 +392,29 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+        );
+
+        let iter = chunk_grid.iter_chunk_subsets();
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            vec![
+                ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3]),
+                ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6]),
+                ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3]),
+                ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6]),
+            ]
+        );
+
+        let iter = chunk_grid.iter_chunk_indices_and_subsets();
+        #[rustfmt::skip]
+        assert_eq!(
+            iter.collect::<Vec<_>>(),
+            vec![
+                (vec![0, 0, 0], ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3])),
+                (vec![0, 0, 1], ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6])),
+                (vec![1, 0, 0], ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])),
+                (vec![1, 0, 1], ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6])),
+            ]
         );
     }
 }

@@ -407,6 +407,36 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     }
 }
 
+#[allow(dead_code)]
+pub(crate) trait ChunkGridTraitsIterators: ChunkGridTraits {
+    /// Return a serial iterator over the chunk subsets of the chunk grid.
+    fn iter_chunk_subsets(&self) -> Box<dyn Iterator<Item = ArraySubset> + '_> {
+        Box::new(self.iter_chunk_indices().map(|chunk_indices| {
+            unsafe {
+                // SAFETY: matching dimensionality
+                self.subset_unchecked(&chunk_indices)
+                    .expect("inbounds chunk")
+            }
+        }))
+    }
+
+    /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
+    fn iter_chunk_indices_and_subsets(
+        &self,
+    ) -> Box<dyn Iterator<Item = (ArrayIndices, ArraySubset)> + '_> {
+        Box::new(self.iter_chunk_indices().map(|chunk_indices| {
+            let chunk_subset = unsafe {
+                // SAFETY: matching dimensionality
+                self.subset_unchecked(&chunk_indices)
+                    .expect("inbounds chunk")
+            };
+            (chunk_indices, chunk_subset)
+        }))
+    }
+}
+
+impl<T> ChunkGridTraitsIterators for T where T: ChunkGridTraits {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
