@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGridTraits::[par_]iter_chunk_indices()`
 - Add `ArraySubset::chunk_shape()`
 - Impl `IntoIterator` for `ChunkShape`
+- Add `RegularBoundedChunkGrid`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -60,9 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
+  - `ChunkGridTraits` is now an `unsafe` trait with invariants
   - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
-  - Implementations must now implement `ChunkGridTraits::grid_shape()` as `grid_shape_unchecked()` has been removed
   - Add `ChunkGridTraits::array_shape()`
+  - Remove `_unchecked` methods and default implementations of associated checked methods
+    - Implementations must implement the checked methods instead
 - **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 

@@ -3,19 +3,20 @@
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/chunk-grids/regular-grid/index.html>.
 
 use std::num::NonZeroU64;
-
 use thiserror::Error;
+
+pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use zarrs_registry::chunk_grid::REGULAR;
 
 use crate::{
-    array::{chunk_grid::ChunkGridPlugin, ArrayIndices, ArrayShape, ChunkShape},
+    array::{
+        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
+        ArrayIndices, ArrayShape, ChunkShape,
+    },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-pub use super::RegularChunkGridConfiguration;
-use super::{ChunkGrid, ChunkGridTraits};
 
 // Register the chunk grid.
 inventory::submit! {
@@ -184,7 +185,7 @@ impl RegularChunkGrid {
     }
 }
 
-impl ChunkGridTraits for RegularChunkGrid {
+unsafe impl ChunkGridTraits for RegularChunkGrid {
     fn create_metadata(&self) -> MetadataV3 {
         let configuration = RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
@@ -209,46 +210,74 @@ impl ChunkGridTraits for RegularChunkGrid {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        Ok(Some(self.subset(chunk_indices)?))
+        self.subset(chunk_indices).map(Option::Some)
     }
 
-    /// The chunk shape. Fixed for a `regular` grid.
-    unsafe fn chunk_shape_unchecked(&self, chunk_indices: &[u64]) -> Option<ChunkShape> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        Some(self.chunk_shape.clone())
+    fn chunk_shape(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            Ok(Some(self.chunk_shape.clone()))
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    /// The chunk shape as an [`ArrayShape`] ([`Vec<u64>`]). Fixed for a `regular` grid.
-    unsafe fn chunk_shape_u64_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayShape> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        Some(self.chunk_shape_u64())
+    fn chunk_shape_u64(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            Ok(Some(self.chunk_shape_u64()))
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    unsafe fn chunk_origin_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayIndices> {
-        Some(self.chunk_origin(chunk_indices).unwrap())
+    fn chunk_origin(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        self.chunk_origin(chunk_indices).map(Option::Some)
     }
 
-    unsafe fn chunk_indices_unchecked(&self, array_indices: &[u64]) -> Option<ArrayIndices> {
-        Some(self.chunk_indices(array_indices).unwrap())
-    }
-
-    unsafe fn chunk_element_indices_unchecked(
+    fn chunk_indices(
         &self,
         array_indices: &[u64],
-    ) -> Option<ArrayIndices> {
-        debug_assert_eq!(self.dimensionality(), array_indices.len());
-        Some(
-            std::iter::zip(array_indices, self.chunk_shape.as_slice())
-                .map(|(i, s)| i % s.get())
-                .collect(),
-        )
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        self.chunk_indices(array_indices).map(Option::Some)
+    }
+
+    fn chunk_element_indices(
+        &self,
+        array_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        if array_indices.len() == self.dimensionality() {
+            Ok(Some(
+                std::iter::zip(array_indices, self.chunk_shape.as_slice())
+                    .map(|(i, s)| i % s.get())
+                    .collect(),
+            ))
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                array_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
     fn chunks_in_array_subset(
         &self,
         array_subset: &ArraySubset,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        Ok(Some(self.chunks_in_array_subset(array_subset)?))
+        self.chunks_in_array_subset(array_subset).map(Option::Some)
     }
 }
 
