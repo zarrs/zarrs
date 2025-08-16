@@ -1,22 +1,24 @@
 //! The `regular_bounded` chunk grid.
-#![allow(unreachable_pub)]
-
-use std::num::NonZeroU64;
 
 use itertools::izip;
+use std::num::NonZeroU64;
+
 // use zarrs_registry::chunk_grid::REGULAR_BOUNDED;
 /// Unique identifier for the `regular_bounded` chunk grid (extension).
 pub const REGULAR_BOUNDED: &str = "regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
 
+/// Configuration parameters for a `regular_bounded` chunk grid.
+pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
+
 use crate::{
-    array::{chunk_grid::ChunkGridPlugin, ArrayIndices, ArrayShape, ChunkShape},
+    array::{
+        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
+        ArrayIndices, ArrayShape, ChunkShape,
+    },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-pub use super::RegularChunkGridConfiguration;
-use super::{ChunkGrid, ChunkGridTraits};
 
 // Register the chunk grid.
 inventory::submit! {
@@ -35,7 +37,7 @@ pub(crate) fn create_chunk_grid_regular_bounded(
     metadata_and_array_shape: &(MetadataV3, ArrayShape),
 ) -> Result<ChunkGrid, PluginCreateError> {
     let (metadata, array_shape) = metadata_and_array_shape;
-    let configuration: RegularChunkGridConfiguration =
+    let configuration: RegularBoundedChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(REGULAR_BOUNDED, "chunk grid", metadata.to_string())
         })?;
@@ -87,9 +89,9 @@ impl RegularBoundedChunkGrid {
     }
 }
 
-impl ChunkGridTraits for RegularBoundedChunkGrid {
+unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
     fn create_metadata(&self) -> MetadataV3 {
-        let configuration = RegularChunkGridConfiguration {
+        let configuration = RegularBoundedChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
         };
         MetadataV3::new_with_serializable_configuration(REGULAR_BOUNDED.to_string(), &configuration)
@@ -108,114 +110,169 @@ impl ChunkGridTraits for RegularBoundedChunkGrid {
         &self.grid_shape
     }
 
-    unsafe fn chunk_shape_unchecked(&self, chunk_indices: &[u64]) -> Option<ChunkShape> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        izip!(
-            self.chunk_shape.as_slice(),
-            &self.array_shape,
-            chunk_indices
-        )
-        .map(|(chunk_shape, &array_shape, chunk_indices)| {
-            let start = (chunk_indices * chunk_shape.get()).min(array_shape);
-            let end = (start + chunk_shape.get()).min(array_shape);
-            NonZeroU64::new(end.saturating_sub(start))
-        })
-        .collect::<Option<Vec<_>>>()
-        .map(ChunkShape::from)
+    fn chunk_shape(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            Ok(izip!(
+                self.chunk_shape.as_slice(),
+                &self.array_shape,
+                chunk_indices
+            )
+            .map(|(chunk_shape, &array_shape, chunk_indices)| {
+                let start = (chunk_indices * chunk_shape.get()).min(array_shape);
+                let end = (start + chunk_shape.get()).min(array_shape);
+                NonZeroU64::new(end.saturating_sub(start))
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(ChunkShape::from))
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    unsafe fn chunk_shape_u64_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayShape> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        izip!(
-            self.chunk_shape.as_slice(),
-            &self.array_shape,
-            chunk_indices
-        )
-        .map(|(chunk_shape, &array_shape, chunk_indices)| {
-            let start = (chunk_indices * chunk_shape.get()).min(array_shape);
-            let end = (start + chunk_shape.get()).min(array_shape);
-            if end > start {
-                Some(end - start)
-            } else {
-                None
-            }
-        })
-        .collect::<Option<Vec<_>>>()
+    fn chunk_shape_u64(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            Ok(izip!(
+                self.chunk_shape.as_slice(),
+                &self.array_shape,
+                chunk_indices
+            )
+            .map(|(chunk_shape, &array_shape, chunk_indices)| {
+                let start = (chunk_indices * chunk_shape.get()).min(array_shape);
+                let end = (start + chunk_shape.get()).min(array_shape);
+                if end > start {
+                    Some(end - start)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>())
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    unsafe fn chunk_origin_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayIndices> {
-        debug_assert_eq!(chunk_indices.len(), self.dimensionality());
-        izip!(
-            chunk_indices,
-            self.chunk_shape.as_slice(),
-            &self.array_shape
-        )
-        .map(|(chunk_index, chunk_shape, &array_shape)| {
-            let start = chunk_index * chunk_shape.get();
-            if start < array_shape {
-                Some(start)
-            } else {
-                None
-            }
-        })
-        .collect::<Option<Vec<_>>>()
+    fn chunk_origin(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            Ok(izip!(
+                chunk_indices,
+                self.chunk_shape.as_slice(),
+                &self.array_shape
+            )
+            .map(|(chunk_index, chunk_shape, &array_shape)| {
+                let start = chunk_index * chunk_shape.get();
+                if start < array_shape {
+                    Some(start)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>())
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    unsafe fn chunk_indices_unchecked(&self, array_indices: &[u64]) -> Option<ArrayIndices> {
-        debug_assert_eq!(array_indices.len(), self.dimensionality());
-        izip!(
-            array_indices,
-            self.chunk_shape.as_slice(),
-            &self.array_shape
-        )
-        .map(|(array_index, chunk_shape, array_shape)| {
-            if array_index < array_shape {
-                Some(array_index / chunk_shape.get())
-            } else {
-                None
-            }
-        })
-        .collect::<Option<Vec<_>>>()
-    }
-
-    unsafe fn chunk_element_indices_unchecked(
+    fn chunk_indices(
         &self,
         array_indices: &[u64],
-    ) -> Option<ArrayIndices> {
-        izip!(
-            array_indices,
-            self.chunk_shape.as_slice(),
-            &self.array_shape
-        )
-        .map(|(array_index, chunk_shape, array_shape)| {
-            if array_index < array_shape {
-                Some(array_index % chunk_shape.get())
-            } else {
-                None
-            }
-        })
-        .collect::<Option<Vec<_>>>()
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        if array_indices.len() == self.dimensionality() {
+            Ok(izip!(
+                array_indices,
+                self.chunk_shape.as_slice(),
+                &self.array_shape
+            )
+            .map(|(array_index, chunk_shape, array_shape)| {
+                if array_index < array_shape {
+                    Some(array_index / chunk_shape.get())
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>())
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                array_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 
-    unsafe fn subset_unchecked(&self, chunk_indices: &[u64]) -> Option<ArraySubset> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        let ranges = izip!(
-            self.chunk_shape.as_slice(),
-            &self.array_shape,
-            chunk_indices
-        )
-        .map(|(chunk_shape, &array_shape, chunk_indices)| {
-            let start = (chunk_indices * chunk_shape.get()).min(array_shape);
-            let end = (start + chunk_shape.get()).min(array_shape);
-            if end > start {
-                Some(start..end)
+    fn chunk_element_indices(
+        &self,
+        array_indices: &[u64],
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
+        if array_indices.len() == self.dimensionality() {
+            Ok(izip!(
+                array_indices,
+                self.chunk_shape.as_slice(),
+                &self.array_shape
+            )
+            .map(|(array_index, chunk_shape, array_shape)| {
+                if array_index < array_shape {
+                    Some(array_index % chunk_shape.get())
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>())
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                array_indices.len(),
+                self.dimensionality(),
+            ))
+        }
+    }
+
+    fn subset(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
+        if chunk_indices.len() == self.dimensionality() {
+            let ranges = izip!(
+                self.chunk_shape.as_slice(),
+                &self.array_shape,
+                chunk_indices
+            )
+            .map(|(chunk_shape, &array_shape, chunk_indices)| {
+                let start = (chunk_indices * chunk_shape.get()).min(array_shape);
+                let end = (start + chunk_shape.get()).min(array_shape);
+                if end > start {
+                    Some(start..end)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>();
+            if let Some(ranges) = ranges {
+                Ok(Some(ArraySubset::new_with_ranges(&ranges)))
             } else {
-                None
+                Ok(None)
             }
-        })
-        .collect::<Option<Vec<_>>>()?;
-        let array_subset = ArraySubset::new_with_ranges(&ranges);
-        Some(array_subset)
+        } else {
+            Err(IncompatibleDimensionalityError::new(
+                chunk_indices.len(),
+                self.dimensionality(),
+            ))
+        }
     }
 }
 

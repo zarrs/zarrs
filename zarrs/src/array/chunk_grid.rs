@@ -1,29 +1,21 @@
-//! Zarr chunk grids. Includes a [regular grid](RegularChunkGrid) implementation.
+//! Zarr chunk grids.
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#chunk-grids>.
 //!
-//! A [`ChunkGrid`] is a [`Box`] wrapped chunk grid which implements [`ChunkGridTraits`].
+//! A [`ChunkGrid`] is an [`Arc`] wrapped [`ChunkGridTraits`] implementation.
 //! Chunk grids are Zarr extension points and they can be registered through [`inventory`] as a [`ChunkGridPlugin`].
 //!
-//! Includes a [`RegularChunkGrid`] and [`RectangularChunkGrid`] implementation.
-//!
-//! A regular chunk grid can be created from a [`ChunkShape`] and similar. See its [`from`/`try_from` implementations](./struct.ChunkGrid.html#trait-implementations).
+#![doc = include_str!("../../doc/status/chunk_grids.md")]
 
 pub mod rectangular;
 pub mod regular;
-pub(crate) mod regular_bounded;
+pub mod regular_bounded;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata_ext::chunk_grid::rectangular::{
-    RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
-};
-pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-
-pub use rectangular::RectangularChunkGrid;
-pub use regular::RegularChunkGrid;
-#[allow(unused_imports)]
-pub(crate) use regular_bounded::RegularBoundedChunkGrid;
+pub use rectangular::*;
+pub use regular::*;
+pub use regular_bounded::*;
 
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
@@ -37,7 +29,7 @@ use crate::{
 
 use super::{ArrayIndices, ArrayShape, ChunkShape};
 
-/// A chunk grid.
+/// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
 pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
 
@@ -101,14 +93,15 @@ impl ChunkGrid {
 }
 
 /// Chunk grid traits.
-// TODO: Unsafe trait? ChunkGridTraits has invariants that must be upheld by implementations.
-//  - chunks must be disjoint for downstream `ArrayBytesFixedDisjoint` construction and otherwise sane behavior
-//  - this is true for regular and rectangular grids, but a custom grid could violate this
-pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
-    /// Create metadata.
+///
+/// # Safety
+/// - Chunks must be disjoint.
+/// - Methods must check the dimensionality of arguments and returned indices/shapes/subsets must match the chunk grid dimensionality.
+pub unsafe trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
+    /// Create the metadata for the chunk grid.
     fn create_metadata(&self) -> MetadataV3;
 
-    /// The dimensionality of the grid.
+    /// The dimensionality of the chunk grid.
     fn dimensionality(&self) -> usize;
 
     /// The array shape (i.e. number of elements).
@@ -118,7 +111,6 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
 
     /// The grid shape (i.e. number of chunks).
     ///
-    /// Zero sized dimensions are considered "unlimited".
     /// If supported by the chunk grid, the grid will have zero sized dimensions where the array shape is zero, which is considered "unlimited".
     fn grid_shape(&self) -> &ArrayShape;
 
@@ -131,16 +123,7 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     fn chunk_shape(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.chunk_shape_unchecked(chunk_indices) })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
+    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError>;
 
     /// The shape of the chunk at `chunk_indices` as an [`ArrayShape`] ([`Vec<u64>`]).
     ///
@@ -151,16 +134,7 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     fn chunk_shape_u64(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.chunk_shape_u64_unchecked(chunk_indices) })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
+    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError>;
 
     /// The origin of the chunk at `chunk_indices`.
     ///
@@ -171,16 +145,7 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     fn chunk_origin(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.chunk_origin_unchecked(chunk_indices) })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError>;
 
     /// Return the [`ArraySubset`] of the chunk at `chunk_indices`.
     ///
@@ -192,13 +157,16 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        if chunk_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.subset_unchecked(chunk_indices) })
+        let chunk_origin = self.chunk_origin(chunk_indices)?;
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        if let (Some(chunk_origin), Some(chunk_shape)) = (chunk_origin, chunk_shape) {
+            let ranges = chunk_origin
+                .into_iter()
+                .zip(chunk_shape)
+                .map(|(o, s)| o..(o + s.get()));
+            Ok(Some(ArraySubset::from(ranges)))
         } else {
-            Err(IncompatibleDimensionalityError::new(
-                chunk_indices.len(),
-                self.dimensionality(),
-            ))
+            Ok(None)
         }
     }
 
@@ -244,16 +212,7 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     fn chunk_indices(
         &self,
         array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        if array_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.chunk_indices_unchecked(array_indices) })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                array_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError>;
 
     /// The indices within the chunk of the element at `array_indices`.
     ///
@@ -264,16 +223,7 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
     fn chunk_element_indices(
         &self,
         array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        if array_indices.len() == self.dimensionality() {
-            Ok(unsafe { self.chunk_element_indices_unchecked(array_indices) })
-        } else {
-            Err(IncompatibleDimensionalityError::new(
-                array_indices.len(),
-                self.dimensionality(),
-            ))
-        }
-    }
+    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError>;
 
     /// Check if array indices are in-bounds.
     ///
@@ -295,62 +245,6 @@ pub trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
         chunk_indices.len() == self.dimensionality()
             && std::iter::zip(chunk_indices, self.grid_shape())
                 .all(|(&index, &shape)| shape == 0 || index < shape)
-    }
-
-    /// See [`ChunkGridTraits::chunk_origin`].
-    ///
-    /// # Safety
-    /// The length of `chunk_indices` must match the dimensionality of the chunk grid.
-    unsafe fn chunk_origin_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayIndices>;
-
-    /// See [`ChunkGridTraits::chunk_shape`].
-    ///
-    /// # Safety
-    /// The length of `chunk_indices` must match the dimensionality of the chunk grid.
-    unsafe fn chunk_shape_unchecked(&self, chunk_indices: &[u64]) -> Option<ChunkShape>;
-
-    /// See [`ChunkGridTraits::chunk_shape_u64`].
-    ///
-    /// # Safety
-    /// The length of `chunk_indices` must match the dimensionality of the chunk grid.
-    unsafe fn chunk_shape_u64_unchecked(&self, chunk_indices: &[u64]) -> Option<ArrayShape>;
-
-    /// See [`ChunkGridTraits::chunk_indices`].
-    ///
-    /// # Safety
-    /// The length of `array_indices` must match the dimensionality of the chunk grid.
-    unsafe fn chunk_indices_unchecked(&self, array_indices: &[u64]) -> Option<ArrayIndices>;
-
-    /// See [`ChunkGridTraits::chunk_element_indices`].
-    ///
-    /// # Safety
-    /// The length of `array_indices` must match the dimensionality of the chunk grid.
-    unsafe fn chunk_element_indices_unchecked(&self, array_indices: &[u64])
-        -> Option<ArrayIndices>;
-
-    /// See [`ChunkGridTraits::subset`].
-    ///
-    /// # Safety
-    /// The length of `chunk_indices` must match the dimensionality of the chunk grid.
-    unsafe fn subset_unchecked(&self, chunk_indices: &[u64]) -> Option<ArraySubset> {
-        debug_assert_eq!(self.dimensionality(), chunk_indices.len());
-        let chunk_origin = unsafe {
-            // SAFETY: The length of `chunk_indices` matches the dimensionality of the chunk grid
-            self.chunk_origin_unchecked(chunk_indices)
-        };
-        let chunk_shape = unsafe {
-            // SAFETY: The length of `chunk_indices` matches the dimensionality of the chunk grid
-            self.chunk_shape_u64_unchecked(chunk_indices)
-        };
-        if let (Some(chunk_origin), Some(chunk_shape)) = (chunk_origin, chunk_shape) {
-            let ranges = chunk_origin
-                .iter()
-                .zip(&chunk_shape)
-                .map(|(&o, &s)| o..(o + s));
-            Some(ArraySubset::from(ranges))
-        } else {
-            None
-        }
     }
 
     /// Return an array subset indicating the chunks intersecting `array_subset`.
@@ -412,11 +306,9 @@ pub(crate) trait ChunkGridTraitsIterators: ChunkGridTraits {
     /// Return a serial iterator over the chunk subsets of the chunk grid.
     fn iter_chunk_subsets(&self) -> Box<dyn Iterator<Item = ArraySubset> + '_> {
         Box::new(self.iter_chunk_indices().map(|chunk_indices| {
-            unsafe {
-                // SAFETY: matching dimensionality
-                self.subset_unchecked(&chunk_indices)
-                    .expect("inbounds chunk")
-            }
+            self.subset(&chunk_indices)
+                .expect("matching dimensionality")
+                .expect("inbounds chunk")
         }))
     }
 
@@ -425,11 +317,10 @@ pub(crate) trait ChunkGridTraitsIterators: ChunkGridTraits {
         &self,
     ) -> Box<dyn Iterator<Item = (ArrayIndices, ArraySubset)> + '_> {
         Box::new(self.iter_chunk_indices().map(|chunk_indices| {
-            let chunk_subset = unsafe {
-                // SAFETY: matching dimensionality
-                self.subset_unchecked(&chunk_indices)
-                    .expect("inbounds chunk")
-            };
+            let chunk_subset = self
+                .subset(&chunk_indices)
+                .expect("matching dimensionality")
+                .expect("inbounds chunk");
             (chunk_indices, chunk_subset)
         }))
     }
