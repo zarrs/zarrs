@@ -176,7 +176,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         // Get all the inner chunks intersected
         inner_chunks_intersected.extend(inner_chunks.iter().map(
-            |inner_chunk_indices: Vec<u64>| ravel_indices(&inner_chunk_indices, &chunks_per_shard),
+            |inner_chunk_indices: Vec<u64>| {
+                ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk")
+            },
         ));
 
         // Get all the inner chunks that need to be updated
@@ -199,7 +201,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         .zip(chunk_subset_indexer.end_exc())
                         .any(|(a, b)| *a > b)
                 {
-                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard)
+                        .expect("inbounds chunk");
                     Some(inner_chunk_index)
                 } else {
                     None
@@ -263,7 +266,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .into_par_iter()
             .try_for_each(|inner_chunk_indices: Vec<u64>| {
                 // Extract the inner chunk bytes that overlap with the chunk subset
-                let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard);
+                let inner_chunk_index =
+                    ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
                 let inner_chunk_subset = self
                     .chunk_grid
                     .subset(&inner_chunk_indices)
