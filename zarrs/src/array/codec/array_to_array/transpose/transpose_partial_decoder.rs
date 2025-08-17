@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use itertools::Itertools;
-
 use super::{calculate_order_decode, permute, transpose_array, TransposeOrder};
 use crate::{
     array::{
@@ -64,7 +62,7 @@ fn get_transposed_indexer(order: &TransposeOrder, indexer: &dyn Indexer) -> impl
     indexer
         .iter_indices()
         .map(|indices| permute(&indices, &order.0))
-        .collect_vec() // FIXME: avoid collect, needs specialisation (impl<T> Indexer for T where T: Iterator<Item = ArrayIndices>)
+        .collect::<Vec<_>>()
 }
 
 /// Reverse the transpose on each subset

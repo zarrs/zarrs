@@ -374,7 +374,6 @@ fn partial_decode_fixed_indexer(
     let output_len = usize::try_from(indexer.len() * data_type_size as u64).unwrap();
     let mut output: Vec<u8> = Vec::with_capacity(output_len);
     let inner_chunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
-    // FIXME: Parallel iter indices
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {
@@ -451,7 +450,6 @@ fn partial_decode_variable_indexer(
     let mut offsets: Vec<usize> = Vec::with_capacity(offsets_len);
     offsets.push(0);
     let inner_chunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
-    // FIXME: Parallel iter indices
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {

@@ -548,9 +548,8 @@ pub fn update_array_bytes<'a>(
             DataTypeSize::Fixed(data_type_size),
         ) => {
             let mut bytes = bytes.into_owned();
-            let byte_ranges = update_indexer.byte_ranges(shape, data_type_size)?; // FIXME: Prefer not to collect here, and go parallel
+            let byte_ranges = update_indexer.byte_ranges(shape, data_type_size)?;
             let mut offset: usize = 0;
-            // TODO: Add `is_disjoint()` to indexer, so that this could go parallel
             for byte_range in byte_ranges {
                 let byte_range_len =
                     usize::try_from(byte_range.length(bytes.len() as u64)).unwrap();
