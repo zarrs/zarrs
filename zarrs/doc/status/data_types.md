@@ -1,51 +1,51 @@
-| [`DataType`]                  | V3 `data_type` `name`        | V2 `dtype`    | [`ElementOwned`] / [`Element`] (Feature Flag) |
-| ----------------------------- | ---------------------------- | ------------- | --------------------------------------------- |
-| [`Bool`]                      | `bool`                       | `\|b1`        | [`bool`]                                      |
-| [`Int2`]                      | `int2`                       |               | [`i8`]                                        |
-| [`Int4`]                      | `int4`                       |               | [`i8`]                                        |
-| [`Int8`]                      | `int8`                       | `\|i1`        | [`i8`]                                        |
-| [`Int16`]                     | `int16`                      | `>i2` `<i2`   | [`i16`]                                       |
-| [`Int32`]                     | `int32`                      | `>i4` `<i4`   | [`i32`]                                       |
-| [`Int64`]                     | `int64`                      | `>i8` `<i8`   | [`i64`]                                       |
-| [`UInt2`]                     | `uint2`                      |               | [`u8`]                                        |
-| [`UInt4`]                     | `uint4`                      |               | [`u8`]                                        |
-| [`UInt8`]                     | `uint8`                      | `\|u1`        | [`u8`]                                        |
-| [`UInt16`]                    | `uint16`                     | `>u2` `<u2`   | [`u16`]                                       |
-| [`UInt32`]                    | `uint32`                     | `>u4` `<u4`   | [`u32`]                                       |
-| [`UInt64`]                    | `uint64`                     | `>u8` `<u8`   | [`u64`]                                       |
-| [`Float4E2M1FN`]†             | `float4_e2m1fn`              |               |                                               |
-| [`Float6E2M3FN`]†             | `float6_e2m3fn`              |               |                                               |
-| [`Float6E3M2FN`]†             | `float6_e3m2fn`              |               |                                               |
-| [`Float8E3M4`]†               | `float8_e3m4`                |               |                                               |
-| [`Float8E4M3`]†               | `float8_e4m3`                |               |  [`float8::F8E4M3`] (`float8`)                |
-| [`Float8E4M3B11FNUZ`]†        | `float8_e4m3b11fnuz`         |               |                                               |
-| [`Float8E4M3FNUZ`]†           | `float8_e4m3fnuz`            |               |                                               |
-| [`Float8E5M2`]†               | `float8_e5m2`                |               | [`float8::F8E5M2`] (`float8`)                 |
-| [`Float8E5M2FNUZ`]†           | `float8_e5m2fnuz`            |               |                                               |
-| [`Float8E8M0FNU`]†            | `float8_e8m0fnu`             |               |                                               |
-| [`BFloat16`]                  | `bfloat16`                   |               | [`half::bf16`]                                |
-| [`Float16`]                   | `float16`                    | `>f2` `<f2`   | [`half::f16`]                                 |
-| [`Float32`]                   | `float32`                    | `>f4` `<f4`   | [`f32`]                                       |
-| [`Float64`]                   | `float64`                    | `>f8` `<f8`   | [`f64`]                                       |
-| [`Complex64`]                 | `complex64`                  | `>c8` `<c8`   | [`Complex<f32>`]                              |
-| [`Complex128`]                | `complex128`                 | `>c16` `<c16` | [`Complex<f64>`]                              |
-| [`ComplexBFloat16`]           | `complex_bfloat16`           |               | [`Complex<half::bf16>`]                       |
-| [`ComplexFloat16`]            | `complex_float16`            |               | [`Complex<half::f16>`]                        |
-| [`ComplexFloat32`]            | `complex_float32`            |               | [`Complex<f32>`]                              |
-| [`ComplexFloat64`]            | `complex_float64`            |               | [`Complex<f64>`]                              |
-| [`ComplexFloat4E2M1FN`]†      | `complex_float4_e2m1fn`      |               |                                               |
-| [`ComplexFloat6E2M3FN`]†      | `complex_float6_e2m3fn`      |               |                                               |
-| [`ComplexFloat6E3M2FN`]†      | `complex_float6_e3m2fn`      |               |                                               |
-| [`ComplexFloat8E3M4`]†        | `complex_float8_e3m4`        |               |                                               |
-| [`ComplexFloat8E4M3`]†        | `complex_float8_e4m3`        |               | [`Complex<float8::F8E4M3>`] (`float8`)        |
-| [`ComplexFloat8E4M3B11FNUZ`]† | `complex_float8_e4m3b11fnuz` |               |                                               |
-| [`ComplexFloat8E4M3FNUZ`]†    | `complex_float8_e4m3fnuz`    |               |                                               |
-| [`ComplexFloat8E5M2`]†        | `complex_float8_e5m2`        |               | [`Complex<float8::F8E5M2>`] (`float8`)        |
-| [`ComplexFloat8E5M2FNUZ`]†    | `complex_float8_e5m2fnuz`    |               |                                               |
-| [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               |                                               |
-| [`RawBits`]                   | `r*`                         |               | `[u8; N]` / `&[u8; N]`                        |
-| [`String`]                    | `string`                     | `\|O`         | [`String`] / [`&str`]                         |
-| [`Bytes`]                     | `bytes`<br>~~`binary`~~      | `\|VX`        | [`Vec<u8>`] / `&[u8]`                         |
+| [`DataType`]                  | V3 `data_type` `name`        | V2 `dtype`    | [`ElementOwned`] / [`Element`]<br>(Feature Flag) |
+| ----------------------------- | ---------------------------- | ------------- | ------------------------------------------------ |
+| [`Bool`]                      | `bool`                       | `\|b1`        | [`bool`]                                         |
+| [`Int2`]                      | `int2`                       |               | [`i8`]                                           |
+| [`Int4`]                      | `int4`                       |               | [`i8`]                                           |
+| [`Int8`]                      | `int8`                       | `\|i1`        | [`i8`]                                           |
+| [`Int16`]                     | `int16`                      | `>i2` `<i2`   | [`i16`]                                          |
+| [`Int32`]                     | `int32`                      | `>i4` `<i4`   | [`i32`]                                          |
+| [`Int64`]                     | `int64`                      | `>i8` `<i8`   | [`i64`]                                          |
+| [`UInt2`]                     | `uint2`                      |               | [`u8`]                                           |
+| [`UInt4`]                     | `uint4`                      |               | [`u8`]                                           |
+| [`UInt8`]                     | `uint8`                      | `\|u1`        | [`u8`]                                           |
+| [`UInt16`]                    | `uint16`                     | `>u2` `<u2`   | [`u16`]                                          |
+| [`UInt32`]                    | `uint32`                     | `>u4` `<u4`   | [`u32`]                                          |
+| [`UInt64`]                    | `uint64`                     | `>u8` `<u8`   | [`u64`]                                          |
+| [`Float4E2M1FN`]†             | `float4_e2m1fn`              |               |                                                  |
+| [`Float6E2M3FN`]†             | `float6_e2m3fn`              |               |                                                  |
+| [`Float6E3M2FN`]†             | `float6_e3m2fn`              |               |                                                  |
+| [`Float8E3M4`]†               | `float8_e3m4`                |               |                                                  |
+| [`Float8E4M3`]†               | `float8_e4m3`                |               |  [`float8::F8E4M3`] (`float8`)                   |
+| [`Float8E4M3B11FNUZ`]†        | `float8_e4m3b11fnuz`         |               |                                                  |
+| [`Float8E4M3FNUZ`]†           | `float8_e4m3fnuz`            |               |                                                  |
+| [`Float8E5M2`]†               | `float8_e5m2`                |               | [`float8::F8E5M2`] (`float8`)                    |
+| [`Float8E5M2FNUZ`]†           | `float8_e5m2fnuz`            |               |                                                  |
+| [`Float8E8M0FNU`]†            | `float8_e8m0fnu`             |               |                                                  |
+| [`BFloat16`]                  | `bfloat16`                   |               | [`half::bf16`]                                   |
+| [`Float16`]                   | `float16`                    | `>f2` `<f2`   | [`half::f16`]                                    |
+| [`Float32`]                   | `float32`                    | `>f4` `<f4`   | [`f32`]                                          |
+| [`Float64`]                   | `float64`                    | `>f8` `<f8`   | [`f64`]                                          |
+| [`Complex64`]                 | `complex64`                  | `>c8` `<c8`   | [`Complex<f32>`]                                 |
+| [`Complex128`]                | `complex128`                 | `>c16` `<c16` | [`Complex<f64>`]                                 |
+| [`ComplexBFloat16`]           | `complex_bfloat16`           |               | [`Complex<half::bf16>`]                          |
+| [`ComplexFloat16`]            | `complex_float16`            |               | [`Complex<half::f16>`]                           |
+| [`ComplexFloat32`]            | `complex_float32`            |               | [`Complex<f32>`]                                 |
+| [`ComplexFloat64`]            | `complex_float64`            |               | [`Complex<f64>`]                                 |
+| [`ComplexFloat4E2M1FN`]†      | `complex_float4_e2m1fn`      |               |                                                  |
+| [`ComplexFloat6E2M3FN`]†      | `complex_float6_e2m3fn`      |               |                                                  |
+| [`ComplexFloat6E3M2FN`]†      | `complex_float6_e3m2fn`      |               |                                                  |
+| [`ComplexFloat8E3M4`]†        | `complex_float8_e3m4`        |               |                                                  |
+| [`ComplexFloat8E4M3`]†        | `complex_float8_e4m3`        |               | [`Complex<float8::F8E4M3>`] (`float8`)           |
+| [`ComplexFloat8E4M3B11FNUZ`]† | `complex_float8_e4m3b11fnuz` |               |                                                  |
+| [`ComplexFloat8E4M3FNUZ`]†    | `complex_float8_e4m3fnuz`    |               |                                                  |
+| [`ComplexFloat8E5M2`]†        | `complex_float8_e5m2`        |               | [`Complex<float8::F8E5M2>`] (`float8`)           |
+| [`ComplexFloat8E5M2FNUZ`]†    | `complex_float8_e5m2fnuz`    |               |                                                  |
+| [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               |                                                  |
+| [`RawBits`]                   | `r*`                         |               | `[u8; N]` / `&[u8; N]`                           |
+| [`String`]                    | `string`                     | `\|O`         | [`String`] / [`&str`]                            |
+| [`Bytes`]                     | `bytes`<br>🚧`binary`        | `\|VX`        | [`Vec<u8>`] / `&[u8]`                            |
 | [`NumpyDateTime64`]           | `numpy.datetime64`           |               | [`i64`]<br>[`chrono::DateTime<Utc>`] (`chrono`)<br>[`jiff::Timestamp`] (`jiff`)  |
 | [`NumpyTimeDelta64`]          | `numpy.timedelta64`          |               | [`i64`]<br>[`chrono::TimeDelta`] (`chrono`)<br>[`jiff::SignedDuration`] (`jiff`) |
 

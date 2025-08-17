@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
 - Impl `From<ChunkKeySeparator>` for `char`
 - Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
+- Add `ChunkGridTraits::[par_]iter_chunk_indices()`
+- Add `ArraySubset::chunk_shape()`
+- Impl `IntoIterator` for `ChunkShape`
+- Add `RegularBoundedChunkGrid`
 - Add initial generic indexing support to partial decoders
   - Add `Indexer` trait with implementations for `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
@@ -61,9 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
+  - `ChunkGridTraits` is now an `unsafe` trait with invariants
   - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
-  - Implementations must now implement `ChunkGridTraits::grid_shape()` as `grid_shape_unchecked()` has been removed
   - Add `ChunkGridTraits::array_shape()`
+  - Remove `_unchecked` methods and default implementations of associated checked methods
+    - Implementations must implement the checked methods instead
 - **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
 - **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
 - **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
@@ -87,6 +93,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
+- Bump `criterion` (dev) to 0.7.0
+- Bump `float8` to 0.4.1
+- Bump `lru` to 0.16
 - Move `zarrs_opendal` to a new repository: `zarrs/zarrs_opendal`
 
 ### Removed

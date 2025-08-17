@@ -6,6 +6,8 @@
 //!
 //! Custom data types can be implemented by registering structs that implement the traits of [`zarrs_data_type`].
 //! A custom data type guide can be found in [The `zarrs` book](https://book.zarrs.dev).
+//!
+#![doc = include_str!("../../doc/status/data_types.md")]
 
 use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
 

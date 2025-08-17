@@ -10,9 +10,11 @@
 
 pub mod iterators;
 use thiserror::Error;
+use zarrs_metadata::ChunkShape;
 
 use std::{
     fmt::{Debug, Display},
+    num::NonZeroU64,
     ops::Range,
 };
 
@@ -173,6 +175,18 @@ impl ArraySubset {
     #[must_use]
     pub fn shape(&self) -> &[u64] {
         &self.shape
+    }
+
+    /// Return the shape of the array as a chunk shape.
+    ///
+    /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
+    #[must_use]
+    pub fn chunk_shape(&self) -> Option<ChunkShape> {
+        self.shape
+            .iter()
+            .map(|s| NonZeroU64::new(*s))
+            .collect::<Option<Vec<_>>>()
+            .map(ChunkShape::from)
     }
 
     /// Return the shape of the array subset.

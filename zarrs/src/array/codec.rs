@@ -9,6 +9,8 @@
 //! A cache may be inserted into a codec chain to optimise partial decoding where appropriate.
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#chunk-encoding>.
+//!
+#![doc = include_str!("../../doc/status/codecs.md")]
 
 pub mod array_to_array;
 pub mod array_to_bytes;
