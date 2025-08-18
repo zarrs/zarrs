@@ -1,19 +1,22 @@
 //! Zarr chunk key encodings. Includes a [default](default::DefaultChunkKeyEncoding) and [v2](v2::V2ChunkKeyEncoding) implementation.
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/chunk-key-encodings/index.html>.
+//!
+#![doc = include_str!("../../doc/status/chunk_key_encodings.md")]
 
 pub mod default;
+pub mod default_suffix;
 pub mod v2;
 
 use std::sync::Arc;
 
 pub use zarrs_metadata::ChunkKeySeparator;
-pub use zarrs_metadata_ext::chunk_key_encoding::{
-    default::DefaultChunkKeyEncodingConfiguration, v2::V2ChunkKeyEncodingConfiguration,
-};
 
-pub use default::DefaultChunkKeyEncoding;
-pub use v2::V2ChunkKeyEncoding;
+pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration};
+pub use default_suffix::{
+    DefaultSuffixChunkKeyEncoding, DefaultSuffixChunkKeyEncodingConfiguration,
+};
+pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::PluginUnsupportedError;
 
 use crate::{

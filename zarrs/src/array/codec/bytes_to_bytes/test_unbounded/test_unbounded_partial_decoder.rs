@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    byte_range::{extract_byte_ranges, ByteRange},
+    storage::byte_range::{extract_byte_ranges, ByteRange},
 };
 
 #[cfg(feature = "async")]
@@ -24,6 +24,10 @@ impl TestUnboundedPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],

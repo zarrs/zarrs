@@ -107,8 +107,9 @@ where
     pub fn new(
         array_shape: Vec<TDim>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: impl Into<FillValue>,
     ) -> Result<Self, DataTypeFillValueError> {
+        let fill_value = fill_value.into();
         match data_type.size() {
             DataTypeSize::Fixed(size) => {
                 if size == fill_value.size() {
@@ -137,8 +138,9 @@ where
     pub unsafe fn new_unchecked(
         array_shape: Vec<TDim>,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: impl Into<FillValue>,
     ) -> Self {
+        let fill_value = fill_value.into();
         if let Some(data_type_size) = data_type.fixed_size() {
             debug_assert_eq!(data_type_size, fill_value.size());
         }

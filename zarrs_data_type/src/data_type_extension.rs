@@ -86,7 +86,7 @@ pub trait DataTypeExtension: Debug + Send + Sync {
 }
 
 /// A data type extension error.
-#[derive(Debug, thiserror::Error, derive_more::Display)]
+#[derive(Debug, Clone, thiserror::Error, derive_more::Display)]
 #[non_exhaustive]
 pub enum DataTypeExtensionError {
     /// Codec not supported

@@ -96,6 +96,16 @@ macro_rules! unsupported_dtypes {
             | DataType::Float8E8M0FNU
             | DataType::BFloat16
             | DataType::ComplexBFloat16
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
@@ -110,7 +120,7 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{ArrayToBytesCodecTraits, CodecOptions},
+            codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
             transmute_to_bytes_vec, ArrayBytes, ChunkRepresentation, ChunkShape, DataType,
             FillValue,
         },
@@ -136,7 +146,7 @@ mod tests {
     fn codec_pcodec_round_trip_impl(
         codec: &PcodecCodec,
         data_type: DataType,
-        fill_value: FillValue,
+        fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
         let chunk_representation =
@@ -166,7 +176,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
     }
@@ -177,7 +187,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt32,
-            FillValue::from(0u32),
+            0u32,
         )
         .unwrap();
     }
@@ -188,7 +198,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt64,
-            FillValue::from(0u64),
+            0u64,
         )
         .unwrap();
     }
@@ -199,7 +209,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int16,
-            FillValue::from(0i16),
+            0i16,
         )
         .unwrap();
     }
@@ -210,7 +220,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int32,
-            FillValue::from(0i32),
+            0i32,
         )
         .unwrap();
     }
@@ -221,7 +231,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Int64,
-            FillValue::from(0i64),
+            0i64,
         )
         .unwrap();
     }
@@ -232,7 +242,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float16,
-            FillValue::from(half::f16::from_f32(0.0)),
+            half::f16::from_f32(0.0),
         )
         .unwrap();
     }
@@ -243,7 +253,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float32,
-            FillValue::from(0f32),
+            0f32,
         )
         .unwrap();
     }
@@ -254,7 +264,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Float64,
-            FillValue::from(0f64),
+            0f64,
         )
         .unwrap();
     }
@@ -265,10 +275,10 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat16,
-            FillValue::from(num::complex::Complex::<half::f16>::new(
+            num::complex::Complex::<half::f16>::new(
                 half::f16::from_f32(0f32),
                 half::f16::from_f32(0f32),
-            )),
+            ),
         )
         .unwrap();
     }
@@ -279,7 +289,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat32,
-            FillValue::from(num::complex::Complex::<f32>::new(0f32, 0f32)),
+            num::complex::Complex::<f32>::new(0f32, 0f32),
         )
         .unwrap();
     }
@@ -290,7 +300,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::ComplexFloat64,
-            FillValue::from(num::complex::Complex::<f64>::new(0f64, 0f64)),
+            num::complex::Complex::<f64>::new(0f64, 0f64),
         )
         .unwrap();
     }
@@ -301,7 +311,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Complex64,
-            FillValue::from(num::complex::Complex32::new(0f32, 0f32)),
+            num::complex::Complex32::new(0f32, 0f32),
         )
         .unwrap();
     }
@@ -312,7 +322,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::Complex128,
-            FillValue::from(num::complex::Complex64::new(0f64, 0f64)),
+            num::complex::Complex64::new(0f64, 0f64),
         )
         .unwrap();
     }
@@ -323,7 +333,7 @@ mod tests {
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
             DataType::UInt8,
-            FillValue::from(0u8),
+            0u8,
         )
         .is_err());
     }
@@ -331,12 +341,8 @@ mod tests {
     #[test]
     fn codec_pcodec_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
         let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -353,24 +359,23 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // packbits partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().into_owned())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -382,12 +387,8 @@ mod tests {
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt32,
-            FillValue::from(0u32),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
         let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -404,8 +405,8 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
@@ -415,15 +416,13 @@ mod tests {
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .await
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().into_owned())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();

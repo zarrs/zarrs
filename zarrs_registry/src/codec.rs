@@ -46,6 +46,9 @@ pub const VLEN_V2: &str = "vlen_v2";
 /// Unique identifier for the `vlen` codec (`zarrs` experimental).
 pub const VLEN: &str = "vlen";
 
+/// Unique identifier for the `adler32` codec (`numcodecs`).
+pub const ADLER32: &str = "adler32";
+
 /// Unique identifier for the `bitround` codec (`numcodecs`).
 pub const BITROUND: &str = "bitround";
 

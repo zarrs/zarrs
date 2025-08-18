@@ -8,7 +8,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `index_location` support to `vlen` codec
+  - Add `VlenCodec::with_index_location()`
+- Add `numcodecs.adler32` codec
+- Add `ChunkCacheTypePartialDecoder`, `ChunkCachePartialDecoderLru{Chunk,Size}Limit[ThreadLocal]`
+- Add `Array::storage()` and `Array::with_storage()`
+- Add `Array<T>::[async_]readable()` where `T: [Async]ReadableWritableStorageTraits`
+- Implement `Clone` for `Error` structs
+- Add `{Indices,Chunks,LinerisedIndices,ContiguousIndices,ContiguousLinearisedIndices}IntoIterator` and `Par{Indices,Chunks}IntoIterator`
+  - Implement `Into[Parallel]Iterator` for `Indices` and `IntoParallelRefIterator` for `&Indices`
+  - Implement `Into[Parallel]Iterator` for `Chunks` and `IntoParallelRefIterator` for `&Chunks`
+  - Implement `IntoIterator` for `{Linearised,Contiguous,ContiguousLinearised}Indices`
+- Impl `From<ChunkKeySeparator>` for `char`
+- Impl `From<RegularChunkGridCreateError>` for `IncompatibleDimensionalityError`
+- Add `ChunkGridTraits::[par_]iter_chunk_indices()`
+- Add `ArraySubset::chunk_shape()`
+- Impl `IntoIterator` for `ChunkShape`
+- Add `RegularBoundedChunkGrid` (`zarrs.regular_bounded`)
+- Add `DefaultSuffixChunkKeyEncoding` (`zarrs.default_suffix`)
 - Add `reshape` codec
+
+### Changed
+- **Major Breaking**: Refactor `ArrayBuilder`
+  - All fields are now private
+  - Add `ArrayBuilder::{new_with_chunk_grid,chunk_grid_metadata,build_metadata,attributes_mut}()`
+  - Add `ArrayBuilder{ChunkGrid,DataType,FillValue}`
+  - Change `ArrayBuilder::new()` to take a broader range of types for each parameter, and swap order of `chunk_grid`/`data_type`. See below
+  ```diff
+  ArrayBuilder::new(
+      // array shape
+      vec![8, 8], // or [8, 8], &[8, 8], etc.
+  -   DataType::Float32,
+  -   vec![4, 4].try_into()?, // no longer valid
+  -   f32::NAN.into(), // no longer valid
+  +   // regular chunk shape or chunk grid metadata
+  +   vec![4, 4], // or [4, 4], &[4, 4], "{"name":"regular",...}", MetadataV3::new_with_configuration(...)
+  +   // data type or data type metadata
+  +   DataType::Float32, // or "float32", "{"name":"float32"}", MetadataV3::new("float32").
+  +   // fill value or fill value metadata
+  +   f32::NAN, // or "NaN", FillValue, FillValueMetadataV3
+  )
+  .build()
+  ```
+- **Major Breaking**: change the `{Array,Chunk}Representation::new[_unchecked]` `fill_value` parameter to take `impl Into<FillValue>` instead of `FillValue`
+  ```diff
+  -  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
+  +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
+  ```
+- **Major Breaking**: change the `[Async]ArrayPartialDecoderTraits::partial_decode[_into]()` trait method:
+  - `array_subsets: &[ArraySubset]` parameter changed to `indexer: &ArraySubset`
+  - Returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
+- **Major Breaking**: change the `ArrayPartialEncoderTraits::partial_encode()` trait method:
+   - `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` parameter changed to `indexer: &ArraySubset` and `bytes: &ArrayBytes<'_>`
+- **Breaking**: `Array::set_shape()` now returns a `Result`
+  - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
+- **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
+  - `ChunkGridTraits` is now an `unsafe` trait with invariants
+  - `ChunkGrid::from_metadata()` and `{Regular,Rectangular}ChunkGrid::new()` now have an `ArrayShape` parameter
+  - Add `ChunkGridTraits::array_shape()`
+  - Remove `_unchecked` methods and default implementations of associated checked methods
+    - Implementations must implement the checked methods instead
+- **Breaking**: `VlenCodec::new()` gains an `index_location` parameter
+- **Breaking**: `ArrayShardedExt::inner_chunk_grid_shape()` no longer returns an `Option`
+- **Breaking**: change `array::codecs()` to return an `Arc`d instead of borrowed `CodecChain` 
+- **Breaking**: Add `size()` method to `{Array,Bytes}PartialDecoderTraits`
+- **Breaking**: Refactor the `ChunkCache` trait
+  - The previous API supported misuse (e.g. using a chunk cache with different arrays)
+  - **Breaking**: Add `retrieve_chunk_subset()` and `array()` methods (required)
+  - Add `retrieve_{array_subset,chunks}()` methods with `_elements()` and `_ndarray()` variants (provided)
+  - Remove `array` from method parameters, the `ChunkCache` must own an `Arc<Array>` instead. See below
+  ```diff
+  -  let cache = ChunkCacheEncodedLruChunkLimit::new(50);
+  -  array.retrieve_chunk_opt_cached(&cache, &[0, 1], &CodecOptions::default()),
+  +  let cache = ChunkCacheEncodedLruChunkLimit::new(array, 50);
+  +  cache.retrieve_chunk(&[0, 1], &CodecOptions::default()),
+  ```
+- **Breaking**: Change `byte_range::extract_byte_ranges_read_seek` to take `T` instead of `&mut T`
+- **Breaking**: Auto implement `[Async]BytesPartialDecoderTraits` for `T: AsRef<[u8]> + ...`
+- **Breaking**: `Arc` the `ChunkCache` types
+- **Breaking**: Change `Contiguous[Linearised]Indices` iterators to include the number of contiguous indices in their `Item`
+- **Breaking**: `ravel_indices` and `unravel_index` now return an `Option`, out-of-bounds access returns `None`
+- Optimised chunk key encoders
+- Bump `zarrs_metadata_ext` to 0.2.0
+- Bump `zarrs_storage` to 0.4.0
+- Bump `blosc-src` to 0.3.6
+- Bump `criterion` (dev) to 0.7.0
+- Bump `float8` to 0.4.1
+- Bump `lru` to 0.16
+- Move `zarrs_opendal` to a new repository: `zarrs/zarrs_opendal`
+
+### Removed
+- **Breaking**: Remove `ArrayChunkCacheExt`. Use the `ChunkCache` methods instead
+- **Breaking**: Remove `Par{Chunks,Indices}IteratorProducer`, which were unneeded
+- **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
+- **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
+- **Breaking**: Remove `storage::byte_range` re-export
+
+### Fixed
+- Permit data types with empty configurations that do not require one
+
+## [0.21.2] - 2025-06-19
+
+### Added
+- Add complex variants of `float4_e2m1fn`, `float6_{e2m3fn,e3m2fn}`, `float8_{e3m4,e4m3,e4m3b11fnuz,e4m3fnuz,e5m2,e5m2fnuz,e8m0fnu}` data types
+- Add `float8` feature enabling the use of `float8::F8E4M3` and `float8::F8E5M2` in `Array::*_elements` methods
+
+### Changed
+- Cleanup `zarrs` root docs and README
+- Bump `bzip2` to 0.6.0
+- Bump `criterion` (dev) to 0.6.0
+- Bump `zip` (dev) to 4.0.0
+- Bump `zarrs_registry` to 0.1.4
+- Bump `zarrs_data_type` to 0.3.2
+- Bump `zarrs_zip` to 0.2.3
+
+## [0.21.1] - 2025-06-16
+
+### Added
+- Add `numpy.datetime64` and `numpy.timedelta64` data type support
+  - `chrono` and `jiff` native element types are supported
+
+### Changed
+- Add `Other` to `ArrayError` enum
+- Bump `zarrs_registry` to 0.1.3
+- Bump `zarrs_metadata_ext` to 0.1.1
 
 ## [0.21.0] - 2025-06-08
 
@@ -1380,7 +1503,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.2...HEAD
+[0.21.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.2
+[0.21.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.1
 [0.21.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.0
 [0.20.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.1
 [0.20.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0

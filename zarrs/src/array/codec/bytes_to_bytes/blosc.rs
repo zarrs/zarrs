@@ -49,7 +49,7 @@ use std::{
 };
 
 pub use blosc_codec::BloscCodec;
-use blosc_sys::{
+use blosc_src::{
     blosc_cbuffer_metainfo, blosc_cbuffer_sizes, blosc_cbuffer_validate, blosc_compress_ctx,
     blosc_decompress_ctx, blosc_getitem, BLOSC_MAX_OVERHEAD, BLOSC_MAX_THREADS,
 };
@@ -84,7 +84,7 @@ pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginC
     Ok(Codec::BytesToBytes(codec))
 }
 
-#[derive(Debug, Error, From)]
+#[derive(Clone, Debug, Error, From)]
 #[error("{0}")]
 struct BloscError(String);
 
@@ -96,12 +96,12 @@ impl From<&str> for BloscError {
 
 const fn compressor_as_cstr(compressor: BloscCompressor) -> *const u8 {
     match compressor {
-        BloscCompressor::BloscLZ => blosc_sys::BLOSC_BLOSCLZ_COMPNAME.as_ptr(),
-        BloscCompressor::LZ4 => blosc_sys::BLOSC_LZ4_COMPNAME.as_ptr(),
-        BloscCompressor::LZ4HC => blosc_sys::BLOSC_LZ4HC_COMPNAME.as_ptr(),
-        BloscCompressor::Snappy => blosc_sys::BLOSC_SNAPPY_COMPNAME.as_ptr(),
-        BloscCompressor::Zlib => blosc_sys::BLOSC_ZLIB_COMPNAME.as_ptr(),
-        BloscCompressor::Zstd => blosc_sys::BLOSC_ZSTD_COMPNAME.as_ptr(),
+        BloscCompressor::BloscLZ => blosc_src::BLOSC_BLOSCLZ_COMPNAME.as_ptr(),
+        BloscCompressor::LZ4 => blosc_src::BLOSC_LZ4_COMPNAME.as_ptr(),
+        BloscCompressor::LZ4HC => blosc_src::BLOSC_LZ4HC_COMPNAME.as_ptr(),
+        BloscCompressor::Snappy => blosc_src::BLOSC_SNAPPY_COMPNAME.as_ptr(),
+        BloscCompressor::Zlib => blosc_src::BLOSC_ZLIB_COMPNAME.as_ptr(),
+        BloscCompressor::Zstd => blosc_src::BLOSC_ZSTD_COMPNAME.as_ptr(),
     }
 }
 
@@ -265,11 +265,11 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{BytesToBytesCodecTraits, CodecOptions},
-            ArrayRepresentation, BytesRepresentation, DataType, FillValue,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
+            ArrayRepresentation, BytesRepresentation, DataType,
         },
         array_subset::ArraySubset,
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;
@@ -368,8 +368,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -387,14 +386,15 @@ mod tests {
         let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // blosc partial decoder does not hold bytes
         let decoded = partial_decoder
             .partial_decode_concat(&decoded_regions, &CodecOptions::default())
             .unwrap()
@@ -415,8 +415,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn codec_blosc_async_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -434,7 +433,7 @@ mod tests {
         let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,

@@ -11,7 +11,7 @@ use crate::{
         ArraySize, ChunkRepresentation, DataType,
     },
     array_subset::ArraySubset,
-    byte_range::extract_byte_ranges_concat,
+    storage::byte_range::extract_byte_ranges_concat,
 };
 
 #[cfg(feature = "async")]
@@ -55,58 +55,50 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
-        for array_subset in decoded_regions {
-            if array_subset.dimensionality() != self.decoded_representation.dimensionality() {
-                return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                    array_subset.clone(),
-                    self.decoded_representation.dimensionality(),
-                ));
-            }
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(CodecError::InvalidArraySubsetDimensionalityError(
+                indexer.clone(),
+                self.decoded_representation.dimensionality(),
+            ));
         }
 
         let encoded_value = self.input_handle.decode(options)?;
-        let mut out = Vec::with_capacity(decoded_regions.len());
         let chunk_shape = self.decoded_representation.shape_u64();
-        match encoded_value {
-            Some(mut encoded_value) => {
-                let decoded_value = zfp_decode(
-                    &self.mode,
-                    self.write_header,
-                    encoded_value.to_mut(), // FIXME: Does zfp **really** need the encoded value as mutable?
-                    &self.decoded_representation,
-                    false, // FIXME
-                )?;
-                for array_subset in decoded_regions {
-                    let byte_ranges = array_subset.byte_ranges(&chunk_shape, data_type_size)?;
-                    out.push(ArrayBytes::from(extract_byte_ranges_concat(
-                        &decoded_value,
-                        &byte_ranges,
-                    )?));
-                }
-            }
-            None => {
-                for decoded_region in decoded_regions {
-                    let array_size = ArraySize::new(
-                        self.decoded_representation.data_type().size(),
-                        decoded_region.num_elements(),
-                    );
-                    let fill_value = ArrayBytes::new_fill_value(
-                        array_size,
-                        self.decoded_representation.fill_value(),
-                    );
-                    out.push(fill_value);
-                }
-            }
+        if let Some(mut encoded_value) = encoded_value {
+            let decoded_value = zfp_decode(
+                &self.mode,
+                self.write_header,
+                encoded_value.to_mut(), // FIXME: Does zfp **really** need the encoded value as mutable?
+                &self.decoded_representation,
+                false, // FIXME
+            )?;
+            let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+            Ok(ArrayBytes::from(extract_byte_ranges_concat(
+                &decoded_value,
+                &byte_ranges,
+            )?))
+        } else {
+            let array_size = ArraySize::new(
+                self.decoded_representation.data_type().size(),
+                indexer.num_elements(),
+            );
+            Ok(ArrayBytes::new_fill_value(
+                array_size,
+                self.decoded_representation.fill_value(),
+            ))
         }
-        Ok(out)
     }
 }
 
@@ -152,55 +144,43 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
 
     async fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
-        for array_subset in decoded_regions {
-            if array_subset.dimensionality() != self.decoded_representation.dimensionality() {
-                return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                    array_subset.clone(),
-                    self.decoded_representation.dimensionality(),
-                ));
-            }
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(CodecError::InvalidArraySubsetDimensionalityError(
+                indexer.clone(),
+                self.decoded_representation.dimensionality(),
+            ));
         }
 
         let encoded_value = self.input_handle.decode(options).await?;
         let chunk_shape = self.decoded_representation.shape_u64();
-        let mut out = Vec::with_capacity(decoded_regions.len());
-        match encoded_value {
-            Some(mut encoded_value) => {
-                let decoded_value = zfp_decode(
-                    &self.mode,
-                    self.write_header,
-                    encoded_value.to_mut(), // FIXME: Does zfp **really** need the encoded value as mutable?
-                    &self.decoded_representation,
-                    false, // FIXME
-                )?;
-                for array_subset in decoded_regions {
-                    let byte_ranges = array_subset.byte_ranges(&chunk_shape, data_type_size)?;
-                    out.push(ArrayBytes::from(extract_byte_ranges_concat(
-                        &decoded_value,
-                        &byte_ranges,
-                    )?));
-                }
-            }
-            None => {
-                for decoded_region in decoded_regions {
-                    let array_size = ArraySize::new(
-                        self.decoded_representation.data_type().size(),
-                        decoded_region.num_elements(),
-                    );
-                    let fill_value = ArrayBytes::new_fill_value(
-                        array_size,
-                        self.decoded_representation.fill_value(),
-                    );
-                    out.push(fill_value);
-                }
-            }
+        if let Some(mut encoded_value) = encoded_value {
+            let decoded_value = zfp_decode(
+                &self.mode,
+                self.write_header,
+                encoded_value.to_mut(), // FIXME: Does zfp **really** need the encoded value as mutable?
+                &self.decoded_representation,
+                false, // FIXME
+            )?;
+            let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+            Ok(ArrayBytes::from(extract_byte_ranges_concat(
+                &decoded_value,
+                &byte_ranges,
+            )?))
+        } else {
+            let array_size = ArraySize::new(
+                self.decoded_representation.data_type().size(),
+                indexer.num_elements(),
+            );
+            Ok(ArrayBytes::new_fill_value(
+                array_size,
+                self.decoded_representation.fill_value(),
+            ))
         }
-        Ok(out)
     }
 }

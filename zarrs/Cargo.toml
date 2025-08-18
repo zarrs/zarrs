@@ -1,6 +1,6 @@
 [package]
 name = "zarrs"
-version = "0.21.0"
+version = "0.22.0-dev"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.82"
@@ -16,8 +16,9 @@ exclude = [".dockerignore", ".github", ".editorconfig", "Dockerfile", "coverage.
 [features]
 default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
 filesystem = ["dep:zarrs_filesystem"] # Re-export zarrs_filesystem as zarrs::filesystem
+adler32 = ["dep:simd-adler32"] # Enable the adler32 checksum codec
 bitround = [] # Enable the bitround codec
-blosc = ["dep:blosc-sys"] # Enable the blosc codec
+blosc = ["dep:blosc-src"] # Enable the blosc codec
 bz2 = ["dep:bzip2"] # Enable the bz2 codec
 crc32c = ["dep:crc32c"] # Enable the crc32c checksum codec
 fletcher32 = [] # Enable the fletcher32 checksum codec
@@ -32,6 +33,9 @@ zstd = ["dep:zstd"] # Enable the zstd codec
 ndarray = ["dep:ndarray"] # Adds ndarray utility functions to Array
 dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
 async = ["dep:async-generic", "dep:async-trait", "dep:futures", "zarrs_storage/async"] # Enable experimental async API
+jiff = ["dep:jiff"] # Adds support for jiff time array elements
+chrono = ["dep:chrono"] # Adds support for chrono time array elements
+float8 = ["dep:float8"] # Adds support for float8 array elements
 
 [lints]
 workspace = true
@@ -45,10 +49,10 @@ bench = false
 
 [dependencies]
 async-trait = { version = "0.1.74", optional = true }
-blosc-sys = { version = "0.3.4", package = "blosc-src", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
+blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
 bytes = "1.6.0"
-bzip2 = { version = "0.5.0", optional = true, features = ["static"] }
+bzip2 = { version = "0.6.0", optional = true }
 crc32c = { version = "0.6.5", optional = true }
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 flate2 = { version = "1.1.1", optional = true }
@@ -57,14 +61,14 @@ gdeflate-sys = { version = "0.4.1", optional = true }
 half.workspace = true
 inventory.workspace = true
 itertools = "0.14.0"
-lru = "0.14.0"
+lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = ">=0.15.0,<17", optional = true }
 num.workspace = true
 pco = { version = "0.4.0", optional = true }
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.2.0"
-serde = { version = "1.0.185", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
 serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_order"] }
 thiserror.workspace = true
 thread_local = "1.1.8"
@@ -81,20 +85,23 @@ dlpark = { version = ">=0.4.1,<0.6", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
 zarrs_metadata_ext.workspace = true
+jiff = { version = "0.2.15", optional = true }
+chrono = { version = "0.4.39", optional = true }
+float8 = { version = "0.4.1", optional = true, features = ["bytemuck"] }
+simd-adler32 = { version = "0.3.7", optional = true }
+itoa = "1.0.15"
 
 [dependencies.num-complex]
 version = "0.4.3"
 features = ["bytemuck"]
 
 [dev-dependencies]
-chrono = "0.4"
-criterion = "0.5.1"
+chrono = "0.4.39"
+criterion = "0.7.0"
 object_store = { workspace = true, features = ["http"] }
-opendal = { workspace = true, features = ["services-fs", "services-http"] }
 tempfile = "3"
 tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 walkdir = "2.3.2"
-zarrs_opendal.workspace = true
 zarrs_object_store.workspace = true
 zarrs_filesystem.workspace = true
 zarrs_zip.workspace = true

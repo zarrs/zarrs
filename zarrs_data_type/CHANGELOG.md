@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implement `Clone` for `Error` structs
+
+## [0.3.2] - 2025-06-19
+
+### Changed
+- Implement `From<num::complex::Complex<T>>` for `FillValue: From<T>`
+- Bump minimum `half` to 2.4.1
+
 ## [0.3.1] - 2025-06-08
 
 ### Added
@@ -44,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.3.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.3.2...HEAD
+[0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.2
 [0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.1
 [0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.0
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.2.0

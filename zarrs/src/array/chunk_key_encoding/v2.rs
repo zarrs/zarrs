@@ -1,5 +1,7 @@
-//! The v2 chunk key encoding.
+//! The `v2` chunk key encoding.
 
+use itertools::Itertools;
+pub use zarrs_metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
 use zarrs_registry::chunk_key_encoding::V2;
 
 use crate::{
@@ -9,9 +11,7 @@ use crate::{
     storage::StoreKey,
 };
 
-use super::{
-    ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator, V2ChunkKeyEncodingConfiguration,
-};
+use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 // Register the chunk key encoding.
 inventory::submit! {
@@ -88,13 +88,21 @@ impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {
         let key = if chunk_grid_indices.is_empty() {
-            "0".to_string()
+            '0'.to_string()
         } else {
+            // Avoid a heap allocation of the chunk key separator
+            let mut separator_str: [u8; 4] = [0; 4];
+            let separator_char: char = self.separator.into();
+            let separator_str: &str = separator_char.encode_utf8(&mut separator_str);
+
+            // Use itoa for integer conversion, faster than format!
+            let mut buffers = vec![itoa::Buffer::new(); chunk_grid_indices.len()];
+
             chunk_grid_indices
                 .iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<String>>()
-                .join(&self.separator.to_string())
+                .zip(&mut buffers)
+                .map(|(&n, buffer)| buffer.format(n))
+                .join(separator_str)
         };
         unsafe { StoreKey::new_unchecked(key) }
     }

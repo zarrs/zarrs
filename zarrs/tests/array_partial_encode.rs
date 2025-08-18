@@ -9,7 +9,7 @@ use zarrs::{
             array_to_bytes::sharding::ShardingCodecBuilder, BytesToBytesCodecTraits,
             CodecOptionsBuilder,
         },
-        ArrayBuilder, DataType, FillValue,
+        ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
 };
@@ -45,9 +45,9 @@ fn array_partial_encode_sharding(
     let array_path = "/";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::UInt16,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u16),
+        0u16,
     );
     builder
         .array_to_bytes_codec(Arc::new(
@@ -214,13 +214,6 @@ fn array_partial_encode_sharding_index_end() {
     array_partial_encode_sharding(ShardingIndexLocation::End, vec![]).unwrap();
 }
 
-#[cfg(all(
-    feature = "gzip",
-    feature = "bz2",
-    feature = "blosc",
-    feature = "crc32c",
-    feature = "zstd"
-))]
 #[test]
 fn array_partial_encode_sharding_index_compressed() {
     use zarrs_metadata_ext::codec::blosc::{
@@ -232,14 +225,18 @@ fn array_partial_encode_sharding_index_compressed() {
         array_partial_encode_sharding(
             *index_location,
             vec![
+                #[cfg(feature = "gzip")]
                 Arc::new(zarrs::array::codec::GzipCodec::new(5).unwrap()),
+                #[cfg(feature = "zstd")]
                 Arc::new(zarrs::array::codec::ZstdCodec::new(
                     5.try_into().unwrap(),
                     true,
                 )),
+                #[cfg(feature = "bz2")]
                 Arc::new(zarrs::array::codec::Bz2Codec::new(
                     Bz2CompressionLevel::try_from(5u8).unwrap(),
                 )),
+                #[cfg(feature = "blosc")]
                 Arc::new(
                     zarrs::array::codec::BloscCodec::new(
                         BloscCompressor::BloscLZ,
@@ -250,7 +247,10 @@ fn array_partial_encode_sharding_index_compressed() {
                     )
                     .unwrap(),
                 ),
+                #[cfg(feature = "crc32c")]
                 Arc::new(zarrs::array::codec::Crc32cCodec::new()),
+                #[cfg(feature = "adler32")]
+                Arc::new(zarrs::array::codec::Adler32Codec::default()),
             ],
         )
         .unwrap();

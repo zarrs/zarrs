@@ -10,7 +10,7 @@ use super::StorePrefix;
 pub struct StoreKey(String);
 
 /// An invalid store key.
-#[derive(Debug, From, Error)]
+#[derive(Debug, Clone, From, Error)]
 #[error("invalid store key {0}")]
 pub struct StoreKeyError(String);
 

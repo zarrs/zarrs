@@ -2,16 +2,16 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "zarr==3.0.2,<3.0.3", # 3.0.4+ is broken with some numcodecs.zarr3 codecs
-#     "numcodecs==0.15.1",
+#     "zarr==3.0.8",
+#     "numcodecs==0.16.1",
 #     "zfpy==1.0.1",
-#     "pcodec==0.3.2",
+#     "pcodec==0.3.5",
 # ]
 # ///
 
 import zarr
 import numpy as np
-from numcodecs.zarr3 import BZ2, ZFPY, PCodec, Fletcher32, Zlib
+from numcodecs.zarr3 import BZ2, ZFPY, PCodec, Adler32, Fletcher32, Zlib
 
 compressor_blosc = zarr.codecs.BloscCodec(cname="zstd", clevel=1, shuffle=zarr.codecs.BloscShuffle.bitshuffle)
 compressor_gzip = zarr.codecs.GzipCodec(level=9)
@@ -19,6 +19,7 @@ compressor_bz2 = BZ2(level=9)
 serializer_zfpy = ZFPY(mode = 4, tolerance=0.01) # fixed accuracy
 serializer_pcodec = PCodec(level = 8, mode_spec="auto")
 compressor_zstd = zarr.codecs.ZstdCodec(level=5, checksum=False)
+compressor_adler32 = Adler32()
 compressor_fletcher32 = Fletcher32()
 compressor_zlib = Zlib(level=8)
 
@@ -39,6 +40,7 @@ data = np.array(
 
 for compressor_name, compressor in [
     ("none", None),
+    ("adler32", compressor_adler32),
     ("blosc", compressor_blosc),
     ("gzip", compressor_gzip),
     ("bz2", compressor_bz2),

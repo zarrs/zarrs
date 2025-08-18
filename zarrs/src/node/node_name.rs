@@ -9,7 +9,7 @@ use thiserror::Error;
 pub struct NodeName(String);
 
 /// An invalid node name.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("invalid node name {0}")]
 pub struct NodeNameError(String);
 

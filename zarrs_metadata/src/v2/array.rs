@@ -194,7 +194,7 @@ pub enum DataTypeMetadataV2 {
 }
 
 /// A Zarr V2 invalid data type endianness error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("invalid V2 data type for {_0:?} endianness, must begin with |, < or >")]
 pub struct DataTypeMetadataV2EndiannessError(DataTypeMetadataV2);
 
@@ -225,7 +225,15 @@ pub fn data_type_metadata_v2_to_endianness(
 
 /// Zarr V2 fill value metadata.
 ///
-/// Provides the default value to use for uninitialized portions of the array, or null if no fill value is to be used.
+/// Provides the default value to use for uninitialized portions of the array, or null if a default fill value is to be used.
+///
+/// Note that the Zarr V2 specification states that `null` fill values are not defined.
+/// However, undefined fill values cannot be represented in Zarr V3.
+/// In `zarr-python` 2.x and potentially other Zarr implementations, unwritten and partially written chunks could indeed have completely undefined values.
+/// This could lead to poor compression performance, and undefined values in partially written chunks cannot be distinguished from real data.
+///
+/// Implementations such as `zarrs` (0.22.0+) and `zarr-python` (3.0.3+) map `null` fill values to a data type dependent default fill value.
+/// There is an active proposal [zarr-python #3084](https://github.com/zarr-developers/zarr-python/issues/3084) to stop writing `null` fill values by default for Zarr V2 arrays.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FillValueMetadataV2 {
     /// No fill value.

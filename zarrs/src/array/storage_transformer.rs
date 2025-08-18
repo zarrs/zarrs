@@ -5,6 +5,8 @@
 //! A storage transformer chain and individual storage transformers all have the same interface as a [store](crate::storage::store).
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#storage-transformers>.
+//!
+#![doc = include_str!("../../doc/status/storage_transformers.md")]
 
 mod storage_transformer_chain;
 pub use storage_transformer_chain::StorageTransformerChain;

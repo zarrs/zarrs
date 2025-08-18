@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::RawBytes,
-    byte_range::{ByteLength, ByteOffset, ByteRange},
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -35,6 +35,10 @@ impl ByteIntervalPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
+    fn size(&self) -> usize {
+        self.inner.size()
+    }
+
     fn partial_decode(
         &self,
         byte_ranges: &[ByteRange],

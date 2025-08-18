@@ -2,12 +2,15 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::PCODEC;
 
-use crate::array::{
-    codec::{
-        ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, BytesPartialDecoderTraits, CodecError,
-        CodecOptions, RawBytes,
+use crate::{
+    array::{
+        codec::{
+            ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError,
+            CodecOptions, RawBytes,
+        },
+        ArraySize, ChunkRepresentation, DataType,
     },
-    ArraySize, ChunkRepresentation, DataType,
+    array_subset::ArraySubset,
 };
 
 #[cfg(feature = "async")]
@@ -34,82 +37,82 @@ impl PcodecPartialDecoder {
 
 fn do_partial_decode<'a>(
     decoded: Option<RawBytes<'a>>,
-    decoded_regions: &[ArraySubset],
+    indexer: &ArraySubset,
     decoded_representation: &ChunkRepresentation,
-) -> Result<Vec<ArrayBytes<'a>>, CodecError> {
-    let mut decoded_bytes = Vec::with_capacity(decoded_regions.len());
+) -> Result<ArrayBytes<'a>, CodecError> {
     let chunk_shape = decoded_representation.shape_u64();
     match decoded {
         None => {
-            for array_subset in decoded_regions {
-                let array_size = ArraySize::new(
-                    decoded_representation.data_type().size(),
-                    array_subset.num_elements(),
-                );
-                let fill_value =
-                    ArrayBytes::new_fill_value(array_size, decoded_representation.fill_value());
-                decoded_bytes.push(fill_value);
-            }
+            let array_size = ArraySize::new(
+                decoded_representation.data_type().size(),
+                indexer.num_elements(),
+            );
+            let fill_value =
+                ArrayBytes::new_fill_value(array_size, decoded_representation.fill_value());
+            Ok(fill_value)
         }
         Some(decoded_value) => {
             macro_rules! pcodec_partial_decode {
-                ( $t:ty ) => {
+                ( $t:ty ) => {{
                     let decoded_chunk = pco::standalone::simple_decompress(&decoded_value)
                         .map(|bytes| crate::array::transmute_to_bytes_vec::<$t>(bytes))
                         .map_err(|err| CodecError::Other(err.to_string()))?;
                     let decoded_chunk: ArrayBytes = decoded_chunk.into();
-                    for array_subset in decoded_regions {
-                        let bytes_subset = decoded_chunk
-                            .extract_array_subset(
-                                array_subset,
-                                &chunk_shape,
-                                decoded_representation.data_type(),
-                            )?
-                            .into_owned();
-                        decoded_bytes.push(bytes_subset);
-                    }
-                };
+                    let bytes_subset = decoded_chunk
+                        .extract_array_subset(
+                            &indexer,
+                            &chunk_shape,
+                            decoded_representation.data_type(),
+                        )?
+                        .into_owned();
+                    Ok(bytes_subset)
+                }};
             }
 
             let data_type = decoded_representation.data_type();
             match data_type {
                 DataType::UInt16 => {
-                    pcodec_partial_decode!(u16);
+                    pcodec_partial_decode!(u16)
                 }
                 DataType::UInt32 => {
-                    pcodec_partial_decode!(u32);
+                    pcodec_partial_decode!(u32)
                 }
                 DataType::UInt64 => {
-                    pcodec_partial_decode!(u64);
+                    pcodec_partial_decode!(u64)
                 }
                 DataType::Int16 => {
-                    pcodec_partial_decode!(i16);
+                    pcodec_partial_decode!(i16)
                 }
                 DataType::Int32 => {
-                    pcodec_partial_decode!(i32);
+                    pcodec_partial_decode!(i32)
                 }
-                DataType::Int64 => {
-                    pcodec_partial_decode!(i64);
+                DataType::Int64
+                | DataType::NumpyDateTime64 {
+                    unit: _,
+                    scale_factor: _,
+                }
+                | DataType::NumpyTimeDelta64 {
+                    unit: _,
+                    scale_factor: _,
+                } => {
+                    pcodec_partial_decode!(i64)
                 }
                 DataType::Float16 | DataType::ComplexFloat16 => {
-                    pcodec_partial_decode!(half::f16);
+                    pcodec_partial_decode!(half::f16)
                 }
                 DataType::Float32 | DataType::Complex64 | DataType::ComplexFloat32 => {
-                    pcodec_partial_decode!(f32);
+                    pcodec_partial_decode!(f32)
                 }
                 DataType::Float64 | DataType::Complex128 | DataType::ComplexFloat64 => {
-                    pcodec_partial_decode!(f64);
+                    pcodec_partial_decode!(f64)
                 }
-                super::unsupported_dtypes!() => {
-                    return Err(CodecError::UnsupportedDataType(
-                        data_type.clone(),
-                        PCODEC.to_string(),
-                    ));
-                }
+                super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
+                    data_type.clone(),
+                    PCODEC.to_string(),
+                )),
             }
         }
     }
-    Ok(decoded_bytes)
 }
 
 impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
@@ -117,13 +120,17 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
+    ) -> Result<ArrayBytes<'_>, CodecError> {
         let decoded = self.input_handle.decode(options)?;
-        do_partial_decode(decoded, decoded_regions, &self.decoded_representation)
+        do_partial_decode(decoded, indexer, &self.decoded_representation)
     }
 }
 
@@ -157,19 +164,17 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
 
     async fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        for array_subset in decoded_regions {
-            if array_subset.dimensionality() != self.decoded_representation.dimensionality() {
-                return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                    array_subset.clone(),
-                    self.decoded_representation.dimensionality(),
-                ));
-            }
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(CodecError::InvalidArraySubsetDimensionalityError(
+                indexer.clone(),
+                self.decoded_representation.dimensionality(),
+            ));
         }
 
         let decoded = self.input_handle.decode(options).await?;
-        do_partial_decode(decoded, decoded_regions, &self.decoded_representation)
+        do_partial_decode(decoded, indexer, &self.decoded_representation)
     }
 }

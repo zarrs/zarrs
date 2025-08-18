@@ -8,7 +8,7 @@ use crate::{
         },
         RawBytes,
     },
-    byte_range::ByteRange,
+    storage::byte_range::ByteRange,
 };
 
 #[cfg(feature = "async")]
@@ -28,6 +28,10 @@ impl BloscPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for BloscPartialDecoder {
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],

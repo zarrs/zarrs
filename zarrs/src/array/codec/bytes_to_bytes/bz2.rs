@@ -72,11 +72,11 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{BytesToBytesCodecTraits, CodecOptions},
-            ArrayRepresentation, BytesRepresentation, DataType, FillValue,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
+            ArrayRepresentation, BytesRepresentation, DataType,
         },
         array_subset::ArraySubset,
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;
@@ -109,8 +109,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_bz2_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -127,14 +126,15 @@ mod tests {
         let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // bz2 partial decoder does not hold bytes
         let decoded = partial_decoder
             .partial_decode_concat(&decoded_regions, &CodecOptions::default())
             .unwrap()
@@ -155,8 +155,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn codec_bz2_async_partial_decode() {
         let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, FillValue::from(0u16))
-                .unwrap();
+            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
         let data_type_size = array_representation.data_type().fixed_size().unwrap();
         let array_size = array_representation.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -173,7 +172,7 @@ mod tests {
         let decoded_regions: Vec<ByteRange> = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,

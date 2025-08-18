@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
-use zarrs::array::{Array, ArrayBuilder, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, DataType};
 use zarrs::array_subset::ArraySubset;
 
 use object_store::memory::InMemory;
 
 use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {
@@ -18,9 +19,9 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        0u8,
     );
     builder.bytes_to_bytes_codecs(vec![]);
     // builder.storage_transformers(vec![].into());
@@ -41,7 +42,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
-    assert_eq!(array.chunk_grid_shape().unwrap(), &[2, 2]);
+    assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
 
@@ -119,10 +120,10 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.async_retrieve_array_subset_ndarray::<u8>(&ArraySubset::new_with_ranges(&[0..5, 0..5])).await?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
     assert!(array.async_partial_decoder(&[0]).await.is_err());
-    assert!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1])], &options).await.is_err());
-    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[], &options).await?, []);
-    assert_eq!(array.async_partial_decoder(&[5, 0]).await?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2])], &options).await?, [vec![0, 0].into()]); // OOB -> fill value
-    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2]), ArraySubset::new_with_ranges(&[0..2, 1..2])], &options).await?, [vec![1, 2].into(), vec![2, 6].into()]);
+    assert!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1]).into(), &options).await.is_err());
+    assert_eq!(array.async_partial_decoder(&[5, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options).await?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options).await?, vec![1, 2].into());
+    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..2, 1..2]).into(), &options).await?, vec![2, 6].into());
 
     Ok(())
 }
@@ -277,9 +278,9 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        "",
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
@@ -292,29 +293,34 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
-    let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
-    let array_path = "/array";
-    let mut builder = ArrayBuilder::new(
-        vec![4, 4], // array shape
-        DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
-    );
-    builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
-        TransposeOrder::new(&[1, 0]).unwrap(),
-    ))]);
-    builder.array_to_bytes_codec(Arc::new(
-        zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
-            vec![2, 1].try_into().unwrap(),
-        )
-        .array_to_bytes_codec(Arc::<VlenCodec>::default())
-        .bytes_to_bytes_codecs(vec![
-            #[cfg(feature = "gzip")]
-            Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-        ])
-        .build(),
-    ));
+    for index_location in [VlenIndexLocation::Start, VlenIndexLocation::End] {
+        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![4, 4], // array shape
+            vec![2, 2], // regular chunk shape
+            DataType::String,
+            "",
+        );
+        builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
+            TransposeOrder::new(&[1, 0]).unwrap(),
+        ))]);
+        builder.array_to_bytes_codec(Arc::new(
+            zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
+                vec![2, 1].try_into().unwrap(),
+            )
+            .array_to_bytes_codec(Arc::new(
+                VlenCodec::default().with_index_location(index_location),
+            ))
+            .bytes_to_bytes_codecs(vec![
+                #[cfg(feature = "gzip")]
+                Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+            ])
+            .build(),
+        ));
 
-    let array = builder.build(store, array_path).unwrap();
-    array_str_impl(array).await
+        let array = builder.build(store, array_path).unwrap();
+        array_str_impl(array).await?;
+    }
+    Ok(())
 }

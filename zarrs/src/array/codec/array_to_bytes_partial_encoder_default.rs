@@ -21,7 +21,8 @@ use crate::array::codec::{
     output_handle: &Arc<dyn AsyncBytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+    chunk_subset_indexer: &ArraySubset,
+    chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 )))]
 fn partial_encode(
@@ -29,7 +30,8 @@ fn partial_encode(
     output_handle: &Arc<dyn BytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+    chunk_subset_indexer: &ArraySubset,
+    chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
     // Read the entire chunk
@@ -61,21 +63,18 @@ fn partial_encode(
     )?;
 
     // Update the chunk
-    // TODO: More efficient update for multiple chunk subsets?
-    for (chunk_subset, chunk_subset_bytes) in subsets_and_bytes {
-        chunk_subset_bytes.validate(
-            chunk_subset.num_elements(),
-            decoded_representation.data_type().size(),
-        )?;
+    chunk_subset_bytes.validate(
+        chunk_subset_indexer.num_elements(),
+        decoded_representation.data_type().size(),
+    )?;
 
-        chunk_bytes = update_array_bytes(
-            chunk_bytes,
-            &chunk_shape,
-            chunk_subset,
-            chunk_subset_bytes,
-            decoded_representation.data_type().size(),
-        )?;
-    }
+    chunk_bytes = update_array_bytes(
+        chunk_bytes,
+        &chunk_shape,
+        chunk_subset_indexer,
+        chunk_subset_bytes,
+        decoded_representation.data_type().size(),
+    )?;
 
     let is_fill_value = !options.store_empty_chunks()
         && chunk_bytes.is_fill_value(decoded_representation.fill_value());
@@ -137,7 +136,8 @@ impl ArrayPartialEncoderTraits for ArrayToBytesPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode(
@@ -145,7 +145,8 @@ impl ArrayPartialEncoderTraits for ArrayToBytesPartialEncoderDefault {
             &self.output_handle,
             &self.decoded_representation,
             &self.codec,
-            subsets_and_bytes,
+            indexer,
+            bytes,
             options,
         )
     }
@@ -188,7 +189,8 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToBytesPartialEncoderDefault {
 
     async fn partial_encode(
         &self,
-        subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)],
+        indexer: &ArraySubset,
+        bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_async(
@@ -196,7 +198,8 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToBytesPartialEncoderDefault {
             &self.output_handle,
             &self.decoded_representation,
             &self.codec,
-            subsets_and_bytes,
+            indexer,
+            bytes,
             options,
         )
         .await

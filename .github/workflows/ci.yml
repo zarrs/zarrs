@@ -105,7 +105,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --workspace --all-features --direct
+      - run: cargo minimal-versions check --direct --all-features --workspace --exclude zarrs_object_store
   codecov:
     runs-on: ubuntu-latest
     steps:

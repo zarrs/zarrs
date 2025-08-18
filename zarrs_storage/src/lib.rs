@@ -155,7 +155,7 @@ pub struct StoreKeyOffsetValue<'a> {
 
 impl StoreKeyOffsetValue<'_> {
     /// Create a new [`StoreKeyOffsetValue`].
-    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue {
+    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue<'_> {
         StoreKeyOffsetValue { key, offset, value }
     }
 
@@ -207,14 +207,14 @@ impl StoreKeysPrefixes {
 }
 
 /// A storage error.
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum StorageError {
     /// A write operation was attempted on a read only store.
     #[error("a write operation was attempted on a read only store")]
     ReadOnly,
     /// An IO error.
     #[error(transparent)]
-    IOError(#[from] std::io::Error),
+    IOError(#[from] Arc<std::io::Error>),
     // /// An error serialising or deserialising JSON.
     // #[error(transparent)]
     // InvalidJSON(#[from] serde_json::Error),
@@ -248,6 +248,12 @@ pub enum StorageError {
     /// Any other error.
     #[error("{0}")]
     Other(String),
+}
+
+impl From<std::io::Error> for StorageError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IOError(Arc::new(err))
+    }
 }
 
 impl From<&str> for StorageError {

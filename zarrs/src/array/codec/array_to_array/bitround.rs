@@ -81,6 +81,14 @@ macro_rules! supported_dtypes {
             | DataType::ComplexFloat64
             | DataType::Complex64
             | DataType::Complex128
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            }
     };
 }
 macro_rules! unsupported_dtypes {
@@ -102,6 +110,16 @@ macro_rules! unsupported_dtypes {
             | DataType::Float8E5M2
             | DataType::Float8E5M2FNUZ
             | DataType::Float8E8M0FNU
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
@@ -238,7 +256,16 @@ fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<
             bytes.chunks_exact_mut(8).for_each(round);
             Ok(())
         }
-        DataType::UInt64 | DataType::Int64 => {
+        DataType::UInt64
+        | DataType::Int64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => {
             let round = |chunk: &mut [u8]| {
                 let element = u64::from_ne_bytes(chunk.try_into().unwrap());
                 let element = u64::to_ne_bytes(round_bits64(
@@ -263,7 +290,6 @@ mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
     use array_representation::ChunkRepresentation;
-    use itertools::Itertools;
 
     use crate::{
         array::{
@@ -280,12 +306,9 @@ mod tests {
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::Float32,
-            0.0f32.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float32, 0.0f32)
+                .unwrap();
         let elements: Vec<f32> = vec![
             //                         |
             0.0,
@@ -324,12 +347,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::UInt32,
-            0u32.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt32, 0u32)
+                .unwrap();
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -362,12 +382,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint8() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap()],
-            DataType::UInt8,
-            0u8.into(),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt8, 0u8)
+                .unwrap();
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -404,7 +421,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![(elements.len() as u64).try_into().unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
@@ -417,11 +434,7 @@ mod tests {
             )
             .unwrap()
             .into_owned();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[3..5]),
-            ArraySubset::new_with_ranges(&[17..21]),
-        ];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded.into_fixed().unwrap()));
+        let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
             .partial_decoder(
@@ -432,24 +445,26 @@ mod tests {
             .unwrap();
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .unwrap();
-        let decoded_partial_chunk = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| {
-                crate::array::transmute_from_bytes_vec::<f32>(
-                    bytes.into_fixed().unwrap().into_owned(),
-                )
-            })
-            .collect_vec();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // bitround partial decoder does not hold bytes
+        let decoded_regions = [
+            ArraySubset::new_with_ranges(&[3..5]),
+            ArraySubset::new_with_ranges(&[17..21]),
+        ];
         let answer: &[Vec<f32>] = &[vec![3.0, 4.0], vec![16.0, 16.0, 20.0, 20.0]];
-        assert_eq!(answer, decoded_partial_chunk);
+        for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .unwrap();
+            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
+                &decoded_partial_chunk.into_fixed().unwrap(),
+            );
+            assert_eq!(expected, &decoded_partial_chunk);
+        }
     }
 
     #[cfg(feature = "async")]
@@ -463,7 +478,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             vec![(elements.len() as u64).try_into().unwrap()],
             DataType::Float32,
-            0.0f32.into(),
+            0.0f32,
         )
         .unwrap();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -476,11 +491,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_regions = [
-            ArraySubset::new_with_ranges(&[3..5]),
-            ArraySubset::new_with_ranges(&[17..21]),
-        ];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded.into_fixed().unwrap()));
+        let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
             .async_partial_decoder(
@@ -498,19 +509,20 @@ mod tests {
             )
             .await
             .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .await
-            .unwrap();
-        let decoded_partial_chunk = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| {
-                crate::array::transmute_from_bytes_vec::<f32>(
-                    bytes.into_fixed().unwrap().into_owned(),
-                )
-            })
-            .collect_vec();
+        let decoded_regions = [
+            ArraySubset::new_with_ranges(&[3..5]),
+            ArraySubset::new_with_ranges(&[17..21]),
+        ];
         let answer: &[Vec<f32>] = &[vec![3.0, 4.0], vec![16.0, 16.0, 20.0, 20.0]];
-        assert_eq!(answer, decoded_partial_chunk);
+        for (decoded_region, expected) in decoded_regions.into_iter().zip(answer.iter()) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region.into(), &CodecOptions::default())
+                .await
+                .unwrap();
+            let decoded_partial_chunk = crate::array::convert_from_bytes_slice::<f32>(
+                &decoded_partial_chunk.into_fixed().unwrap(),
+            );
+            assert_eq!(expected, &decoded_partial_chunk);
+        }
     }
 }

@@ -8,6 +8,8 @@ use zarrs_metadata::{v3::MetadataV3, ConfigurationSerialize};
 #[non_exhaustive]
 #[serde(untagged)]
 pub enum VlenCodecConfiguration {
+    /// Version 0.1 draft.
+    V0_1(VlenCodecConfigurationV0_1),
     /// Version 0.0 draft.
     V0(VlenCodecConfigurationV0),
 }
@@ -19,12 +21,37 @@ impl ConfigurationSerialize for VlenCodecConfiguration {}
 #[serde(deny_unknown_fields)]
 #[display("{}", serde_json::to_string(self).unwrap_or_default())]
 pub struct VlenCodecConfigurationV0 {
-    /// Encoding for the variable length data indices (offsets).
+    /// Encoding for the variable length indices (offsets).
     pub index_codecs: Vec<MetadataV3>,
     /// Encoding for the variable length data.
     pub data_codecs: Vec<MetadataV3>,
-    /// The indices data type.
+    /// The index data type.
     pub index_data_type: VlenIndexDataType,
+}
+
+/// `vlen` codec configuration parameters (version 0.1 draft).
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]
+#[serde(deny_unknown_fields)]
+#[display("{}", serde_json::to_string(self).unwrap_or_default())]
+pub struct VlenCodecConfigurationV0_1 {
+    /// Encoding for the variable length indices (offsets).
+    pub index_codecs: Vec<MetadataV3>,
+    /// Encoding for the variable length data.
+    pub data_codecs: Vec<MetadataV3>,
+    /// The index data type.
+    pub index_data_type: VlenIndexDataType,
+    /// The index location.
+    pub index_location: VlenIndexLocation,
+}
+
+/// The `vlen` index location.
+#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq, Debug, Display)]
+#[serde(rename_all = "lowercase")]
+pub enum VlenIndexLocation {
+    /// The index is at the start of the chunk.
+    Start,
+    /// The index is at the end of the chunk.
+    End,
 }
 
 /// Data types for variable length chunk data indices.
@@ -62,7 +89,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn codec_vlen_simple() {
+    fn codec_vlen_simple_v0_0() {
         serde_json::from_str::<VlenCodecConfiguration>(
             r#"{
             "data_codecs": [{"name": "bytes"}],
@@ -74,11 +101,25 @@ mod tests {
     }
 
     #[test]
+    fn codec_vlen_simple_v0_1_start() {
+        serde_json::from_str::<VlenCodecConfiguration>(
+            r#"{
+            "data_codecs": [{"name": "bytes"}],
+            "index_codecs": [{"name": "bytes","configuration": { "endian": "little" }}],
+            "index_data_type": "uint32",
+            "index_location": "start"
+        }"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn codec_vlen_compressed() {
         serde_json::from_str::<VlenCodecConfiguration>(r#"{
             "data_codecs": [{"name": "bytes"},{"name": "blosc","configuration": {"cname": "zstd", "clevel":5,"shuffle": "bitshuffle", "typesize":1,"blocksize":0}}],
             "index_codecs": [{"name": "bytes","configuration": { "endian": "little" }},{"name": "blosc","configuration":{"cname": "zstd", "clevel":5,"shuffle": "shuffle", "typesize":4,"blocksize":0}}],
-            "index_data_type": "uint32"
+            "index_data_type": "uint32",
+            "index_location": "end"
         }"#).unwrap();
     }
 }

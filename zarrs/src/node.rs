@@ -74,7 +74,7 @@ impl From<Node> for NodePath {
 }
 
 /// A node creation error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum NodeCreateError {
     /// An invalid node path.
     #[error(transparent)]
@@ -461,7 +461,7 @@ impl Node {
 #[cfg(test)]
 mod tests {
     use crate::{
-        array::{ArrayBuilder, ArrayMetadataOptions, FillValue},
+        array::{ArrayBuilder, ArrayMetadataOptions},
         group::{GroupMetadata, GroupMetadataV3},
         storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
     };
@@ -553,9 +553,9 @@ mod tests {
         let node_path = "/node";
         let array = ArrayBuilder::new(
             vec![1, 2, 3],
+            vec![1, 1, 1],
             crate::array::DataType::Float32,
-            vec![1, 1, 1].try_into().unwrap(),
-            FillValue::from(0.0f32),
+            0.0f32,
         )
         .build(store.clone(), node_path)
         .unwrap();

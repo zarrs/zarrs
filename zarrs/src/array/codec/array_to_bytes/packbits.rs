@@ -116,6 +116,29 @@ fn pack_bits_components(
             num_components: 1,
             sign_extension: false,
         }),
+        DataType::ComplexFloat4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
+            component_size_bits: 4,
+            num_components: 2,
+            sign_extension: false,
+        }),
+        DataType::ComplexFloat6E2M3FN | DataType::ComplexFloat6E3M2FN => {
+            Ok(DataTypeExtensionPackBitsCodecComponents {
+                component_size_bits: 6,
+                num_components: 2,
+                sign_extension: false,
+            })
+        }
+        DataType::ComplexFloat8E3M4
+        | DataType::ComplexFloat8E4M3
+        | DataType::ComplexFloat8E4M3B11FNUZ
+        | DataType::ComplexFloat8E4M3FNUZ
+        | DataType::ComplexFloat8E5M2
+        | DataType::ComplexFloat8E5M2FNUZ
+        | DataType::ComplexFloat8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
+            component_size_bits: 8,
+            num_components: 2,
+            sign_extension: false,
+        }),
         DT::Int8 => Ok(DataTypeExtensionPackBitsCodecComponents {
             component_size_bits: 8,
             num_components: 1,
@@ -141,7 +164,15 @@ fn pack_bits_components(
             num_components: 1,
             sign_extension: false,
         }),
-        DT::Int32 => Ok(DataTypeExtensionPackBitsCodecComponents {
+        DT::Int32
+        | DT::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DT::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(DataTypeExtensionPackBitsCodecComponents {
             component_size_bits: 32,
             num_components: 1,
             sign_extension: true,
@@ -198,9 +229,9 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
+            codec::{ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions},
             element::{Element, ElementOwned},
-            ArrayBytes, ChunkRepresentation, DataType, FillValue,
+            ArrayBytes, ChunkRepresentation, DataType,
         },
         array_subset::ArraySubset,
     };
@@ -239,7 +270,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Bool;
-            let fill_value = FillValue::from(false);
+            let fill_value = false;
 
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
             let chunk_representation =
@@ -271,19 +302,18 @@ mod tests {
             assert_eq!(bytes, decoded);
 
             // Partial decoding
-            let decoded_regions = [ArraySubset::new_with_ranges(&[1..4, 1..4])];
-            let input_handle = Arc::new(std::io::Cursor::new(encoded));
+            let decoded_region = ArraySubset::new_with_ranges(&[1..4, 1..4]);
+            let input_handle = Arc::new(encoded);
             let partial_decoder = codec
                 .partial_decoder(
-                    input_handle,
+                    input_handle.clone(),
                     &chunk_representation,
                     &CodecOptions::default(),
                 )
                 .unwrap();
+            assert_eq!(partial_decoder.size(), input_handle.size()); // packbits partial decoder does not hold bytes
             let decoded_partial_chunk = partial_decoder
-                .partial_decode(&decoded_regions, &CodecOptions::default())
-                .unwrap()
-                .pop()
+                .partial_decode(&decoded_region, &CodecOptions::default())
                 .unwrap();
             let decoded_partial_chunk =
                 bool::from_array_bytes(&data_type, decoded_partial_chunk).unwrap();
@@ -303,7 +333,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float32;
-            let fill_value = FillValue::from(0.0f32);
+            let fill_value = 0.0f32;
 
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
             let chunk_representation =
@@ -356,7 +386,7 @@ mod tests {
                             .unwrap(),
                     );
                     let data_type = DataType::Int16;
-                    let fill_value = FillValue::from(0i16);
+                    let fill_value = 0i16;
 
                     let chunk_shape =
                         vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
@@ -400,7 +430,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::UInt2;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -438,7 +468,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::UInt4;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -476,7 +506,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Int2;
-            let fill_value = FillValue::from(0i8);
+            let fill_value = 0i8;
 
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -514,7 +544,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Int4;
-            let fill_value = FillValue::from(0i8);
+            let fill_value = 0i8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -552,7 +582,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float4E2M1FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -589,7 +619,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float6E2M3FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =
@@ -626,7 +656,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let data_type = DataType::Float6E3M2FN;
-            let fill_value = FillValue::from(0u8);
+            let fill_value = 0u8;
 
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
             let chunk_representation =

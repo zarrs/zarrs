@@ -6,8 +6,8 @@ use thiserror::Error;
 use zarrs_metadata::v3::FillValueMetadataV3;
 
 /// A data type and fill value metadata incompatibility error.
-#[derive(Debug, Error)]
-#[error("incompatible fill value {} for data type {}", _1.to_string(), _0.to_string())]
+#[derive(Clone, Debug, Error)]
+#[error("incompatible fill value {} for data type {}", _1.to_string(), _0.clone())]
 pub struct DataTypeFillValueMetadataError(String, FillValueMetadataV3);
 
 impl DataTypeFillValueMetadataError {
@@ -19,7 +19,7 @@ impl DataTypeFillValueMetadataError {
 }
 
 /// A data type and fill value incompatibility error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("incompatible fill value {1} for data type {0}")]
 pub struct DataTypeFillValueError(String, FillValue);
 
@@ -145,38 +145,16 @@ impl From<f64> for FillValue {
     }
 }
 
-impl From<num::complex::Complex<half::bf16>> for FillValue {
-    fn from(value: num::complex::Complex<half::bf16>) -> Self {
-        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex<half::bf16>>());
-        bytes.extend(value.re.to_ne_bytes());
-        bytes.extend(value.im.to_ne_bytes());
-        Self(bytes)
-    }
-}
-
-impl From<num::complex::Complex<half::f16>> for FillValue {
-    fn from(value: num::complex::Complex<half::f16>) -> Self {
-        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex<half::f16>>());
-        bytes.extend(value.re.to_ne_bytes());
-        bytes.extend(value.im.to_ne_bytes());
-        Self(bytes)
-    }
-}
-
-impl From<num::complex::Complex32> for FillValue {
-    fn from(value: num::complex::Complex32) -> Self {
-        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex32>());
-        bytes.extend(value.re.to_ne_bytes());
-        bytes.extend(value.im.to_ne_bytes());
-        Self(bytes)
-    }
-}
-
-impl From<num::complex::Complex64> for FillValue {
-    fn from(value: num::complex::Complex64) -> Self {
-        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex64>());
-        bytes.extend(value.re.to_ne_bytes());
-        bytes.extend(value.im.to_ne_bytes());
+impl<T> From<num::complex::Complex<T>> for FillValue
+where
+    FillValue: From<T>,
+{
+    fn from(value: num::complex::Complex<T>) -> Self {
+        let re = FillValue::from(value.re);
+        let im = FillValue::from(value.im);
+        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex<T>>());
+        bytes.extend(re.as_ne_bytes());
+        bytes.extend(im.as_ne_bytes());
         Self(bytes)
     }
 }

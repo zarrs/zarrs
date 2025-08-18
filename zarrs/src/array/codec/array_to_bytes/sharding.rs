@@ -54,7 +54,9 @@
 
 mod sharding_codec;
 mod sharding_codec_builder;
-mod sharding_partial_decoder;
+#[cfg(feature = "async")]
+mod sharding_partial_decoder_async;
+mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
 use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
@@ -65,10 +67,10 @@ pub use zarrs_metadata_ext::codec::sharding::{
 
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
-pub(crate) use sharding_partial_decoder::ShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 #[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder::AsyncShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
 use crate::{
     array::{
@@ -76,11 +78,14 @@ use crate::{
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
             CodecPlugin,
         },
-        BytesRepresentation, ChunkRepresentation, ChunkShape, CodecChain, DataType, FillValue,
+        concurrency::calc_concurrency_outer_inner,
+        ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
+        ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
-    byte_range::ByteRange,
+    array_subset::ArraySubset,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
+    storage::byte_range::ByteRange,
 };
 use zarrs_registry::codec::SHARDING;
 
@@ -125,7 +130,7 @@ fn sharding_index_decoded_representation(chunks_per_shard: &[NonZeroU64]) -> Chu
     let mut index_shape = Vec::with_capacity(chunks_per_shard.len() + 1);
     index_shape.extend(chunks_per_shard);
     index_shape.push(unsafe { NonZeroU64::new_unchecked(2) });
-    ChunkRepresentation::new(index_shape, DataType::UInt64, FillValue::from(u64::MAX)).unwrap()
+    ChunkRepresentation::new(index_shape, DataType::UInt64, u64::MAX).unwrap()
 }
 
 fn compute_index_encoded_size(
@@ -195,6 +200,62 @@ fn get_index_byte_range(
         ShardingIndexLocation::Start => ByteRange::FromStart(0, Some(index_encoded_size)),
         ShardingIndexLocation::End => ByteRange::Suffix(index_encoded_size),
     })
+}
+
+fn inner_chunk_byte_range(
+    shard_index: Option<&[u64]>,
+    shard_shape: &[NonZeroU64],
+    chunk_shape: &[NonZeroU64],
+    chunk_indices: &[u64],
+) -> Result<Option<ByteRange>, CodecError> {
+    if let Some(shard_index) = shard_index {
+        let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
+        let chunks_per_shard = chunks_per_shard.to_array_shape();
+
+        let shard_index_idx =
+            ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
+        Ok(Some(ByteRange::new(offset..offset + size)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn partial_decode_empty_shard<'a>(
+    shard_representation: &ChunkRepresentation,
+    indexer: &ArraySubset,
+) -> ArrayBytes<'a> {
+    let array_size = ArraySize::new(
+        shard_representation.data_type().size(),
+        indexer.num_elements(),
+    );
+    ArrayBytes::new_fill_value(array_size, shard_representation.fill_value())
+}
+
+fn get_concurrent_target_and_codec_options(
+    inner_codecs: &CodecChain,
+    chunk_representation: &ChunkRepresentation,
+    chunks_per_shard: &[u64],
+    options: &CodecOptions,
+) -> Result<(usize, CodecOptions), CodecError> {
+    let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
+
+    // Calculate inner chunk/codec concurrency
+    let (inner_chunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
+        options.concurrent_target(),
+        &RecommendedConcurrency::new_maximum(std::cmp::min(
+            options.concurrent_target(),
+            num_chunks,
+        )),
+        &inner_codecs.recommended_concurrency(chunk_representation)?,
+    );
+    let options = options
+        .into_builder()
+        .concurrent_target(concurrency_limit_codec)
+        .build();
+    Ok((inner_chunk_concurrent_limit, options))
 }
 
 /// Returns `None` if there is no shard.
@@ -337,7 +398,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             ChunkShape::try_from(vec![4, 4]).unwrap().into(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
         let elements: Vec<u16> = if all_fill_value {
@@ -432,7 +493,7 @@ mod tests {
         let chunk_representation = ChunkRepresentation::new(
             ChunkShape::try_from(vec![4, 4]).unwrap().into(),
             DataType::UInt16,
-            FillValue::from(0u16),
+            0u16,
         )
         .unwrap();
         let elements: Vec<u16> = if all_fill_value {
@@ -497,8 +558,7 @@ mod tests {
     ) {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_representation.num_elements() as usize]
         } else {
@@ -531,20 +591,18 @@ mod tests {
         let encoded = codec
             .encode(bytes.clone(), &chunk_representation, options)
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(input_handle, &chunk_representation, options)
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, options)
+            .partial_decode(&decoded_region, options)
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -581,8 +639,7 @@ mod tests {
     ) {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_representation.num_elements() as usize]
         } else {
@@ -614,22 +671,20 @@ mod tests {
         let encoded = codec
             .encode(bytes.clone(), &chunk_representation, options)
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(input_handle, &chunk_representation, options)
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, options)
+            .partial_decode(&decoded_region, options)
             .await
+            .unwrap()
+            .into_fixed()
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -664,12 +719,8 @@ mod tests {
     #[test]
     fn codec_sharding_partial_decode2() {
         let chunk_shape: ChunkShape = vec![2, 4, 4].try_into().unwrap();
-        let chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            DataType::UInt16,
-            FillValue::from(0u16),
-        )
-        .unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt16, 0u16).unwrap();
         let elements: Vec<u16> = (0..chunk_representation.num_elements() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -681,24 +732,26 @@ mod tests {
         let encoded = codec
             .encode(bytes, &chunk_representation, &CodecOptions::default())
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(
+            partial_decoder.size(),
+            input_handle.size() + size_of::<u64>() * 2 * 2 * 2 * 2
+        ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
         println!("decoded_partial_chunk {decoded_partial_chunk:?}");
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u16>())
             .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -711,8 +764,7 @@ mod tests {
     fn codec_sharding_partial_decode3() {
         let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, FillValue::from(0u8))
-                .unwrap();
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
         let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
@@ -723,24 +775,26 @@ mod tests {
         let encoded = codec
             .encode(bytes, &chunk_representation, &CodecOptions::default())
             .unwrap();
-        let decoded_regions = [ArraySubset::new_with_ranges(&[1..3, 0..1])];
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(
+            partial_decoder.size(),
+            input_handle.size() + size_of::<u64>() * 2 * 2 * 2
+        ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
+            .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
+            .into_fixed()
+            .unwrap()
             .chunks(size_of::<u8>())
             .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
             .collect();

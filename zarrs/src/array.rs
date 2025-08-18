@@ -48,7 +48,10 @@ mod array_sync_sharded_readable_ext;
 use std::sync::Arc;
 
 pub use self::{
-    array_builder::ArrayBuilder,
+    array_builder::{
+        ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
+        ArrayBuilderFillValue,
+    },
     array_bytes::{
         copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, RawBytes,
         RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
@@ -82,9 +85,9 @@ pub use crate::metadata::{
 };
 use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 
-pub use chunk_cache::array_chunk_cache_ext_sync::ArrayChunkCacheExt;
 pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder,
 };
 
 #[cfg(all(feature = "sharding", feature = "async"))]
@@ -194,10 +197,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///   - Variants without the `_opt` suffix use default [`CodecOptions`](crate::array::codec::CodecOptions).
 ///   - **Experimental**: `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
-/// Additional methods are offered by extension traits:
+/// Additional [`Array`] methods are offered by extension traits:
 ///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
-///  - [`ArrayChunkCacheExt`]: see [Chunk Caching](#chunk-caching).
 ///  - [`[Async]ArrayDlPackExt`](ArrayDlPackExt): methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop.
+///
+/// [`ChunkCache`] implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
 ///
 /// ### Chunks and Array Subsets
 /// Several convenience methods are available for querying the underlying chunk grid:
@@ -226,8 +230,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// // Get an iterator over the chunk indices
 /// //   The array shape must have been set (i.e. non-zero), otherwise the
 /// //   iterator will be empty
-/// let chunk_grid_shape = array.chunk_grid_shape().unwrap();
-/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape).indices();
+/// let chunk_grid_shape = array.chunk_grid_shape();
+/// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape.to_vec()).indices();
 ///
 /// // Iterate over chunk indices (in parallel)
 /// chunks.into_par_iter().try_for_each(|chunk_indices: Vec<u64>| {
@@ -289,32 +293,42 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
 /// ### Chunk Caching
-/// The [`ArrayChunkCacheExt`] trait adds [`Array`] retrieve methods that utilise chunk caching:
-///  - [`retrieve_chunk_opt_cached`](ArrayChunkCacheExt::retrieve_chunk_opt_cached)
-///  - [`retrieve_chunks_opt_cached`](ArrayChunkCacheExt::retrieve_chunks_opt_cached)
-///  - [`retrieve_chunk_subset_opt_cached`](ArrayChunkCacheExt::retrieve_chunk_subset_opt_cached)
-///  - [`retrieve_array_subset_opt_cached`](ArrayChunkCacheExt::retrieve_array_subset_opt_cached)
+/// `zarrs` supports three types of chunk caches:
+/// - [`ChunkCacheTypeDecoded`]: caches decoded chunks.
+///   - Preferred where decoding is expensive and memory is abundant.
+/// - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
+///   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
+/// - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+///   - Preferred where chunks are repeatedly *partially retrieved*.
+///   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
+///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs. See:
+///     - [`CodecTraits::partial_decoder_decodes_all`](crate::array::codec::CodecTraits::partial_decoder_decodes_all), and
+///     - [`CodecTraits::partial_decoder_should_cache_input`](crate::array::codec::CodecTraits::partial_decoder_should_cache_input).
 ///
-/// `_elements` and `_ndarray` variants are also available.
-/// Each method has a `cache` parameter that implements the [`ChunkCache`] trait.
-///
-/// Several Least Recently Used (LRU) chunk caches are provided by `zarrs`:
-///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity.
-///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
+/// `zarrs` implements the following Least Recently Used (LRU) chunk caches:
+///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
 ///  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
+///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
 ///  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
+///  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
+///  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 ///
 /// There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
-///
 /// `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
+///
+/// Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
+///  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
+///  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
+///  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
+///  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
+///
+/// `_elements` and `_ndarray` variants are also available.
 ///
 /// Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 /// Chunk caching may not outperform disk caching with a filesystem store.
 /// The above caches use internal locking to support multithreading, which has a performance overhead.
 /// **Prefer not to use a chunk cache if chunks are not accessed repeatedly**.
-/// Cached retrieve methods do not use partial decoders, and any intersected chunk is fully decoded if not present in the cache.
-/// The encoded chunk caches may be optimal if dealing with highly compressed/sparse data with a fast codec.
-/// However, the decoded chunk caches are likely to be more performant in most cases.
+/// Aside from [`ChunkCacheTypePartialDecoder`]-based caches, caches do not use partial decoders and any intersected chunk is fully retrieved if not present in the cache.
 ///
 /// For many access patterns, chunk caching may reduce performance.
 /// **Benchmark your algorithm/data.**
@@ -358,8 +372,6 @@ pub struct Array<TStorage: ?Sized> {
     storage: Arc<TStorage>,
     /// The path of the array in a store.
     path: NodePath,
-    // /// An array of integers providing the length of each dimension of the Zarr array.
-    // shape: ArrayShape,
     /// The data type of the Zarr array.
     data_type: DataType,
     /// The chunk grid of the Zarr array.
@@ -370,19 +382,31 @@ pub struct Array<TStorage: ?Sized> {
     fill_value: FillValue,
     /// Specifies a list of codecs to be used for encoding and decoding chunks.
     codecs: Arc<CodecChain>,
-    // /// Optional user defined attributes.
-    // attributes: serde_json::Map<String, serde_json::Value>,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
     dimension_names: Option<Vec<DimensionName>>,
-    // /// Additional fields annotated with `"must_understand": false`.
-    // additional_fields: AdditionalFields,
     /// Metadata used to create the array
     metadata: ArrayMetadata,
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
+    /// Replace the storage backing an array.
+    pub fn with_storage<TStorage2: ?Sized>(&self, storage: Arc<TStorage2>) -> Array<TStorage2> {
+        Array {
+            storage,
+            path: self.path.clone(),
+            data_type: self.data_type.clone(),
+            chunk_grid: self.chunk_grid.clone(),
+            chunk_key_encoding: self.chunk_key_encoding.clone(),
+            fill_value: self.fill_value.clone(),
+            codecs: self.codecs.clone(),
+            storage_transformers: self.storage_transformers.clone(),
+            dimension_names: self.dimension_names.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+
     /// Create an array in `storage` at `path` with `metadata`.
     /// This does **not** write to the store, use [`store_metadata`](Array<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
     ///
@@ -418,7 +442,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             global_config().data_type_aliases_v3(),
         )
         .map_err(ArrayCreateError::DataTypeCreateError)?;
-        let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid)
+        let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
             return Err(ArrayCreateError::InvalidChunkGridDimensionality(
@@ -464,6 +488,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         })
     }
 
+    /// Get the underlying storage backing the array.
+    #[must_use]
+    pub fn storage(&self) -> Arc<TStorage> {
+        self.storage.clone()
+    }
+
     /// Get the node path.
     #[must_use]
     pub const fn path(&self) -> &NodePath {
@@ -485,23 +515,26 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the array shape.
     #[must_use]
     pub fn shape(&self) -> &[u64] {
-        match &self.metadata {
-            ArrayMetadata::V3(metadata) => &metadata.shape,
-            ArrayMetadata::V2(metadata) => &metadata.shape,
-        }
+        self.chunk_grid().array_shape()
     }
 
     /// Set the array shape.
-    pub fn set_shape(&mut self, shape: ArrayShape) -> &mut Self {
+    ///
+    /// # Errors
+    /// Returns an [`ArrayCreateError`] if the chunk grid is not compatible with `array_shape`.
+    pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
+        self.chunk_grid =
+            ChunkGrid::from_metadata(&self.chunk_grid.create_metadata(), &array_shape)
+                .map_err(ArrayCreateError::ChunkGridCreateError)?;
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
-                metadata.shape = shape;
+                metadata.shape = array_shape;
             }
             ArrayMetadata::V2(metadata) => {
-                metadata.shape = shape;
+                metadata.shape = array_shape;
             }
         }
-        self
+        Ok(self)
     }
 
     /// Get the array dimensionality.
@@ -512,8 +545,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Get the codecs.
     #[must_use]
-    pub fn codecs(&self) -> &CodecChain {
-        &self.codecs
+    pub fn codecs(&self) -> Arc<CodecChain> {
+        self.codecs.clone()
     }
 
     /// Get the chunk grid.
@@ -687,6 +720,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         metadata
     }
 
+    pub(crate) fn fill_value_metadata_v3(&self) -> FillValueMetadataV3 {
+        self.data_type
+            .metadata_fill_value(&self.fill_value)
+            .expect("data type and fill value are compatible")
+    }
+
     /// Create an array builder matching the parameters of this array.
     #[must_use]
     pub fn builder(&self) -> ArrayBuilder {
@@ -695,8 +734,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     #[must_use]
-    pub fn chunk_grid_shape(&self) -> Option<ArrayShape> {
-        unsafe { self.chunk_grid().grid_shape_unchecked(self.shape()) }
+    pub fn chunk_grid_shape(&self) -> &ArrayShape {
+        self.chunk_grid().grid_shape()
     }
 
     /// Return the [`StoreKey`] of the chunk at `chunk_indices`.
@@ -711,7 +750,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError> {
         self.chunk_grid()
-            .chunk_origin(chunk_indices, self.shape())
+            .chunk_origin(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -722,7 +761,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError> {
         self.chunk_grid()
-            .chunk_shape(chunk_indices, self.shape())
+            .chunk_shape(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -754,7 +793,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
     pub fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError> {
         self.chunk_grid()
-            .subset(chunk_indices, self.shape())
+            .subset(chunk_indices)
             .map_err(|_| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
@@ -803,7 +842,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<ChunkRepresentation, ArrayError> {
-        (self.chunk_grid().chunk_shape(chunk_indices, self.shape())?).map_or_else(
+        self.chunk_grid().chunk_shape(chunk_indices)?.map_or_else(
             || {
                 Err(ArrayError::InvalidChunkGridIndicesError(
                     chunk_indices.to_vec(),
@@ -831,8 +870,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         &self,
         array_subset: &ArraySubset,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        self.chunk_grid
-            .chunks_in_array_subset(array_subset, self.shape())
+        self.chunk_grid.chunks_in_array_subset(array_subset)
     }
 
     /// Calculate the recommended codec concurrency.
@@ -987,7 +1025,7 @@ pub fn transmute_to_bytes<T: bytemuck::NoUninit>(from: &[T]) -> &[u8] {
 
 /// Unravel a linearised index to ND indices.
 #[must_use]
-pub fn unravel_index(mut index: u64, shape: &[u64]) -> ArrayIndices {
+pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
     let len = shape.len();
     let mut indices: ArrayIndices = Vec::with_capacity(len);
     for (indices_i, &dim) in std::iter::zip(
@@ -998,19 +1036,28 @@ pub fn unravel_index(mut index: u64, shape: &[u64]) -> ArrayIndices {
         index /= dim;
     }
     unsafe { indices.set_len(len) };
-    indices
+    if index == 0 {
+        Some(indices)
+    } else {
+        None
+    }
 }
 
 /// Ravel ND indices to a linearised index.
+///
+/// Returns [`None`] if any `indices` are out-of-bounds of `shape`.
 #[must_use]
-pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> u64 {
+pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
     let mut index: u64 = 0;
     let mut count = 1;
     for (i, s) in std::iter::zip(indices, shape).rev() {
+        if i >= s {
+            return None;
+        }
         index += i * count;
         count *= s;
     }
-    index
+    Some(index)
 }
 
 #[cfg(feature = "ndarray")]
@@ -1064,14 +1111,9 @@ mod tests {
         let store = Arc::new(MemoryStore::new());
 
         let array_path = "/array";
-        let array = ArrayBuilder::new(
-            vec![8, 8],
-            DataType::UInt8,
-            vec![4, 4].try_into().unwrap(),
-            FillValue::from(0u8),
-        )
-        .build(store.clone(), array_path)
-        .unwrap();
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::UInt8, 0u8)
+            .build(store.clone(), array_path)
+            .unwrap();
         array.store_metadata().unwrap();
         let stored_metadata = array.metadata_opt(&ArrayMetadataOptions::default());
 
@@ -1085,9 +1127,9 @@ mod tests {
         let array_path = "/group/array";
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
+            vec![4, 4],
             DataType::Float32,
-            vec![4, 4].try_into().unwrap(),
-            FillValue::from(ZARR_NAN_F32),
+            ZARR_NAN_F32,
         )
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
@@ -1096,7 +1138,7 @@ mod tests {
         .build(store.into(), array_path)
         .unwrap();
 
-        array.set_shape(vec![16, 16]);
+        array.set_shape(vec![16, 16]).unwrap();
         array
             .attributes_mut()
             .insert("test".to_string(), "apple".into());
@@ -1117,9 +1159,9 @@ mod tests {
         let array_path = "/array";
         let array = ArrayBuilder::new(
             vec![8, 8], // array shape
+            vec![4, 4], // regular chunk shape
             DataType::Float32,
-            vec![4, 4].try_into().unwrap(), // regular chunk shape
-            FillValue::from(1f32),
+            1f32,
         )
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
@@ -1362,6 +1404,13 @@ mod tests {
         array_v3_numcodecs("tests/data/v3_zarr_python/array_fletcher32.zarr")
     }
 
+    #[cfg(feature = "adler32")]
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_v3_adler32() {
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_adler32.zarr")
+    }
+
     #[cfg(feature = "zlib")]
     #[test]
     #[cfg_attr(miri, ignore)]
@@ -1405,7 +1454,7 @@ mod tests {
     //         vec![100, 4],
     //         DataType::UInt8,
     //         vec![10, 2].try_into().unwrap(),
-    //         FillValue::from(0u8),
+    //         0u8,
     //     )
     //     .build(store, array_path)
     //     .unwrap();
@@ -1459,9 +1508,9 @@ mod tests {
             // Permit array creation with manually added additional fields
             let array = ArrayBuilder::new(
                 vec![8, 8], // array shape
+                vec![4, 4],
                 DataType::Float32,
-                vec![4, 4].try_into().unwrap(),
-                FillValue::from(ZARR_NAN_F32),
+                ZARR_NAN_F32,
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]

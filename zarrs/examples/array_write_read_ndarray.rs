@@ -9,7 +9,7 @@ use zarrs::storage::{
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
     use zarrs::{
-        array::{DataType, FillValue, ZARR_NAN_F32},
+        array::{DataType, ZARR_NAN_F32},
         array_subset::ArraySubset,
         node::Node,
         storage::store,
@@ -58,9 +58,9 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/group/array";
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
+        vec![4, 4], // regular chunk shape
         DataType::Float32,
-        vec![4, 4].try_into()?, // regular chunk shape
-        FillValue::from(ZARR_NAN_F32),
+        ZARR_NAN_F32,
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed
     .dimension_names(["y", "x"].into())
@@ -78,12 +78,9 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Write some chunks
     (0..2).into_par_iter().try_for_each(|i| {
         let chunk_indices: Vec<u64> = vec![0, i];
-        let chunk_subset = array
-            .chunk_grid()
-            .subset(&chunk_indices, array.shape())?
-            .ok_or_else(|| {
-                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
-            })?;
+        let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
+            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+        })?;
         array.store_chunk_ndarray(
             &chunk_indices,
             ArrayD::<f32>::from_shape_vec(

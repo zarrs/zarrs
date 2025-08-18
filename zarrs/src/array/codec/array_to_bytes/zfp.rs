@@ -164,6 +164,16 @@ macro_rules! unsupported_dtypes {
             | DataType::ComplexFloat16
             | DataType::ComplexFloat32
             | DataType::ComplexFloat64
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
             | DataType::Complex64
             | DataType::Complex128
             | DataType::RawBits(_)
@@ -182,7 +192,16 @@ const fn zarr_to_zfp_data_type(data_type: &DataType) -> Option<zfp_sys::zfp_type
         | DataType::UInt16
         | DataType::Int32
         | DataType::UInt32 => Some(zfp_sys::zfp_type_zfp_type_int32),
-        DataType::Int64 | DataType::UInt64 => Some(zfp_sys::zfp_type_zfp_type_int64),
+        DataType::Int64
+        | DataType::UInt64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Some(zfp_sys::zfp_type_zfp_type_int64),
         DataType::Float32 => Some(zfp_sys::zfp_type_zfp_type_float),
         DataType::Float64 => Some(zfp_sys::zfp_type_zfp_type_double),
         unsupported_dtypes!() => None,
@@ -238,7 +257,15 @@ fn promote_before_zfp_encoding(
                 .collect();
             Ok(ZfpArray::Int32(i))
         }
-        DataType::Int64 => Ok(ZfpArray::Int64(convert_from_bytes_slice::<i64>(
+        DataType::Int64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(ZfpArray::Int64(convert_from_bytes_slice::<i64>(
             decoded_value,
         ))),
         DataType::UInt64 => {
@@ -273,7 +300,16 @@ fn init_zfp_decoding_output(
         | DataType::UInt16
         | DataType::Int32
         | DataType::UInt32 => Ok(ZfpArray::Int32(vec![0; num_elements])),
-        DataType::Int64 | DataType::UInt64 => Ok(ZfpArray::Int64(vec![0; num_elements])),
+        DataType::Int64
+        | DataType::UInt64
+        | DataType::NumpyDateTime64 {
+            unit: _,
+            scale_factor: _,
+        }
+        | DataType::NumpyTimeDelta64 {
+            unit: _,
+            scale_factor: _,
+        } => Ok(ZfpArray::Int64(vec![0; num_elements])),
         DataType::Float32 => Ok(ZfpArray::Float(vec![0.0; num_elements])),
         DataType::Float64 => Ok(ZfpArray::Double(vec![0.0; num_elements])),
         unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
@@ -396,7 +432,10 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{array_to_array::squeeze::SqueezeCodec, ArrayToBytesCodecTraits, CodecOptions},
+            codec::{
+                array_to_array::squeeze::SqueezeCodec, ArrayToBytesCodecTraits,
+                BytesPartialDecoderTraits, CodecOptions,
+            },
             element::ElementOwned,
             ArrayBytes, CodecChain,
         },
@@ -473,7 +512,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i8() {
         codec_zfp_round_trip::<i8>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int8, 0i8.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int8, 0i8).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i8>(
@@ -486,7 +525,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u8() {
         codec_zfp_round_trip::<u8>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt8, 0u8.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt8, 0u8).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u8>(
@@ -499,7 +538,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i16() {
         codec_zfp_round_trip::<i16>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int16, 0i16.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int16, 0i16).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i16>(
@@ -512,7 +551,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u16() {
         codec_zfp_round_trip::<u16>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt16, 0u16.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt16, 0u16).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u16>(
@@ -525,7 +564,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i32() {
         codec_zfp_round_trip::<i32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int32, 0i32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int32, 0i32).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i32>(
@@ -538,7 +577,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u32() {
         codec_zfp_round_trip::<u32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt32, 0u32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt32, 0u32).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u32>(
@@ -551,7 +590,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_i64() {
         codec_zfp_round_trip::<i64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Int64, 0i64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Int64, 0i64).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<i64>(
@@ -564,11 +603,11 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_u64() {
         codec_zfp_round_trip::<u64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64).unwrap(),
             JSON_REVERSIBLE,
         );
         // codec_zfp_round_trip::<u64>(
-        //     &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64.into()).unwrap(),
+        //     &ChunkRepresentation::new(chunk_shape(), DataType::UInt64, 0u64).unwrap(),
         //     &json_fixedprecision(64),
         // );
     }
@@ -577,19 +616,19 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_f32() {
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedprecision(13),
         );
     }
@@ -598,19 +637,19 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zfp_round_trip_f64() {
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f64>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float64, 0.0f64).unwrap(),
             &json_fixedprecision(16),
         );
     }
@@ -624,7 +663,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32.into()).unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32).unwrap();
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -644,30 +683,32 @@ mod tests {
             ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
         ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &chunk_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // zfp partial decoder does not hold bytes
 
-        let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
-            .chunks(size_of::<f32>())
-            .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
-            .collect();
-        let answer: Vec<f32> = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 8.0, 14.0, 17.0, 23.0, 26.0,
-        ];
-        assert_eq!(answer, decoded_partial_chunk);
+        for (decoded_region, expected) in decoded_regions.into_iter().zip([
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
+        ]) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region, &CodecOptions::default())
+                .unwrap();
+
+            let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
+                .into_fixed()
+                .unwrap()
+                .chunks(size_of::<f32>())
+                .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
+                .collect();
+            assert_eq!(decoded_partial_chunk, expected);
+        }
     }
 
     #[cfg(feature = "async")]
@@ -680,7 +721,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
         ];
         let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32.into()).unwrap();
+            ChunkRepresentation::new(chunk_shape, DataType::Float32, 0.0f32).unwrap();
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -697,12 +738,8 @@ mod tests {
             )
             .unwrap();
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
-        let decoded_regions = [
-            ArraySubset::new_with_shape(vec![1, 2, 3]),
-            ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
-        ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
@@ -711,23 +748,29 @@ mod tests {
             )
             .await
             .unwrap();
-        let decoded_partial_chunk = partial_decoder
-            .partial_decode(&decoded_regions, &CodecOptions::default())
-            .await
-            .unwrap();
 
-        let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
-            .into_iter()
-            .map(|bytes| bytes.into_fixed().unwrap().to_vec())
-            .flatten()
-            .collect::<Vec<_>>()
-            .chunks(size_of::<f32>())
-            .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
-            .collect();
-        let answer: Vec<f32> = vec![
-            0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 8.0, 14.0, 17.0, 23.0, 26.0,
+        let decoded_regions = [
+            ArraySubset::new_with_shape(vec![1, 2, 3]),
+            ArraySubset::new_with_ranges(&[0..3, 1..3, 2..3]),
         ];
-        assert_eq!(answer, decoded_partial_chunk);
+
+        for (decoded_region, expected) in decoded_regions.into_iter().zip([
+            vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![5.0, 8.0, 14.0, 17.0, 23.0, 26.0],
+        ]) {
+            let decoded_partial_chunk = partial_decoder
+                .partial_decode(&decoded_region, &CodecOptions::default())
+                .await
+                .unwrap();
+
+            let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
+                .into_fixed()
+                .unwrap()
+                .chunks(size_of::<f32>())
+                .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
+                .collect();
+            assert_eq!(decoded_partial_chunk, expected);
+        }
     }
 
     #[test]
@@ -745,19 +788,19 @@ mod tests {
         };
 
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
-            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into()).unwrap(),
+            &ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32).unwrap(),
             &json_fixedprecision(13),
         );
     }

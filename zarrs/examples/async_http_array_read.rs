@@ -8,7 +8,7 @@ use zarrs::{
 };
 
 enum Backend {
-    OpenDAL,
+    // OpenDAL,
     ObjectStore,
 }
 
@@ -19,11 +19,11 @@ async fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Err
 
     // Create a HTTP store
     let mut store: AsyncReadableStorage = match backend {
-        Backend::OpenDAL => {
-            let builder = opendal::services::Http::default().endpoint(HTTP_URL);
-            let operator = opendal::Operator::new(builder)?.finish();
-            Arc::new(zarrs_opendal::AsyncOpendalStore::new(operator))
-        }
+        // Backend::OpenDAL => {
+        //     let builder = opendal::services::Http::default().endpoint(HTTP_URL);
+        //     let operator = opendal::Operator::new(builder)?.finish();
+        //     Arc::new(zarrs_opendal::AsyncOpendalStore::new(operator))
+        // }
         Backend::ObjectStore => {
             let options = object_store::ClientOptions::new().with_allow_http(true);
             let store = object_store::http::HttpBuilder::new()
@@ -81,7 +81,7 @@ async fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Err
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------ object_store backend ------------");
     http_array_read(Backend::ObjectStore).await?;
-    println!("------------   opendal backend    ------------");
-    http_array_read(Backend::OpenDAL).await?;
+    // println!("------------   opendal backend    ------------");
+    // http_array_read(Backend::OpenDAL).await?;
     Ok(())
 }

@@ -1,0 +1,19 @@
+{
+  "shape": [
+    100,
+    100
+  ],
+  "chunks": [
+    50,
+    50
+  ],
+  "fill_value": 0,
+  "order": "C",
+  "filters": null,
+  "dimension_separator": ".",
+  "compressor": {
+    "id": "adler32"
+  },
+  "zarr_format": 2,
+  "dtype": "<u2"
+}

@@ -20,6 +20,7 @@
 #![doc = include_str!("../doc/version_compatibility_matrix.md")]
 //!
 //! `object_store` is re-exported as a dependency of this crate, so it does not need to be specified as a direct dependency.
+//! You can enable `object_store` features `fs`, `aws`, `azure`, `gcp` and `http` by enabling features for this crate of the same name.
 //!
 //! However, if `object_store` is a direct dependency, it is necessary to ensure that the version used by this crate is compatible.
 //! This crate can depend on a range of semver-incompatible versions of `object_store`, and Cargo will not automatically choose a single version of `object_store` that satisfies all dependencies.

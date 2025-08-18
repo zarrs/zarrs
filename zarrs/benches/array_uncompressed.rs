@@ -14,8 +14,8 @@ fn array_write_all(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     zarrs::array::DataType::UInt8,
-                    vec![32; 3].try_into().unwrap(),
-                    zarrs::array::FillValue::from(0u8),
+                    vec![32; 3],
+                    0u8,
                 )
                 .build(store.into(), "/")
                 .unwrap();
@@ -41,8 +41,8 @@ fn array_write_all_sharded(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     zarrs::array::DataType::UInt16,
-                    vec![size; 3].try_into().unwrap(),
-                    zarrs::array::FillValue::from(0u16),
+                    vec![size; 3],
+                    0u16,
                 )
                 .array_to_bytes_codec(sharding_codec)
                 .build(store.into(), "/")
@@ -67,8 +67,8 @@ fn array_read_all(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 zarrs::array::DataType::UInt16,
-                vec![32; 3].try_into().unwrap(),
-                zarrs::array::FillValue::from(0u16),
+                vec![32; 3],
+                0u16,
             )
             .build(store.into(), "/")
             .unwrap();
@@ -98,8 +98,8 @@ fn array_read_all_sharded(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 zarrs::array::DataType::UInt8,
-                vec![size; 3].try_into().unwrap(),
-                zarrs::array::FillValue::from(1u8),
+                vec![size; 3],
+                1u8,
             )
             .array_to_bytes_codec(sharding_codec)
             .build(store.into(), "/")

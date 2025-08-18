@@ -15,7 +15,7 @@ use crate::{
 use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 
 /// An array creation error.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArrayCreateError {
     /// An invalid node path
     #[error(transparent)]
@@ -29,6 +29,15 @@ pub enum ArrayCreateError {
     /// Invalid fill value.
     #[error(transparent)]
     InvalidFillValue(#[from] DataTypeFillValueError),
+    // /// Unparseable metadata.
+    // #[error("unparseable metadata: {_0:?}")]
+    // UnparseableMetadata(String),
+    // /// Invalid data type metadata.
+    // #[error("unsupported data type metadata: {_0:?}")]
+    // UnsupportedDataTypeMetadata(MetadataV3),
+    // /// Invalid chunk grid metadata.
+    // #[error("unsupported chunk grid metadata: {_0:?}")]
+    // UnsupportedChunkGridMetadata(MetadataV3),
     /// Invalid fill value metadata.
     #[error(transparent)]
     InvalidFillValueMetadata(#[from] DataTypeFillValueMetadataError),
@@ -62,7 +71,7 @@ pub enum ArrayCreateError {
 }
 
 /// Array errors.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[non_exhaustive]
 pub enum ArrayError {
     /// Error when a disjoint view creation cannot be done
@@ -116,7 +125,7 @@ pub enum ArrayError {
     ///  - a bool array with a value not equal to 0 (false) or 1 (true).
     ///  - a string with invalid utf-8 encoding.
     #[error("Invalid element value")]
-    InvalidElementValue,
+    InvalidElementValue, // TODO: Add reason
     /// Unsupported method.
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),
@@ -124,12 +133,15 @@ pub enum ArrayError {
     /// A `DLPack` error
     #[error(transparent)]
     DlPackError(#[from] super::array_dlpack_ext::ArrayDlPackExtError),
+    /// Any other error.
+    #[error("{_0}")]
+    Other(String),
 }
 
 /// An unsupported additional field error.
 ///
 /// An unsupported field in array or group metadata is an unrecognised field without `"must_understand": false`.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("unsupported additional field {name} with value {value}")]
 pub struct AdditionalFieldUnsupportedError {
     name: String,

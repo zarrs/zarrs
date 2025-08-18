@@ -16,7 +16,7 @@ use zarrs::{
             },
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
         },
-        ArrayBuilder, ArrayMetadataOptions, DataType, FillValue,
+        ArrayBuilder, ArrayMetadataOptions, DataType,
     },
     storage::{store::MemoryStore, ReadableWritableListableStorage},
 };
@@ -48,9 +48,9 @@ fn cities_impl(
 
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
+        vec![chunk_size],          // regular chunk shape
         DataType::String,
-        vec![chunk_size].try_into()?, // regular chunk shape
-        FillValue::from(""),
+        "",
     );
     if let Some(shard_size) = shard_size {
         builder.array_to_bytes_codec(Arc::new(
@@ -102,14 +102,16 @@ fn cities() -> Result<(), Box<dyn Error>> {
     let vlen_configuration: VlenCodecConfiguration = serde_json::from_str(r#"{
         "data_codecs": [{"name": "bytes"}],
         "index_codecs": [{"name": "bytes","configuration": { "endian": "little" }}],
-        "index_data_type": "uint32"
+        "index_data_type": "uint32",
+        "index_location": "start"
     }"#)?;
     let vlen = Arc::new(VlenCodec::new_with_configuration(&vlen_configuration)?);
 
     let vlen_compressed_configuration: VlenCodecConfiguration = serde_json::from_str(r#"{
         "data_codecs": [{"name": "bytes"},{"name": "blosc","configuration": {"cname": "zstd", "clevel":5,"shuffle": "bitshuffle", "typesize":1,"blocksize":0}}],
         "index_codecs": [{"name": "bytes","configuration": { "endian": "little" }},{"name": "blosc","configuration":{"cname": "zstd", "clevel":5,"shuffle": "shuffle", "typesize":4,"blocksize":0}}],
-        "index_data_type": "uint32"
+        "index_data_type": "uint32",
+        "index_location": "end"
     }"#)?;
     let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration)?);
 

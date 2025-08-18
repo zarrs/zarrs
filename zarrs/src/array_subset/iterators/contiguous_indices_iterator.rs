@@ -4,7 +4,10 @@ use itertools::izip;
 
 use crate::{
     array::ArrayIndices,
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{
+        iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
+        IncompatibleArraySubsetAndShapeError,
+    },
 };
 
 use super::IndicesIterator;
@@ -29,6 +32,7 @@ use super::IndicesIterator;
 /// ```rust,ignore
 /// [((2, 1), 2), ((3, 1), 2)]
 /// ```
+#[derive(Clone)]
 pub struct ContiguousIndices {
     subset_contiguous_start: ArraySubset,
     contiguous_elements: u64,
@@ -118,12 +122,32 @@ impl ContiguousIndices {
 }
 
 impl<'a> IntoIterator for &'a ContiguousIndices {
-    type Item = ArrayIndices;
+    type Item = (ArrayIndices, u64);
     type IntoIter = ContiguousIndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let n_elements = self.subset_contiguous_start.num_elements_usize();
         ContiguousIndicesIterator {
-            inner: IndicesIterator::new(&self.subset_contiguous_start),
+            inner: IndicesIterator {
+                subset: &self.subset_contiguous_start,
+                range: 0..n_elements,
+            },
+            contiguous_elements: self.contiguous_elements,
+        }
+    }
+}
+
+impl IntoIterator for ContiguousIndices {
+    type Item = (ArrayIndices, u64);
+    type IntoIter = ContiguousIndicesIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let n_elements = self.subset_contiguous_start.num_elements_usize();
+        ContiguousIndicesIntoIterator {
+            inner: IndicesIntoIterator {
+                subset: self.subset_contiguous_start,
+                range: 0..n_elements,
+            },
             contiguous_elements: self.contiguous_elements,
         }
     }
@@ -137,41 +161,58 @@ pub struct ContiguousIndicesIterator<'a> {
     contiguous_elements: u64,
 }
 
-impl ContiguousIndicesIterator<'_> {
-    /// Return the number of contiguous elements (fixed on each iteration).
-    #[must_use]
-    pub fn contiguous_elements(&self) -> u64 {
-        self.contiguous_elements
-    }
-
-    /// Return the number of contiguous elements (fixed on each iteration).
-    ///
-    /// # Panics
-    /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
-    #[must_use]
-    pub fn contiguous_elements_usize(&self) -> usize {
-        usize::try_from(self.contiguous_elements).unwrap()
-    }
+/// Serial contiguous indices iterator.
+///
+/// See [`ContiguousIndices`].
+pub struct ContiguousIndicesIntoIterator {
+    inner: IndicesIntoIterator,
+    contiguous_elements: u64,
 }
 
-impl Iterator for ContiguousIndicesIterator<'_> {
-    type Item = ArrayIndices;
+macro_rules! impl_contiguous_indices_iterator {
+    ($iterator_type:ty) => {
+        impl $iterator_type {
+            /// Return the number of contiguous elements (fixed on each iteration).
+            #[must_use]
+            pub fn contiguous_elements(&self) -> u64 {
+                self.contiguous_elements
+            }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
+            /// Return the number of contiguous elements (fixed on each iteration).
+            ///
+            /// # Panics
+            /// Panics if the number of contiguous elements exceeds [`usize::MAX`].
+            #[must_use]
+            pub fn contiguous_elements_usize(&self) -> usize {
+                usize::try_from(self.contiguous_elements).unwrap()
+            }
+        }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
+        impl Iterator for $iterator_type {
+            type Item = (ArrayIndices, u64);
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.inner.next().map(|i| (i, self.contiguous_elements()))
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.inner.size_hint()
+            }
+        }
+
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.inner
+                    .next_back()
+                    .map(|i| (i, self.contiguous_elements()))
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
 }
 
-impl DoubleEndedIterator for ContiguousIndicesIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner.next_back()
-    }
-}
-
-impl ExactSizeIterator for ContiguousIndicesIterator<'_> {}
-
-impl FusedIterator for ContiguousIndicesIterator<'_> {}
+impl_contiguous_indices_iterator!(ContiguousIndicesIterator<'_>);
+impl_contiguous_indices_iterator!(ContiguousIndicesIntoIterator);

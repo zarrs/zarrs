@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use zarrs_storage::ReadableStorageTraits;
 
 use crate::{
     array::ArrayBytes,
@@ -18,6 +19,12 @@ use super::{
 };
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {
+    /// Return a read-only instantiation of the array.
+    #[must_use]
+    pub fn readable(&self) -> Array<dyn ReadableStorageTraits> {
+        self.with_storage(self.storage.clone().readable())
+    }
+
     /// Encode `chunk_subset_bytes` and store in `chunk_subset` of the chunk at `chunk_indices` with default codec options.
     ///
     /// Use [`store_chunk_subset_opt`](Array::store_chunk_subset_opt) to control codec options.
@@ -166,7 +173,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
             .chunk_grid()
-            .chunk_shape_u64(chunk_indices, self.shape())?
+            .chunk_shape_u64(chunk_indices)?
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
         if std::iter::zip(chunk_subset.end_exc(), &chunk_shape)
             .any(|(end_exc, shape)| end_exc > *shape)
@@ -192,8 +199,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
             if options.experimental_partial_encoding() {
                 let partial_encoder = self.partial_encoder(chunk_indices, options)?;
-                Ok(partial_encoder
-                    .partial_encode(&[(chunk_subset, chunk_subset_bytes)], options)?)
+                Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
             } else {
                 // Decode the entire chunk
                 let chunk_bytes_old = self.retrieve_chunk_opt(chunk_indices, options)?;

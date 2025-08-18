@@ -30,30 +30,26 @@ impl SqueezePartialDecoder {
 }
 
 fn get_decoded_regions_squeezed(
-    decoded_regions: &[ArraySubset],
+    decoded_region: &ArraySubset,
     shape: &[NonZeroU64],
-) -> Result<Vec<ArraySubset>, CodecError> {
-    let mut decoded_regions_squeezed = Vec::with_capacity(decoded_regions.len());
-    for decoded_region in decoded_regions {
-        if decoded_region.dimensionality() != shape.len() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                decoded_region.clone(),
-                shape.len(),
-            ));
-        }
-
-        let ranges = izip!(
-            decoded_region.start().iter(),
-            decoded_region.shape().iter(),
-            shape.iter()
-        )
-        .filter(|(_, _, &shape)| shape.get() > 1)
-        .map(|(rstart, rshape, _)| (*rstart..rstart + rshape));
-
-        let decoded_region_squeeze = ArraySubset::from(ranges);
-        decoded_regions_squeezed.push(decoded_region_squeeze);
+) -> Result<ArraySubset, CodecError> {
+    if decoded_region.dimensionality() != shape.len() {
+        return Err(CodecError::InvalidArraySubsetDimensionalityError(
+            decoded_region.clone(),
+            shape.len(),
+        ));
     }
-    Ok(decoded_regions_squeezed)
+
+    let ranges = izip!(
+        decoded_region.start().iter(),
+        decoded_region.shape().iter(),
+        shape.iter()
+    )
+    .filter(|(_, _, &shape)| shape.get() > 1)
+    .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
+
+    let decoded_region_squeeze = ArraySubset::from(ranges);
+    Ok(decoded_region_squeeze)
 }
 
 impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
@@ -61,15 +57,24 @@ impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        let decoded_regions_squeezed =
-            get_decoded_regions_squeezed(decoded_regions, self.decoded_representation.shape())?;
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        // let Some(decoded_region) = indexer.as_array_subset() else {
+        //     todo!("Generic indexer support")
+        // };
+        let decoded_region = indexer;
+
+        let decoded_region_squeezed =
+            get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_regions_squeezed, options)
+            .partial_decode(&decoded_region_squeezed, options)
     }
 }
 
@@ -103,13 +108,18 @@ impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
 
     async fn partial_decode(
         &self,
-        decoded_regions: &[ArraySubset],
+        indexer: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<ArrayBytes<'_>>, CodecError> {
-        let decoded_regions_squeezed =
-            get_decoded_regions_squeezed(decoded_regions, self.decoded_representation.shape())?;
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        // let Some(decoded_region) = indexer.as_array_subset() else {
+        //     todo!("Generic indexer support")
+        // };
+        let decoded_region = indexer;
+
+        let decoded_region_squeezed =
+            get_decoded_regions_squeezed(decoded_region, self.decoded_representation.shape())?;
         self.input_handle
-            .partial_decode(&decoded_regions_squeezed, options)
+            .partial_decode(&decoded_region_squeezed, options)
             .await
     }
 }

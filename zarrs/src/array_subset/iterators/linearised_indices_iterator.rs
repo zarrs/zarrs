@@ -2,7 +2,10 @@ use std::iter::FusedIterator;
 
 use crate::{
     array::{ravel_indices, ArrayShape},
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    array_subset::{
+        iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
+        IncompatibleArraySubsetAndShapeError,
+    },
 };
 
 use super::IndicesIterator;
@@ -18,6 +21,7 @@ use super::IndicesIterator;
 /// 9  10  11
 /// ```
 /// An iterator with an array subset corresponding to the lower right 2x2 region will produce `[7, 8, 10, 11]`.
+#[derive(Clone)]
 pub struct LinearisedIndices {
     subset: ArraySubset,
     array_shape: ArrayShape,
@@ -85,8 +89,27 @@ impl<'a> IntoIterator for &'a LinearisedIndices {
 
     fn into_iter(self) -> Self::IntoIter {
         LinearisedIndicesIterator {
-            inner: IndicesIterator::new(&self.subset),
+            inner: IndicesIterator {
+                subset: &self.subset,
+                range: 0..self.subset.num_elements_usize(),
+            },
             array_shape: &self.array_shape,
+        }
+    }
+}
+
+impl IntoIterator for LinearisedIndices {
+    type Item = u64;
+    type IntoIter = LinearisedIndicesIntoIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let num_elements = self.subset.num_elements_usize();
+        LinearisedIndicesIntoIterator {
+            inner: IndicesIntoIterator {
+                subset: self.subset,
+                range: 0..num_elements,
+            },
+            array_shape: self.array_shape,
         }
     }
 }
@@ -99,31 +122,64 @@ pub struct LinearisedIndicesIterator<'a> {
     array_shape: &'a [u64],
 }
 
-impl Iterator for LinearisedIndicesIterator<'_> {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
+/// Serial linearised indices iterator.
+///
+/// See [`LinearisedIndices`].
+pub struct LinearisedIndicesIntoIterator {
+    inner: IndicesIntoIterator,
+    array_shape: ArrayShape,
 }
 
-impl DoubleEndedIterator for LinearisedIndicesIterator<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next_back()
-            .map(|indices| ravel_indices(&indices, self.array_shape))
-    }
+macro_rules! impl_linearised_indices_iterator {
+    (private $iterator_type:ty, $qualifier:tt) => {
+        impl Iterator for $iterator_type {
+            type Item = u64;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                self.inner.next().map(|indices| {
+                    ravel_indices(&indices, $qualifier!(self.array_shape))
+                        .expect("inbounds indices")
+                })
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.inner.size_hint()
+            }
+        }
+
+        impl DoubleEndedIterator for $iterator_type {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                self.inner.next_back().map(|indices| {
+                    ravel_indices(&indices, $qualifier!(self.array_shape))
+                        .expect("inbounds indices")
+                })
+            }
+        }
+
+        impl ExactSizeIterator for $iterator_type {}
+
+        impl FusedIterator for $iterator_type {}
+    };
+    ($iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                $v
+            };
+        }
+        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
+    (ref $iterator_type:ty) => {
+        macro_rules! qualifier {
+            ($v:expr) => {
+                &$v
+            };
+        }
+        impl_linearised_indices_iterator! {private $iterator_type, qualifier}
+    };
 }
 
-impl ExactSizeIterator for LinearisedIndicesIterator<'_> {}
-
-impl FusedIterator for LinearisedIndicesIterator<'_> {}
+impl_linearised_indices_iterator!(LinearisedIndicesIterator<'_>);
+impl_linearised_indices_iterator!(ref LinearisedIndicesIntoIterator);
 
 #[cfg(test)]
 mod tests {

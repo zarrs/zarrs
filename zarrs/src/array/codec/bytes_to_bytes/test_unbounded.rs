@@ -13,10 +13,10 @@ mod tests {
 
     use crate::{
         array::{
-            codec::{BytesToBytesCodecTraits, CodecOptions},
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             BytesRepresentation,
         },
-        byte_range::ByteRange,
+        storage::byte_range::ByteRange,
     };
 
     use super::*;
@@ -54,14 +54,15 @@ mod tests {
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
-                input_handle,
+                input_handle.clone(),
                 &bytes_representation,
                 &CodecOptions::default(),
             )
             .unwrap();
+        assert_eq!(partial_decoder.size(), input_handle.size()); // test unbounded partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode_concat(&decoded_regions, &CodecOptions::default())
             .unwrap()
@@ -95,7 +96,7 @@ mod tests {
             ByteRange::FromStart(10, Some(2)),
         ];
 
-        let input_handle = Arc::new(std::io::Cursor::new(encoded));
+        let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,

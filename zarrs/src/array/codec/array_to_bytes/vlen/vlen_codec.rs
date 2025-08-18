@@ -1,7 +1,7 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
+use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 
 use crate::{
     array::{
@@ -11,7 +11,7 @@ use crate::{
             RecommendedConcurrency,
         },
         transmute_to_bytes_vec, ArrayBytes, BytesRepresentation, ChunkRepresentation, CodecChain,
-        DataType, DataTypeSize, Endianness, FillValue, RawBytes, RawBytesOffsets,
+        DataType, DataTypeSize, Endianness, RawBytes, RawBytesOffsets,
     },
     plugin::PluginCreateError,
 };
@@ -19,7 +19,7 @@ use crate::{
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 
-use super::{vlen_partial_decoder, VlenCodecConfiguration, VlenCodecConfigurationV0};
+use super::{vlen_partial_decoder, VlenCodecConfiguration, VlenCodecConfigurationV0_1};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]
@@ -27,6 +27,7 @@ pub struct VlenCodec {
     index_codecs: Arc<CodecChain>,
     data_codecs: Arc<CodecChain>,
     index_data_type: VlenIndexDataType,
+    index_location: VlenIndexLocation,
 }
 
 impl Default for VlenCodec {
@@ -45,6 +46,7 @@ impl Default for VlenCodec {
             index_codecs,
             data_codecs,
             index_data_type: VlenIndexDataType::UInt64,
+            index_location: VlenIndexLocation::Start,
         }
     }
 }
@@ -56,12 +58,21 @@ impl VlenCodec {
         index_codecs: Arc<CodecChain>,
         data_codecs: Arc<CodecChain>,
         index_data_type: VlenIndexDataType,
+        index_location: VlenIndexLocation,
     ) -> Self {
         Self {
             index_codecs,
             data_codecs,
             index_data_type,
+            index_location,
         }
+    }
+
+    /// Set the index location.
+    #[must_use]
+    pub fn with_index_location(mut self, index_location: VlenIndexLocation) -> Self {
+        self.index_location = index_location;
+        self
     }
 
     /// Create a new `vlen` codec from configuration.
@@ -72,6 +83,17 @@ impl VlenCodec {
         configuration: &VlenCodecConfiguration,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
+            VlenCodecConfiguration::V0_1(configuration) => {
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                Ok(Self::new(
+                    index_codecs,
+                    data_codecs,
+                    configuration.index_data_type,
+                    configuration.index_location,
+                ))
+            }
             VlenCodecConfiguration::V0(configuration) => {
                 let index_codecs =
                     Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
@@ -80,6 +102,7 @@ impl VlenCodec {
                     index_codecs,
                     data_codecs,
                     configuration.index_data_type,
+                    VlenIndexLocation::Start,
                 ))
             }
             _ => Err(PluginCreateError::Other(
@@ -99,10 +122,11 @@ impl CodecTraits for VlenCodec {
         _name: &str,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
-        let configuration = VlenCodecConfiguration::V0(VlenCodecConfigurationV0 {
+        let configuration = VlenCodecConfiguration::V0_1(VlenCodecConfigurationV0_1 {
             index_codecs: self.index_codecs.create_metadatas(),
             data_codecs: self.data_codecs.create_metadatas(),
             index_data_type: self.index_data_type,
+            index_location: self.index_location,
         });
         Some(configuration.into())
     }
@@ -165,7 +189,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             //     let index_chunk_rep = ChunkRepresentation::new(
             //         vec![num_offsets],
             //         DataType::UInt8,
-            //         FillValue::from(0u8),
+            //         0u8,
             //     )
             //     .unwrap();
             //     self.index_codecs
@@ -185,7 +209,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             //     let index_chunk_rep = ChunkRepresentation::new(
             //         vec![num_offsets],
             //         DataType::UInt16,
-            //         FillValue::from(0u16),
+            //         0u16,
             //     )
             //     .unwrap();
             //     self.index_codecs
@@ -202,12 +226,8 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                         )
                     })?;
                 let offsets = transmute_to_bytes_vec(offsets);
-                let index_chunk_rep = ChunkRepresentation::new(
-                    vec![num_offsets],
-                    DataType::UInt32,
-                    FillValue::from(0u32),
-                )
-                .unwrap();
+                let index_chunk_rep =
+                    ChunkRepresentation::new(vec![num_offsets], DataType::UInt32, 0u32).unwrap();
                 self.index_codecs
                     .encode(offsets.into(), &index_chunk_rep, options)?
             }
@@ -217,12 +237,8 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                     .map(|offset| u64::try_from(*offset).unwrap())
                     .collect::<Vec<u64>>();
                 let offsets = transmute_to_bytes_vec(offsets);
-                let index_chunk_rep = ChunkRepresentation::new(
-                    vec![num_offsets],
-                    DataType::UInt64,
-                    FillValue::from(0u64),
-                )
-                .unwrap();
+                let index_chunk_rep =
+                    ChunkRepresentation::new(vec![num_offsets], DataType::UInt64, 0u64).unwrap();
                 self.index_codecs
                     .encode(offsets.into(), &index_chunk_rep, options)?
             }
@@ -232,8 +248,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
             self.data_codecs.encode(
                 data.into(),
-                &ChunkRepresentation::new(vec![data_len], DataType::UInt8, FillValue::from(0u8))
-                    .unwrap(),
+                &ChunkRepresentation::new(vec![data_len], DataType::UInt8, 0u8).unwrap(),
                 options,
             )?
         } else {
@@ -242,9 +257,20 @@ impl ArrayToBytesCodecTraits for VlenCodec {
 
         // Pack encoded offsets length, encoded offsets, and encoded data
         let mut bytes = Vec::with_capacity(size_of::<u64>() + offsets.len() + data.len());
-        bytes.extend_from_slice(&u64::try_from(offsets.len()).unwrap().to_le_bytes()); // offsets length as u64 little endian
-        bytes.extend_from_slice(&offsets);
-        bytes.extend_from_slice(&data);
+
+        match self.index_location {
+            VlenIndexLocation::Start => {
+                bytes.extend_from_slice(&u64::try_from(offsets.len()).unwrap().to_le_bytes()); // offsets length as u64 little endian
+                bytes.extend_from_slice(&offsets);
+                bytes.extend_from_slice(&data);
+            }
+            VlenIndexLocation::End => {
+                bytes.extend_from_slice(&data);
+                bytes.extend_from_slice(&offsets);
+                bytes.extend_from_slice(&u64::try_from(offsets.len()).unwrap().to_le_bytes());
+            }
+        }
+
         Ok(bytes.into())
     }
 
@@ -258,16 +284,16 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         let index_shape = vec![NonZeroU64::try_from(num_elements as u64 + 1).unwrap()];
         let index_chunk_rep = match self.index_data_type {
             // VlenIndexDataType::UInt8 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt8, FillValue::from(0u8))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt8, 0u8)
             // }
             // VlenIndexDataType::UInt16 => {
-            //     ChunkRepresentation::new(index_shape, DataType::UInt16, FillValue::from(0u16))
+            //     ChunkRepresentation::new(index_shape, DataType::UInt16, 0u16)
             // }
             VlenIndexDataType::UInt32 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt32, FillValue::from(0u32))
+                ChunkRepresentation::new(index_shape, DataType::UInt32, 0u32)
             }
             VlenIndexDataType::UInt64 => {
-                ChunkRepresentation::new(index_shape, DataType::UInt64, FillValue::from(0u64))
+                ChunkRepresentation::new(index_shape, DataType::UInt64, 0u64)
             }
         }
         .unwrap();
@@ -276,6 +302,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             &bytes,
             &self.index_codecs,
             &self.data_codecs,
+            self.index_location,
             options,
         )?;
         let offsets = RawBytesOffsets::new(offsets)?;
@@ -295,6 +322,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.index_codecs.clone(),
             self.data_codecs.clone(),
             self.index_data_type,
+            self.index_location,
         )))
     }
 
@@ -312,6 +340,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.clone(),
                 self.data_codecs.clone(),
                 self.index_data_type,
+                self.index_location,
             ),
         ))
     }

@@ -195,7 +195,15 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             DataType::Int32 => {
                 pcodec_encode!(i32)
             }
-            DataType::Int64 => {
+            DataType::Int64
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => {
                 pcodec_encode!(i64)
             }
             DataType::Float16 | DataType::ComplexFloat16 => {
@@ -245,7 +253,15 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             DataType::Int32 => {
                 pcodec_decode!(i32)
             }
-            DataType::Int64 => {
+            DataType::Int64
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => {
                 pcodec_decode!(i64)
             }
             DataType::Float16 | DataType::ComplexFloat16 => {
@@ -322,11 +338,18 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             | DataType::Int64
             | DataType::Float64
             | DataType::Complex128
-            | DataType::ComplexFloat64 => Ok(file_size::<u64>(
-                num_elements,
-                &self.chunk_config.paging_spec,
-            )
-            .map_err(|err| CodecError::from(err.to_string()))?),
+            | DataType::ComplexFloat64
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            } => Ok(
+                file_size::<u64>(num_elements, &self.chunk_config.paging_spec)
+                    .map_err(|err| CodecError::from(err.to_string()))?,
+            ),
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
                 PCODEC.to_string(),

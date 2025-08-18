@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_data_type"
-version = "0.3.1"
+version = "0.3.3"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"

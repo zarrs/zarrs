@@ -59,11 +59,11 @@ impl<'de> serde::Deserialize<'de> for BloscCompressionLevel {
 pub enum BloscShuffleMode {
     /// No shuffling.
     #[default]
-    NoShuffle = 0, // blosc_sys::BLOSC_NOSHUFFLE,
+    NoShuffle = 0, // blosc_src::BLOSC_NOSHUFFLE,
     /// Byte-wise shuffling.
-    Shuffle = 1, // blosc_sys::BLOSC_SHUFFLE,
+    Shuffle = 1, // blosc_src::BLOSC_SHUFFLE,
     /// Bit-wise shuffling.
-    BitShuffle = 2, // blosc_sys::BLOSC_BITSHUFFLE,
+    BitShuffle = 2, // blosc_src::BLOSC_BITSHUFFLE,
 }
 
 /// The `blosc` compressor.

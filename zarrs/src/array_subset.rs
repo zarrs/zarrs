@@ -10,6 +10,7 @@
 
 pub mod iterators;
 use thiserror::Error;
+use zarrs_metadata::ChunkShape;
 
 use std::{
     fmt::{Debug, Display},
@@ -17,9 +18,7 @@ use std::{
     ops::Range,
 };
 
-use iterators::{
-    Chunks, ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
-};
+use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 
 use derive_more::From;
 use itertools::izip;
@@ -178,6 +177,18 @@ impl ArraySubset {
         &self.shape
     }
 
+    /// Return the shape of the array as a chunk shape.
+    ///
+    /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
+    #[must_use]
+    pub fn chunk_shape(&self) -> Option<ChunkShape> {
+        self.shape
+            .iter()
+            .map(|s| NonZeroU64::new(*s))
+            .collect::<Option<Vec<_>>>()
+            .map(ChunkShape::from)
+    }
+
     /// Return the shape of the array subset.
     ///
     /// # Panics
@@ -261,11 +272,11 @@ impl ArraySubset {
         element_size: usize,
     ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
         let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let contiguous_indices = self.contiguous_linearised_indices(array_shape)?;
-        let byte_length = contiguous_indices.contiguous_elements_usize() * element_size;
-        for array_index in &contiguous_indices {
-            let byte_index = array_index * element_size as u64;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length as u64)));
+        let element_size = element_size as u64;
+        for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
+            let byte_index = array_index * element_size;
+            let byte_length = contiguous_elements * element_size;
+            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length)));
         }
         Ok(byte_ranges)
     }
@@ -301,10 +312,12 @@ impl ArraySubset {
         let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
         let mut subset_offset = 0;
         // SAFETY: `array_shape` is encapsulated by an array with `array_shape`.
-        let contiguous_elements = self.contiguous_linearised_indices(array_shape)?;
-        let element_length = contiguous_elements.contiguous_elements_usize();
-        for array_index in &contiguous_elements {
+        for (array_index, contiguous_elements) in
+            &self.contiguous_linearised_indices(array_shape)?
+        {
             let element_offset = usize::try_from(array_index).unwrap();
+            let element_length =
+                usize::try_from(contiguous_elements * size_of::<T>() as u64).unwrap();
             debug_assert!(element_offset + element_length <= elements.len());
             debug_assert!(subset_offset + element_length <= num_elements);
             elements_subset_slice[subset_offset..subset_offset + element_length]
@@ -355,20 +368,6 @@ impl ArraySubset {
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
-    }
-
-    /// Returns the [`Chunks`] with `chunk_shape` in the array subset which can be iterated over.
-    ///
-    /// All chunks overlapping the array subset are returned, and they all have the same shape `chunk_shape`.
-    /// Thus, the subsets of the chunks may extend out over the subset.
-    ///
-    /// # Errors
-    /// Returns an error if `chunk_shape` does not match the array subset dimensionality.
-    pub fn chunks(
-        &self,
-        chunk_shape: &[NonZeroU64],
-    ) -> Result<Chunks, IncompatibleDimensionalityError> {
-        Chunks::new(self, chunk_shape)
     }
 
     /// Return the overlapping subset between this array subset and `subset_other`.
@@ -497,7 +496,7 @@ pub struct IncompatibleOffsetError {
 }
 
 /// Array errors.
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ArraySubsetError {
     /// Incompatible dimensionality.
     #[error(transparent)]

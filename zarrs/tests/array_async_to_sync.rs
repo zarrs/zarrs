@@ -8,7 +8,7 @@ use zarrs::storage::{
     ReadableWritableStorage,
 };
 use zarrs::{
-    array::{DataType, FillValue, ZARR_NAN_F32},
+    array::{DataType, ZARR_NAN_F32},
     array_subset::ArraySubset,
 };
 
@@ -47,15 +47,11 @@ fn array_read_and_write_async_storage_adapter() {
     assert_eq!(group.attributes().get("foo"), Some(&json!("bar")));
 
     // Create an array
-    let array = zarrs::array::ArrayBuilder::new(
-        vec![8, 8],
-        DataType::Float32,
-        vec![4, 4].try_into().unwrap(),
-        FillValue::from(ZARR_NAN_F32),
-    )
-    .dimension_names(["y", "x"].into())
-    .build(store.clone(), ARRAY_PATH)
-    .unwrap();
+    let array =
+        zarrs::array::ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::Float32, ZARR_NAN_F32)
+            .dimension_names(["y", "x"].into())
+            .build(store.clone(), ARRAY_PATH)
+            .unwrap();
     array.store_metadata().unwrap();
     assert_eq!(array.shape(), &[8, 8]);
 

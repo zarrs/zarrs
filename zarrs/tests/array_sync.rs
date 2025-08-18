@@ -4,17 +4,17 @@
 use std::sync::Arc;
 
 use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType, FillValue};
+use zarrs::array::{Array, ArrayBuilder, ArrayCodecTraits, DataType};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]
-fn array_sync_read(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
+fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(array.data_type(), &DataType::UInt8);
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
-    assert_eq!(array.chunk_grid_shape().unwrap(), &[2, 2]);
+    assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
 
@@ -92,10 +92,10 @@ fn array_sync_read(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::
     assert_eq!(array.retrieve_array_subset_ndarray::<u8>(&ArraySubset::new_with_ranges(&[0..5, 0..5]))?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
     assert!(array.partial_decoder(&[0]).is_err());
-    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1])], &options).is_err());
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[], &options)?, []);
-    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2])], &options)?, [vec![0, 0].into()]); // OOB -> fill value
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[ArraySubset::new_with_ranges(&[0..1, 0..2]), ArraySubset::new_with_ranges(&[0..2, 1..2])], &options)?, [vec![1, 2].into(), vec![2, 6].into()]);
+    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1]).into(), &options).is_err());
+    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options)?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]).into(), &options)?, vec![1, 2].into());
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..2, 1..2]).into(), &options)?, vec![2, 6].into());
 
     Ok(())
 }
@@ -106,9 +106,9 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let array = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        0u8,
     )
     .bytes_to_bytes_codecs(vec![])
     // .storage_transformers(vec![].into())
@@ -124,7 +124,12 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
         [2, 2].try_into().unwrap()
     );
 
-    array_sync_read(array)
+    array_sync_read(&array)?;
+
+    // uncompressed partial decoder holds no data
+    assert_eq!(array.partial_decoder(&[0, 0])?.size(), 0);
+
+    Ok(())
 }
 
 #[cfg(feature = "sharding")]
@@ -135,9 +140,9 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::UInt8,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(0u8),
+        0u8,
     );
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
@@ -162,7 +167,17 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
         [1, 1].try_into().unwrap()
     );
 
-    array_sync_read(array)
+    array_sync_read(&array)?;
+
+    // sharding partial decoder holds the shard index, which has double the number of elements
+    assert_eq!(
+        array.partial_decoder(&[0, 0])?.size(),
+        size_of::<u64>() * 4 * 2
+    );
+    // this chunk is empty, so it has no shard index
+    assert_eq!(array.partial_decoder(&[1, 1])?.size(), 0);
+
+    Ok(())
 }
 
 fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
@@ -267,9 +282,9 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        "",
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
@@ -290,9 +305,9 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::String,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from(""),
+        "",
     );
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
         TransposeOrder::new(&[1, 0]).unwrap(),
@@ -321,9 +336,9 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     let array_path = "/array";
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
+        vec![2, 2], // regular chunk shape
         DataType::Bytes,
-        vec![2, 2].try_into().unwrap(), // regular chunk shape
-        FillValue::from([]),
+        [],
     );
     builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]

@@ -21,7 +21,7 @@ pub struct RawBytesDlPack {
 }
 
 /// Errors related to [`[Async]ArrayDlPackExt`](ArrayDlPackExt) methods.
-#[derive(Clone, Debug, Error, Display)]
+#[derive(Clone, Debug, Display, Error)]
 #[non_exhaustive]
 pub enum ArrayDlPackExtError {
     /// The Zarr data type is not supported by `DLPack`.
@@ -49,11 +49,29 @@ macro_rules! unsupported_dtypes {
             | DataType::ComplexFloat16
             | DataType::ComplexFloat32
             | DataType::ComplexFloat64
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
             | DataType::Complex64
             | DataType::Complex128
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            }
             | DataType::Extension(_)
     };
 }
@@ -127,21 +145,16 @@ mod tests {
     use zarrs_storage::store::MemoryStore;
 
     use crate::{
-        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType, FillValue},
+        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType},
         array_subset::ArraySubset,
     };
 
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(
-            vec![4, 4],
-            DataType::Float32,
-            vec![2, 2].try_into().unwrap(),
-            FillValue::from(-1.0f32),
-        )
-        .build(store.into(), "/")
-        .unwrap();
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], DataType::Float32, -1.0f32)
+            .build(store.into(), "/")
+            .unwrap();
         array
             .store_chunk_elements::<f32>(&[0, 0], &[0.0, 1.0, 2.0, 3.0])
             .unwrap();

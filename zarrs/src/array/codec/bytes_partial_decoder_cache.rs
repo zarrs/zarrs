@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     array::RawBytes,
-    byte_range::{extract_byte_ranges, ByteRange},
+    storage::byte_range::{extract_byte_ranges, ByteRange},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -50,6 +50,10 @@ impl BytesPartialDecoderCache {
 }
 
 impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
+    fn size(&self) -> usize {
+        self.cache.as_ref().map_or(0, Vec::len)
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],

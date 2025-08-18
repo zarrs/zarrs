@@ -5,7 +5,7 @@ use crate::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    byte_range::ByteRange,
+    storage::byte_range::ByteRange,
 };
 
 #[cfg(feature = "async")]
@@ -31,6 +31,10 @@ impl StripSuffixPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     fn partial_decode(
         &self,
         decoded_regions: &[ByteRange],
@@ -41,7 +45,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
             return Ok(None);
         };
 
-        // Drop trailing checksum
+        // Drop suffix of length `suffix_size`
         let mut output = Vec::with_capacity(bytes.len());
         for (bytes, byte_range) in bytes.into_iter().zip(decoded_regions) {
             let bytes = match byte_range {
