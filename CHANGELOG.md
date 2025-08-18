@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ChunkGridTraits::[par_]iter_chunk_indices()`
 - Add `ArraySubset::chunk_shape()`
 - Impl `IntoIterator` for `ChunkShape`
-- Add `RegularBoundedChunkGrid`
+- Add `RegularBoundedChunkGrid` (`zarrs.regular_bounded`)
+- Add `DefaultSuffixChunkKeyEncoding` (`zarrs.default_suffix`)
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
