@@ -151,7 +151,8 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
             fn next(&mut self) -> Option<Self::Item> {
                 self.inner.next().map(|indices| {
                     (
-                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape)),
+                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape))
+                            .expect("inbounds indices"),
                         indices.1,
                     )
                 })
@@ -166,7 +167,8 @@ macro_rules! impl_contiguous_linearised_indices_iterator {
             fn next_back(&mut self) -> Option<Self::Item> {
                 self.inner.next_back().map(|indices| {
                     (
-                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape)),
+                        ravel_indices(indices.0.as_slice(), $qualifier!(self.array_shape))
+                            .expect("inbounds indices"),
                         indices.1,
                     )
                 })

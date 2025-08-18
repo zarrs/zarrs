@@ -204,11 +204,12 @@ fn partial_decode_fixed_array_subset(
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
     let decode_inner_chunk_subset_into_slice = |chunk_indices: Vec<u64>| {
-        let shard_index_idx: usize =
-            usize::try_from(ravel_indices(&chunk_indices, &chunks_per_shard) * 2).unwrap();
+        let shard_index_idx =
+            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let chunk_representation = &partial_decoder.chunk_representation;
-        let offset = shard_index[shard_index_idx];
-        let size = shard_index[shard_index_idx + 1];
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
 
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid
@@ -293,11 +294,12 @@ fn partial_decode_variable_array_subset(
     .expect("matching dimensionality");
 
     let decode_inner_chunk_subset = |chunk_indices: Vec<u64>| {
-        let shard_index_idx: usize =
-            usize::try_from(ravel_indices(&chunk_indices, &chunks_per_shard) * 2).unwrap();
+        let shard_index_idx =
+            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let chunk_representation = &partial_decoder.chunk_representation;
-        let offset = shard_index[shard_index_idx];
-        let size = shard_index[shard_index_idx + 1];
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
 
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid

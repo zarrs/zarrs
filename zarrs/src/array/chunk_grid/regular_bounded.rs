@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 
 // use zarrs_registry::chunk_grid::REGULAR_BOUNDED;
 /// Unique identifier for the `regular_bounded` chunk grid (extension).
-pub const REGULAR_BOUNDED: &str = "regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
+pub const REGULAR_BOUNDED: &str = "zarrs.regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
 
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_metadata() {
         let metadata: MetadataV3 = serde_json::from_str(
-            r#"{"name":"regular_bounded","configuration":{"chunk_shape":[1,2,3]}}"#,
+            r#"{"name":"zarrs.regular_bounded","configuration":{"chunk_shape":[1,2,3]}}"#,
         )
         .unwrap();
         assert!(create_chunk_grid_regular_bounded(&(metadata, vec![3, 3, 3])).is_ok());
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_metadata_invalid() {
         let metadata: MetadataV3 = serde_json::from_str(
-            r#"{"name":"regular_bounded","configuration":{"invalid":[1,2,3]}}"#,
+            r#"{"name":"zarrs.regular_bounded","configuration":{"invalid":[1,2,3]}}"#,
         )
         .unwrap();
         assert!(create_chunk_grid_regular_bounded(&(metadata.clone(), vec![3, 3, 3])).is_err());
@@ -304,7 +304,7 @@ mod tests {
             create_chunk_grid_regular_bounded(&(metadata, vec![3, 3, 3]))
                 .unwrap_err()
                 .to_string(),
-            r#"chunk grid regular_bounded is unsupported with metadata: regular_bounded {"invalid":[1,2,3]}"#
+            r#"chunk grid zarrs.regular_bounded is unsupported with metadata: zarrs.regular_bounded {"invalid":[1,2,3]}"#
         );
     }
 
