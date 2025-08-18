@@ -164,7 +164,7 @@ macro_rules! impl_indices_iterator {
             type Item = ArrayIndices;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let mut indices = unravel_index(self.range.start as u64, self.subset.shape());
+                let mut indices = unravel_index(self.range.start as u64, self.subset.shape())?;
                 std::iter::zip(indices.iter_mut(), self.subset.start())
                     .for_each(|(index, start)| *index += start);
 
@@ -186,7 +186,7 @@ macro_rules! impl_indices_iterator {
             fn next_back(&mut self) -> Option<Self::Item> {
                 if self.range.end > self.range.start {
                     self.range.end -= 1;
-                    let mut indices = unravel_index(self.range.end as u64, self.subset.shape());
+                    let mut indices = unravel_index(self.range.end as u64, self.subset.shape())?;
                     std::iter::zip(indices.iter_mut(), self.subset.start())
                         .for_each(|(index, start)| *index += start);
                     Some(indices)

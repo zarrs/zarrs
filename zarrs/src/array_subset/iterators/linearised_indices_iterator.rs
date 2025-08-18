@@ -136,9 +136,10 @@ macro_rules! impl_linearised_indices_iterator {
             type Item = u64;
 
             fn next(&mut self) -> Option<Self::Item> {
-                self.inner
-                    .next()
-                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+                self.inner.next().map(|indices| {
+                    ravel_indices(&indices, $qualifier!(self.array_shape))
+                        .expect("inbounds indices")
+                })
             }
 
             fn size_hint(&self) -> (usize, Option<usize>) {
@@ -148,9 +149,10 @@ macro_rules! impl_linearised_indices_iterator {
 
         impl DoubleEndedIterator for $iterator_type {
             fn next_back(&mut self) -> Option<Self::Item> {
-                self.inner
-                    .next_back()
-                    .map(|indices| ravel_indices(&indices, $qualifier!(self.array_shape)))
+                self.inner.next_back().map(|indices| {
+                    ravel_indices(&indices, $qualifier!(self.array_shape))
+                        .expect("inbounds indices")
+                })
             }
         }
 

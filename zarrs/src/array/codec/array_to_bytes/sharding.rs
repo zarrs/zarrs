@@ -212,10 +212,11 @@ fn inner_chunk_byte_range(
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
 
-        let shard_index_idx: usize =
-            usize::try_from(ravel_indices(chunk_indices, &chunks_per_shard) * 2).unwrap();
-        let offset = shard_index[shard_index_idx];
-        let size = shard_index[shard_index_idx + 1];
+        let shard_index_idx =
+            ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
+        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+        let offset = shard_index[shard_index_idx * 2];
+        let size = shard_index[shard_index_idx * 2 + 1];
         Ok(Some(ByteRange::new(offset..offset + size)))
     } else {
         Ok(None)

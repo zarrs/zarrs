@@ -375,7 +375,8 @@ pub(crate) fn update_bytes_vlen<'a>(
                 .map(|(i, s)| i - s)
                 .collect::<Vec<_>>();
             let subset_index =
-                usize::try_from(ravel_indices(&subset_indices, update_subset.shape())).unwrap();
+                ravel_indices(&subset_indices, update_subset.shape()).expect("inbounds indices");
+            let subset_index = usize::try_from(subset_index).unwrap();
             let start = update_offsets[subset_index];
             let end = update_offsets[subset_index + 1];
             bytes_new.extend_from_slice(&update_bytes[start..end]);
