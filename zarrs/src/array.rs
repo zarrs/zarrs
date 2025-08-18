@@ -1024,9 +1024,8 @@ pub fn transmute_to_bytes<T: bytemuck::NoUninit>(from: &[T]) -> &[u8] {
 }
 
 /// Unravel a linearised index to ND indices.
-// FIXME: Check index is in bounds
 #[must_use]
-pub fn unravel_index(mut index: u64, shape: &[u64]) -> ArrayIndices {
+pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
     let len = shape.len();
     let mut indices: ArrayIndices = Vec::with_capacity(len);
     for (indices_i, &dim) in std::iter::zip(
@@ -1037,7 +1036,11 @@ pub fn unravel_index(mut index: u64, shape: &[u64]) -> ArrayIndices {
         index /= dim;
     }
     unsafe { indices.set_len(len) };
-    indices
+    if index == 0 {
+        Some(indices)
+    } else {
+        None
+    }
 }
 
 /// Ravel ND indices to a linearised index.

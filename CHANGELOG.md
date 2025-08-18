@@ -85,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Auto implement `[Async]BytesPartialDecoderTraits` for `T: AsRef<[u8]> + ...`
 - **Breaking**: `Arc` the `ChunkCache` types
 - **Breaking**: Change `Contiguous[Linearised]Indices` iterators to include the number of contiguous indices in their `Item`
-- **Breaking**: `ravel_indices` now returns an `Option` and returns `None` if indices are out-of-bounds
+- **Breaking**: `ravel_indices` and `unravel_index` now return an `Option`, out-of-bounds access returns `None`
 - Optimised chunk key encoders
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
