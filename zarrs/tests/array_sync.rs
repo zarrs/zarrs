@@ -393,13 +393,14 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "zfp")]
 #[test]
 fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs_data_type::FillValue;
     use zarrs_metadata_ext::codec::reshape::ReshapeShape;
 
     let store = std::sync::Arc::new(MemoryStore::default());
     let mut builder = ArrayBuilder::new(
         vec![4, 4, 4, 4, 4],
+        vec![1, 1, 4, 4, 4],
         DataType::UInt32,
-        vec![1, 1, 4, 4, 4].try_into()?,
         FillValue::from(0u32),
     );
     builder.array_to_array_codecs(vec![Arc::new(zarrs::array::codec::ReshapeCodec::new(
