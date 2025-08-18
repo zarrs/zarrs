@@ -1,6 +1,7 @@
-//! The v2 chunk key encoding.
+//! The `v2` chunk key encoding.
 
 use itertools::Itertools;
+pub use zarrs_metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
 use zarrs_registry::chunk_key_encoding::V2;
 
 use crate::{
@@ -10,9 +11,7 @@ use crate::{
     storage::StoreKey,
 };
 
-use super::{
-    ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator, V2ChunkKeyEncodingConfiguration,
-};
+use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 // Register the chunk key encoding.
 inventory::submit! {

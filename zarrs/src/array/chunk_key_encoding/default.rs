@@ -1,6 +1,7 @@
-//! The default chunk key encoding.
+//! The `default` chunk key encoding.
 
 use itertools::Itertools;
+pub use zarrs_metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
 use zarrs_registry::chunk_key_encoding::DEFAULT;
 
 use crate::{
@@ -10,10 +11,7 @@ use crate::{
     storage::StoreKey,
 };
 
-use super::{
-    ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator,
-    DefaultChunkKeyEncodingConfiguration,
-};
+use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 // Register the chunk key encoding.
 inventory::submit! {
