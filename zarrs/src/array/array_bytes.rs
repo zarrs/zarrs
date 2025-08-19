@@ -6,8 +6,8 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
-    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
-    indexer::Indexer,
+    array_subset::ArraySubset,
+    indexer::{IncompatibleIndexerError, Indexer},
     metadata::DataTypeSize,
     storage::byte_range::extract_byte_ranges_concat,
 };
@@ -211,7 +211,7 @@ impl<'a> ArrayBytes<'a> {
     /// Extract a subset of the array bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::InvalidArraySubsetError`] if the `array_shape` is incompatible with `subset`.
+    /// Returns a [`CodecError::InvalidIndexerError`] if the `array_shape` is incompatible with `subset`.
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].
@@ -224,10 +224,7 @@ impl<'a> ArrayBytes<'a> {
         match self {
             ArrayBytes::Variable(bytes, offsets) => {
                 let num_elements = indexer.len();
-                let indices: Vec<_> = indexer
-                    .iter_linearised_indices(array_shape)
-                    .map_err(|_| IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))?
-                    .collect();
+                let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
                 let mut bytes_length = 0;
                 for index in &indices {
                     let index = usize::try_from(*index).unwrap();
@@ -329,9 +326,12 @@ fn update_bytes_vlen_array_subset<'a>(
     update_bytes: &RawBytes,
     update_offsets: &RawBytesOffsets,
     update_subset: &ArraySubset,
-) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
+) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
     if !update_subset.inbounds_shape(input_shape) {
-        return Err(IncompatibleIndexerAndShapeError::new(input_shape.to_vec()));
+        return Err(IncompatibleIndexerError::new_oob(
+            update_subset.end_exc(),
+            input_shape.to_vec(),
+        ));
     }
 
     // Get the current and new length of the bytes in the chunk subset
@@ -397,7 +397,7 @@ fn update_bytes_vlen_indexer<'a>(
     update_bytes: &RawBytes,
     update_offsets: &RawBytesOffsets,
     update_indexer: &dyn Indexer,
-) -> Result<ArrayBytes<'a>, IncompatibleIndexerAndShapeError> {
+) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
     // Get the size of the new bytes
     let updated_size_new = update_bytes.len();
     debug_assert_eq!(

@@ -2,12 +2,9 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::BYTES;
 
-use crate::{
-    array::{
-        codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-        ArrayBytes, ArraySize, ChunkRepresentation, DataType,
-    },
-    array_subset::IncompatibleIndexerAndShapeError,
+use crate::array::{
+    codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
+    ArrayBytes, ArraySize, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -60,11 +57,7 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
 
         let chunk_shape = self.decoded_representation.shape_u64();
         // Get byte ranges
-        let mut byte_ranges = indexer
-            .byte_ranges(&chunk_shape, data_type_size)
-            .map_err(|_| {
-                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64())
-            })?;
+        let mut byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
 
         // Decode
         let decoded = self
@@ -148,11 +141,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         let chunk_shape = self.decoded_representation.shape_u64();
 
         // Get byte ranges
-        let mut byte_ranges = indexer
-            .byte_ranges(&chunk_shape, data_type_size)
-            .map_err(|_| {
-                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64())
-            })?;
+        let mut byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
 
         // Decode
         let decoded = self

@@ -1,11 +1,51 @@
 //! Generic indexer support.
 
+use thiserror::Error;
+use zarrs_metadata::ArrayShape;
 use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{ravel_indices, ArrayIndices},
-    array_subset::{ArraySubset, IncompatibleIndexerAndShapeError},
+    array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
+
+/// An incompatible indexer and array shape error.
+///
+/// Raised if an indexer references an out-of-bounds element or the dimensionality differs.
+#[derive(Clone, Debug, Error)]
+pub enum IncompatibleIndexerError {
+    /// The indexer dimensionality is incompatible.
+    #[error("indexer is incompatible with array shape {_0:?}")]
+    IncompatibleDimensionality(#[from] IncompatibleDimensionalityError),
+    /// The indexer references out-of-bounds array indices.
+    #[error(
+        "indexer references array indices {_0:?} which are out-of-bounds of array shape {_1:?}"
+    )]
+    OutOfBounds(ArrayIndices, ArrayShape),
+    /// The indexer has an incompatible length.
+    #[error("indexer has an incompatible length {_0}, expected {_1}")]
+    IncompatibleLength(u64, u64),
+}
+
+impl IncompatibleIndexerError {
+    /// Create a new [`IncompatibleIndexerError`] where the dimensionality is incompatible.
+    #[must_use]
+    pub fn new_incompatible_dimensionality(got: usize, expected: usize) -> Self {
+        IncompatibleDimensionalityError::new(got, expected).into()
+    }
+
+    /// Create a new [`IncompatibleIndexerError`] representing out-of-bounds indices.
+    #[must_use]
+    pub fn new_oob(indices: ArrayIndices, shape: ArrayShape) -> Self {
+        Self::OutOfBounds(indices, shape)
+    }
+
+    /// Create a new [`IncompatibleIndexerError`] where the length is incompatible.
+    #[must_use]
+    pub fn new_incompatible_length(got: u64, expected: u64) -> Self {
+        Self::IncompatibleLength(got, expected)
+    }
+}
 
 /// A trait for a generic indexer.
 pub trait Indexer: Send + Sync {
@@ -17,7 +57,7 @@ pub trait Indexer: Send + Sync {
     #[must_use]
     fn len(&self) -> u64;
 
-    /// Returns if the array subset is empty (i.e. has a zero length).
+    /// Returns if the indexer is empty (i.e. has a zero length).
     #[must_use]
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -33,40 +73,39 @@ pub trait Indexer: Send + Sync {
     /// Returns an iterator over the linearised indices of elements.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate the indices.
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError>;
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError>;
 
     // /// Returns an iterator over contiguous sequences of element indices.
     // ///
     // /// # Errors
-    // /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    // /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate the indices.
     // fn iter_contiguous_indices(
     //     &self,
     //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerAndShapeError>;
+    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError>;
 
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate the indices.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate the indices.
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>;
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError>;
 
-    /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
+    /// Return the byte ranges of the indexer in an array with `array_shape` and `element_size`.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate indices of the indexer.
     fn byte_ranges(
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerError> {
         let element_size_u64 = element_size as u64;
         let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
             move |(array_index, contiguous_elements)| {
@@ -108,7 +147,7 @@ impl<T: Indexer> Indexer for &[T] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         let linearised_indices = self
             .iter()
             .map(|indexer| indexer.iter_linearised_indices(array_shape))
@@ -124,15 +163,14 @@ impl<T: Indexer> Indexer for &[T] {
     // fn iter_contiguous_indices(
     //     &self,
     //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerAndShapeError> {
+    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError> {
     //     Ok(Box::new(self.contiguous_indices(array_shape)?.into_iter()))
     // }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         let contiguous_linearised_indices = self
             .iter()
             .map(|indexer| indexer.iter_contiguous_linearised_indices(array_shape))
@@ -170,15 +208,14 @@ impl<T: Indexer> Indexer for Vec<T> {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -208,15 +245,14 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -247,15 +283,20 @@ impl Indexer for &[ArrayIndices] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         let linearised_indices = self
             .iter()
             .map(|indices| {
                 if indices.len() == array_shape.len() {
-                    ravel_indices(indices, array_shape)
-                        .ok_or_else(|| IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
+                    ravel_indices(indices, array_shape).ok_or_else(|| {
+                        IncompatibleIndexerError::new_oob(indices.clone(), array_shape.to_vec())
+                    })
                 } else {
-                    Err(IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
+                    Err(IncompatibleDimensionalityError::new(
+                        self.dimensionality(),
+                        array_shape.len(),
+                    )
+                    .into())
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -265,21 +306,24 @@ impl Indexer for &[ArrayIndices] {
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         let contiguous_linearised_indices = self
             .iter()
             .map(|indices| {
                 if indices.len() == array_shape.len() {
                     let index = ravel_indices(indices, array_shape).ok_or_else(|| {
-                        IncompatibleIndexerAndShapeError::new(array_shape.to_vec())
+                        IncompatibleIndexerError::new_oob(indices.clone(), array_shape.to_vec())
                     })?;
                     Ok((index, 1))
                 } else {
-                    Err(IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
+                    Err(IncompatibleDimensionalityError::new(
+                        self.dimensionality(),
+                        array_shape.len(),
+                    )
+                    .into())
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, IncompatibleIndexerError>>()?;
         Ok(Box::new(contiguous_linearised_indices.into_iter()))
     }
 }
@@ -308,15 +352,14 @@ impl Indexer for Vec<ArrayIndices> {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -346,15 +389,14 @@ impl<const N: usize> Indexer for [ArrayIndices; N] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }

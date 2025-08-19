@@ -7,15 +7,12 @@ use num::Integer;
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use zarrs_storage::byte_range::ByteRange;
 
-use crate::{
-    array::{
-        codec::{
-            array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
-            ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
-        },
-        ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+use crate::array::{
+    codec::{
+        array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
+        ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
     },
-    array_subset::IncompatibleIndexerAndShapeError,
+    ArrayBytes, ArraySize, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -79,8 +76,7 @@ fn partial_decode<'a>(
     let chunk_shape = decoded_representation.shape_u64();
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
-        .byte_ranges(&chunk_shape, element_size_bits_usize)
-        .map_err(|_| IncompatibleIndexerAndShapeError::new(chunk_shape.clone()))?
+        .byte_ranges(&chunk_shape, element_size_bits_usize)?
         .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte

@@ -21,7 +21,7 @@ use crate::{
         ravel_indices, transmute_to_bytes, ArrayBytes, ArraySize, ChunkRepresentation, ChunkShape,
         CodecChain, RawBytes,
     },
-    array_subset::IncompatibleIndexerAndShapeError,
+    indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,
 };
 
@@ -131,15 +131,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .max()
             .expect("shards cannot be empty");
 
-        let get_inner_chunks = |chunk_subset| {
-            self.chunk_grid
-                .chunks_in_array_subset(chunk_subset)
-                .map_err(|_| {
-                    CodecError::InvalidArraySubsetError(IncompatibleIndexerAndShapeError::new(
-                        chunks_per_shard.clone(),
-                    ))
-                })
-        };
+        let get_inner_chunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
         let inner_chunk_fill_value = || {
             let array_size = ArraySize::new(
                 self.inner_chunk_representation.data_type().size(),
@@ -165,9 +157,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .zip(self.decoded_representation.shape())
             .any(|(a, b)| *a > b.get())
         {
-            return Err(CodecError::InvalidArraySubsetError(
-                IncompatibleIndexerAndShapeError::new(self.decoded_representation.shape_u64()),
-            ));
+            Err(IncompatibleIndexerError::new_oob(
+                chunk_subset_indexer.end_exc(),
+                self.decoded_representation.shape_u64(),
+            ))?;
         }
 
         // Get the iterator over the inner chunks

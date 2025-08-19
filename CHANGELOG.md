@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add initial generic indexing support to partial decoders
   - Add `Indexer` trait with implementations for `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
-- Add `IncompatibleIndexerAndShapeError`
+- Add `IncompatibleIndexerError`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -204,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `AsyncArrayShardedReadableExt` and `AsyncArrayShardedReadableExtCache`
 - Add `ArrayBytesFixedDisjointViewCreateError::IncompatibleArraySubsetAndShapeError` [#156] by [@ilan-gold]
 - Add `CodecError::IncompatibleDimensionalityError` variant [#156] by [@ilan-gold]
-- Add `CodecError::{DataTypeExtension,IncompatibleFillValueError,InvalidArrayShape,InvalidNumberOfElements,SubsetOutOfBounds,RawBytesOffsetsCreate,RawBytesOffsetsOutOfBounds}` variants
+- Add `CodecError::{DataTypeExtension,IncompatibleFillValueError,InvalidArrayShape,InvalidNumberOfElements,SubsetOutOfBounds,RawBytesOffsetsCreate,RawBytesOffsetsOutOfBounds,InvalidIndexerError}` variants
 - Add `ArrayError::{ArrayBytesFixedDisjointViewCreateError,IncompatibleStartEndIndicesError,IncompatibleOffset,DlPackError}` variants
 - Add `CodecMetadataOptions` and `ArrayMetadataOptions::codec_options[_mut]`
 - Implement `From<T: IntoIterator<Item = Range<u64>>>` for `ArraySubset`
@@ -261,6 +261,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `{Array,Group}::additional_fields[_mut]`
 - **Breaking**: Remove `CodecTraits::create_metadata[_opt]()`
 - **Breaking**: Remove `Config::experimental_codec_names[_mut]`
+- **Breaking**: Remove `CodecError::InvalidArraySubsetError`
 
 ### Fixed
 - Fixed reserving one more element than necessary when retrieving `string` or `bytes` array elements

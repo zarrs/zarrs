@@ -25,7 +25,7 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
-    indexer::Indexer,
+    indexer::{IncompatibleIndexerError, Indexer},
 };
 
 /// An array subset.
@@ -264,8 +264,7 @@ impl ArraySubset {
     /// Return the elements in this array subset from an array with shape `array_shape`.
     ///
     /// # Errors
-    ///
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
+    /// Returns [`IncompatibleIndexerError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
     ///
     /// # Panics
     /// Panics if attempting to access a byte index beyond [`usize::MAX`].
@@ -273,17 +272,32 @@ impl ArraySubset {
         &self,
         elements: &[T],
         array_shape: &[u64],
-    ) -> Result<Vec<T>, IncompatibleIndexerAndShapeError> {
-        let is_same_shape = elements.len() as u64 == array_shape.iter().product::<u64>();
-        let is_correct_dimensionality = array_shape.len() == self.dimensionality();
-        let is_in_bounds = self
+    ) -> Result<Vec<T>, IncompatibleIndexerError> {
+        if self.dimensionality() != array_shape.len() {
+            return Err(IncompatibleDimensionalityError::new(
+                self.dimensionality(),
+                array_shape.len(),
+            )
+            .into());
+        }
+        if elements.len() as u64 != array_shape.iter().product::<u64>() {
+            return Err(IncompatibleIndexerError::new_incompatible_length(
+                elements.len() as u64,
+                array_shape.iter().product::<u64>(),
+            ));
+        }
+        if self
             .end_exc()
             .iter()
             .zip(array_shape)
-            .all(|(end, shape)| end <= shape);
-        if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
-            return Err(IncompatibleIndexerAndShapeError(array_shape.to_vec()));
+            .any(|(end, shape)| end > shape)
+        {
+            return Err(IncompatibleIndexerError::new_oob(
+                self.end_exc(),
+                array_shape.to_vec(),
+            ));
         }
+
         let num_elements = usize::try_from(self.num_elements()).unwrap();
         let mut elements_subset = Vec::with_capacity(num_elements);
         let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
@@ -315,11 +329,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<LinearisedIndices, IncompatibleIndexerAndShapeError> {
+    ) -> Result<LinearisedIndices, IncompatibleIndexerError> {
         LinearisedIndices::new(self.clone(), array_shape.to_vec())
     }
 
@@ -327,11 +341,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn contiguous_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousIndices, IncompatibleIndexerAndShapeError> {
+    ) -> Result<ContiguousIndices, IncompatibleIndexerError> {
         ContiguousIndices::new(self, array_shape)
     }
 
@@ -339,11 +353,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleIndexerAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerAndShapeError> {
+    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
     }
 
@@ -453,22 +467,21 @@ impl Indexer for ArraySubset {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
         Ok(Box::new(self.linearised_indices(array_shape)?.into_iter()))
     }
 
     // fn iter_contiguous_indices(
     //     &self,
     //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerAndShapeError> {
+    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError> {
     //     Ok(Box::new(self.contiguous_indices(array_shape)?.into_iter()))
     // }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerAndShapeError>
-    {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
         Ok(Box::new(
             self.contiguous_linearised_indices(array_shape)?.into_iter(),
         ))
@@ -489,19 +502,6 @@ impl IncompatibleDimensionalityError {
     #[must_use]
     pub const fn new(got: usize, expected: usize) -> Self {
         Self(got, expected)
-    }
-}
-
-/// An incompatible array and array shape error.
-#[derive(Clone, Debug, Error, From)]
-#[error("indexer is incompatible with array shape {0:?}")]
-pub struct IncompatibleIndexerAndShapeError(ArrayShape);
-
-impl IncompatibleIndexerAndShapeError {
-    /// Create a new incompatible array subset and shape error.
-    #[must_use]
-    pub fn new(array_shape: ArrayShape) -> Self {
-        Self(array_shape)
     }
 }
 

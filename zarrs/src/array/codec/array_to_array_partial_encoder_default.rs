@@ -50,26 +50,10 @@ fn partial_encode(
         decoded_representation.data_type().size(),
     )?;
 
-    // Update the chunk
-    // FIXME: Are these checkes necessary? Should be in update_array_bytes
-    // if chunk_subset_indexer
-    //     .end_exc()
-    //     .iter()
-    //     .zip(decoded_representation.shape())
-    //     .any(|(a, b)| *a > b.get())
-    // {
-    //     return Err(CodecError::InvalidArraySubsetError(
-    //         IncompatibleIndexerAndShapeError::new(
-    //             (*chunk_subset_indexer).to_arc(),
-    //             decoded_representation.shape_u64(),
-    //         ),
-    //     ));
-    // }
-
-    // chunk_subset_bytes.validate(
-    //     chunk_subset_indexer.len(),
-    //     decoded_representation.data_type().size(),
-    // )?;
+    chunk_subset_bytes.validate(
+        chunk_subset_indexer.len(),
+        decoded_representation.data_type().size(),
+    )?;
 
     decoded_value = update_array_bytes(
         decoded_value,

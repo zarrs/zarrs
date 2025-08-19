@@ -3,8 +3,7 @@ use std::iter::FusedIterator;
 use crate::{
     array::{ravel_indices, ArrayShape},
     array_subset::{
-        iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
-        IncompatibleIndexerAndShapeError,
+        iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
 };
 
@@ -31,11 +30,11 @@ impl LinearisedIndices {
     /// Create a new linearised indices iterator.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerAndShapeError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
     pub fn new(
         subset: ArraySubset,
         array_shape: ArrayShape,
-    ) -> Result<Self, IncompatibleIndexerAndShapeError> {
+    ) -> Result<Self, IncompatibleIndexerError> {
         if subset.dimensionality() == array_shape.len()
             && std::iter::zip(subset.end_exc(), &array_shape).all(|(end, shape)| end <= *shape)
         {
@@ -44,7 +43,10 @@ impl LinearisedIndices {
                 array_shape,
             })
         } else {
-            Err(IncompatibleIndexerAndShapeError(array_shape))
+            Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                subset.dimensionality(),
+                array_shape.len(),
+            ))
         }
     }
 
