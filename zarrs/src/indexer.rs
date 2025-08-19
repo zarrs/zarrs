@@ -252,7 +252,8 @@ impl Indexer for &[ArrayIndices] {
             .iter()
             .map(|indices| {
                 if indices.len() == array_shape.len() {
-                    Ok(ravel_indices(indices, array_shape))
+                    ravel_indices(indices, array_shape)
+                        .ok_or_else(|| IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
                 } else {
                     Err(IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
                 }
@@ -270,7 +271,10 @@ impl Indexer for &[ArrayIndices] {
             .iter()
             .map(|indices| {
                 if indices.len() == array_shape.len() {
-                    Ok((ravel_indices(indices, array_shape), 1))
+                    let index = ravel_indices(indices, array_shape).ok_or_else(|| {
+                        IncompatibleIndexerAndShapeError::new(array_shape.to_vec())
+                    })?;
+                    Ok((index, 1))
                 } else {
                     Err(IncompatibleIndexerAndShapeError::new(array_shape.to_vec()))
                 }

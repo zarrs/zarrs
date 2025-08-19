@@ -16,7 +16,7 @@ use crate::{
         ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySize,
         ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
     },
-    array_subset::IncompatibleDimensionalityError,
+    array_subset::{IncompatibleDimensionalityError, IncompatibleIndexerAndShapeError},
     indexer::Indexer,
 };
 
@@ -389,8 +389,8 @@ fn partial_decode_fixed_indexer(
             .zip(partial_decoder.chunk_representation.shape())
             .map(|(&i, &cs)| i / cs)
             .collect();
-        // FIXME: Check chunk is within the expected number of chunks
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard);
+        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
+            .ok_or_else(|| IncompatibleIndexerAndShapeError::new(chunks_per_shard.clone()))?;
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
@@ -465,8 +465,8 @@ fn partial_decode_variable_indexer(
             .zip(partial_decoder.chunk_representation.shape())
             .map(|(&i, &cs)| i / cs)
             .collect();
-        // FIXME: Check chunk is within the expected number of chunks
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard);
+        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
+            .ok_or_else(|| IncompatibleIndexerAndShapeError::new(chunks_per_shard.clone()))?;
 
         // Get the partial decoder
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
