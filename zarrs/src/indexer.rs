@@ -115,6 +115,38 @@ pub trait Indexer: Send + Sync {
     }
 }
 
+impl<T: Indexer> Indexer for &T {
+    fn dimensionality(&self) -> usize {
+        (**self).dimensionality()
+    }
+
+    fn len(&self) -> u64 {
+        (**self).len()
+    }
+
+    fn output_shape(&self) -> Vec<u64> {
+        (**self).output_shape()
+    }
+
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+        (**self).iter_indices()
+    }
+
+    fn iter_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+        (**self).iter_linearised_indices(array_shape)
+    }
+
+    fn iter_contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+        (**self).iter_contiguous_linearised_indices(array_shape)
+    }
+}
+
 impl<T: Indexer> Indexer for &[T] {
     fn dimensionality(&self) -> usize {
         self.first().map_or(0, T::dimensionality)
