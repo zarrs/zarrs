@@ -79,15 +79,6 @@ pub trait Indexer: Send + Sync {
         array_shape: &[u64],
     ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError>;
 
-    // /// Returns an iterator over contiguous sequences of element indices.
-    // ///
-    // /// # Errors
-    // /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate the indices.
-    // fn iter_contiguous_indices(
-    //     &self,
-    //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError>;
-
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
     /// # Errors
@@ -159,13 +150,6 @@ impl<T: Indexer> Indexer for &[T] {
                 .flat_map(IntoIterator::into_iter),
         ))
     }
-
-    // fn iter_contiguous_indices(
-    //     &self,
-    //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError> {
-    //     Ok(Box::new(self.contiguous_indices(array_shape)?.into_iter()))
-    // }
 
     fn iter_contiguous_linearised_indices(
         &self,
