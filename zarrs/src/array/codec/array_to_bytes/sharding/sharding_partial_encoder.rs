@@ -147,7 +147,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let mut inner_chunks_indices = HashSet::<u64>::new();
 
         let Some(chunk_subset_indexer) = chunk_subset_indexer.as_array_subset() else {
-            todo!("generic indexer support")
+            // TODO: Add support for generic indexers
+            return Err(CodecError::from(
+                "sharding_indexed does not yet support partial encoding with generic indexers",
+            ));
         };
 
         // Check the subset is within the chunk shape
