@@ -27,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `RegularBoundedChunkGrid` (`zarrs.regular_bounded`)
 - Add `DefaultSuffixChunkKeyEncoding` (`zarrs.default_suffix`)
 - Add initial generic indexing support to partial decoders
-  - Add `Indexer` trait with implementations for `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
-  - Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
-- Add `IncompatibleIndexerError`
+  - Add `indexer` module with `Indexer` trait and `IncompatibleIndexerError`
+  - Implement `Indexer` for `ArraySubset`, `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
+  - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
+  - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -58,11 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   -  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32.into())?,
   +  ChunkRepresentation::new(chunk_shape(), DataType::Float32, 0.0f32)?,
   ```
-- **Major Breaking**: change the `[Async]ArrayPartialDecoderTraits::partial_decode[_into]()` trait method:
-  - `array_subsets: &[ArraySubset]` parameter changed to `indexer: &dyn Indexer`
-  - Returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
-- **Major Breaking**: change the `ArrayPartialEncoderTraits::partial_encode()` trait method:
-   - `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` parameter changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
+- **Major Breaking**: `[Async]ArrayPartialDecoderTraits` trait changes: 
+  - `partial_decode[_into]()`: parameter `array_subsets: &[ArraySubset]` changed to `indexer: &dyn Indexer`
+  - `partial_decode[_into]()`: returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
+- **Breaking**: `ArrayPartialEncoderTraits:` trait changes:
+  - `partial_encode()`: parameter `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
+- **Breaking**: `[Async]BytesPartialDecoderTraits` trait changes:
+  - `partial_decode[_concat]`: parameter `decoded_regions: &[ByteRange]` changed to `&mut (dyn Iterator<Item = ByteRange> + Send)`
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
@@ -91,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Arc` the `ChunkCache` types
 - **Breaking**: Change `Contiguous[Linearised]Indices` iterators to include the number of contiguous indices in their `Item`
 - **Breaking**: `ravel_indices` and `unravel_index` now return an `Option`, out-of-bounds access returns `None`
+- **Breaking**: `CodecError` enum revisions
+  - Rename `InvalidArraySubsetError` to `IncompatibleIndexer`
+  - Remove `InvalidArraySubsetDimensionalityError`, included in `IncompatibleIndexer`
 - Optimised chunk key encoders
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
@@ -106,7 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `[Async]BytesPartialDecoderTraits` implementations for `std::io::Cursor` variants
 - **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
 - **Breaking**: Remove `storage::byte_range` re-export
-- **Breaking**: Remove `IncompatibleArraySubsetAndShapeError`
+- **Breaking**: Remove `array_subset::IncompatibleArraySubsetAndShapeError`, replaced by `indexer::IncompatibleIndexerError`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
