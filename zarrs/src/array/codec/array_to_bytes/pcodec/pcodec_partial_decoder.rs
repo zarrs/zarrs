@@ -2,12 +2,15 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::PCODEC;
 
-use crate::array::{
-    codec::{
-        ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
-        RawBytes,
+use crate::{
+    array::{
+        codec::{
+            ArrayBytes, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError,
+            CodecOptions, RawBytes,
+        },
+        ArraySize, ChunkRepresentation, DataType,
     },
-    ArraySize, ChunkRepresentation, DataType,
+    indexer::IncompatibleIndexerError,
 };
 
 #[cfg(feature = "async")]
@@ -125,10 +128,11 @@ impl ArrayPartialDecoderTraits for PcodecPartialDecoder {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let decoded = self.input_handle.decode(options)?;
@@ -170,10 +174,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let decoded = self.input_handle.decode(options).await?;

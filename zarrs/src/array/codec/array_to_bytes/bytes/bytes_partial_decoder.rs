@@ -2,9 +2,12 @@ use std::sync::Arc;
 
 use zarrs_registry::codec::BYTES;
 
-use crate::array::{
-    codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-    ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+use crate::{
+    array::{
+        codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
+        ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+    },
+    indexer::IncompatibleIndexerError,
 };
 
 #[cfg(feature = "async")]
@@ -54,6 +57,14 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
                 BYTES.to_string(),
             ));
         };
+
+        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
+                self.decoded_representation.dimensionality(),
+            )
+            .into());
+        }
 
         let chunk_shape = self.decoded_representation.shape_u64();
         // Get byte ranges
@@ -132,10 +143,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         };
 
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let chunk_shape = self.decoded_representation.shape_u64();

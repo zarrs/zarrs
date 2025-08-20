@@ -114,10 +114,11 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if indexer.dimensionality() != self.shard_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.shard_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         match self.shard_representation.element_size() {
@@ -379,10 +380,11 @@ fn partial_decode_fixed_indexer(
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indices.len(),
                 partial_decoder.chunk_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
         let chunk_index: ArrayIndices = indices
             .iter()
@@ -456,10 +458,11 @@ fn partial_decode_variable_indexer(
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indices.len(),
                 partial_decoder.chunk_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
         let chunk_index: ArrayIndices = indices
             .iter()

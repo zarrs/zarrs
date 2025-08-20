@@ -211,7 +211,7 @@ impl<'a> ArrayBytes<'a> {
     /// Extract a subset of the array bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::InvalidIndexerError`] if the `array_shape` is incompatible with `subset`.
+    /// Returns a [`CodecError::IncompatibleIndexer`] if the `indexer` is incompatible with `subset`.
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].

@@ -7,7 +7,7 @@ use crate::{
         codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
         ArrayIndices, ChunkRepresentation, DataType,
     },
-    indexer::Indexer,
+    indexer::{IncompatibleIndexerError, Indexer},
 };
 
 #[cfg(feature = "async")]
@@ -37,10 +37,11 @@ fn get_squeezed_array_subset(
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
-        return Err(CodecError::InvalidIndexerDimensionalityError(
+        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
             decoded_region.dimensionality(),
             shape.len(),
-        ));
+        )
+        .into());
     }
 
     let ranges = izip!(
@@ -71,7 +72,7 @@ fn get_squeezed_indexer(
                     )
                     .collect_vec())
             } else {
-                Err(CodecError::InvalidIndexerDimensionalityError(
+                Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                     indices.len(),
                     shape.len(),
                 ))

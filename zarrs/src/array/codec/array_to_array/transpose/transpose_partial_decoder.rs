@@ -6,7 +6,7 @@ use crate::{
         codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
         ChunkRepresentation, DataType,
     },
-    indexer::Indexer,
+    indexer::{IncompatibleIndexerError, Indexer},
 };
 
 #[cfg(feature = "async")]
@@ -41,10 +41,11 @@ fn validate_regions(
     if indexer.dimensionality() == dimensionality {
         Ok(())
     } else {
-        Err(CodecError::InvalidIndexerDimensionalityError(
+        Err(IncompatibleIndexerError::new_incompatible_dimensionality(
             indexer.dimensionality(),
             dimensionality,
-        ))
+        )
+        .into())
     }
 }
 

@@ -1308,10 +1308,7 @@ pub enum CodecError {
     InvalidByteRangeError(#[from] InvalidByteRangeError),
     /// The indexer is invalid (e.g. incorrect dimensionality / out-of-bounds access).
     #[error(transparent)]
-    InvalidIndexerError(#[from] IncompatibleIndexerError),
-    /// An invalid array subset was requested with the wrong dimensionality.
-    #[error("the indexer has the wrong dimensionality {_0}, expected {_1}")]
-    InvalidIndexerDimensionalityError(usize, usize),
+    IncompatibleIndexer(#[from] IncompatibleIndexerError),
     /// The decoded size of a chunk did not match what was expected.
     #[error("the size of a decoded chunk is {}, expected {}", _0.len, _0.expected_len)]
     UnexpectedChunkDecodedSize(#[from] InvalidBytesLengthError),

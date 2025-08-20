@@ -10,6 +10,7 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
+    indexer::IncompatibleIndexerError,
     storage::byte_range::extract_byte_ranges_concat,
 };
 
@@ -67,10 +68,11 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let encoded_value = self.input_handle.decode(options)?;
@@ -150,10 +152,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidIndexerDimensionalityError(
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let encoded_value = self.input_handle.decode(options).await?;
