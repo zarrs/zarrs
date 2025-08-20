@@ -436,11 +436,12 @@ pub trait ArrayPartialDecoderTraits: Any + Send + Sync {
     /// This method is intended for internal use by Array.
     /// It currently only works for fixed length data types.
     ///
-    /// The `array_subset` shape and dimensionality does not need to match `output_subset`, but the number of elements must match.
-    /// Extracted elements from the `array_subset` are written to the subset of the output in C order.
+    /// The `indexer` shape and dimensionality does not need to match `output_subset`, but the number of elements must match.
+    /// Extracted elements from the `indexer` are written as ordered by the indexer.
+    /// For an [`ArraySubset`], that is C order.
     ///
     /// # Errors
-    /// Returns [`CodecError`] if a codec fails or the number of elements in `array_subset` does not match the number of elements in `output_view`,
+    /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_view`,
     fn partial_decode_into(
         &self,
         indexer: &dyn crate::indexer::Indexer,
