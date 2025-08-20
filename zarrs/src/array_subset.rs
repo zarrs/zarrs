@@ -471,12 +471,43 @@ impl Indexer for ArraySubset {
         Ok(Box::new(self.linearised_indices(array_shape)?.into_iter()))
     }
 
-    // fn iter_contiguous_indices(
-    //     &self,
-    //     array_shape: &[u64],
-    // ) -> Result<Box<dyn Iterator<Item = (ArrayIndices, u64)>>, IncompatibleIndexerError> {
-    //     Ok(Box::new(self.contiguous_indices(array_shape)?.into_iter()))
-    // }
+    fn iter_contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+        Ok(Box::new(
+            self.contiguous_linearised_indices(array_shape)?.into_iter(),
+        ))
+    }
+
+    fn as_array_subset(&self) -> Option<&ArraySubset> {
+        Some(self)
+    }
+}
+
+impl Indexer for &ArraySubset {
+    fn dimensionality(&self) -> usize {
+        self.start.len()
+    }
+
+    fn len(&self) -> u64 {
+        self.num_elements()
+    }
+
+    fn output_shape(&self) -> Vec<u64> {
+        self.shape().to_vec()
+    }
+
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+        Box::new(self.indices().into_iter())
+    }
+
+    fn iter_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+        Ok(Box::new(self.linearised_indices(array_shape)?.into_iter()))
+    }
 
     fn iter_contiguous_linearised_indices(
         &self,
