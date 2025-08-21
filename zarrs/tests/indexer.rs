@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+//! Tests for generic indexers.
 #![cfg(feature = "async")]
 
 use std::{num::NonZeroU64, sync::Arc};
@@ -13,7 +13,7 @@ use zarrs::{
         ChunkRepresentation, CodecChain, DataType, ElementOwned,
     },
     array_subset::ArraySubset,
-    indexer::Indexer,
+    indexer::{IncompatibleIndexerError, Indexer},
 };
 use zarrs_metadata::ChunkShape;
 
@@ -21,6 +21,33 @@ use zarrs_metadata::ChunkShape;
 fn indexer_array_subset1() {
     let indexer = ArraySubset::new_with_ranges(&[1..4, 2..4]);
     let indices = indexer.iter_contiguous_linearised_indices(&[4, 4]).unwrap();
+    assert_eq!(indices.collect_vec(), vec![(6, 2), (10, 2), (14, 2),]);
+    let indices = indexer.iter_linearised_indices(&[4, 4]).unwrap();
+    assert_eq!(indices.collect_vec(), vec![6, 7, 10, 11, 14, 15]);
+    assert!(matches!(
+        indexer.iter_linearised_indices(&[4, 4, 4]),
+        Err(IncompatibleIndexerError::IncompatibleDimensionality(_))
+    )); // incompatible dimensionality
+    assert!(matches!(
+        indexer.iter_contiguous_linearised_indices(&[4, 4, 4]),
+        Err(IncompatibleIndexerError::IncompatibleDimensionality(_))
+    )); // incompatible dimensionality
+    assert!(matches!(
+        indexer.iter_linearised_indices(&[3, 3]),
+        Err(IncompatibleIndexerError::OutOfBounds(_, _))
+    )); // OOB
+    assert!(matches!(
+        indexer.iter_contiguous_linearised_indices(&[3, 3]),
+        Err(IncompatibleIndexerError::OutOfBounds(_, _))
+    )); // OOB
+}
+
+#[test]
+fn indexer_array_subset1_ref() {
+    let indexer = ArraySubset::new_with_ranges(&[1..4, 2..4]);
+    let indices = (&indexer)
+        .iter_contiguous_linearised_indices(&[4, 4])
+        .unwrap();
     assert_eq!(indices.collect_vec(), vec![(6, 2), (10, 2), (14, 2),])
 }
 

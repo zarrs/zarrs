@@ -35,18 +35,21 @@ impl LinearisedIndices {
         subset: ArraySubset,
         array_shape: ArrayShape,
     ) -> Result<Self, IncompatibleIndexerError> {
-        if subset.dimensionality() == array_shape.len()
-            && std::iter::zip(subset.end_exc(), &array_shape).all(|(end, shape)| end <= *shape)
-        {
-            Ok(Self {
-                subset,
-                array_shape,
-            })
-        } else {
+        if subset.dimensionality() != array_shape.len() {
             Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
                 array_shape.len(),
             ))
+        } else if std::iter::zip(subset.end_exc(), &array_shape).any(|(end, shape)| end > *shape) {
+            Err(IncompatibleIndexerError::new_oob(
+                subset.end_exc(),
+                array_shape,
+            ))
+        } else {
+            Ok(Self {
+                subset,
+                array_shape,
+            })
         }
     }
 
