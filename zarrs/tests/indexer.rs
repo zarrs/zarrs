@@ -17,13 +17,21 @@ use zarrs::{
 };
 use zarrs_metadata::ChunkShape;
 
-#[test]
-fn indexer_array_subset1() {
-    let indexer = ArraySubset::new_with_ranges(&[1..4, 2..4]);
-    let indices = indexer.iter_contiguous_linearised_indices(&[4, 4]).unwrap();
-    assert_eq!(indices.collect_vec(), vec![(6, 2), (10, 2), (14, 2),]);
-    let indices = indexer.iter_linearised_indices(&[4, 4]).unwrap();
-    assert_eq!(indices.collect_vec(), vec![6, 7, 10, 11, 14, 15]);
+fn indexer_basic<T: Indexer>(indexer: T, indices: Vec<u64>, contiguous_indices: Vec<(u64, u64)>) {
+    assert_eq!(
+        indexer
+            .iter_contiguous_linearised_indices(&[4, 4])
+            .unwrap()
+            .collect_vec(),
+        contiguous_indices
+    );
+    assert_eq!(
+        indexer
+            .iter_linearised_indices(&[4, 4])
+            .unwrap()
+            .collect_vec(),
+        indices
+    );
     assert!(matches!(
         indexer.iter_linearised_indices(&[4, 4, 4]),
         Err(IncompatibleIndexerError::IncompatibleDimensionality(_))
@@ -40,35 +48,76 @@ fn indexer_array_subset1() {
         indexer.iter_contiguous_linearised_indices(&[3, 3]),
         Err(IncompatibleIndexerError::OutOfBounds(_, _))
     )); // OOB
+    let subset = ArraySubset::new_with_shape(vec![4, 4]);
+    assert!(matches!(
+        subset.extract_elements(&vec![0u8, 4 * 4], &[5, 5]),
+        Err(IncompatibleIndexerError::IncompatibleLength(_, _))
+    ));
+}
+
+#[test]
+fn indexer_array_subset1() {
+    let indexer = ArraySubset::new_with_ranges(&[1..4, 2..4]);
+    indexer_basic(
+        indexer,
+        vec![6, 7, 10, 11, 14, 15],
+        vec![(6, 2), (10, 2), (14, 2)],
+    );
 }
 
 #[test]
 fn indexer_array_subset1_ref() {
     let indexer = ArraySubset::new_with_ranges(&[1..4, 2..4]);
-    let indices = (&indexer)
-        .iter_contiguous_linearised_indices(&[4, 4])
-        .unwrap();
-    assert_eq!(indices.collect_vec(), vec![(6, 2), (10, 2), (14, 2),])
+    indexer_basic(
+        &indexer,
+        vec![6, 7, 10, 11, 14, 15],
+        vec![(6, 2), (10, 2), (14, 2)],
+    );
 }
 
 #[test]
 fn indexer_array_subset2() {
     let indexer = ArraySubset::new_with_ranges(&[0..1, 0..4]);
-    let indices = indexer.iter_contiguous_linearised_indices(&[4, 4]).unwrap();
-    assert_eq!(indices.collect_vec(), vec![(0, 4),])
+    indexer_basic(&indexer, vec![0, 1, 2, 3], vec![(0, 4)]);
 }
 
 #[test]
-fn indexer_array_subsets() {
+fn indexer_array_subsets_list() {
     let indexer = [
         ArraySubset::new_with_ranges(&[1..4, 2..4]),
         ArraySubset::new_with_ranges(&[0..1, 0..4]),
     ];
-    let indices = indexer.iter_contiguous_linearised_indices(&[4, 4]).unwrap();
-    assert_eq!(
-        indices.collect_vec(),
-        vec![(6, 2), (10, 2), (14, 2), (0, 4),]
-    )
+    indexer_basic(
+        indexer,
+        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+    );
+}
+
+#[test]
+fn indexer_array_subsets_slice() {
+    let indexer = [
+        ArraySubset::new_with_ranges(&[1..4, 2..4]),
+        ArraySubset::new_with_ranges(&[0..1, 0..4]),
+    ];
+    indexer_basic(
+        &indexer,
+        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+    );
+}
+
+#[test]
+fn indexer_array_subsets_vec() {
+    let indexer = vec![
+        ArraySubset::new_with_ranges(&[1..4, 2..4]),
+        ArraySubset::new_with_ranges(&[0..1, 0..4]),
+    ];
+    indexer_basic(
+        indexer,
+        vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
+        vec![(6, 2), (10, 2), (14, 2), (0, 4)],
+    );
 }
 
 #[async_generic::async_generic]
