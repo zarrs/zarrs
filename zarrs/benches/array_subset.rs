@@ -1,6 +1,8 @@
+//! Benchmark the `ArraySubset` indices iterator.
+
 use criterion::{
-    black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
-    PlotConfiguration, Throughput,
+    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    Throughput,
 };
 use zarrs::array_subset::ArraySubset;
 
@@ -15,7 +17,7 @@ fn array_subset_indices_iterator(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("size", array_subset_size), |b| {
             b.iter(|| {
                 array_subset.indices().into_iter().for_each(|indices| {
-                    black_box(indices.first().unwrap());
+                    std::hint::black_box(indices.first().unwrap());
                 })
             });
         });
