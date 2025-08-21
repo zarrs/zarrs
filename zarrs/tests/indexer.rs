@@ -10,7 +10,7 @@ use zarrs::{
             ArrayToBytesCodecTraits, BytesCodec, CodecOptions, ShardingCodecBuilder, SqueezeCodec,
             TransposeCodec, TransposeOrder, VlenCodec,
         },
-        ChunkRepresentation, CodecChain, DataType, ElementOwned,
+        ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -21,7 +21,8 @@ fn indexer_basic<T: Indexer>(
     indexer: T,
     dimensionality: usize,
     output_shape: Vec<u64>,
-    indices: Vec<u64>,
+    indices: Vec<ArrayIndices>,
+    linearised_indices: Vec<u64>,
     contiguous_indices: Vec<(u64, u64)>,
 ) {
     assert_eq!(indexer.dimensionality(), dimensionality);
@@ -35,12 +36,13 @@ fn indexer_basic<T: Indexer>(
             .collect_vec(),
         contiguous_indices
     );
+    assert_eq!(indexer.iter_indices().collect_vec(), indices);
     assert_eq!(
         indexer
             .iter_linearised_indices(&[4, 4])
             .unwrap()
             .collect_vec(),
-        indices
+        linearised_indices
     );
     assert!(matches!(
         indexer.iter_linearised_indices(&[4, 4, 4]),
@@ -72,6 +74,7 @@ fn indexer_indices_list() {
         indexer,
         2,
         vec![4],
+        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
         vec![0, 1, 3, 5],
         vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
@@ -84,6 +87,7 @@ fn indexer_indices_vec() {
         indexer,
         2,
         vec![4],
+        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
         vec![0, 1, 3, 5],
         vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
@@ -96,6 +100,7 @@ fn indexer_indices_slice() {
         &indexer,
         2,
         vec![4],
+        vec![vec![0, 0], vec![0, 1], vec![0, 3], vec![1, 1]],
         vec![0, 1, 3, 5],
         vec![(0, 1), (1, 1), (3, 1), (5, 1)], // TODO: Fusion of contiguous indices
     );
@@ -108,6 +113,14 @@ fn indexer_array_subset1() {
         indexer,
         2,
         vec![3, 2],
+        vec![
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 2],
+            vec![2, 3],
+            vec![3, 2],
+            vec![3, 3],
+        ],
         vec![6, 7, 10, 11, 14, 15],
         vec![(6, 2), (10, 2), (14, 2)],
     );
@@ -120,6 +133,14 @@ fn indexer_array_subset1_ref() {
         &indexer,
         2,
         vec![3, 2],
+        vec![
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 2],
+            vec![2, 3],
+            vec![3, 2],
+            vec![3, 3],
+        ],
         vec![6, 7, 10, 11, 14, 15],
         vec![(6, 2), (10, 2), (14, 2)],
     );
@@ -128,7 +149,14 @@ fn indexer_array_subset1_ref() {
 #[test]
 fn indexer_array_subset2() {
     let indexer = ArraySubset::new_with_ranges(&[0..1, 0..4]);
-    indexer_basic(&indexer, 2, vec![1, 4], vec![0, 1, 2, 3], vec![(0, 4)]);
+    indexer_basic(
+        &indexer,
+        2,
+        vec![1, 4],
+        vec![vec![0, 0], vec![0, 1], vec![0, 2], vec![0, 3]],
+        vec![0, 1, 2, 3],
+        vec![(0, 4)],
+    );
 }
 
 #[test]
@@ -141,6 +169,18 @@ fn indexer_array_subsets_list() {
         indexer,
         2,
         vec![10],
+        vec![
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 2],
+            vec![2, 3],
+            vec![3, 2],
+            vec![3, 3],
+            vec![0, 0],
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+        ],
         vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
         vec![(6, 2), (10, 2), (14, 2), (0, 4)],
     );
@@ -156,6 +196,18 @@ fn indexer_array_subsets_slice() {
         &indexer,
         2,
         vec![10],
+        vec![
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 2],
+            vec![2, 3],
+            vec![3, 2],
+            vec![3, 3],
+            vec![0, 0],
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+        ],
         vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
         vec![(6, 2), (10, 2), (14, 2), (0, 4)],
     );
@@ -171,6 +223,18 @@ fn indexer_array_subsets_vec() {
         indexer,
         2,
         vec![10],
+        vec![
+            vec![1, 2],
+            vec![1, 3],
+            vec![2, 2],
+            vec![2, 3],
+            vec![3, 2],
+            vec![3, 3],
+            vec![0, 0],
+            vec![0, 1],
+            vec![0, 2],
+            vec![0, 3],
+        ],
         vec![6, 7, 10, 11, 14, 15, 0, 1, 2, 3],
         vec![(6, 2), (10, 2), (14, 2), (0, 4)],
     );
