@@ -1,3 +1,5 @@
+//! Benchmark uncompressed unsharded and sharded arrays.
+
 use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -13,8 +15,8 @@ fn array_write_all(c: &mut Criterion) {
                 let store = zarrs::storage::store::MemoryStore::new();
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
-                    zarrs::array::DataType::UInt8,
                     vec![32; 3],
+                    zarrs::array::DataType::UInt8,
                     0u8,
                 )
                 .build(store.into(), "/")
@@ -40,8 +42,8 @@ fn array_write_all_sharded(c: &mut Criterion) {
                     Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
-                    zarrs::array::DataType::UInt16,
                     vec![size; 3],
+                    zarrs::array::DataType::UInt16,
                     0u16,
                 )
                 .array_to_bytes_codec(sharding_codec)
@@ -66,8 +68,8 @@ fn array_read_all(c: &mut Criterion) {
             let store = zarrs::storage::store::MemoryStore::new();
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
-                zarrs::array::DataType::UInt16,
                 vec![32; 3],
+                zarrs::array::DataType::UInt16,
                 0u16,
             )
             .build(store.into(), "/")
@@ -97,8 +99,8 @@ fn array_read_all_sharded(c: &mut Criterion) {
                 Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
-                zarrs::array::DataType::UInt8,
                 vec![size; 3],
+                zarrs::array::DataType::UInt8,
                 1u8,
             )
             .array_to_bytes_codec(sharding_codec)

@@ -1,3 +1,5 @@
+//! Benchmark various codecs.
+
 use std::borrow::Cow;
 
 use criterion::{
