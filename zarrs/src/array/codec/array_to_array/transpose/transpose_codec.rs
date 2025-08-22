@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use crate::array::{DataType, FillValue};
+use crate::array::{codec::ArrayPartialEncoderTraits, DataType, FillValue};
 use zarrs_metadata::Configuration;
 use zarrs_registry::codec::TRANSPOSE;
 
@@ -101,7 +101,9 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         if self.order.0.len() != decoded_shape.len() {
-            return Err(CodecError::Other("Invalid shape".to_string()));
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
         }
         Ok(permute(decoded_shape, &self.order.0).into())
     }
@@ -111,7 +113,9 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         encoded_shape: &[NonZeroU64],
     ) -> Result<Option<ChunkShape>, CodecError> {
         if self.order.0.len() != encoded_shape.len() {
-            return Err(CodecError::Other("Invalid shape".to_string()));
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
         }
         let mut permutation_decode = vec![0; self.order.0.len()];
         for (i, val) in self.order.0.iter().enumerate() {
@@ -131,6 +135,11 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             decoded_representation.num_elements(),
             decoded_representation.data_type().size(),
         )?;
+        if self.order.0.len() != decoded_representation.dimensionality() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
+        }
 
         match bytes {
             ArrayBytes::Variable(bytes, offsets) => {
@@ -173,6 +182,11 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             decoded_representation.num_elements(),
             decoded_representation.data_type().size(),
         )?;
+        if self.order.0.len() != decoded_representation.dimensionality() {
+            return Err(CodecError::Other(
+                "Length of transpose codec `order` does not match array dimensionality".to_string(),
+            ));
+        }
 
         match bytes {
             ArrayBytes::Variable(bytes, offsets) => {
@@ -218,6 +232,16 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                 self.order.clone(),
             ),
         ))
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        todo!("the transpose codec does not yet support partial encoding")
     }
 
     #[cfg(feature = "async")]

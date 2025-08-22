@@ -1,7 +1,10 @@
 //! Tests for generic indexers.
 #![cfg(feature = "async")]
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::{
+    num::NonZeroU64,
+    sync::{Arc, Mutex},
+};
 
 use itertools::Itertools;
 use zarrs::{
@@ -241,7 +244,7 @@ fn indexer_array_subsets_vec() {
 }
 
 #[async_generic::async_generic]
-fn indexer_array_subsets_impl<T: ElementOwned>(
+fn indexer_partial_decode_impl<T: ElementOwned>(
     codec: Arc<dyn ArrayToBytesCodecTraits>,
     shape: &ChunkShape,
     indexer: &dyn Indexer,
@@ -263,8 +266,9 @@ fn indexer_array_subsets_impl<T: ElementOwned>(
 
     let partial_decoder = if _async {
         codec
+            .clone()
             .async_partial_decoder(
-                encoded_chunk,
+                encoded_chunk.clone(),
                 &decoded_representation,
                 &CodecOptions::default(),
             )
@@ -272,8 +276,9 @@ fn indexer_array_subsets_impl<T: ElementOwned>(
             .unwrap()
     } else {
         codec
+            .clone()
             .partial_decoder(
-                encoded_chunk,
+                encoded_chunk.clone(),
                 &decoded_representation,
                 &CodecOptions::default(),
             )
@@ -290,6 +295,62 @@ fn indexer_array_subsets_impl<T: ElementOwned>(
             partial_decoder.partial_decode(indexer, &CodecOptions::default())
         }
         .unwrap(),
+    )
+    .unwrap()
+}
+
+// #[async_generic::async_generic]
+fn indexer_partial_encode_impl<T: ElementOwned>(
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    shape: &ChunkShape,
+    indexer: &dyn Indexer,
+    elements_partial_encode: &[T],
+    data_type: DataType,
+    bytes: &[T],
+) -> Vec<T> {
+    let decoded_representation =
+        ChunkRepresentation::new(shape.to_vec(), data_type.clone(), 0u32).unwrap();
+    let encoded_chunk = Arc::new(
+        codec
+            .encode(
+                T::into_array_bytes(&data_type, bytes).unwrap(),
+                &decoded_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap()
+            .into_owned(),
+    );
+
+    // TODO: Async partial encoder
+    let output = Arc::new(Mutex::new(Some((&encoded_chunk).to_vec())));
+    let partial_encoder = codec
+        .clone()
+        .partial_encoder(
+            encoded_chunk,
+            output.clone(),
+            &decoded_representation,
+            &CodecOptions::default(),
+        )
+        .unwrap();
+
+    partial_encoder
+        .partial_encode(
+            indexer,
+            &T::into_array_bytes(&data_type, elements_partial_encode).unwrap(),
+            &CodecOptions::default(),
+        )
+        .unwrap();
+
+    let output = output.lock().unwrap().clone().unwrap();
+    T::from_array_bytes(
+        &data_type,
+        codec
+            .decode(
+                output.into(),
+                &decoded_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap(),
     )
     .unwrap()
 }
@@ -311,34 +372,49 @@ async fn async_indexer_array_subsets_fixed() {
         .collect_vec();
     let expected = vec![6.0, 7.0, 10.0, 11.0, 14.0, 15.0, 0.0, 1.0, 2.0, 3.0];
 
+    let elements_partial_encode = vec![
+        60.0, 70.0, 100.0, 110.0, 140.0, 150.0, 0.0, 10.0, 20.0, 30.0,
+    ];
+    let expected_partial_encode = vec![
+        0.0, 10.0, 20.0, 30.0, //
+        4.0, 5.0, 60.0, 70.0, //
+        8.0, 9.0, 100.0, 110.0, //
+        12.0, 13.0, 140.0, 150.0, //
+    ];
+
     let codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>> = vec![
         Arc::new(BytesCodec::little()),
         Arc::new(CodecChain::new(
             vec![
-                Arc::new(SqueezeCodec::new()),
-                #[cfg(feature = "transpose")]
-                Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
+                // Arc::new(SqueezeCodec::new()), // FIXME: Add squeeze partial encoder
+                // #[cfg(feature = "transpose")]
+                // Arc::new(TransposeCodec::new(TransposeOrder::new(&[2, 1, 0]).unwrap())), // FIXME: Add transpose partial encoder
             ],
             Arc::new(BytesCodec::little()),
             vec![],
         )),
-        Arc::new(CodecChain::new(
-            vec![
-                Arc::new(SqueezeCodec::new()),
-                #[cfg(feature = "transpose")]
-                Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
-            ],
-            ShardingCodecBuilder::new(
-                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
-            )
-            .build_arc(),
-            vec![],
-        )),
+        // Arc::new(CodecChain::new(
+        //     vec![
+        //         // Arc::new(SqueezeCodec::new()), // FIXME: Add squeeze partial encoder
+        //         // #[cfg(feature = "transpose")]
+        //         // Arc::new(TransposeCodec::new(TransposeOrder::new(&[2, 1, 0]).unwrap())), // FIXME: Add transpose partial encoder
+        //     ],
+        //     ShardingCodecBuilder::new(  // FIXME: Add generic indexing support to sharding indexed partial encoder
+        //         vec![
+        //             NonZeroU64::new(1).unwrap(),
+        //             NonZeroU64::new(2).unwrap(),
+        //             NonZeroU64::new(2).unwrap(),
+        //         ]
+        //         .into(),
+        //     )
+        //     .build_arc(),
+        //     vec![],
+        // )),
     ];
 
     for codec in codecs {
         assert_eq!(
-            indexer_array_subsets_impl(
+            indexer_partial_decode_impl(
                 codec.clone(),
                 &shape,
                 &indexer,
@@ -349,7 +425,7 @@ async fn async_indexer_array_subsets_fixed() {
         );
         #[cfg(feature = "async")]
         assert_eq!(
-            indexer_array_subsets_impl_async(
+            indexer_partial_decode_impl_async(
                 codec.clone(),
                 &shape,
                 &indexer,
@@ -358,6 +434,17 @@ async fn async_indexer_array_subsets_fixed() {
             )
             .await,
             expected
+        );
+        assert_eq!(
+            indexer_partial_encode_impl(
+                codec.clone(),
+                &shape,
+                &indexer,
+                &elements_partial_encode,
+                DataType::Float32,
+                &elements,
+            ),
+            expected_partial_encode
         );
     }
 }
@@ -424,7 +511,7 @@ async fn async_indexer_array_subsets_variable() {
 
     for codec in codecs {
         assert_eq!(
-            indexer_array_subsets_impl(
+            indexer_partial_decode_impl(
                 codec.clone(),
                 &shape,
                 &indexer,
@@ -434,7 +521,7 @@ async fn async_indexer_array_subsets_variable() {
             expected
         );
         assert_eq!(
-            indexer_array_subsets_impl_async(codec, &shape, &indexer, DataType::String, &elements)
+            indexer_partial_decode_impl_async(codec, &shape, &indexer, DataType::String, &elements)
                 .await,
             expected,
         );

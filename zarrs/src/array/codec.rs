@@ -135,6 +135,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use super::ArraySize;
 use super::{
@@ -671,6 +672,38 @@ impl StoragePartialEncoder {
     /// Create a new storage partial encoder.
     pub fn new(storage: WritableStorage, key: StoreKey) -> Self {
         Self { storage, key }
+    }
+}
+
+impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
+    fn erase(&self) -> Result<(), CodecError> {
+        *self.lock().unwrap() = None;
+        Ok(())
+    }
+
+    fn partial_encode(
+        &self,
+        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+        _options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let mut v = self.lock().unwrap();
+        let mut output = v.as_ref().cloned().unwrap_or_default();
+        let length = offsets_and_bytes
+            .iter()
+            .map(|(offset, bytes)| offset + bytes.len() as u64)
+            .max()
+            .unwrap_or_default();
+        let length = usize::try_from(length).unwrap();
+        if output.len() < length {
+            output.resize(length, 0);
+        }
+
+        for (offset, bytes) in offsets_and_bytes {
+            let offset = usize::try_from(*offset).unwrap();
+            output[offset..offset + bytes.len()].copy_from_slice(bytes);
+        }
+        *v = Some(output);
+        Ok(())
     }
 }
 

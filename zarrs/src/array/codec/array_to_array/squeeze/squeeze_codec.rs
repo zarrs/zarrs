@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use crate::array::{DataType, FillValue};
+use crate::array::{codec::ArrayPartialEncoderTraits, DataType, FillValue};
 use zarrs_metadata::Configuration;
 use zarrs_registry::codec::SQUEEZE;
 
@@ -143,6 +143,16 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
                 decoded_representation.clone(),
             ),
         ))
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        todo!("the squeeze codec does not yet support partial encoding")
     }
 
     #[cfg(feature = "async")]
