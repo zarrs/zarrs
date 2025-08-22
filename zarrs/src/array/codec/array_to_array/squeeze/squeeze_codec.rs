@@ -147,10 +147,10 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
-        options: &CodecOptions,
+        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        _output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         todo!("the squeeze codec does not yet support partial encoding")
     }

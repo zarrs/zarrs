@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Indexer` for `ArraySubset`, `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
+- Impl `BytesPartialEncoderTraits` for `Mutex<Option<Vec<u8>>>`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
