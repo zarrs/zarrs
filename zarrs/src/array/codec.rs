@@ -732,7 +732,8 @@ impl BytesPartialEncoderTraits for StoragePartialEncoder {
 }
 
 /// Traits for array to array codecs.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
@@ -935,7 +936,8 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 }
 
 /// Traits for array to bytes codecs.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
@@ -1092,7 +1094,8 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 }
 
 /// Traits for bytes to bytes codecs.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits>;
