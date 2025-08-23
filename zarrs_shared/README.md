@@ -6,7 +6,7 @@
 [![build](https://github.com/zarrs/zarrs/actions/workflows/ci.yml/badge.svg)](https://github.com/zarrs/zarrs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/zarrs/zarrs/graph/badge.svg?component=zarrs_shared)](https://codecov.io/gh/zarrs/zarrs)
 
-The data type API for the [`zarrs`](https://crates.io/crates/zarrs) Rust crate.
+Shared definitions for multiple [`zarrs`](https://crates.io/crates/zarrs) workspace Rust crates.
 
 ## Licence
 `zarrs_shared` is licensed under either of
