@@ -105,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `criterion` (dev) to 0.7.0
 - Bump `float8` to 0.4.1
 - Bump `lru` to 0.16
+- Bump minimum `ndarray` to 0.15.4
 - Move `zarrs_opendal` to a new repository: `zarrs/zarrs_opendal`
 
 ### Removed
