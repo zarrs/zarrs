@@ -4,33 +4,23 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
-    /// An extension trait that enforces `Send` only on native platforms.
+    /// A marker trait that enforces `Send` only on native platforms.
     ///
-    /// Useful for writing cross-platform async code!
-    pub trait MaybeSend: Send {}
+    pub use core::marker::Send as MaybeSend;
 
-    impl<T> MaybeSend for T where T: Send {}
-
-    /// An extension trait that enforces `Sync` only on native platforms.
+    /// A marker trait that enforces `Sync` only on native platforms.
     ///
-    /// Useful for writing cross-platform async code!
-    pub trait MaybeSync: Sync {}
-
-    impl<T> MaybeSync for T where T: Sync {}
+    pub use core::marker::Sync as MaybeSync;
 }
 
 #[cfg(target_arch = "wasm32")]
 mod platform {
-    /// An extension trait that enforces `Send` only on native platforms.
-    ///
-    /// Useful for writing cross-platform async code!
+    /// A marker trait that enforces `Send` only on native platforms.
     pub trait MaybeSend {}
 
     impl<T> MaybeSend for T {}
 
-    /// An extension trait that enforces `Sync` only on native platforms.
-    ///
-    /// Useful for writing cross-platform async code!
+    /// A marker trait that enforces `Sync` only on native platforms.
     pub trait MaybeSync {}
 
     impl<T> MaybeSync for T {}
