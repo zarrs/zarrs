@@ -389,7 +389,7 @@ pub fn extract_byte_ranges_read<T: Read>(
     Ok(out)
 }
 
-/// This trait combines Iterator and MaybeSend,
+/// This trait combines `Iterator` and `MaybeSend`,
 /// as they cannot be combined together directly in function signatures.
 pub trait ByteRangeIterator: Iterator<Item = ByteRange> + MaybeSend {}
 impl<T: Iterator<Item = ByteRange> + MaybeSend> ByteRangeIterator for T {}

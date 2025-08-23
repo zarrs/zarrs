@@ -21,7 +21,7 @@ use crate::{
     MaybeAsyncBytes,
 };
 
-/// This trait combines Write and MaybeSend + MaybeSync
+/// This trait combines `Write` and `MaybeSend + MaybeSync`
 /// as they cannot be combined together directly in function signatures.
 pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
 impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
