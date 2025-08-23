@@ -73,17 +73,20 @@ fn partial_encode(
         decoded_representation.data_type().size(),
     )?;
 
+    // Erase existing data
+    #[cfg(feature = "async")]
+    if _async {
+        output_handle.erase().await?;
+    } else {
+        output_handle.erase()?;
+    }
+    #[cfg(not(feature = "async"))]
+    output_handle.erase()?;
+
     let is_fill_value = !options.store_empty_chunks()
         && chunk_bytes.is_fill_value(decoded_representation.fill_value());
     if is_fill_value {
-        #[cfg(feature = "async")]
-        if _async {
-            output_handle.erase().await
-        } else {
-            output_handle.erase()
-        }
-        #[cfg(not(feature = "async"))]
-        output_handle.erase()
+        Ok(())
     } else {
         // Store the updated chunk
         let chunk_bytes = codec.encode(chunk_bytes, decoded_representation, options)?;

@@ -117,6 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
+- Erase chunks before writing the updated chunk in `ArrayTo{Array,Bytes}PartialEncoderDefault`
 
 ## [0.21.2] - 2025-06-19
 
