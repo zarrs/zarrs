@@ -201,7 +201,8 @@ impl AsyncArrayShardedReadableExtCache {
 ///s
 /// Sharding indexes are cached in a [`AsyncArrayShardedReadableExtCache`] enabling faster retrieval.
 // TODO: Add default methods? Or change to options: Option<&CodecOptions>? Should really do this for array (breaking)...
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTraits + 'static>:
     private::Sealed
 {
@@ -377,7 +378,8 @@ fn inner_chunk_shard_index_and_chunk_index<
     Ok((shard_indices, chunk_indices))
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedReadableExt<TStorage>
     for Array<TStorage>
 {

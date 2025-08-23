@@ -93,7 +93,8 @@ impl AsyncBitroundPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncBitroundPartialDecoder {
     fn data_type(&self) -> &DataType {
         &self.data_type

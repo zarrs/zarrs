@@ -126,7 +126,8 @@ impl AsyncArrayToBytesPartialDecoderDefault {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncArrayToBytesPartialDecoderDefault {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()

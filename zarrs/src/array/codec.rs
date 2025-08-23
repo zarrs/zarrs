@@ -368,7 +368,8 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 
 #[cfg(feature = "async")]
 /// Asynchronous partial bytes decoder traits.
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Partially decode bytes.
     ///
@@ -490,7 +491,8 @@ pub trait ArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 
 #[cfg(feature = "async")]
 /// Asynchronous partial array encoder traits.
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
     /// Erase the chunk.
     ///
@@ -531,7 +533,8 @@ pub trait BytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 
 #[cfg(feature = "async")]
 /// Asynhronous partial bytes encoder traits.
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
     /// Erase the chunk.
     ///
@@ -552,7 +555,8 @@ pub trait AsyncBytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 
 #[cfg(feature = "async")]
 /// Asynchronous partial array decoder traits.
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
@@ -643,7 +647,8 @@ impl AsyncStoragePartialDecoder {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     async fn partial_decode(
         &self,
@@ -1238,7 +1243,8 @@ where
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T> AsyncBytesPartialDecoderTraits for T
 where
     T: AsRef<[u8]> + MaybeSend + MaybeSync + 'static,
