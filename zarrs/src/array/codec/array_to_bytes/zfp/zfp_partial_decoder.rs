@@ -10,7 +10,7 @@ use crate::{
         },
         ArraySize, ChunkRepresentation, DataType,
     },
-    array_subset::ArraySubset,
+    indexer::IncompatibleIndexerError,
     storage::byte_range::extract_byte_ranges_concat,
 };
 
@@ -61,17 +61,18 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let encoded_value = self.input_handle.decode(options)?;
@@ -87,12 +88,12 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
-                &byte_ranges,
+                byte_ranges,
             )?))
         } else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             Ok(ArrayBytes::new_fill_value(
                 array_size,
@@ -144,17 +145,18 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let data_type_size = self.data_type().fixed_size().ok_or_else(|| {
             CodecError::UnsupportedDataType(self.data_type().clone(), ZFP.to_string())
         })?;
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
-            return Err(CodecError::InvalidArraySubsetDimensionalityError(
-                indexer.clone(),
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
                 self.decoded_representation.dimensionality(),
-            ));
+            )
+            .into());
         }
 
         let encoded_value = self.input_handle.decode(options).await?;
@@ -170,12 +172,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
             let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
-                &byte_ranges,
+                byte_ranges,
             )?))
         } else {
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
-                indexer.num_elements(),
+                indexer.len(),
             );
             Ok(ArrayBytes::new_fill_value(
                 array_size,

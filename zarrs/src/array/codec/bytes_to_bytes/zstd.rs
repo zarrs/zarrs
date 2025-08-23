@@ -129,7 +129,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // zstd partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode_concat(&decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(&mut decoded_regions.into_iter(), &CodecOptions::default())
             .unwrap()
             .unwrap();
 
@@ -171,7 +171,7 @@ mod tests {
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode_concat(&decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(&mut decoded_regions.into_iter(), &CodecOptions::default())
             .await
             .unwrap()
             .unwrap();

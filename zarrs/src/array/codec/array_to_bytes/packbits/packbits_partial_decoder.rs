@@ -7,15 +7,12 @@ use num::Integer;
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use zarrs_storage::byte_range::ByteRange;
 
-use crate::{
-    array::{
-        codec::{
-            array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
-            ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
-        },
-        ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+use crate::array::{
+    codec::{
+        array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
+        ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
     },
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    ArrayBytes, ArraySize, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -35,7 +32,7 @@ use super::DataTypeExtensionPackBitsCodecComponents;
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
@@ -44,7 +41,7 @@ fn partial_decode<'a>(
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let DataTypeExtensionPackBitsCodecComponents {
@@ -79,35 +76,30 @@ fn partial_decode<'a>(
     let chunk_shape = decoded_representation.shape_u64();
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
-        .byte_ranges(&chunk_shape, element_size_bits_usize)
-        .map_err(|_| {
-            IncompatibleArraySubsetAndShapeError::from((indexer.clone(), chunk_shape.clone()))
-        })?;
+        .byte_ranges(&chunk_shape, element_size_bits_usize)?
+        .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte
-    let byte_ranges: Vec<ByteRange> = bit_ranges
-        .iter()
-        .map(|bit_range| {
-            let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
-            let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
-            ByteRange::new(byte_start..byte_end)
-        })
-        .collect();
+    let mut byte_ranges = bit_ranges.iter().map(|bit_range| {
+        let byte_start = offset + bit_range.start(encoded_length_bits).div(8);
+        let byte_end = offset + bit_range.end(encoded_length_bits).div_ceil(8);
+        ByteRange::new(byte_start..byte_end)
+    });
 
     // Retrieve those bytes
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
-        input_handle.partial_decode(&byte_ranges, options).await
+        input_handle.partial_decode(&mut byte_ranges, options).await
     } else {
-        input_handle.partial_decode(&byte_ranges, options)
+        input_handle.partial_decode(&mut byte_ranges, options)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode(&byte_ranges, options)?;
+    let encoded_bytes = input_handle.partial_decode(&mut byte_ranges, options)?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {
         let mut bytes_dec: Vec<u8> =
-            vec![0; usize::try_from(indexer.num_elements() * data_type_size_dec as u64).unwrap()];
+            vec![0; usize::try_from(indexer.len() * data_type_size_dec as u64).unwrap()];
         let mut component_idx_outer = 0;
         for (packed_elements, bit_range) in encoded_bytes.into_iter().zip(bit_ranges) {
             // Get the bit range within the entire chunk
@@ -153,10 +145,7 @@ fn partial_decode<'a>(
         ArrayBytes::new_flen(bytes_dec)
     } else {
         ArrayBytes::new_fill_value(
-            ArraySize::new(
-                decoded_representation.data_type().size(),
-                indexer.num_elements(),
-            ),
+            ArraySize::new(decoded_representation.data_type().size(), indexer.len()),
             decoded_representation.fill_value(),
         )
     };
@@ -202,7 +191,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
@@ -256,7 +245,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
 
     async fn partial_decode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode_async(

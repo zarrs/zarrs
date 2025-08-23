@@ -359,7 +359,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     .array
                     .codecs()
                     .partial_decoder(chunk_encoded, &chunk_representation, options)?
-                    .partial_decode(&chunk_subset, options)?
+                    .partial_decode(chunk_subset, options)?
                     .into_owned()
                     .into())
             } else {
@@ -491,7 +491,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                     })
                 })?;
             Ok(partial_decoder
-                .partial_decode(&chunk_subset, options)?
+                .partial_decode(chunk_subset, options)?
                 .into_owned()
                 .into())
         }

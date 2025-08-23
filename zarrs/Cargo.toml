@@ -32,7 +32,7 @@ zlib = ["dep:flate2"] # Enable the zlib codec
 zstd = ["dep:zstd"] # Enable the zstd codec
 ndarray = ["dep:ndarray"] # Adds ndarray utility functions to Array
 dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
-async = ["dep:async-generic", "dep:async-trait", "dep:futures", "zarrs_storage/async"] # Enable experimental async API
+async = ["dep:async-generic", "dep:async-trait", "dep:futures", "moka/future", "zarrs_storage/async"] # Enable experimental async API
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
 float8 = ["dep:float8"] # Adds support for float8 array elements
@@ -63,7 +63,7 @@ inventory.workspace = true
 itertools = "0.14.0"
 lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
-ndarray = { version = ">=0.15.0,<17", optional = true }
+ndarray = { version = ">=0.15.4,<17", optional = true }
 num.workspace = true
 pco = { version = "0.4.0", optional = true }
 rayon = "1.10.0"
