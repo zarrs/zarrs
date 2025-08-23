@@ -54,7 +54,7 @@ use crate::{
 /// [23:41:19.891] get(group/array/zarr.json) -> len=Ok(1315)
 /// [23:41:19.892] list() -> [group/array/c/0/0, group/array/c/1/0, group/array/zarr.json, group/zarr.json]
 /// ```
-trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
+pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
 impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 
 pub struct UsageLogStorageAdapter<TStorage: ?Sized> {

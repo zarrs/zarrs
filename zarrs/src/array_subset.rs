@@ -25,7 +25,7 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
-    indexer::{IncompatibleIndexerError, Indexer},
+    indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},
 };
 
 /// An array subset.
@@ -460,21 +460,21 @@ impl Indexer for ArraySubset {
         self.shape().to_vec()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
         Box::new(self.indices().into_iter())
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn IndexerIterator<Item = u64>>, IncompatibleIndexerError> {
         Ok(Box::new(self.linearised_indices(array_shape)?.into_iter()))
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IncompatibleIndexerError> {
         Ok(Box::new(
             self.contiguous_linearised_indices(array_shape)?.into_iter(),
         ))
