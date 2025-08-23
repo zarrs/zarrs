@@ -41,9 +41,10 @@ use futures::{StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
-    async_store_set_partial_values, byte_range::{ByteRangeIterator}, AsyncBytes, AsyncListableStorageTraits,
-    AsyncReadableStorageTraits, AsyncWritableStorageTraits, MaybeAsyncBytes, StorageError,
-    StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    async_store_set_partial_values, byte_range::ByteRangeIterator, AsyncBytes,
+    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
+    MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes,
+    StorePrefix,
 };
 
 /// Maps a [`StoreKey`] to an [`object_store`] path.

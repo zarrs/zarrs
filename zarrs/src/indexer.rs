@@ -2,8 +2,8 @@
 
 use thiserror::Error;
 use zarrs_metadata::ArrayShape;
-use zarrs_storage::byte_range::ByteRange;
 use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{ravel_indices, ArrayIndices},
@@ -48,7 +48,8 @@ impl IncompatibleIndexerError {
     }
 }
 
-/// A trait object for an iterator that is MaybeSend and MaybeSync.
+/// This trait combines `MaybeSend` and `MaybeSync`
+/// for an iterator over generic items.
 pub trait IndexerIterator: Iterator + MaybeSend + MaybeSync {}
 impl<T: Iterator + MaybeSend + MaybeSync> IndexerIterator for T {}
 

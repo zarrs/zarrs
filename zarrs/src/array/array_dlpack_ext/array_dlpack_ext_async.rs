@@ -12,7 +12,10 @@ use super::RawBytesDlPack;
 use super::ArrayDlPackExtError;
 
 /// An async [`Array`] extension trait with methods that return `DLPack` managed tensors.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 'static>:
     private::Sealed
@@ -70,7 +73,10 @@ pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 's
     ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
 }
 
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayDlPackExt<TStorage>
     for Array<TStorage>

@@ -124,7 +124,8 @@ use crate::{
     indexer::IncompatibleIndexerError,
     plugin::{Plugin, PluginCreateError},
     storage::byte_range::{
-        extract_byte_ranges_read_seek, ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError,
+        extract_byte_ranges_read_seek, ByteOffset, ByteRange, ByteRangeIterator,
+        InvalidByteRangeError,
     },
     storage::{ReadableStorage, StorageError, StoreKey},
 };
@@ -732,7 +733,10 @@ impl BytesPartialEncoderTraits for StoragePartialEncoder {
 }
 
 /// Traits for array to array codecs.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
@@ -936,7 +940,10 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 }
 
 /// Traits for array to bytes codecs.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
@@ -1094,7 +1101,10 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 }
 
 /// Traits for bytes to bytes codecs.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.

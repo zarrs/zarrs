@@ -7,12 +7,16 @@ use itertools::Itertools;
 use zarrs_shared::{MaybeSend, MaybeSync};
 
 use super::{
-    byte_range::{ByteRange, ByteRangeIterator}, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::{ByteRange, ByteRangeIterator},
+    AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
 pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
@@ -123,7 +127,10 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
 }
 
 /// Async listable storage traits.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
 pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
@@ -230,7 +237,10 @@ pub async fn async_store_set_partial_values<T: AsyncReadableWritableStorageTrait
 }
 
 /// Async writable storage traits.
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
 pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
@@ -278,7 +288,10 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait AsyncReadableWritableStorageTraits:
     AsyncReadableStorageTraits + AsyncWritableStorageTraits

@@ -74,7 +74,10 @@ impl CodecTraits for ZlibCodec {
     }
 }
 
-#[cfg_attr(all(feature = "async", not(target_arch = "wasm32")), async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl BytesToBytesCodecTraits for ZlibCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {

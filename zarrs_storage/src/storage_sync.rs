@@ -6,8 +6,9 @@ use itertools::Itertools;
 use zarrs_shared::{MaybeSend, MaybeSync};
 
 use super::{
-    byte_range::{ByteRange, ByteRangeIterator}, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
-    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::{ByteRange, ByteRangeIterator},
+    Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Readable storage traits.

@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
-use zarrs_storage::AsyncReadableStorageTraits;
 use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::AsyncReadableStorageTraits;
 
 use crate::{
     array::ArrayBytes, array_subset::ArraySubset, storage::AsyncReadableWritableStorageTraits,
