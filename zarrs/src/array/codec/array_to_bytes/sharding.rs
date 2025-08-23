@@ -82,7 +82,6 @@ use crate::{
         ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
         ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
-    array_subset::ArraySubset,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
     storage::byte_range::ByteRange,
@@ -225,12 +224,9 @@ fn inner_chunk_byte_range(
 
 fn partial_decode_empty_shard<'a>(
     shard_representation: &ChunkRepresentation,
-    indexer: &ArraySubset,
+    indexer: &dyn crate::indexer::Indexer,
 ) -> ArrayBytes<'a> {
-    let array_size = ArraySize::new(
-        shard_representation.data_type().size(),
-        indexer.num_elements(),
-    );
+    let array_size = ArraySize::new(shard_representation.data_type().size(), indexer.len());
     ArrayBytes::new_fill_value(array_size, shard_representation.fill_value())
 }
 
@@ -272,7 +268,7 @@ fn decode_shard_index_partial_decoder(
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
-        .partial_decode(&[index_byte_range], options)?
+        .partial_decode(&mut [index_byte_range].into_iter(), options)?
         .map(|mut v| v.remove(0));
     Ok(match encoded_shard_index {
         Some(encoded_shard_index) => Some(decode_shard_index(
@@ -300,7 +296,7 @@ async fn decode_shard_index_async_partial_decoder(
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
-        .partial_decode(&[index_byte_range], options)
+        .partial_decode(&mut [index_byte_range].into_iter(), options)
         .await?
         .map(|mut v| v.remove(0));
     Ok(match encoded_shard_index {

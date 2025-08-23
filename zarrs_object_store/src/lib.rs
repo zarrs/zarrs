@@ -100,13 +100,12 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
         };
         let ranges = byte_ranges
-            .iter()
             .map(|byte_range| byte_range.to_range(size))
             .collect::<Vec<_>>();
         let get_ranges = self

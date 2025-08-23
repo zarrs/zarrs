@@ -143,7 +143,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     ] {
         println!("{inner_chunk_subset}");
         let decoded_inner_chunk_bytes =
-            partial_decoder.partial_decode(&inner_chunk_subset.into(), &options)?;
+            partial_decoder.partial_decode(&inner_chunk_subset, &options)?;
         let ndarray = bytes_to_ndarray::<u16>(
             &inner_chunk_shape,
             decoded_inner_chunk_bytes.into_fixed()?.into_owned(),

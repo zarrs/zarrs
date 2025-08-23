@@ -6,7 +6,7 @@ use crate::{
     array::ravel_indices,
     array_subset::{
         iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator, ArraySubset,
-        IncompatibleArraySubsetAndShapeError,
+        IncompatibleIndexerError,
     },
 };
 
@@ -43,11 +43,11 @@ impl ContiguousLinearisedIndices {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
     pub fn new(
         subset: &ArraySubset,
         array_shape: Vec<u64>,
-    ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<Self, IncompatibleIndexerError> {
         let inner = subset.contiguous_indices(&array_shape)?;
         Ok(Self { inner, array_shape })
     }

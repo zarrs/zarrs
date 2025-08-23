@@ -21,7 +21,7 @@ use crate::{
         ravel_indices, transmute_to_bytes, ArrayBytes, ArraySize, ChunkRepresentation, ChunkShape,
         CodecChain, RawBytes,
     },
-    array_subset::{ArraySubset, IncompatibleArraySubsetAndShapeError},
+    indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,
 };
 
@@ -105,7 +105,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     #[allow(clippy::similar_names)]
     fn partial_encode(
         &self,
-        chunk_subset_indexer: &ArraySubset,
+        chunk_subset_indexer: &dyn crate::indexer::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -131,16 +131,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .max()
             .expect("shards cannot be empty");
 
-        let get_inner_chunks = |chunk_subset| {
-            self.chunk_grid
-                .chunks_in_array_subset(chunk_subset)
-                .map_err(|_| {
-                    CodecError::InvalidArraySubsetError(IncompatibleArraySubsetAndShapeError::new(
-                        (*chunk_subset).clone(),
-                        chunks_per_shard.clone(),
-                    ))
-                })
-        };
+        let get_inner_chunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
         let inner_chunk_fill_value = || {
             let array_size = ArraySize::new(
                 self.inner_chunk_representation.data_type().size(),
@@ -155,6 +146,13 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let mut inner_chunks_intersected = HashSet::<u64>::new();
         let mut inner_chunks_indices = HashSet::<u64>::new();
 
+        let Some(chunk_subset_indexer) = chunk_subset_indexer.as_array_subset() else {
+            // TODO: Add support for generic indexers
+            return Err(CodecError::from(
+                "sharding_indexed does not yet support partial encoding with generic indexers",
+            ));
+        };
+
         // Check the subset is within the chunk shape
         if chunk_subset_indexer
             .end_exc()
@@ -162,12 +160,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .zip(self.decoded_representation.shape())
             .any(|(a, b)| *a > b.get())
         {
-            return Err(CodecError::InvalidArraySubsetError(
-                IncompatibleArraySubsetAndShapeError::new(
-                    (*chunk_subset_indexer).clone(),
-                    self.decoded_representation.shape_u64(),
-                ),
-            ));
+            Err(IncompatibleIndexerError::new_oob(
+                chunk_subset_indexer.end_exc(),
+                self.decoded_representation.shape_u64(),
+            ))?;
         }
 
         // Get the iterator over the inner chunks
@@ -231,7 +227,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling inner chunks
         let inner_chunks_encoded = self
             .input_handle
-            .partial_decode(&byte_ranges, options)?
+            .partial_decode(&mut byte_ranges.into_iter(), options)?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
         // Decode the straddling inner chunks
@@ -257,7 +253,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             };
 
         // Update all of the intersecting inner chunks
-        //   This loop is intentionally not run in parallel so that overapping subset updates are applied incrementally rather than having a non deterministic output.
         let inner_chunks_decoded = Arc::new(Mutex::new(inner_chunks_decoded));
         let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
 

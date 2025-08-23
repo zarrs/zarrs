@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    array::{array_bytes::update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation},
-    array_subset::ArraySubset,
-};
+use crate::array::{array_bytes::update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation};
 
 use super::{
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -21,7 +18,7 @@ use crate::array::codec::{
     output_handle: &Arc<dyn AsyncBytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    chunk_subset_indexer: &ArraySubset,
+    chunk_subset_indexer: &dyn crate::indexer::Indexer,
     chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 )))]
@@ -30,7 +27,7 @@ fn partial_encode(
     output_handle: &Arc<dyn BytesPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
-    chunk_subset_indexer: &ArraySubset,
+    chunk_subset_indexer: &dyn crate::indexer::Indexer,
     chunk_subset_bytes: &ArrayBytes<'_>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
@@ -64,7 +61,7 @@ fn partial_encode(
 
     // Update the chunk
     chunk_subset_bytes.validate(
-        chunk_subset_indexer.num_elements(),
+        chunk_subset_indexer.len(),
         decoded_representation.data_type().size(),
     )?;
 
@@ -76,17 +73,20 @@ fn partial_encode(
         decoded_representation.data_type().size(),
     )?;
 
+    // Erase existing data
+    #[cfg(feature = "async")]
+    if _async {
+        output_handle.erase().await?;
+    } else {
+        output_handle.erase()?;
+    }
+    #[cfg(not(feature = "async"))]
+    output_handle.erase()?;
+
     let is_fill_value = !options.store_empty_chunks()
         && chunk_bytes.is_fill_value(decoded_representation.fill_value());
     if is_fill_value {
-        #[cfg(feature = "async")]
-        if _async {
-            output_handle.erase().await
-        } else {
-            output_handle.erase()
-        }
-        #[cfg(not(feature = "async"))]
-        output_handle.erase()
+        Ok(())
     } else {
         // Store the updated chunk
         let chunk_bytes = codec.encode(chunk_bytes, decoded_representation, options)?;
@@ -136,7 +136,7 @@ impl ArrayPartialEncoderTraits for ArrayToBytesPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -189,7 +189,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToBytesPartialEncoderDefault {
 
     async fn partial_encode(
         &self,
-        indexer: &ArraySubset,
+        indexer: &dyn crate::indexer::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {

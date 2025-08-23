@@ -78,7 +78,7 @@ impl ReadableStorageTraits for MemoryStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &[ByteRange],
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
@@ -86,16 +86,16 @@ impl ReadableStorageTraits for MemoryStore {
             let data = data.clone();
             drop(data_map);
             let data = data.read();
-            let mut out = Vec::with_capacity(byte_ranges.len());
-            for byte_range in byte_ranges {
-                let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
-                let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
-                if end > data.len() {
-                    return Err(InvalidByteRangeError::new(*byte_range, data.len() as u64).into());
-                }
-                let bytes = data[start..end].to_vec();
-                out.push(bytes.into());
-            }
+            let out = byte_ranges
+                .map(|byte_range| {
+                    let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
+                    let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
+                    if end > data.len() {
+                        return Err(InvalidByteRangeError::new(byte_range, data.len() as u64));
+                    }
+                    Ok(data[start..end].to_vec().into())
+                })
+                .collect::<Result<Vec<Bytes>, InvalidByteRangeError>>()?;
             Ok(Some(out))
         } else {
             Ok(None)

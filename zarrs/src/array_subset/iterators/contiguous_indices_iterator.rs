@@ -5,8 +5,7 @@ use itertools::izip;
 use crate::{
     array::ArrayIndices,
     array_subset::{
-        iterators::indices_iterator::IndicesIntoIterator, ArraySubset,
-        IncompatibleArraySubsetAndShapeError,
+        iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
 };
 
@@ -42,19 +41,24 @@ impl ContiguousIndices {
     /// Create a new contiguous indices iterator.
     ///
     /// # Errors
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if `array_shape` does not encapsulate `subset`.
+    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
     pub fn new(
         subset: &ArraySubset,
         array_shape: &[u64],
-    ) -> Result<Self, IncompatibleArraySubsetAndShapeError> {
-        if !(subset.dimensionality() == array_shape.len()
-            && std::iter::zip(subset.end_exc(), array_shape).all(|(end, shape)| end <= *shape))
-        {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                subset.clone(),
+    ) -> Result<Self, IncompatibleIndexerError> {
+        if subset.dimensionality() != array_shape.len() {
+            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                subset.dimensionality(),
+                array_shape.len(),
+            ));
+        }
+        if std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape) {
+            return Err(IncompatibleIndexerError::new_oob(
+                subset.end_exc(),
                 array_shape.to_vec(),
             ));
         }
+
         let mut contiguous = true;
         let mut contiguous_elements = 1;
         let mut shape_out: Vec<u64> = Vec::with_capacity(array_shape.len());

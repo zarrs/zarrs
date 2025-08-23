@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
+- **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: impl Iterator<Item = ByteRange>` for
+  - `extract_byte_ranges[{_concat,_read_seek,_read}]`
+  - `[Async]ReadableStorageTraits::get_partial_values_key`
+
+### Removed
+- **Breaking**: Remove `extract_byte_ranges_unchecked`
+- **Breaking**: Remove `extract_byte_ranges_concat_unchecked`
 
 ## [0.3.4] - 2025-05-16
 

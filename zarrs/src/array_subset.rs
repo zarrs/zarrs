@@ -25,7 +25,7 @@ use itertools::izip;
 
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
-    storage::byte_range::ByteRange,
+    indexer::{IncompatibleIndexerError, Indexer},
 };
 
 /// An array subset.
@@ -261,31 +261,10 @@ impl ArraySubset {
         izip!(indices, &self.start, &self.shape).all(|(&i, &o, &s)| i >= o && i < o + s)
     }
 
-    /// Return the byte ranges of an array subset in an array with `array_shape` and `element_size`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
-    pub fn byte_ranges(
-        &self,
-        array_shape: &[u64],
-        element_size: usize,
-    ) -> Result<Vec<ByteRange>, IncompatibleArraySubsetAndShapeError> {
-        let mut byte_ranges: Vec<ByteRange> = Vec::new();
-        let element_size = element_size as u64;
-        for (array_index, contiguous_elements) in self.contiguous_linearised_indices(array_shape)? {
-            let byte_index = array_index * element_size;
-            let byte_length = contiguous_elements * element_size;
-            byte_ranges.push(ByteRange::FromStart(byte_index, Some(byte_length)));
-        }
-        Ok(byte_ranges)
-    }
-
     /// Return the elements in this array subset from an array with shape `array_shape`.
     ///
     /// # Errors
-    ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
+    /// Returns [`IncompatibleIndexerError`] if the length of `array_shape` does not match the array subset dimensionality or the array subset is outside of the bounds of `array_shape`.
     ///
     /// # Panics
     /// Panics if attempting to access a byte index beyond [`usize::MAX`].
@@ -293,20 +272,32 @@ impl ArraySubset {
         &self,
         elements: &[T],
         array_shape: &[u64],
-    ) -> Result<Vec<T>, IncompatibleArraySubsetAndShapeError> {
-        let is_same_shape = elements.len() as u64 == array_shape.iter().product::<u64>();
-        let is_correct_dimensionality = array_shape.len() == self.dimensionality();
-        let is_in_bounds = self
+    ) -> Result<Vec<T>, IncompatibleIndexerError> {
+        if self.dimensionality() != array_shape.len() {
+            return Err(IncompatibleDimensionalityError::new(
+                self.dimensionality(),
+                array_shape.len(),
+            )
+            .into());
+        }
+        if elements.len() as u64 != array_shape.iter().product::<u64>() {
+            return Err(IncompatibleIndexerError::new_incompatible_length(
+                elements.len() as u64,
+                array_shape.iter().product::<u64>(),
+            ));
+        }
+        if self
             .end_exc()
             .iter()
             .zip(array_shape)
-            .all(|(end, shape)| end <= shape);
-        if !(is_correct_dimensionality && is_in_bounds && is_same_shape) {
-            return Err(IncompatibleArraySubsetAndShapeError(
-                self.clone(),
+            .any(|(end, shape)| end > shape)
+        {
+            return Err(IncompatibleIndexerError::new_oob(
+                self.end_exc(),
                 array_shape.to_vec(),
             ));
         }
+
         let num_elements = usize::try_from(self.num_elements()).unwrap();
         let mut elements_subset = Vec::with_capacity(num_elements);
         let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
@@ -338,11 +329,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<LinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<LinearisedIndices, IncompatibleIndexerError> {
         LinearisedIndices::new(self.clone(), array_shape.to_vec())
     }
 
@@ -350,11 +341,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn contiguous_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<ContiguousIndices, IncompatibleIndexerError> {
         ContiguousIndices::new(self, array_shape)
     }
 
@@ -362,11 +353,11 @@ impl ArraySubset {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleArraySubsetAndShapeError`] if the `array_shape` does not encapsulate this array subset.
+    /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate this array subset.
     pub fn contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<ContiguousLinearisedIndices, IncompatibleArraySubsetAndShapeError> {
+    ) -> Result<ContiguousLinearisedIndices, IncompatibleIndexerError> {
         ContiguousLinearisedIndices::new(self, array_shape.to_vec())
     }
 
@@ -456,6 +447,44 @@ impl ArraySubset {
     }
 }
 
+impl Indexer for ArraySubset {
+    fn dimensionality(&self) -> usize {
+        self.start.len()
+    }
+
+    fn len(&self) -> u64 {
+        self.num_elements()
+    }
+
+    fn output_shape(&self) -> Vec<u64> {
+        self.shape().to_vec()
+    }
+
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+        Box::new(self.indices().into_iter())
+    }
+
+    fn iter_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+        Ok(Box::new(self.linearised_indices(array_shape)?.into_iter()))
+    }
+
+    fn iter_contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+        Ok(Box::new(
+            self.contiguous_linearised_indices(array_shape)?.into_iter(),
+        ))
+    }
+
+    fn as_array_subset(&self) -> Option<&ArraySubset> {
+        Some(self)
+    }
+}
+
 /// An incompatible dimensionality error.
 #[derive(Copy, Clone, Debug, Error)]
 #[error("incompatible dimensionality {0}, expected {1}")]
@@ -466,19 +495,6 @@ impl IncompatibleDimensionalityError {
     #[must_use]
     pub const fn new(got: usize, expected: usize) -> Self {
         Self(got, expected)
-    }
-}
-
-/// An incompatible array and array shape error.
-#[derive(Clone, Debug, Error, From)]
-#[error("incompatible array subset {0} with array shape {1:?}")]
-pub struct IncompatibleArraySubsetAndShapeError(ArraySubset, ArrayShape);
-
-impl IncompatibleArraySubsetAndShapeError {
-    /// Create a new incompatible array subset and shape error.
-    #[must_use]
-    pub fn new(array_subset: ArraySubset, array_shape: ArrayShape) -> Self {
-        Self(array_subset, array_shape)
     }
 }
 
@@ -522,6 +538,7 @@ impl From<ArraySubsetError> for ArrayError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::byte_range::ByteRange;
 
     #[test]
     fn array_subset() {
@@ -581,17 +598,13 @@ mod tests {
         let array_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
 
         assert!(array_subset.byte_ranges(&[1, 1], 1).is_err());
+        let ranges = array_subset
+            .byte_ranges(&[4, 4], 1)
+            .unwrap()
+            .collect::<Vec<ByteRange>>();
 
         assert_eq!(
-            array_subset.byte_ranges(&[4, 4], 1).unwrap(),
-            vec![
-                ByteRange::FromStart(5, Some(2)),
-                ByteRange::FromStart(9, Some(2))
-            ]
-        );
-
-        assert_eq!(
-            array_subset.byte_ranges(&[4, 4], 1).unwrap(),
+            ranges,
             vec![
                 ByteRange::FromStart(5, Some(2)),
                 ByteRange::FromStart(9, Some(2))
