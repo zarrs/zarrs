@@ -7,6 +7,8 @@ use std::{
 
 use itertools::Itertools;
 
+use zarrs_shared::{MaybeSend, MaybeSync};
+
 use crate::{
     byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
@@ -54,7 +56,7 @@ use crate::{
 /// ```
 pub struct UsageLogStorageAdapter<TStorage: ?Sized> {
     storage: Arc<TStorage>,
-    handle: Arc<Mutex<dyn Write + Send + Sync>>,
+    handle: Arc<Mutex<dyn Write + MaybeSend + MaybeSync>>,
     prefix_func: fn() -> String,
 }
 
@@ -68,7 +70,7 @@ impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
     /// Create a new usage log storage adapter.
     pub fn new(
         storage: Arc<TStorage>,
-        handle: Arc<Mutex<dyn Write + Send + Sync>>,
+        handle: Arc<Mutex<dyn Write + MaybeSend + MaybeSync>>,
         prefix_func: fn() -> String,
     ) -> Self {
         Self {
@@ -96,7 +98,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
@@ -306,7 +308,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self

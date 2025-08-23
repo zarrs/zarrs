@@ -56,6 +56,10 @@ component_management:
       name: zarrs_registry
       paths:
         - zarrs_registry/**
+    - component_id: zarrs_shared
+      name: zarrs_shared
+      paths:
+        - zarrs_shared/**
     - component_id: zarrs_storage
       name: zarrs_storage
       paths:

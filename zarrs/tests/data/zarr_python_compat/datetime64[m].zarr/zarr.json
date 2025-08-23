@@ -5,7 +5,7 @@
   "data_type": {
     "name": "numpy.datetime64",
     "configuration": {
-      "unit": "m",
+      "unit": "M",
       "scale_factor": 1
     }
   },

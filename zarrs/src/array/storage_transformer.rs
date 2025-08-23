@@ -11,6 +11,7 @@
 mod storage_transformer_chain;
 pub use storage_transformer_chain::StorageTransformerChain;
 use zarrs_plugin::{Plugin, PluginUnsupportedError};
+use zarrs_shared::{MaybeSend, MaybeSync};
 
 use std::sync::Arc;
 
@@ -68,7 +69,7 @@ pub fn try_create_storage_transformer(
 
 /// A storage transformer extension.
 #[cfg_attr(feature = "async", async_trait::async_trait)]
-pub trait StorageTransformerExtension: core::fmt::Debug + Send + Sync {
+pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync {
     /// Create metadata.
     fn create_metadata(&self) -> MetadataV3;
 

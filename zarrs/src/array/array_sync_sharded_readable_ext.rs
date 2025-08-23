@@ -7,6 +7,7 @@ use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::StorageHandle;
+use zarrs_shared::{MaybeSend, MaybeSync};
 
 use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
@@ -364,7 +365,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 unreachable!("exlusively sharded")
             };
             // TODO: trait upcasting
-            // let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
+            // let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
             // let partial_decoder = partial_decoder
             //     .downcast::<ShardingPartialDecoder>()
             //     .expect("array is exclusively sharded");
@@ -393,7 +394,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 unreachable!("exlusively sharded")
             };
             // TODO: trait upcasting
-            // let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
+            // let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
             // let partial_decoder = partial_decoder
             //     .downcast::<ShardingPartialDecoder>()
             //     .expect("array is exclusively sharded");

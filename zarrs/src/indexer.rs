@@ -3,6 +3,7 @@
 use thiserror::Error;
 use zarrs_metadata::ArrayShape;
 use zarrs_storage::byte_range::ByteRange;
+use zarrs_shared::{MaybeSend, MaybeSync};
 
 use crate::{
     array::{ravel_indices, ArrayIndices},
@@ -48,7 +49,7 @@ impl IncompatibleIndexerError {
 }
 
 /// A trait for a generic indexer.
-pub trait Indexer: Send + Sync {
+pub trait Indexer: MaybeSend + MaybeSync {
     /// Return the dimensionality of the indexer.
     #[must_use]
     fn dimensionality(&self) -> usize;
@@ -68,7 +69,7 @@ pub trait Indexer: Send + Sync {
     fn output_shape(&self) -> Vec<u64>;
 
     /// Returns an iterator over the indices of elements.
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync>;
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync>;
 
     /// Returns an iterator over the linearised indices of elements.
     ///
@@ -77,7 +78,7 @@ pub trait Indexer: Send + Sync {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError>;
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError>;
 
     /// Returns an iterator over contiguous sequences of linearised element indices.
     ///
@@ -86,7 +87,7 @@ pub trait Indexer: Send + Sync {
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError>;
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError>;
 
     /// Return the byte ranges of the indexer in an array with `array_shape` and `element_size`.
     ///
@@ -96,7 +97,7 @@ pub trait Indexer: Send + Sync {
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Box<dyn Iterator<Item = ByteRange> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = ByteRange> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         let element_size_u64 = element_size as u64;
         let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
             move |(array_index, contiguous_elements)| {
@@ -128,21 +129,21 @@ impl<T: Indexer> Indexer for &T {
         (**self).output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         (**self).iter_indices()
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         (**self).iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         (**self).iter_contiguous_linearised_indices(array_shape)
     }
 }
@@ -161,7 +162,7 @@ impl<T: Indexer> Indexer for &[T] {
         vec![self.len()]
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         let indices = self.iter().map(Indexer::iter_indices).collect::<Vec<_>>();
 
         Box::new(indices.into_iter().flat_map(IntoIterator::into_iter))
@@ -170,7 +171,7 @@ impl<T: Indexer> Indexer for &[T] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         let linearised_indices = self
             .iter()
             .map(|indexer| indexer.iter_linearised_indices(array_shape))
@@ -186,7 +187,7 @@ impl<T: Indexer> Indexer for &[T] {
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         let contiguous_linearised_indices = self
             .iter()
             .map(|indexer| indexer.iter_contiguous_linearised_indices(array_shape))
@@ -217,21 +218,21 @@ impl<T: Indexer> Indexer for Vec<T> {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         self.as_slice().iter_indices()
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -254,21 +255,21 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         self.as_slice().iter_indices()
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -291,7 +292,7 @@ impl Indexer for &[ArrayIndices] {
         vec![self.len()]
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         #[allow(clippy::unnecessary_to_owned)] // false positive
         Box::new(self.to_vec().into_iter())
     }
@@ -299,7 +300,7 @@ impl Indexer for &[ArrayIndices] {
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         let linearised_indices = self
             .iter()
             .map(|indices| {
@@ -322,7 +323,7 @@ impl Indexer for &[ArrayIndices] {
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         let contiguous_linearised_indices = self
             .iter()
             .map(|indices| {
@@ -361,21 +362,21 @@ impl Indexer for Vec<ArrayIndices> {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         self.as_slice().iter_indices()
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }
@@ -398,21 +399,21 @@ impl<const N: usize> Indexer for [ArrayIndices; N] {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + Send + Sync> {
+    fn iter_indices(&self) -> Box<dyn Iterator<Item = ArrayIndices> + MaybeSend + MaybeSync> {
         self.as_slice().iter_indices()
     }
 
     fn iter_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = u64> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = u64> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice().iter_linearised_indices(array_shape)
     }
 
     fn iter_contiguous_linearised_indices(
         &self,
         array_shape: &[u64],
-    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + Send + Sync>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn Iterator<Item = (u64, u64)> + MaybeSend + MaybeSync>, IncompatibleIndexerError> {
         self.as_slice()
             .iter_contiguous_linearised_indices(array_shape)
     }

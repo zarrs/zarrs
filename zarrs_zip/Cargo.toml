@@ -20,6 +20,7 @@ derive_more = { version = "2.0.0", features = ["from"] }
 itertools = "0.14.0"
 thiserror.workspace = true
 zarrs_storage.workspace = true
+zarrs_shared.workspace = true
 zip.workspace = true
 
 [dev-dependencies]

@@ -17,6 +17,7 @@
 use zarrs_storage::{
     byte_range::ByteRange, Bytes, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
 };
+use zarrs_shared::MaybeSend;
 
 use itertools::multiunzip;
 use reqwest::{
@@ -101,7 +102,7 @@ impl ReadableStorageTraits for HTTPStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let url = self.key_to_url(key).map_err(handle_url_error)?;
         let Some(size) = self.size_key(key)? else {

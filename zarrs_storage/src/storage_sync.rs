@@ -3,6 +3,8 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
+use zarrs_shared::{MaybeSend, MaybeSync};
+
 use super::{
     byte_range::ByteRange, Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue,
     StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
@@ -10,7 +12,7 @@ use super::{
 
 /// Readable storage traits.
 #[auto_impl(Arc)]
-pub trait ReadableStorageTraits: Send + Sync {
+pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve the value (bytes) associated with a given [`StoreKey`].
     ///
     /// Returns [`None`] if the key is not found.
@@ -32,7 +34,7 @@ pub trait ReadableStorageTraits: Send + Sync {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<Bytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
@@ -114,7 +116,7 @@ pub trait ReadableStorageTraits: Send + Sync {
 
 /// Listable storage traits.
 #[auto_impl(Arc)]
-pub trait ListableStorageTraits: Send + Sync {
+pub trait ListableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve all [`StoreKeys`] in the store.
     ///
     /// # Errors
@@ -212,7 +214,7 @@ pub fn store_set_partial_values<T: ReadableWritableStorageTraits>(
 
 /// Writable storage traits.
 #[auto_impl(Arc)]
-pub trait WritableStorageTraits: Send + Sync {
+pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     /// Store bytes at a [`StoreKey`].
     ///
     /// # Errors

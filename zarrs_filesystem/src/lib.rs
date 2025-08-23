@@ -13,6 +13,7 @@ use zarrs_storage::{
     StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
     StorePrefixes, WritableStorageTraits,
 };
+use zarrs_shared::MaybeSend;
 
 use bytes::BytesMut;
 use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
@@ -253,7 +254,7 @@ impl ReadableStorageTraits for FilesystemStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();

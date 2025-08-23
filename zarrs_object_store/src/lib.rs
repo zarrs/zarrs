@@ -45,6 +45,7 @@ use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncWritableStorageTraits, MaybeAsyncBytes, StorageError,
     StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
 };
+use zarrs_shared::{MaybeSend, MaybeSync};
 
 /// Maps a [`StoreKey`] to an [`object_store`] path.
 fn key_to_path(key: &StoreKey) -> object_store::path::Path {

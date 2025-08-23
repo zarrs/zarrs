@@ -1,5 +1,7 @@
 //! A storage transformer which records performance metrics.
 
+use zarrs_shared::MaybeSend;
+
 use crate::{
     byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
@@ -111,7 +113,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self.storage.get_partial_values_key(key, byte_ranges)?;
@@ -226,7 +228,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self

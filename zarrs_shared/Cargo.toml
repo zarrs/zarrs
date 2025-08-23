@@ -1,0 +1,23 @@
+[package]
+name = "zarrs_shared"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2021"
+rust-version = "1.77"
+description = "Shared traits and types for the zarrs crates"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_shared"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_shared"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs"]
+categories = ["encoding"]
+
+[lints]
+workspace = true
+
+[dependencies]
+half.workspace = true
+num.workspace = true
+thiserror.workspace = true
+derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
+inventory.workspace = true
