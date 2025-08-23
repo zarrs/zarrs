@@ -2,7 +2,10 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
-use crate::array::{DataType, FillValue};
+use crate::array::{
+    codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits},
+    DataType, FillValue,
+};
 use num::Integer;
 use zarrs_metadata::Configuration;
 use zarrs_registry::codec::RESHAPE;
@@ -20,6 +23,9 @@ use crate::{
 use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
+
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncArrayPartialDecoderTraits;
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]
@@ -165,6 +171,35 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
+    }
+
+    fn partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        todo!("the reshape codec does not yet support partial decoding")
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        _output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        todo!("the reshape codec does not yet support partial encoding")
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        todo!("the reshape codec does not yet support partial decoding")
     }
 }
 
