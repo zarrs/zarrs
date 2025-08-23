@@ -1,13 +1,11 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    storage::byte_range::{extract_byte_ranges, ByteRange},
+    storage::byte_range::{extract_byte_ranges, ByteRangeIterator},
 };
 
 #[cfg(feature = "async")]
@@ -32,7 +30,7 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
@@ -69,7 +67,7 @@ impl AsyncTestUnboundedPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;

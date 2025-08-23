@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     array::RawBytes,
-    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -43,7 +41,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 
     fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
@@ -92,7 +90,7 @@ impl AsyncByteIntervalPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
     async fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {

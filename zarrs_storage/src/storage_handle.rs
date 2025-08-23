@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use zarrs_shared::MaybeSend;
-
 use super::{
-    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StorePrefix, WritableStorageTraits,
 };
 
@@ -34,7 +32,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges)
     }
@@ -116,7 +114,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges).await
     }

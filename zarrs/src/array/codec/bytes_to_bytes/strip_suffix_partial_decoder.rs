@@ -1,13 +1,11 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    storage::byte_range::ByteRange,
+    storage::byte_range::{ByteRange, ByteRangeIterator},
 };
 
 #[cfg(feature = "async")]
@@ -39,7 +37,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         decoded_regions
@@ -90,7 +88,7 @@ impl AsyncStripSuffixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};

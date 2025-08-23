@@ -1,7 +1,5 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     array::{
         codec::{
@@ -10,7 +8,7 @@ use crate::{
         },
         RawBytes,
     },
-    storage::byte_range::ByteRange,
+    storage::byte_range::ByteRangeIterator,
 };
 
 #[cfg(feature = "async")]
@@ -36,7 +34,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
@@ -82,7 +80,7 @@ impl AsyncBloscPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        decoded_regions: &mut (dyn ByteRangeIterator),
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;

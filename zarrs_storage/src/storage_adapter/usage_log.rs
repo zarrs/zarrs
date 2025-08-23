@@ -10,7 +10,7 @@ use itertools::Itertools;
 use zarrs_shared::{MaybeSend, MaybeSync};
 
 use crate::{
-    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::{ByteRange, ByteRangeIterator}, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
     StorePrefix, WritableStorageTraits,
 };
@@ -54,9 +54,12 @@ use crate::{
 /// [23:41:19.891] get(group/array/zarr.json) -> len=Ok(1315)
 /// [23:41:19.892] list() -> [group/array/c/0/0, group/array/c/1/0, group/array/zarr.json, group/zarr.json]
 /// ```
+trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
+impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
+
 pub struct UsageLogStorageAdapter<TStorage: ?Sized> {
     storage: Arc<TStorage>,
-    handle: Arc<Mutex<dyn Write + MaybeSend + MaybeSync>>,
+    handle: Arc<Mutex<dyn WriteMaybeSendSync>>,
     prefix_func: fn() -> String,
 }
 
@@ -70,7 +73,7 @@ impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
     /// Create a new usage log storage adapter.
     pub fn new(
         storage: Arc<TStorage>,
-        handle: Arc<Mutex<dyn Write + MaybeSend + MaybeSync>>,
+        handle: Arc<Mutex<dyn WriteMaybeSendSync>>,
         prefix_func: fn() -> String,
     ) -> Self {
         Self {
@@ -98,7 +101,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
@@ -308,7 +311,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + MaybeSend),
+        byte_ranges: &mut (dyn ByteRangeIterator),
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self

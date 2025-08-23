@@ -17,6 +17,8 @@ use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use zarrs_shared::MaybeSend;
+
 /// A byte offset.
 pub type ByteOffset = u64;
 
@@ -386,6 +388,10 @@ pub fn extract_byte_ranges_read<T: Read>(
 
     Ok(out)
 }
+
+// Define a trait that combines Iterator and MaybeSend
+pub trait ByteRangeIterator: Iterator<Item = ByteRange> + MaybeSend {}
+impl<T: Iterator<Item = ByteRange> + MaybeSend> ByteRangeIterator for T {}
 
 #[cfg(test)]
 mod tests {
