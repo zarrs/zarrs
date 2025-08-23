@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         RawBytes,
     },
-    storage::byte_range::ByteRange,
+    storage::byte_range::{ByteRange, ByteRangeIterator},
 };
 
 #[cfg(feature = "async")]

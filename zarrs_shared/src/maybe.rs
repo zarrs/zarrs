@@ -1,6 +1,6 @@
-//! MaybeSend and MaybeSync traits for cross-platform async code.
+//! `MaybeSend` and `MaybeSync` traits for cross-platform async code.
 //!
-//! Reference: https://github.com/iced-rs/iced/blob/master/futures/src/maybe.rs
+//! Reference: <https://github.com/iced-rs/iced/blob/master/futures/src/maybe.rs>
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
