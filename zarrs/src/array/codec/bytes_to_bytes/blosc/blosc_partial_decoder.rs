@@ -34,7 +34,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
@@ -80,7 +80,7 @@ impl AsyncBloscPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;

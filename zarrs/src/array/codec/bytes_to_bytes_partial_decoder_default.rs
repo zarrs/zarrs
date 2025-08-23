@@ -14,14 +14,14 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn ByteRangeIterator),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn ByteRangeIterator),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
     #[cfg(feature = "async")]
@@ -80,7 +80,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode(
@@ -123,7 +123,7 @@ impl AsyncBytesToBytesPartialDecoderDefault {
 impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode_async(

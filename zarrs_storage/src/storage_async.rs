@@ -39,7 +39,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn ByteRangeIterator),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].

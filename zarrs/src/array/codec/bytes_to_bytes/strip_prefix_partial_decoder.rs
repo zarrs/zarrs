@@ -39,7 +39,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {
@@ -80,7 +80,7 @@ impl AsyncStripPrefixPartialDecoder {
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn ByteRangeIterator),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut decoded_regions = decoded_regions.map(|range| match range {

@@ -21,6 +21,11 @@ use crate::{
     MaybeAsyncBytes,
 };
 
+/// This trait combines Write and MaybeSend + MaybeSync
+/// as they cannot be combined together directly in function signatures.
+pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
+impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
+
 /// The usage log storage transformer. Logs storage method calls.
 ///
 /// It is intended to aid in debugging and optimising performance by revealing storage access patterns.
@@ -54,9 +59,6 @@ use crate::{
 /// [23:41:19.891] get(group/array/zarr.json) -> len=Ok(1315)
 /// [23:41:19.892] list() -> [group/array/c/0/0, group/array/c/1/0, group/array/zarr.json, group/zarr.json]
 /// ```
-pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
-impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
-
 pub struct UsageLogStorageAdapter<TStorage: ?Sized> {
     storage: Arc<TStorage>,
     handle: Arc<Mutex<dyn WriteMaybeSendSync>>,
@@ -101,7 +103,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn ByteRangeIterator),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
@@ -311,7 +313,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn ByteRangeIterator),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
