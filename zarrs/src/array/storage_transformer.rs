@@ -11,7 +11,7 @@
 mod storage_transformer_chain;
 pub use storage_transformer_chain::StorageTransformerChain;
 use zarrs_plugin::{Plugin, PluginUnsupportedError};
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use std::sync::Arc;
 

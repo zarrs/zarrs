@@ -3,12 +3,10 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use super::{
     byte_range::{ByteRange, ByteRangeIterator},
-    Bytes, MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    Bytes, MaybeBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
+    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Readable storage traits.

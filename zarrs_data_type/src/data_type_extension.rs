@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_plugin::{MaybeSend, MaybeSync};
 
 use crate::{
     data_type_extension_packbits_codec::DataTypeExtensionPackBitsCodec,

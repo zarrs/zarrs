@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     array_subset::ArraySubset,

@@ -17,7 +17,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use zarrs_shared::MaybeSend;
+use crate::MaybeSend;
 
 /// A byte offset.
 pub type ByteOffset = u64;

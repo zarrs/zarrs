@@ -19,7 +19,7 @@ pub use regular_bounded::*;
 
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 use crate::{

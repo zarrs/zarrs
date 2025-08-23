@@ -4,12 +4,10 @@ use auto_impl::auto_impl;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use super::{
     byte_range::{ByteRange, ByteRangeIterator},
-    AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange,
-    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    AsyncBytes, MaybeAsyncBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
+    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.

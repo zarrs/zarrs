@@ -4,9 +4,9 @@ use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use zarrs_shared::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::StorageHandle;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;

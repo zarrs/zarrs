@@ -4,12 +4,11 @@
 //!
 //! The docs for the [`AsyncToSyncBlockOn`] trait include an example implementation for the `tokio` runtime.
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
-    StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeSend, MaybeSync,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
 use std::sync::Arc;

@@ -115,7 +115,7 @@ use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue}
 use zarrs_metadata::{v3::MetadataV3, ArrayShape};
 use zarrs_plugin::PluginUnsupportedError;
 use zarrs_registry::ExtensionAliasesCodecV3;
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::config::global_config;
 use crate::storage::{StoreKeyOffsetValue, WritableStorage};

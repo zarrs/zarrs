@@ -2,8 +2,8 @@
 
 use thiserror::Error;
 use zarrs_metadata::ArrayShape;
-use zarrs_shared::{MaybeSend, MaybeSync};
 use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     array::{ravel_indices, ArrayIndices},

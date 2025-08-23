@@ -18,7 +18,7 @@ pub use default_suffix::{
 };
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::PluginUnsupportedError;
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     metadata::v3::MetadataV3,

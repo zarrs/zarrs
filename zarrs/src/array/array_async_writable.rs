@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 
-use zarrs_shared::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     array::ArrayBytes,

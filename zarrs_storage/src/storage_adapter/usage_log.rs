@@ -7,13 +7,11 @@ use std::{
 
 use itertools::Itertools;
 
-use zarrs_shared::{MaybeSend, MaybeSync};
-
 use crate::{
     byte_range::{ByteRange, ByteRangeIterator},
-    Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, ReadableStorageTraits,
+    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]

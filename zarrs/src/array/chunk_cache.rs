@@ -4,8 +4,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon_iter_concurrent_limit::iter_concurrent_limit;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::DataTypeSize;
-use zarrs_shared::{MaybeSend, MaybeSync};
 use zarrs_storage::ReadableStorageTraits;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     array::{
