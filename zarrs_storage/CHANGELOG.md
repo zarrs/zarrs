@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `Clone` for `Error` structs
+- Add `MaybeSend`/`MaybeSync` for WASM compatibility ([#245] by [@keller-mark])
 
 ### Changed
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
@@ -19,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Breaking**: Remove `extract_byte_ranges_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_concat_unchecked`
+
+[#245]: https://github.com/zarrs/zarrs/pull/245
 
 ## [0.3.4] - 2025-05-16
 
@@ -122,3 +125,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.1.2
 [0.1.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.1.1
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.1.0
+
+[@keller-mark]: https://github.com/keller-mark
