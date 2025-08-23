@@ -11,7 +11,7 @@ use zarrs::{
     array::{
         codec::{
             ArrayToBytesCodecTraits, BytesCodec, CodecOptions, ShardingCodecBuilder, SqueezeCodec,
-            TransposeCodec, TransposeOrder, VlenCodec,
+            VlenCodec,
         },
         ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
     },
@@ -19,6 +19,9 @@ use zarrs::{
     indexer::{IncompatibleIndexerError, Indexer},
 };
 use zarrs_metadata::ChunkShape;
+
+#[cfg(feature = "transpose")]
+use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 
 fn indexer_basic<T: Indexer>(
     indexer: T,
@@ -382,37 +385,39 @@ async fn async_indexer_array_subsets_fixed() {
         12.0, 13.0, 140.0, 150.0, //
     ];
 
-    let codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>> = vec![
-        Arc::new(BytesCodec::little()),
-        Arc::new(CodecChain::new(
-            vec![
-                // Arc::new(SqueezeCodec::new()), // FIXME: Add squeeze partial encoder
-                // #[cfg(feature = "transpose")]
-                // Arc::new(TransposeCodec::new(TransposeOrder::new(&[2, 1, 0]).unwrap())), // FIXME: Add transpose partial encoder
-            ],
-            Arc::new(BytesCodec::little()),
-            vec![],
-        )),
-        // Arc::new(CodecChain::new(
-        //     vec![
-        //         // Arc::new(SqueezeCodec::new()), // FIXME: Add squeeze partial encoder
-        //         // #[cfg(feature = "transpose")]
-        //         // Arc::new(TransposeCodec::new(TransposeOrder::new(&[2, 1, 0]).unwrap())), // FIXME: Add transpose partial encoder
-        //     ],
-        //     ShardingCodecBuilder::new(  // FIXME: Add generic indexing support to sharding indexed partial encoder
-        //         vec![
-        //             NonZeroU64::new(1).unwrap(),
-        //             NonZeroU64::new(2).unwrap(),
-        //             NonZeroU64::new(2).unwrap(),
-        //         ]
-        //         .into(),
-        //     )
-        //     .build_arc(),
-        //     vec![],
-        // )),
+    let codecs: Vec<(Arc<dyn ArrayToBytesCodecTraits>, bool)> = vec![
+        (Arc::new(BytesCodec::little()), true),
+        (
+            Arc::new(CodecChain::new(
+                vec![
+                    Arc::new(SqueezeCodec::new()),
+                    #[cfg(feature = "transpose")]
+                    Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
+                ],
+                Arc::new(BytesCodec::little()),
+                vec![],
+            )),
+            false, // FIXME: Add squeeze / transpose partial encoder
+        ),
+        (
+            Arc::new(CodecChain::new(
+                vec![
+                    Arc::new(SqueezeCodec::new()),
+                    #[cfg(feature = "transpose")]
+                    Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
+                ],
+                ShardingCodecBuilder::new(
+                    // FIXME: Add generic indexing support to sharding indexed partial encoder
+                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
+                )
+                .build_arc(),
+                vec![],
+            )),
+            false,
+        ),
     ];
 
-    for codec in codecs {
+    for (codec, test_partial_encoding) in codecs {
         assert_eq!(
             indexer_partial_decode_impl(
                 codec.clone(),
@@ -435,17 +440,19 @@ async fn async_indexer_array_subsets_fixed() {
             .await,
             expected
         );
-        assert_eq!(
-            indexer_partial_encode_impl(
-                codec.clone(),
-                &shape,
-                &indexer,
-                &elements_partial_encode,
-                DataType::Float32,
-                &elements,
-            ),
-            expected_partial_encode
-        );
+        if test_partial_encoding {
+            assert_eq!(
+                indexer_partial_encode_impl(
+                    codec.clone(),
+                    &shape,
+                    &indexer,
+                    &elements_partial_encode,
+                    DataType::Float32,
+                    &elements,
+                ),
+                expected_partial_encode
+            );
+        }
     }
 }
 
@@ -483,33 +490,64 @@ async fn async_indexer_array_subsets_variable() {
         "dddd",
     ];
 
-    let codecs: Vec<Arc<dyn ArrayToBytesCodecTraits>> = vec![
-        Arc::new(VlenCodec::default()),
-        Arc::new(CodecChain::new(
-            vec![
-                Arc::new(SqueezeCodec::new()),
-                #[cfg(feature = "transpose")]
-                Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
-            ],
-            Arc::new(VlenCodec::default()),
-            vec![],
-        )),
-        Arc::new(CodecChain::new(
-            vec![
-                Arc::new(SqueezeCodec::new()),
-                #[cfg(feature = "transpose")]
-                Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
-            ],
-            ShardingCodecBuilder::new(
-                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
-            )
-            .array_to_bytes_codec(Arc::new(VlenCodec::default()))
-            .build_arc(),
-            vec![],
-        )),
+    let elements_partial_encode = [
+        "60.0", "70.0", "100.0", "110.0", "140.0", "150.0", "0.0", "10.0", "20.0", "30.0",
+    ]
+    .into_iter()
+    .map(|s| s.to_string())
+    .collect::<Vec<_>>();
+    let expected_partial_encode = vec![
+        "0.0",
+        "10.0",
+        "20.0",
+        "30.0", //
+        "eeeee",
+        "ffffff",
+        "60.0",
+        "70.0", //
+        "iiiiiiiii",
+        "jjjjjjjjjj",
+        "100.0",
+        "110.0", //
+        "mmmmmmmmmmmmm",
+        "nnnnnnnnnnnnnn",
+        "140.0",
+        "150.0", //
+    ];
+    let codecs: Vec<(Arc<dyn ArrayToBytesCodecTraits>, bool)> = vec![
+        (Arc::new(VlenCodec::default()), true),
+        (
+            Arc::new(CodecChain::new(
+                vec![
+                    Arc::new(SqueezeCodec::new()),
+                    #[cfg(feature = "transpose")]
+                    Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
+                ],
+                Arc::new(VlenCodec::default()),
+                vec![],
+            )),
+            false, // FIXME: Add squeeze / transpose partial encoder
+        ),
+        (
+            Arc::new(CodecChain::new(
+                vec![
+                    Arc::new(SqueezeCodec::new()),
+                    #[cfg(feature = "transpose")]
+                    Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
+                ],
+                ShardingCodecBuilder::new(
+                    // FIXME: Add generic indexing support to sharding indexed partial encoder
+                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
+                )
+                .array_to_bytes_codec(Arc::new(VlenCodec::default()))
+                .build_arc(),
+                vec![],
+            )),
+            false,
+        ),
     ];
 
-    for codec in codecs {
+    for (codec, test_partial_encoding) in codecs {
         assert_eq!(
             indexer_partial_decode_impl(
                 codec.clone(),
@@ -521,9 +559,28 @@ async fn async_indexer_array_subsets_variable() {
             expected
         );
         assert_eq!(
-            indexer_partial_decode_impl_async(codec, &shape, &indexer, DataType::String, &elements)
-                .await,
+            indexer_partial_decode_impl_async(
+                codec.clone(),
+                &shape,
+                &indexer,
+                DataType::String,
+                &elements
+            )
+            .await,
             expected,
         );
+        if test_partial_encoding {
+            assert_eq!(
+                indexer_partial_encode_impl(
+                    codec.clone(),
+                    &shape,
+                    &indexer,
+                    &elements_partial_encode,
+                    DataType::String,
+                    &elements
+                ),
+                expected_partial_encode
+            );
+        }
     }
 }
