@@ -26,7 +26,6 @@ pathdiff = "0.2.0"
 thiserror.workspace = true
 walkdir = "2.3.2"
 zarrs_storage.workspace = true
-zarrs_shared.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
