@@ -19,9 +19,7 @@ use super::{
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, DataTypeSize};
 use crate::array::codec::AsyncStoragePartialDecoder;
 use crate::storage::AsyncReadableStorageTraits;
-use crate::{
-    array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset,
-};
+use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]
