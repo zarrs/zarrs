@@ -41,9 +41,10 @@ use futures::{StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
-    async_store_set_partial_values, byte_range::ByteRange, AsyncBytes, AsyncListableStorageTraits,
-    AsyncReadableStorageTraits, AsyncWritableStorageTraits, MaybeAsyncBytes, StorageError,
-    StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    async_store_set_partial_values, byte_range::ByteRangeIterator, AsyncBytes,
+    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
+    MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes,
+    StorePrefix,
 };
 
 /// Maps a [`StoreKey`] to an [`object_store`] path.
@@ -85,7 +86,8 @@ impl<T: object_store::ObjectStore> AsyncObjectStore<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectStore<T> {
     async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
         let get = handle_result_notfound(self.object_store.get(&key_to_path(key)).await)?;
@@ -100,7 +102,7 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
@@ -147,7 +149,8 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectStore<T> {
     async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
         handle_result(self.object_store.put(&key_to_path(key), value.into()).await)?;
@@ -183,7 +186,8 @@ impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectSto
     }
 }
 
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: object_store::ObjectStore> AsyncListableStorageTraits for AsyncObjectStore<T> {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
         let mut list = handle_result(

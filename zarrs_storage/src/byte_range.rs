@@ -17,6 +17,8 @@ use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use crate::MaybeSend;
+
 /// A byte offset.
 pub type ByteOffset = u64;
 
@@ -386,6 +388,11 @@ pub fn extract_byte_ranges_read<T: Read>(
 
     Ok(out)
 }
+
+/// This trait combines `Iterator` and `MaybeSend`,
+/// as they cannot be combined together directly in function signatures.
+pub trait ByteRangeIterator: Iterator<Item = ByteRange> + MaybeSend {}
+impl<T: Iterator<Item = ByteRange> + MaybeSend> ByteRangeIterator for T {}
 
 #[cfg(test)]
 mod tests {

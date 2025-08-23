@@ -12,6 +12,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_storage/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+mod maybe;
 pub mod storage_adapter;
 mod storage_handle;
 mod storage_sync;
@@ -22,6 +23,8 @@ mod store_prefix;
 
 pub mod byte_range;
 use byte_range::{ByteOffset, ByteRange, InvalidByteRangeError};
+
+pub use maybe::{MaybeSend, MaybeSync};
 
 #[cfg(feature = "async")]
 mod storage_async;

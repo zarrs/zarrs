@@ -26,3 +26,6 @@ lcov.info
 
 # cargo-mutants
 mutants.out
+
+# MacOS files
+.DS_Store

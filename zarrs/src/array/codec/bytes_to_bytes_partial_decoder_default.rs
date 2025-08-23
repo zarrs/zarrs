@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_storage::byte_range::{extract_byte_ranges, ByteRange};
+use zarrs_storage::byte_range::{extract_byte_ranges, ByteRangeIterator};
 
 use crate::array::{BytesRepresentation, RawBytes};
 
@@ -14,14 +14,14 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+    decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
     #[cfg(feature = "async")]
@@ -80,7 +80,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialDecoderDefault {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode(
@@ -119,11 +119,12 @@ impl AsyncBytesToBytesPartialDecoderDefault {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode_async(

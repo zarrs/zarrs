@@ -19,6 +19,7 @@ pub use regular_bounded::*;
 
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 use crate::{
@@ -97,7 +98,7 @@ impl ChunkGrid {
 /// # Safety
 /// - Chunks must be disjoint.
 /// - Methods must check the dimensionality of arguments and returned indices/shapes/subsets must match the chunk grid dimensionality.
-pub unsafe trait ChunkGridTraits: core::fmt::Debug + Send + Sync {
+pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
     /// Create the metadata for the chunk grid.
     fn create_metadata(&self) -> MetadataV3;
 

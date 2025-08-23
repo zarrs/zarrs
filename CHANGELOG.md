@@ -99,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Rename `InvalidArraySubsetError` to `IncompatibleIndexer`
   - Remove `InvalidArraySubsetDimensionalityError`, included in `IncompatibleIndexer`
 - Optimised chunk key encoders
+- Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Bump `zarrs_metadata_ext` to 0.2.0
 - Bump `zarrs_storage` to 0.4.0
 - Bump `blosc-src` to 0.3.6
@@ -119,6 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Permit data types with empty configurations that do not require one
 - Erase chunks before writing the updated chunk in `ArrayTo{Array,Bytes}PartialEncoderDefault`
+
+[#245]: https://github.com/zarrs/zarrs/pull/245
 
 ## [0.21.2] - 2025-06-19
 
@@ -1590,3 +1593,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [@niklasmueboe]: https://github.com/niklasmueboe
 [@ilan-gold]: https://github.com/ilan-gold
 [@jder]: https://github.com/jder
+[@keller-mark]: https://github.com/keller-mark

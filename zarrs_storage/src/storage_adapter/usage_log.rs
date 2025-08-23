@@ -8,7 +8,8 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::ByteRange, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
+    byte_range::{ByteRange, ByteRangeIterator},
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, ReadableStorageTraits,
     StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
     StorePrefix, WritableStorageTraits,
 };
@@ -18,6 +19,11 @@ use crate::{
     AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
     MaybeAsyncBytes,
 };
+
+/// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
+/// as they cannot be combined together directly in function signatures.
+pub trait WriteMaybeSendSync: Write + MaybeSend + MaybeSync {}
+impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 
 /// The usage log storage transformer. Logs storage method calls.
 ///
@@ -54,7 +60,7 @@ use crate::{
 /// ```
 pub struct UsageLogStorageAdapter<TStorage: ?Sized> {
     storage: Arc<TStorage>,
-    handle: Arc<Mutex<dyn Write + Send + Sync>>,
+    handle: Arc<Mutex<dyn WriteMaybeSendSync>>,
     prefix_func: fn() -> String,
 }
 
@@ -68,7 +74,7 @@ impl<TStorage: ?Sized> UsageLogStorageAdapter<TStorage> {
     /// Create a new usage log storage adapter.
     pub fn new(
         storage: Arc<TStorage>,
-        handle: Arc<Mutex<dyn Write + Send + Sync>>,
+        handle: Arc<Mutex<dyn WriteMaybeSendSync>>,
         prefix_func: fn() -> String,
     ) -> Self {
         Self {
@@ -96,7 +102,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
@@ -286,7 +292,8 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
@@ -306,7 +313,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
@@ -356,7 +363,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
@@ -424,7 +432,8 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {

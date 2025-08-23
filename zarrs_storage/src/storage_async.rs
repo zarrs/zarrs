@@ -5,14 +5,19 @@ use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
 use super::{
-    byte_range::ByteRange, AsyncBytes, MaybeAsyncBytes, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::{ByteRange, ByteRangeIterator},
+    AsyncBytes, MaybeAsyncBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
+    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
-pub trait AsyncReadableStorageTraits: Send + Sync {
+pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve the value (bytes) associated with a given [`StoreKey`].
     ///
     /// Returns [`None`] if the key is not found.
@@ -37,7 +42,7 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
     async fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
@@ -120,9 +125,13 @@ pub trait AsyncReadableStorageTraits: Send + Sync {
 }
 
 /// Async listable storage traits.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
-pub trait AsyncListableStorageTraits: Send + Sync {
+pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
     /// Retrieve all [`StoreKeys`] in the store.
     ///
     /// # Errors
@@ -226,9 +235,13 @@ pub async fn async_store_set_partial_values<T: AsyncReadableWritableStorageTrait
 }
 
 /// Async writable storage traits.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 #[auto_impl(Arc)]
-pub trait AsyncWritableStorageTraits: Send + Sync {
+pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// Store bytes at a [`StoreKey`].
     ///
     /// # Errors
@@ -273,7 +286,11 @@ pub trait AsyncWritableStorageTraits: Send + Sync {
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 pub trait AsyncReadableWritableStorageTraits:
     AsyncReadableStorageTraits + AsyncWritableStorageTraits
 {

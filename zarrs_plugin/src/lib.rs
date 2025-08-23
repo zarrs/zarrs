@@ -16,6 +16,10 @@
 
 use thiserror::Error;
 
+mod maybe;
+
+pub use maybe::{MaybeSend, MaybeSync};
+
 /// A plugin.
 pub struct Plugin<TPlugin, TInputs> {
     /// the identifier of the plugin.
