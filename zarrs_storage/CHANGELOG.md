@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Breaking**: Remove `extract_byte_ranges_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_concat_unchecked`
+- **Breaking**: Remove `extract_byte_ranges_read`, no longer needed by `zarrs_zip`
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 
