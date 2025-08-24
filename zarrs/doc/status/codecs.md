@@ -1,6 +1,7 @@
 | Codec Type     | V3 `name`                          | V2 `id`                             | Feature Flag* |
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
 | Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
+|                | 🚧[`reshape`]                      | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | 🚧[`numcodecs.bitround`]†          | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
@@ -43,6 +44,7 @@
 [zarr-extensions/codecs/zstd]: https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/zstd
 
 [`transpose`]: crate::array::codec::array_to_array::transpose
+[`reshape`]: crate::array::codec::array_to_array::reshape
 [`numcodecs.bitround`]: crate::array::codec::array_to_array::bitround
 [`numcodecs.fixedscaleoffset`]: crate::array::codec::array_to_array::fixedscaleoffset
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze

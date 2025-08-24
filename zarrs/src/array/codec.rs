@@ -30,7 +30,7 @@ pub use options::{CodecMetadataOptions, CodecOptions, CodecOptionsBuilder};
 pub use array_to_array::bitround::*;
 #[cfg(feature = "transpose")]
 pub use array_to_array::transpose::*;
-pub use array_to_array::{fixedscaleoffset::*, squeeze::*};
+pub use array_to_array::{fixedscaleoffset::*, reshape::*, squeeze::*};
 
 // Array to bytes
 #[cfg(feature = "pcodec")]
