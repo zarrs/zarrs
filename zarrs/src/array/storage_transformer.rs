@@ -11,7 +11,7 @@
 mod storage_transformer_chain;
 pub use storage_transformer_chain::StorageTransformerChain;
 use zarrs_plugin::{Plugin, PluginUnsupportedError};
-use zarrs_storage::{MaybeSend, MaybeSync};
+use zarrs_storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
 
 use std::sync::Arc;
 
@@ -23,7 +23,9 @@ use crate::{
 };
 
 #[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorage, AsyncReadableStorage, AsyncWritableStorage};
+use crate::storage::{
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
 
 /// An [`Arc`] wrapped storage transformer.
 pub type StorageTransformer = Arc<dyn StorageTransformerExtension>;
@@ -95,6 +97,15 @@ pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync 
         storage: WritableStorage,
     ) -> Result<WritableStorage, StorageError>;
 
+    /// Create a readable and writable transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    fn create_readable_writable_transformer(
+        self: Arc<Self>,
+        storage: ReadableWritableStorage,
+    ) -> Result<ReadableWritableStorage, StorageError>;
+
     /// Create a listable transformer.
     ///
     /// # Errors
@@ -123,6 +134,16 @@ pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync 
         self: Arc<Self>,
         storage: AsyncWritableStorage,
     ) -> Result<AsyncWritableStorage, StorageError>;
+
+    #[cfg(feature = "async")]
+    /// Create an asynchronous readable and writable transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    async fn create_async_readable_writable_transformer(
+        self: Arc<Self>,
+        storage: AsyncReadableWritableStorage,
+    ) -> Result<AsyncReadableWritableStorage, StorageError>;
 
     #[cfg(feature = "async")]
     /// Create an asynchronous listable transformer.

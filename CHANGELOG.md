@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 - Impl `BytesPartialEncoderTraits` for `Mutex<Option<Vec<u8>>>`
+- Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
