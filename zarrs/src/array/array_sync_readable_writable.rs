@@ -11,8 +11,7 @@ use crate::{
 
 use super::{
     codec::{
-        ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialDecoder,
-        StoragePartialEncoder,
+        ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialEncoder,
     },
     concurrency::concurrency_chunks_and_codec,
     update_array_bytes, Array, ArrayError, Element,
@@ -389,28 +388,19 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
-        // Input
-        let storage_transformer_read = self
-            .storage_transformers()
-            .create_readable_transformer(storage_handle.clone())?;
-        let input_handle = Arc::new(StoragePartialDecoder::new(
-            storage_transformer_read,
-            self.chunk_key(chunk_indices),
-        ));
         let chunk_representation = self.chunk_array_representation(chunk_indices)?;
 
-        // Output
-        let storage_transformer_write = self
+        // Input/output
+        let storage_transformer = self
             .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        let output_handle = Arc::new(StoragePartialEncoder::new(
-            storage_transformer_write,
+            .create_readable_writable_transformer(storage_handle)?;
+        let input_output_handle = Arc::new(StoragePartialEncoder::new(
+            storage_transformer,
             self.chunk_key(chunk_indices),
         ));
 
         Ok(self.codecs.clone().partial_encoder(
-            input_handle,
-            output_handle,
+            input_output_handle,
             &chunk_representation,
             options,
         )?)

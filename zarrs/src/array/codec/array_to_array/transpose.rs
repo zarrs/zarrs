@@ -28,6 +28,7 @@
 
 mod transpose_codec;
 mod transpose_partial_decoder;
+mod transpose_partial_encoder;
 
 use std::sync::Arc;
 
@@ -40,9 +41,11 @@ use zarrs_registry::codec::TRANSPOSE;
 use crate::{
     array::{
         array_bytes::RawBytesOffsets,
-        codec::{Codec, CodecPlugin},
-        ArrayBytes, RawBytes,
+        codec::{Codec, CodecError, CodecPlugin},
+        ArrayBytes, ChunkRepresentation, RawBytes,
     },
+    array_subset::ArraySubset,
+    indexer::{IncompatibleIndexerError, Indexer},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
@@ -109,12 +112,16 @@ fn transpose_array(
     }
 }
 
-fn permute<T: Copy>(v: &[T], order: &[usize]) -> Vec<T> {
-    let mut vec = Vec::<T>::with_capacity(v.len());
-    for axis in order {
-        vec.push(v[*axis]);
+fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
+    if v.len() == order.len() {
+        let mut vec = Vec::<T>::with_capacity(v.len());
+        for axis in order {
+            vec.push(v[*axis]);
+        }
+        Some(vec)
+    } else {
+        None
     }
-    vec
 }
 
 fn transpose_vlen<'a>(
@@ -149,6 +156,92 @@ fn transpose_vlen<'a>(
         ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)
     };
     array_bytes
+}
+
+fn get_transposed_array_subset(
+    order: &TransposeOrder,
+    decoded_region: &ArraySubset,
+) -> Result<ArraySubset, CodecError> {
+    if decoded_region.dimensionality() != order.0.len() {
+        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            decoded_region.dimensionality(),
+            order.0.len(),
+        )
+        .into());
+    }
+
+    let start = permute(decoded_region.start(), &order.0).expect("matching dimensionality");
+    let size = permute(decoded_region.shape(), &order.0).expect("matching dimensionality");
+    let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
+    Ok(ArraySubset::from(ranges))
+}
+
+fn get_transposed_indexer(
+    order: &TransposeOrder,
+    indexer: &dyn Indexer,
+) -> Result<impl Indexer, CodecError> {
+    indexer
+        .iter_indices()
+        .map(|indices| permute(&indices, &order.0))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            IncompatibleIndexerError::new_incompatible_dimensionality(
+                indexer.dimensionality(),
+                order.0.len(),
+            )
+            .into()
+        })
+}
+
+/// Reverse the transpose on each subset
+fn do_transpose<'a>(
+    encoded_value: ArrayBytes<'a>,
+    subset: &ArraySubset,
+    order: &TransposeOrder,
+    decoded_representation: &ChunkRepresentation,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if subset.dimensionality() != order.0.len() {
+        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            subset.dimensionality(),
+            order.0.len(),
+        )
+        .into());
+    } else if decoded_representation.dimensionality() != order.0.len() {
+        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            decoded_representation.dimensionality(),
+            order.0.len(),
+        )
+        .into());
+    }
+
+    let order_decode = calculate_order_decode(order, decoded_representation.shape().len());
+    let data_type_size = decoded_representation.data_type().size();
+    encoded_value.validate(subset.num_elements(), data_type_size)?;
+    match encoded_value {
+        ArrayBytes::Variable(bytes, offsets) => {
+            let mut order_decode = vec![0; decoded_representation.shape().len()];
+            for (i, val) in order.0.iter().enumerate() {
+                order_decode[*val] = i;
+            }
+            Ok(transpose_vlen(
+                &bytes,
+                &offsets,
+                &subset.shape_usize(),
+                order_decode,
+            ))
+        }
+        ArrayBytes::Fixed(bytes) => {
+            let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
+            let bytes = transpose_array(
+                &order_decode,
+                &permute(subset.shape(), &order.0).expect("matching dimensionality"),
+                data_type_size,
+                &bytes,
+            )
+            .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
+            Ok(ArrayBytes::from(bytes))
+        }
+    }
 }
 
 #[cfg(test)]
