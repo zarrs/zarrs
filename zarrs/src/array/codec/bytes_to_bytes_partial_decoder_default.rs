@@ -11,14 +11,14 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
 
 #[cfg_attr(feature = "async", async_generic::async_generic(
     async_signature(
-    input_handle: &dyn AsyncBytesPartialDecoderTraits,
+    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
     decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 )))]
 pub(crate) fn partial_decode<'a>(
-    input_handle: &dyn BytesPartialDecoderTraits,
+    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
     decoded_regions: &mut dyn ByteRangeIterator,
@@ -84,7 +84,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialDecoderDefault {
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode(
-            self.input_handle.as_ref(),
+            &self.input_handle,
             &self.decoded_representation,
             &self.codec,
             decoded_regions,
@@ -128,7 +128,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         partial_decode_async(
-            self.input_handle.as_ref(),
+            &self.input_handle,
             &self.decoded_representation,
             &self.codec,
             decoded_regions,

@@ -12,14 +12,14 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 
 #[cfg_attr(feature = "async", async_generic::async_generic(
     async_signature(
-    input_handle: &dyn AsyncBytesPartialDecoderTraits,
+    input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
     indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
 pub(crate) fn partial_decode<'a>(
-    input_handle: &dyn BytesPartialDecoderTraits,
+    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
     indexer: &dyn crate::indexer::Indexer,
@@ -91,7 +91,7 @@ impl ArrayPartialDecoderTraits for ArrayToBytesPartialDecoderDefault {
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode(
-            self.input_handle.as_ref(),
+            &self.input_handle,
             &self.decoded_representation,
             &self.codec,
             indexer,
@@ -139,7 +139,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToBytesPartialDecoderDefault {
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         partial_decode_async(
-            self.input_handle.as_ref(),
+            &self.input_handle,
             &self.decoded_representation,
             &self.codec,
             indexer,

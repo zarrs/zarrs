@@ -14,14 +14,14 @@ use crate::array::codec::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncod
 
 #[cfg_attr(feature = "async", async_generic::async_generic(
     async_signature(
-    input_output_handle: &dyn AsyncBytesPartialEncoderTraits,
+    input_output_handle: &Arc<dyn AsyncBytesPartialEncoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
     offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
     options: &super::CodecOptions,
 )))]
 fn partial_encode(
-    input_output_handle: &dyn BytesPartialEncoderTraits,
+    input_output_handle: &Arc<dyn BytesPartialEncoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
     offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
@@ -108,7 +108,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialEncoderDefault {
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         super::bytes_to_bytes_partial_decoder_default::partial_decode(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle.clone().into_dyn_decoder(),
             &self.decoded_representation,
             &self.codec,
             decoded_regions,
@@ -132,7 +132,7 @@ impl BytesPartialEncoderTraits for BytesToBytesPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
             offsets_and_bytes,
@@ -176,7 +176,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialEncoderDefault {
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         super::bytes_to_bytes_partial_decoder_default::partial_decode_async(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle.clone().into_dyn_decoder(),
             &self.decoded_representation,
             &self.codec,
             decoded_regions,
@@ -190,7 +190,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialEncoderDefault {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialEncoderTraits for AsyncBytesToBytesPartialEncoderDefault {
-    async fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits> {
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits> {
         self.clone()
     }
 
@@ -204,7 +204,7 @@ impl AsyncBytesPartialEncoderTraits for AsyncBytesToBytesPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_async(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
             offsets_and_bytes,

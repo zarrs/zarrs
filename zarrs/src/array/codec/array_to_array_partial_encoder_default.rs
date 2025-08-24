@@ -12,7 +12,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
 
 #[cfg_attr(feature = "async", async_generic::async_generic(
     async_signature(
-        input_output_handle: &dyn AsyncArrayPartialEncoderTraits,
+        input_output_handle: &Arc<dyn AsyncArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         codec: &Arc<dyn ArrayToArrayCodecTraits>,
         chunk_subset_indexer: &dyn crate::indexer::Indexer,
@@ -20,7 +20,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
         options: &super::CodecOptions,
 )))]
 pub(crate) fn partial_encode_default(
-    input_output_handle: &dyn ArrayPartialEncoderTraits,
+    input_output_handle: &Arc<dyn ArrayPartialEncoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
     chunk_subset_indexer: &dyn crate::indexer::Indexer,
@@ -129,7 +129,7 @@ impl ArrayPartialDecoderTraits for ArrayToArrayPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         super::array_to_array_partial_decoder_default::partial_decode(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle.clone().into_dyn_decoder(),
             &self.decoded_representation,
             &self.codec,
             indexer,
@@ -154,7 +154,7 @@ impl ArrayPartialEncoderTraits for ArrayToArrayPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_default(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
             indexer,
@@ -203,7 +203,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToArrayPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         super::array_to_array_partial_decoder_default::partial_decode_async(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle.clone().into_dyn_decoder(),
             &self.decoded_representation,
             &self.codec,
             indexer,
@@ -217,7 +217,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToArrayPartialEncoderDefault {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialEncoderTraits for AsyncArrayToArrayPartialEncoderDefault {
-    async fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
         self.clone()
     }
 
@@ -232,7 +232,7 @@ impl AsyncArrayPartialEncoderTraits for AsyncArrayToArrayPartialEncoderDefault {
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_default_async(
-            self.input_output_handle.as_ref(),
+            &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
             indexer,

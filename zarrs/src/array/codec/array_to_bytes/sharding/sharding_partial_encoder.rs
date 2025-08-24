@@ -64,7 +64,7 @@ impl ShardingPartialEncoder {
 
         // Decode the index
         let shard_index = super::decode_shard_index_partial_decoder(
-            &*input_output_handle,
+            input_output_handle.clone().into_dyn_decoder().as_ref(),
             &index_codecs,
             index_location,
             inner_chunk_representation.shape(),

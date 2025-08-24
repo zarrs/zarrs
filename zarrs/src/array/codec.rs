@@ -501,7 +501,7 @@ pub trait AsyncArrayPartialEncoderTraits:
     AsyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Return the encoder as an [`Arc<AsyncArrayPartialDecoderTraits>`].
-    async fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits>;
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits>;
 
     /// Erase the chunk.
     ///
@@ -553,7 +553,7 @@ pub trait AsyncBytesPartialEncoderTraits:
     AsyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
 {
     /// Return the encoder as an [`Arc<AsyncBytesPartialDecoderTraits>`].
-    async fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits>;
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits>;
 
     /// Erase the chunk.
     ///
