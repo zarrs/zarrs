@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implement `Clone` for `Error` structs
 - Add `MaybeSend`/`MaybeSync` for WASM compatibility ([#245] by [@keller-mark])
+- Add missing `AsyncReadableWritableStorage`
 
 ### Changed
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)

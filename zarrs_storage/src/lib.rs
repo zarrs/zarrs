@@ -67,14 +67,14 @@ pub type WritableStorage = Arc<dyn WritableStorageTraits>;
 /// [`Arc`] wrapped readable and writable storage.
 pub type ReadableWritableStorage = Arc<dyn ReadableWritableStorageTraits>;
 
-/// [`Arc`] wrapped readable, writable, and listable storage.
-pub type ReadableWritableListableStorage = Arc<dyn ReadableWritableListableStorageTraits>;
-
 /// [`Arc`] wrapped listable storage.
 pub type ListableStorage = Arc<dyn ListableStorageTraits>;
 
 /// [`Arc`] wrapped readable and listable storage.
 pub type ReadableListableStorage = Arc<dyn ReadableListableStorageTraits>;
+
+/// [`Arc`] wrapped readable, writable, and listable storage.
+pub type ReadableWritableListableStorage = Arc<dyn ReadableWritableListableStorageTraits>;
 
 #[cfg(feature = "async")]
 /// [`Arc`] wrapped asynchronous readable storage.
@@ -83,6 +83,10 @@ pub type AsyncReadableStorage = Arc<dyn AsyncReadableStorageTraits>;
 #[cfg(feature = "async")]
 /// [`Arc`] wrapped asynchronous writable storage.
 pub type AsyncWritableStorage = Arc<dyn AsyncWritableStorageTraits>;
+
+#[cfg(feature = "async")]
+/// [`Arc`] wrapped asynchronous readable and writable storage.
+pub type AsyncReadableWritableStorage = Arc<dyn AsyncReadableWritableStorageTraits>;
 
 #[cfg(feature = "async")]
 /// [`Arc`] wrapped asynchronous listable storage.
