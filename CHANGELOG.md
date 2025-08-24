@@ -31,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `Indexer` for `ArraySubset`, `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
-- Impl `BytesPartialEncoderTraits` for `Mutex<Option<Vec<u8>>>`
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
 
 ### Changed
@@ -99,6 +98,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `CodecError` enum revisions
   - Rename `InvalidArraySubsetError` to `IncompatibleIndexer`
   - Remove `InvalidArraySubsetDimensionalityError`, included in `IncompatibleIndexer`
+- **Breaking**: Refactor partial encoding and the `[Async]{Array,Bytes}PartialEncoderTraits` traits:
+  - The partial decoder traits are now a supertrait of the partial encoder traits
+  - Input/output handle parameters are fused in relevant methods
+  ```diff
+  - input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+  - output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+  + input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+  ```
+  - Add `[Async]{Array,Bytes}PartialEncoderTraits::into_dyn_decoder`
+  - Impl `{Array,Bytes}PartialEncoderTrait` for `Mutex<Option<Vec<u8>>>`
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Bump `zarrs_metadata_ext` to 0.2.0
@@ -121,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Permit data types with empty configurations that do not require one
 - Erase chunks before writing the updated chunk in `ArrayTo{Array,Bytes}PartialEncoderDefault`
+- Fix `squeeze` and `transpose` codec partial encoding
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 
