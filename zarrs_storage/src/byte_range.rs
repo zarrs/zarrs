@@ -6,14 +6,12 @@
 //! [`extract_byte_ranges`] is a convenience function for extracting byte ranges from a slice of bytes.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
     io::{Read, Seek, SeekFrom},
     ops::{
         Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
     },
 };
 
-use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
@@ -376,9 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_byte_ranges_read() {
+    fn test_extract_byte_ranges_read_seek() {
         let data: Vec<u8> = (0..10).collect();
-        let size = data.len() as u64;
         let mut read = std::io::Cursor::new(data);
         let byte_ranges = vec![
             ByteRange::FromStart(3, Some(3)),
@@ -386,7 +383,7 @@ mod tests {
             ByteRange::FromStart(1, Some(1)),
             ByteRange::Suffix(5),
         ];
-        let out = extract_byte_ranges_read(&mut read, size, &mut byte_ranges.into_iter()).unwrap();
+        let out = extract_byte_ranges_read_seek(&mut read, &mut byte_ranges.into_iter()).unwrap();
         assert_eq!(
             out,
             vec![vec![3, 4, 5], vec![4], vec![1], vec![5, 6, 7, 8, 9]]
