@@ -150,14 +150,12 @@ macro_rules! vlen_v2_codec {
 
             fn partial_encoder(
                 self: Arc<Self>,
-                input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                output_handle: Arc<dyn BytesPartialEncoderTraits>,
+                input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
                 decoded_representation: &ChunkRepresentation,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
                 self.inner.clone().partial_encoder(
-                    input_handle,
-                    output_handle,
+                    input_output_handle,
                     decoded_representation,
                     options,
                 )

@@ -467,15 +467,13 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             sharding_partial_encoder::ShardingPartialEncoder::new(
-                input_handle,
-                output_handle,
+                input_output_handle,
                 decoded_representation.clone(),
                 self.chunk_shape.clone(),
                 self.inner_codecs.clone(),

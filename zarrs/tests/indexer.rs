@@ -329,7 +329,6 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let partial_encoder = codec
         .clone()
         .partial_encoder(
-            encoded_chunk,
             output.clone(),
             &decoded_representation,
             &CodecOptions::default(),
@@ -397,7 +396,7 @@ async fn async_indexer_array_subsets_fixed() {
                 Arc::new(BytesCodec::little()),
                 vec![],
             )),
-            false, // FIXME: Add squeeze / transpose partial encoder
+            true,
         ),
         (
             Arc::new(CodecChain::new(
@@ -407,13 +406,12 @@ async fn async_indexer_array_subsets_fixed() {
                     Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
                 ],
                 ShardingCodecBuilder::new(
-                    // FIXME: Add generic indexing support to sharding indexed partial encoder
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
                 )
                 .build_arc(),
                 vec![],
             )),
-            false,
+            false, // FIXME: Add generic indexing support to sharding indexed partial encoder
         ),
     ];
 
@@ -526,7 +524,7 @@ async fn async_indexer_array_subsets_variable() {
                 Arc::new(VlenCodec::default()),
                 vec![],
             )),
-            false, // FIXME: Add squeeze / transpose partial encoder
+            true,
         ),
         (
             Arc::new(CodecChain::new(
@@ -536,14 +534,13 @@ async fn async_indexer_array_subsets_variable() {
                     Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
                 ],
                 ShardingCodecBuilder::new(
-                    // FIXME: Add generic indexing support to sharding indexed partial encoder
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
                 )
                 .array_to_bytes_codec(Arc::new(VlenCodec::default()))
                 .build_arc(),
                 vec![],
             )),
-            false,
+            false, // FIXME: Add generic indexing support to sharding indexed partial encoder
         ),
     ];
 

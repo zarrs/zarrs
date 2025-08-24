@@ -115,18 +115,16 @@ use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue}
 use zarrs_metadata::{v3::MetadataV3, ArrayShape};
 use zarrs_plugin::PluginUnsupportedError;
 use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_storage::byte_range::extract_byte_ranges;
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::config::global_config;
-use crate::storage::{StoreKeyOffsetValue, WritableStorage};
+use crate::storage::{ReadableWritableStorage, StoreKeyOffsetValue};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     indexer::IncompatibleIndexerError,
     plugin::{Plugin, PluginCreateError},
-    storage::byte_range::{
-        extract_byte_ranges_read_seek, ByteOffset, ByteRange, ByteRangeIterator,
-        InvalidByteRangeError,
-    },
+    storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError},
     storage::{ReadableStorage, StorageError, StoreKey},
 };
 
@@ -471,7 +469,12 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 }
 
 /// Partial array encoder traits.
-pub trait ArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
+pub trait ArrayPartialEncoderTraits:
+    ArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the encoder as an [`Arc<ArrayPartialDecoderTraits>`].
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits>;
+
     /// Erase the chunk.
     ///
     /// # Errors
@@ -494,7 +497,12 @@ pub trait ArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 /// Asynchronous partial array encoder traits.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait AsyncArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
+pub trait AsyncArrayPartialEncoderTraits:
+    AsyncArrayPartialDecoderTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the encoder as an [`Arc<AsyncArrayPartialDecoderTraits>`].
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits>;
+
     /// Erase the chunk.
     ///
     /// # Errors
@@ -514,7 +522,12 @@ pub trait AsyncArrayPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 }
 
 /// Partial bytes encoder traits.
-pub trait BytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
+pub trait BytesPartialEncoderTraits:
+    BytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the encoder as an [`Arc<BytesPartialDecoderTraits>`].
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits>;
+
     /// Erase the chunk.
     ///
     /// # Errors
@@ -536,7 +549,12 @@ pub trait BytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
 /// Asynhronous partial bytes encoder traits.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-pub trait AsyncBytesPartialEncoderTraits: Any + MaybeSend + MaybeSync {
+pub trait AsyncBytesPartialEncoderTraits:
+    AsyncBytesPartialDecoderTraits + Any + MaybeSend + MaybeSync
+{
+    /// Return the encoder as an [`Arc<AsyncBytesPartialDecoderTraits>`].
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncBytesPartialDecoderTraits>;
+
     /// Erase the chunk.
     ///
     /// # Errors
@@ -669,20 +687,38 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     }
 }
 
-/// A [`WritableStorage`] store value partial encoder.
-pub struct StoragePartialEncoder {
-    storage: WritableStorage,
-    key: StoreKey,
-}
+impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
+    fn size(&self) -> usize {
+        self.lock().unwrap().as_ref().map_or(0, Vec::len)
+    }
 
-impl StoragePartialEncoder {
-    /// Create a new storage partial encoder.
-    pub fn new(storage: WritableStorage, key: StoreKey) -> Self {
-        Self { storage, key }
+    fn partial_decode(
+        &self,
+        decoded_regions: &mut dyn ByteRangeIterator,
+        _options: &CodecOptions,
+    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+        if let Some(input) = self.lock().unwrap().as_ref() {
+            let size = input.len() as u64;
+            let mut outputs = vec![];
+            for byte_range in decoded_regions {
+                if byte_range.end(size) <= size {
+                    outputs.push(Cow::Owned(input[byte_range.to_range_usize(size)].to_vec()));
+                } else {
+                    return Err(InvalidByteRangeError::new(byte_range, size).into());
+                }
+            }
+            Ok(Some(outputs))
+        } else {
+            Ok(None)
+        }
     }
 }
 
 impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits> {
+        self.clone()
+    }
+
     fn erase(&self) -> Result<(), CodecError> {
         *self.lock().unwrap() = None;
         Ok(())
@@ -714,7 +750,46 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
     }
 }
 
+/// A [`ReadableWritableStorage`] store value partial encoder.
+pub struct StoragePartialEncoder {
+    storage: ReadableWritableStorage,
+    key: StoreKey,
+}
+
+impl StoragePartialEncoder {
+    /// Create a new storage partial encoder.
+    pub fn new(storage: ReadableWritableStorage, key: StoreKey) -> Self {
+        Self { storage, key }
+    }
+}
+
+impl BytesPartialDecoderTraits for StoragePartialEncoder {
+    fn size(&self) -> usize {
+        0
+    }
+
+    fn partial_decode(
+        &self,
+        decoded_regions: &mut dyn ByteRangeIterator,
+        _options: &CodecOptions,
+    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+        Ok(self
+            .storage
+            .get_partial_values_key(&self.key, decoded_regions)?
+            .map(|vec_bytes| {
+                vec_bytes
+                    .into_iter()
+                    .map(|bytes| Cow::Owned(bytes.to_vec()))
+                    .collect()
+            }))
+    }
+}
+
 impl BytesPartialEncoderTraits for StoragePartialEncoder {
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn BytesPartialDecoderTraits> {
+        self.clone()
+    }
+
     fn erase(&self) -> Result<(), CodecError> {
         Ok(self.storage.erase(&self.key)?)
     }
@@ -881,14 +956,12 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(ArrayToArrayPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
         )))
@@ -925,14 +998,12 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     fn async_partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
+        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(AsyncArrayToArrayPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
         )))
@@ -1042,14 +1113,12 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(ArrayToBytesPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
         )))
@@ -1086,14 +1155,12 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     async fn async_partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(AsyncArrayToBytesPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
         )))
@@ -1175,14 +1242,12 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     fn partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(BytesToBytesPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             *decoded_representation,
             self.into_dyn(),
         )))
@@ -1219,24 +1284,19 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     #[allow(unused_variables)]
     async fn async_partial_encoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(AsyncBytesToBytesPartialEncoderDefault::new(
-            input_handle,
-            output_handle,
+            input_output_handle,
             *decoded_representation,
             self.into_dyn(),
         )))
     }
 }
 
-impl<T> BytesPartialDecoderTraits for T
-where
-    T: AsRef<[u8]> + MaybeSend + MaybeSync + 'static,
-{
+impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
     fn size(&self) -> usize {
         self.as_ref().len()
     }
@@ -1247,7 +1307,26 @@ where
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
-            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
+            extract_byte_ranges(self, decoded_regions)?
+                .into_iter()
+                .map(Cow::Owned)
+                .collect(),
+        ))
+    }
+}
+
+impl BytesPartialDecoderTraits for Vec<u8> {
+    fn size(&self) -> usize {
+        self.len()
+    }
+
+    fn partial_decode(
+        &self,
+        decoded_regions: &mut dyn ByteRangeIterator,
+        _parallel: &CodecOptions,
+    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+        Ok(Some(
+            extract_byte_ranges(self, decoded_regions)?
                 .into_iter()
                 .map(Cow::Owned)
                 .collect(),
@@ -1258,17 +1337,32 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T> AsyncBytesPartialDecoderTraits for T
-where
-    T: AsRef<[u8]> + MaybeSend + MaybeSync + 'static,
-{
+impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
     async fn partial_decode(
         &self,
         decoded_regions: &mut dyn ByteRangeIterator,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
-            extract_byte_ranges_read_seek(std::io::Cursor::new(self), decoded_regions)?
+            extract_byte_ranges(self, decoded_regions)?
+                .into_iter()
+                .map(Cow::Owned)
+                .collect(),
+        ))
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl AsyncBytesPartialDecoderTraits for Vec<u8> {
+    async fn partial_decode(
+        &self,
+        decoded_regions: &mut dyn ByteRangeIterator,
+        _parallel: &CodecOptions,
+    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+        Ok(Some(
+            extract_byte_ranges(self, decoded_regions)?
                 .into_iter()
                 .map(Cow::Owned)
                 .collect(),

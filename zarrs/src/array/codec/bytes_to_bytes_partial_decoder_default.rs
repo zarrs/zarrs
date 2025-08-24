@@ -17,7 +17,7 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
     decoded_regions: &mut dyn ByteRangeIterator,
     options: &CodecOptions,
 )))]
-fn partial_decode<'a>(
+pub(crate) fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,

@@ -27,7 +27,7 @@ use super::{
 /// A Transpose codec implementation.
 #[derive(Clone, Debug)]
 pub struct TransposeCodec {
-    order: TransposeOrder,
+    pub(crate) order: TransposeOrder,
 }
 
 impl TransposeCodec {
@@ -109,7 +109,9 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
             ));
         }
-        Ok(permute(decoded_shape, &self.order.0).into())
+        Ok(permute(decoded_shape, &self.order.0)
+            .expect("matching dimensionality")
+            .into())
     }
 
     fn decoded_shape(
@@ -125,7 +127,8 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         for (i, val) in self.order.0.iter().enumerate() {
             permutation_decode[*val] = i;
         }
-        let transposed_shape = permute(encoded_shape, &permutation_decode);
+        let transposed_shape =
+            permute(encoded_shape, &permutation_decode).expect("matching dimensionality");
         Ok(Some(transposed_shape.into()))
     }
 
@@ -213,7 +216,8 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             ArrayBytes::Fixed(bytes) => {
                 let order_decode =
                     calculate_order_decode(&self.order, decoded_representation.shape().len());
-                let transposed_shape = permute(&decoded_representation.shape_u64(), &self.order.0);
+                let transposed_shape = permute(&decoded_representation.shape_u64(), &self.order.0)
+                    .expect("matching dimensionality");
                 let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
                 let bytes =
                     transpose_array(&order_decode, &transposed_shape, data_type_size, &bytes)
@@ -240,12 +244,17 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
 
     fn partial_encoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        todo!("the transpose codec does not yet support partial encoding")
+        Ok(Arc::new(
+            super::transpose_partial_encoder::TransposePartialEncoder::new(
+                input_output_handle,
+                decoded_representation.clone(),
+                self.order.clone(),
+            ),
+        ))
     }
 
     #[cfg(feature = "async")]

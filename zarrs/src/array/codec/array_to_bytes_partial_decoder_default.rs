@@ -18,7 +18,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
     indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
-fn partial_decode<'a>(
+pub(crate) fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToBytesCodecTraits>,
