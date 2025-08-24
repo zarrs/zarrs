@@ -11,6 +11,7 @@
 mod storage_transformer_chain;
 pub use storage_transformer_chain::StorageTransformerChain;
 use zarrs_plugin::{Plugin, PluginUnsupportedError};
+use zarrs_storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
 
 use std::sync::Arc;
 
@@ -22,7 +23,9 @@ use crate::{
 };
 
 #[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorage, AsyncReadableStorage, AsyncWritableStorage};
+use crate::storage::{
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
 
 /// An [`Arc`] wrapped storage transformer.
 pub type StorageTransformer = Arc<dyn StorageTransformerExtension>;
@@ -67,8 +70,12 @@ pub fn try_create_storage_transformer(
 }
 
 /// A storage transformer extension.
-#[cfg_attr(feature = "async", async_trait::async_trait)]
-pub trait StorageTransformerExtension: core::fmt::Debug + Send + Sync {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync {
     /// Create metadata.
     fn create_metadata(&self) -> MetadataV3;
 
@@ -89,6 +96,15 @@ pub trait StorageTransformerExtension: core::fmt::Debug + Send + Sync {
         self: Arc<Self>,
         storage: WritableStorage,
     ) -> Result<WritableStorage, StorageError>;
+
+    /// Create a readable and writable transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    fn create_readable_writable_transformer(
+        self: Arc<Self>,
+        storage: ReadableWritableStorage,
+    ) -> Result<ReadableWritableStorage, StorageError>;
 
     /// Create a listable transformer.
     ///
@@ -118,6 +134,16 @@ pub trait StorageTransformerExtension: core::fmt::Debug + Send + Sync {
         self: Arc<Self>,
         storage: AsyncWritableStorage,
     ) -> Result<AsyncWritableStorage, StorageError>;
+
+    #[cfg(feature = "async")]
+    /// Create an asynchronous readable and writable transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    async fn create_async_readable_writable_transformer(
+        self: Arc<Self>,
+        storage: AsyncReadableWritableStorage,
+    ) -> Result<AsyncReadableWritableStorage, StorageError>;
 
     #[cfg(feature = "async")]
     /// Create an asynchronous listable transformer.

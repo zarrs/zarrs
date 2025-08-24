@@ -5,6 +5,7 @@ use rayon_iter_concurrent_limit::iter_concurrent_limit;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::ReadableStorageTraits;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     array::{
@@ -30,7 +31,7 @@ pub type ChunkCacheTypeDecoded = Arc<ArrayBytes<'static>>;
 pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
 
 /// A chunk type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
-pub trait ChunkCacheType: Send + Sync + Clone + 'static {
+pub trait ChunkCacheType: MaybeSend + MaybeSync + Clone + 'static {
     /// The size of the chunk in bytes.
     fn size(&self) -> usize;
 }
@@ -54,7 +55,7 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 }
 
 /// Traits for a chunk cache.
-pub trait ChunkCache: Send + Sync {
+pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
 

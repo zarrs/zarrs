@@ -1,13 +1,10 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::sync::Arc;
 
-use itertools::{izip, Itertools};
+use super::{get_squeezed_array_subset, get_squeezed_indexer};
 
-use crate::{
-    array::{
-        codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
-        ArrayIndices, ChunkRepresentation, DataType,
-    },
-    indexer::{IncompatibleIndexerError, Indexer},
+use crate::array::{
+    codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions},
+    ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -30,57 +27,6 @@ impl SqueezePartialDecoder {
             decoded_representation,
         }
     }
-}
-
-fn get_squeezed_array_subset(
-    decoded_region: &ArraySubset,
-    shape: &[NonZeroU64],
-) -> Result<ArraySubset, CodecError> {
-    if decoded_region.dimensionality() != shape.len() {
-        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
-            decoded_region.dimensionality(),
-            shape.len(),
-        )
-        .into());
-    }
-
-    let ranges = izip!(
-        decoded_region.start().iter(),
-        decoded_region.shape().iter(),
-        shape.iter()
-    )
-    .filter(|(_, _, &shape)| shape.get() > 1)
-    .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
-
-    let decoded_region_squeeze = ArraySubset::from(ranges);
-    Ok(decoded_region_squeeze)
-}
-
-fn get_squeezed_indexer(
-    indexer: &dyn Indexer,
-    shape: &[NonZeroU64],
-) -> Result<impl Indexer, CodecError> {
-    let indices = indexer
-        .iter_indices()
-        .map(|indices| {
-            if indices.len() == shape.len() {
-                Ok(indices
-                    .into_iter()
-                    .zip(shape)
-                    .filter_map(
-                        |(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None },
-                    )
-                    .collect_vec())
-            } else {
-                Err(IncompatibleIndexerError::new_incompatible_dimensionality(
-                    indices.len(),
-                    shape.len(),
-                ))
-            }
-        })
-        .collect::<Result<Vec<ArrayIndices>, _>>()?;
-
-    Ok(indices)
 }
 
 impl ArrayPartialDecoderTraits for SqueezePartialDecoder {
@@ -132,7 +78,8 @@ impl AsyncSqueezePartialDecoder {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()

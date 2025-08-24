@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     array::RawBytes,
-    storage::byte_range::{ByteLength, ByteOffset, ByteRange},
+    storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -14,7 +14,7 @@ use super::AsyncBytesPartialDecoderTraits;
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
 pub struct ByteIntervalPartialDecoder {
-    inner: Arc<dyn BytesPartialDecoderTraits>,
+    input_handle: Arc<dyn BytesPartialDecoderTraits>,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
 }
@@ -22,12 +22,12 @@ pub struct ByteIntervalPartialDecoder {
 impl ByteIntervalPartialDecoder {
     /// Create a new byte interval partial decoder.
     pub fn new(
-        inner: Arc<dyn BytesPartialDecoderTraits>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
         byte_offset: ByteOffset,
         byte_length: ByteLength,
     ) -> Self {
         Self {
-            inner,
+            input_handle,
             byte_offset,
             byte_length,
         }
@@ -36,12 +36,12 @@ impl ByteIntervalPartialDecoder {
 
 impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
     fn size(&self) -> usize {
-        self.inner.size()
+        self.input_handle.size()
     }
 
     fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
@@ -55,7 +55,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
                 ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
             }
         });
-        self.inner.partial_decode(&mut byte_ranges, options)
+        self.input_handle.partial_decode(&mut byte_ranges, options)
     }
 }
 
@@ -64,7 +64,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
 ///
 /// Modifies byte range requests to a specific byte interval in an inner bytes partial decoder.
 pub struct AsyncByteIntervalPartialDecoder {
-    inner: Arc<dyn AsyncBytesPartialDecoderTraits>,
+    input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
     byte_offset: ByteOffset,
     byte_length: ByteLength,
 }
@@ -73,12 +73,12 @@ pub struct AsyncByteIntervalPartialDecoder {
 impl AsyncByteIntervalPartialDecoder {
     /// Create a new byte interval partial decoder.
     pub fn new(
-        inner: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         byte_offset: ByteOffset,
         byte_length: ByteLength,
     ) -> Self {
         Self {
-            inner,
+            input_handle,
             byte_offset,
             byte_length,
         }
@@ -86,11 +86,12 @@ impl AsyncByteIntervalPartialDecoder {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
     async fn partial_decode(
         &self,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
@@ -104,6 +105,8 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
                 ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
             }
         });
-        self.inner.partial_decode(&mut byte_ranges, options).await
+        self.input_handle
+            .partial_decode(&mut byte_ranges, options)
+            .await
     }
 }

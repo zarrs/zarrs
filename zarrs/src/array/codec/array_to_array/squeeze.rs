@@ -29,9 +29,11 @@
 
 mod squeeze_codec;
 mod squeeze_partial_decoder;
+mod squeeze_partial_encoder;
 
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 
+use itertools::{izip, Itertools};
 pub use squeeze_codec::SqueezeCodec;
 pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
@@ -39,7 +41,12 @@ pub use zarrs_metadata_ext::codec::squeeze::{
 use zarrs_registry::codec::SQUEEZE;
 
 use crate::{
-    array::codec::{Codec, CodecPlugin},
+    array::{
+        codec::{Codec, CodecError, CodecPlugin},
+        ArrayIndices,
+    },
+    array_subset::ArraySubset,
+    indexer::{IncompatibleIndexerError, Indexer},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
@@ -59,6 +66,57 @@ pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, Plugi
         .map_err(|_| PluginMetadataInvalidError::new(SQUEEZE, "codec", metadata.to_string()))?;
     let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
+}
+
+fn get_squeezed_array_subset(
+    decoded_region: &ArraySubset,
+    shape: &[NonZeroU64],
+) -> Result<ArraySubset, CodecError> {
+    if decoded_region.dimensionality() != shape.len() {
+        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            decoded_region.dimensionality(),
+            shape.len(),
+        )
+        .into());
+    }
+
+    let ranges = izip!(
+        decoded_region.start().iter(),
+        decoded_region.shape().iter(),
+        shape.iter()
+    )
+    .filter(|(_, _, &shape)| shape.get() > 1)
+    .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
+
+    let decoded_region_squeeze = ArraySubset::from(ranges);
+    Ok(decoded_region_squeeze)
+}
+
+fn get_squeezed_indexer(
+    indexer: &dyn Indexer,
+    shape: &[NonZeroU64],
+) -> Result<impl Indexer, CodecError> {
+    let indices = indexer
+        .iter_indices()
+        .map(|indices| {
+            if indices.len() == shape.len() {
+                Ok(indices
+                    .into_iter()
+                    .zip(shape)
+                    .filter_map(
+                        |(indices, &shape)| if shape.get() > 1 { Some(indices) } else { None },
+                    )
+                    .collect_vec())
+            } else {
+                Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                    indices.len(),
+                    shape.len(),
+                ))
+            }
+        })
+        .collect::<Result<Vec<ArrayIndices>, _>>()?;
+
+    Ok(indices)
 }
 
 #[cfg(test)]

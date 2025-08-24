@@ -4,7 +4,7 @@ use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
 use std::sync::Mutex;
 
 use crate::{
-    byte_range::{ByteOffset, ByteRange, InvalidByteRangeError},
+    byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
     Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
     StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
@@ -78,7 +78,7 @@ impl ReadableStorageTraits for MemoryStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);

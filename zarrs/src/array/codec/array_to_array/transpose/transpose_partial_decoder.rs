@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-use super::{calculate_order_decode, permute, transpose_array, TransposeOrder};
-use crate::{
-    array::{
-        codec::{ArrayBytes, ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions},
-        ChunkRepresentation, DataType,
-    },
-    indexer::{IncompatibleIndexerError, Indexer},
+use super::{do_transpose, get_transposed_array_subset, get_transposed_indexer, TransposeOrder};
+use crate::array::{
+    codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions},
+    ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -34,75 +31,6 @@ impl TransposePartialDecoder {
     }
 }
 
-fn validate_regions(
-    indexer: &dyn crate::indexer::Indexer,
-    dimensionality: usize,
-) -> Result<(), CodecError> {
-    if indexer.dimensionality() == dimensionality {
-        Ok(())
-    } else {
-        Err(IncompatibleIndexerError::new_incompatible_dimensionality(
-            indexer.dimensionality(),
-            dimensionality,
-        )
-        .into())
-    }
-}
-
-fn get_transposed_array_subset(
-    order: &TransposeOrder,
-    decoded_region: &ArraySubset,
-) -> ArraySubset {
-    let start = permute(decoded_region.start(), &order.0);
-    let size = permute(decoded_region.shape(), &order.0);
-    let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
-    ArraySubset::from(ranges)
-}
-
-fn get_transposed_indexer(order: &TransposeOrder, indexer: &dyn Indexer) -> impl Indexer {
-    indexer
-        .iter_indices()
-        .map(|indices| permute(&indices, &order.0))
-        .collect::<Vec<_>>()
-}
-
-/// Reverse the transpose on each subset
-fn do_transpose<'a>(
-    encoded_value: ArrayBytes<'a>,
-    subset: &ArraySubset,
-    order: &TransposeOrder,
-    decoded_representation: &ChunkRepresentation,
-) -> Result<ArrayBytes<'a>, CodecError> {
-    let order_decode = calculate_order_decode(order, decoded_representation.shape().len());
-    let data_type_size = decoded_representation.data_type().size();
-    encoded_value.validate(subset.num_elements(), data_type_size)?;
-    match encoded_value {
-        ArrayBytes::Variable(bytes, offsets) => {
-            let mut order_decode = vec![0; decoded_representation.shape().len()];
-            for (i, val) in order.0.iter().enumerate() {
-                order_decode[*val] = i;
-            }
-            Ok(super::transpose_vlen(
-                &bytes,
-                &offsets,
-                &subset.shape_usize(),
-                order_decode,
-            ))
-        }
-        ArrayBytes::Fixed(bytes) => {
-            let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
-            let bytes = transpose_array(
-                &order_decode,
-                &permute(subset.shape(), &order.0),
-                data_type_size,
-                &bytes,
-            )
-            .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
-            Ok(ArrayBytes::from(bytes))
-        }
-    }
-}
-
 impl ArrayPartialDecoderTraits for TransposePartialDecoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
@@ -117,10 +45,8 @@ impl ArrayPartialDecoderTraits for TransposePartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        validate_regions(indexer, self.decoded_representation.dimensionality())?;
-
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset);
+            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             let encoded_value = self
                 .input_handle
                 .partial_decode(&array_subset_transposed, options)?;
@@ -131,7 +57,7 @@ impl ArrayPartialDecoderTraits for TransposePartialDecoder {
                 &self.decoded_representation,
             )
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer);
+            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
             self.input_handle
                 .partial_decode(&indexer_transposed, options)
         }
@@ -163,7 +89,8 @@ impl AsyncTransposePartialDecoder {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
@@ -174,10 +101,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        validate_regions(indexer, self.decoded_representation.dimensionality())?;
-
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset);
+            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             let encoded_value = self
                 .input_handle
                 .partial_decode(&array_subset_transposed, options)
@@ -189,7 +114,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
                 &self.decoded_representation,
             )
         } else {
-            let indexer_transposed = get_transposed_indexer(&self.order, indexer);
+            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
             self.input_handle
                 .partial_decode(&indexer_transposed, options)
                 .await

@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use crate::{
     array::RawBytes,
-    storage::byte_range::{extract_byte_ranges, ByteRange},
+    storage::byte_range::{extract_byte_ranges, ByteRange, ByteRangeIterator},
 };
 
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
@@ -56,7 +56,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
@@ -73,11 +73,12 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
     async fn partial_decode(
         &self,
-        decoded_regions: &mut (dyn Iterator<Item = ByteRange> + Send),
+        decoded_regions: &mut dyn ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode(self, decoded_regions, options)

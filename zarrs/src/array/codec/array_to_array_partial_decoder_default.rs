@@ -17,7 +17,7 @@ use crate::array::codec::AsyncArrayPartialDecoderTraits;
     indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 )))]
-fn partial_decode<'a>(
+pub(crate) fn partial_decode<'a>(
     input_handle: &Arc<dyn ArrayPartialDecoderTraits>,
     decoded_representation: &ChunkRepresentation,
     codec: &Arc<dyn ArrayToArrayCodecTraits>,
@@ -139,7 +139,8 @@ impl AsyncArrayToArrayPartialDecoderDefault {
 }
 
 #[cfg(feature = "async")]
-#[async_trait::async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncArrayToArrayPartialDecoderDefault {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()

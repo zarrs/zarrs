@@ -294,7 +294,11 @@ impl CodecTraits for CodecChain {
     }
 }
 
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToBytesCodecTraits for CodecChain {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
@@ -517,8 +521,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
 
     fn partial_encoder(
         self: Arc<Self>,
-        mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        mut output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        mut input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
@@ -531,56 +534,35 @@ impl ArrayToBytesCodecTraits for CodecChain {
             self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
         ) {
-            output_handle = Arc::clone(codec).partial_encoder(
-                input_handle.clone(),
-                output_handle,
+            input_output_handle = Arc::clone(codec).partial_encoder(
+                input_output_handle,
                 bytes_representation,
                 options,
             )?;
-            input_handle =
-                Arc::clone(codec).partial_decoder(input_handle, bytes_representation, options)?;
         }
 
-        let mut output_handle = self.array_to_bytes.codec().clone().partial_encoder(
-            input_handle.clone(),
-            output_handle,
+        let mut input_output_handle = self.array_to_bytes.codec().clone().partial_encoder(
+            input_output_handle,
             array_representations.last().unwrap(),
             options,
         )?;
 
         if self.array_to_array.is_empty() {
-            return Ok(output_handle);
+            return Ok(input_output_handle);
         }
 
-        let mut input_handle = self.array_to_bytes.codec().clone().partial_decoder(
-            input_handle,
-            array_representations.last().unwrap(),
-            options,
-        )?;
-
-        let mut it = std::iter::zip(
+        for (codec, array_representation) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
-        )
-        .peekable();
-        while let Some((codec, array_representation)) = it.next() {
-            output_handle = Arc::clone(codec).partial_encoder(
-                input_handle.clone(),
-                output_handle,
+        ) {
+            input_output_handle = Arc::clone(codec).partial_encoder(
+                input_output_handle,
                 array_representation,
                 options,
             )?;
-
-            if it.peek().is_some() {
-                input_handle = Arc::clone(codec).partial_decoder(
-                    input_handle,
-                    array_representation,
-                    options,
-                )?;
-            }
         }
 
-        Ok(output_handle)
+        Ok(input_output_handle)
     }
 
     #[cfg(feature = "async")]

@@ -7,11 +7,13 @@ use crate::{
     metadata::v3::MetadataV3,
     node::NodePath,
     plugin::PluginCreateError,
-    storage::{ListableStorage, ReadableStorage, WritableStorage},
+    storage::{ListableStorage, ReadableStorage, ReadableWritableStorage, WritableStorage},
 };
 
 #[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorage, AsyncReadableStorage, AsyncWritableStorage};
+use crate::storage::{
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
 
 use super::{try_create_storage_transformer, StorageTransformer};
 
@@ -91,6 +93,22 @@ impl StorageTransformerChain {
         Ok(storage)
     }
 
+    /// Create a readable and writable storage transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    pub fn create_readable_writable_transformer(
+        &self,
+        mut storage: ReadableWritableStorage,
+    ) -> Result<ReadableWritableStorage, StorageError> {
+        for transformer in &self.0 {
+            storage = transformer
+                .clone()
+                .create_readable_writable_transformer(storage)?;
+        }
+        Ok(storage)
+    }
+
     /// Create a listable storage transformer.
     ///
     /// # Errors
@@ -136,6 +154,24 @@ impl StorageTransformerChain {
             storage = transformer
                 .clone()
                 .create_async_writable_transformer(storage)
+                .await?;
+        }
+        Ok(storage)
+    }
+
+    #[cfg(feature = "async")]
+    /// Create an asynchronous redable and writable storage transformer.
+    ///
+    /// # Errors
+    /// Returns an error if creation fails.
+    pub async fn create_async_readable_writable_transformer(
+        &self,
+        mut storage: AsyncReadableWritableStorage,
+    ) -> Result<AsyncReadableWritableStorage, StorageError> {
+        for transformer in &self.0 {
+            storage = transformer
+                .clone()
+                .create_async_readable_writable_transformer(storage)
                 .await?;
         }
         Ok(storage)

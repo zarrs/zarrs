@@ -75,7 +75,11 @@ impl CodecTraits for SqueezeCodec {
     }
 }
 
-#[cfg_attr(feature = "async", async_trait::async_trait)]
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
@@ -147,12 +151,16 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
 
     fn partial_encoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        todo!("the squeeze codec does not yet support partial encoding")
+        Ok(Arc::new(
+            super::squeeze_partial_encoder::SqueezePartialEncoder::new(
+                input_output_handle,
+                decoded_representation.clone(),
+            ),
+        ))
     }
 
     #[cfg(feature = "async")]

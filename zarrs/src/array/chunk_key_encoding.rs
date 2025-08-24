@@ -18,6 +18,7 @@ pub use default_suffix::{
 };
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::PluginUnsupportedError;
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
     metadata::v3::MetadataV3,
@@ -96,7 +97,7 @@ where
 }
 
 /// Chunk key encoding traits.
-pub trait ChunkKeyEncodingTraits: core::fmt::Debug + Send + Sync {
+pub trait ChunkKeyEncodingTraits: core::fmt::Debug + MaybeSend + MaybeSync {
     /// Create the metadata of this chunk key encoding.
     fn create_metadata(&self) -> MetadataV3;
 

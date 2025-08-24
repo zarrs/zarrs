@@ -21,7 +21,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_zip/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use zarrs_storage::{
-    byte_range::{extract_byte_ranges_read, ByteRange},
+    byte_range::{extract_byte_ranges_read_seek, ByteRangeIterator},
     Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError, StorageValueIO, StoreKey,
     StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
@@ -93,11 +93,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
     fn get_impl(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let mut zip_archive = self.zip_archive.lock().unwrap();
         let mut file = {
-            let zip_file = zip_archive.by_name(&self.key_str_to_zip_path(key.as_str()));
+            let zip_file = zip_archive.by_name_seek(&self.key_str_to_zip_path(key.as_str()));
             match zip_file {
                 Ok(zip_file) => zip_file,
                 Err(err) => match err {
@@ -106,9 +106,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
                 },
             }
         };
-        let size = file.size();
 
-        let out = extract_byte_ranges_read(&mut file, size, byte_ranges)?
+        let out = extract_byte_ranges_read_seek(&mut file, byte_ranges)?
             .into_iter()
             .map(Bytes::from)
             .collect();
@@ -127,7 +126,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut (dyn Iterator<Item = ByteRange> + Send),
+        byte_ranges: &mut dyn ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.get_impl(key, byte_ranges)
     }
