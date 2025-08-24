@@ -184,8 +184,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 
     fn partial_encoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         _decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
