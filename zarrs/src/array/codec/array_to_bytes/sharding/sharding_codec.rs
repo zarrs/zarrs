@@ -772,14 +772,13 @@ impl ShardingCodec {
             }
         };
 
-        let encoded_chunks: Vec<(usize, Vec<u8>)> =
-            crate::iter_concurrent_limit!(
-                shard_concurrent_limit,
-                (0..n_chunks).into_par_iter(),
-                filter_map,
-                encode_chunk
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+        let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
+            shard_concurrent_limit,
+            (0..n_chunks).into_par_iter(),
+            filter_map,
+            encode_chunk
+        )
+        .collect::<Result<Vec<_>, _>>()?;
 
         // Allocate the shard
         let encoded_chunk_length = encoded_chunks

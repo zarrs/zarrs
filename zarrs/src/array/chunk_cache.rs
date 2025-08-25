@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::iter_concurrent_limit;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::ReadableStorageTraits;

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::iter_concurrent_limit;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;

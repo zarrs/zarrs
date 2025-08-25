@@ -261,5 +261,5 @@ macro_rules! iter_concurrent_limit {
     ( $concurrent_limit:expr, $iterator:expr, $t:tt, $op:expr ) => {{
         std::hint::black_box($concurrent_limit);
         $iterator.into_iter().$t($op)
-    }}
+    }};
 }
