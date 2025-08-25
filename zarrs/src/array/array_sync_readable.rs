@@ -1,7 +1,9 @@
 use std::{borrow::Cow, sync::Arc};
 
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
+
+use crate::iter_concurrent_limit;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use crate::{
