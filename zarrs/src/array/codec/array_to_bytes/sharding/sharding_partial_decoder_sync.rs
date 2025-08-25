@@ -317,7 +317,7 @@ pub(crate) fn partial_decode_fixed_array_subset(
     };
 
     let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
-    rayon_iter_concurrent_limit::iter_concurrent_limit!(
+    crate::iter_concurrent_limit!(
         inner_chunk_concurrent_limit,
         chunks.indices(),
         try_for_each,
@@ -405,7 +405,7 @@ pub(crate) fn partial_decode_variable_array_subset(
     };
     // Decode the inner chunk subsets
     let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
-    let chunk_bytes_and_subsets = rayon_iter_concurrent_limit::iter_concurrent_limit!(
+    let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
         inner_chunk_concurrent_limit,
         chunks.indices(),
         map,

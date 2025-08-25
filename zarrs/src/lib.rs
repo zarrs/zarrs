@@ -250,3 +250,16 @@ fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
         )
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon_iter_concurrent_limit::iter_concurrent_limit;
+
+#[cfg(target_arch = "wasm32")]
+/// A serial equivalent of [`rayon_iter_concurrent_limit::iter_concurrent_limit`] for WASM compatibility.
+#[macro_export]
+macro_rules! iter_concurrent_limit {
+    ( $concurrent_limit:expr, $iterator:expr, $t:tt, $op:expr ) => {{
+        std::hint::black_box($concurrent_limit);
+        $iterator.into_iter().$t($op)
+    }}
+}

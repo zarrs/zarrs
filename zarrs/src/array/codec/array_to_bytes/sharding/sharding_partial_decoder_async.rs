@@ -273,7 +273,7 @@ async fn partial_decode_fixed_array_subset(
     // FIXME: Concurrency limit for futures
 
     if !results.is_empty() {
-        rayon_iter_concurrent_limit::iter_concurrent_limit!(
+        crate::iter_concurrent_limit!(
             options.concurrent_target(),
             results,
             try_for_each,
@@ -312,7 +312,7 @@ async fn partial_decode_fixed_array_subset(
         .collect::<Vec<_>>();
     if !filled_chunks.is_empty() {
         // Write filled chunks
-        rayon_iter_concurrent_limit::iter_concurrent_limit!(
+        crate::iter_concurrent_limit!(
             options.concurrent_target(),
             filled_chunks,
             try_for_each,

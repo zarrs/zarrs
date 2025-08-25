@@ -259,7 +259,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 };
 
                 // Decode the inner chunks
-                let chunk_bytes_and_subsets = rayon_iter_concurrent_limit::iter_concurrent_limit!(
+                let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     (0..num_chunks),
                     map,
@@ -323,7 +323,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         Ok::<_, CodecError>(())
                     };
 
-                    rayon_iter_concurrent_limit::iter_concurrent_limit!(
+                    crate::iter_concurrent_limit!(
                         shard_concurrent_limit,
                         (0..num_chunks),
                         try_for_each,
@@ -417,7 +417,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             Ok::<_, CodecError>(())
         };
 
-        rayon_iter_concurrent_limit::iter_concurrent_limit!(
+        crate::iter_concurrent_limit!(
             shard_concurrent_limit,
             (0..num_chunks),
             try_for_each,
@@ -623,7 +623,7 @@ impl ShardingCodec {
                 .iter()
                 .map(|i| usize::try_from(i.get()).unwrap())
                 .product::<usize>();
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 shard_concurrent_limit,
                 (0..n_chunks),
                 try_for_each,
@@ -773,7 +773,7 @@ impl ShardingCodec {
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> =
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 shard_concurrent_limit,
                 (0..n_chunks).into_par_iter(),
                 filter_map,
@@ -800,7 +800,7 @@ impl ShardingCodec {
         if !encoded_chunks.is_empty() {
             let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
             let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 options.concurrent_target(),
                 encoded_chunks,
                 for_each,
