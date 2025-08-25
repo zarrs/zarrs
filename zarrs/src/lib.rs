@@ -258,8 +258,8 @@ use rayon_iter_concurrent_limit::iter_concurrent_limit;
 /// A serial equivalent of [`rayon_iter_concurrent_limit::iter_concurrent_limit`] for WASM compatibility.
 #[macro_export]
 macro_rules! iter_concurrent_limit {
-    ( $concurrent_limit:expr, $iterator:expr, $t:tt, $op:expr ) => {{
+    ( $concurrent_limit:expr, $iterator:expr, $fn:tt, $op:expr ) => {{
         let _concurrent_limit = $concurrent_limit; // fixes unused lint
-        $iterator.into_iter().$t($op)
+        $iterator.into_iter().$fn($op)
     }};
 }
