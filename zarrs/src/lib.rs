@@ -259,7 +259,7 @@ use rayon_iter_concurrent_limit::iter_concurrent_limit;
 #[macro_export]
 macro_rules! iter_concurrent_limit {
     ( $concurrent_limit:expr, $iterator:expr, $t:tt, $op:expr ) => {{
-        std::hint::black_box($concurrent_limit);
+        let _concurrent_limit = $concurrent_limit; // fixes unused lint
         $iterator.into_iter().$t($op)
     }};
 }
