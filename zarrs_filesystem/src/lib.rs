@@ -22,8 +22,7 @@ use walkdir::WalkDir;
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    io::{self, Read, Seek, SeekFrom, Write},
-    os::fd::AsRawFd,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -31,7 +30,7 @@ use std::{
 #[cfg(target_os = "linux")]
 use libc::O_DIRECT;
 #[cfg(target_os = "linux")]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::{fd::AsRawFd, unix::fs::{MetadataExt, OpenOptionsExt}};
 
 // // Register the store.
 // inventory::submit! {
@@ -295,7 +294,7 @@ impl ReadableStorageTraits for FilesystemStore {
                         }
                     };
                     if length > file_size {
-                        return Err(StorageError::IOError(Arc::new(io::Error::new(io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
+                        return Err(StorageError::IOError(Arc::new(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
                     }
                     let fd = file.as_raw_fd();
                     let aligned_offset = offset - (offset % ps);
