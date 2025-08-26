@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use crate::iter_concurrent_limit;
+
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
 
 use crate::{
     array::ArrayBytes,
@@ -247,7 +249,12 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let erase_chunk =
             |chunk_indices: Vec<u64>| storage_transformer.erase(&self.chunk_key(&chunk_indices));
 
-        chunks.indices().into_par_iter().try_for_each(erase_chunk)
+        #[cfg(not(target_arch = "wasm32"))]
+        chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+        #[cfg(target_arch = "wasm32")]
+        chunks.indices().into_iter().try_for_each(erase_chunk)?;
+
+        Ok(())
     }
 
     /////////////////////////////////////////////////////////////////////////////

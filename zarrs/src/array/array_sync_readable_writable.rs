@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use zarrs_storage::ReadableStorageTraits;
 
 use crate::{
@@ -331,7 +333,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             };
 
             let indices = chunks.indices();
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 chunk_concurrent_limit,
                 indices,
                 try_for_each,
