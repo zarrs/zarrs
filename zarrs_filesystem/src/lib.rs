@@ -315,31 +315,30 @@ impl ReadableStorageTraits for FilesystemStore {
                     let last_bytes = buf[start_in_buf..(start_in_buf + length)].to_vec();
                     // Free the unused memory
                     unsafe { libc::free(buf_ptr) };
-                    Ok(Bytes::from(last_bytes))
-                } else {
-                    // Seek
-                    match byte_range {
-                        ByteRange::FromStart(offset, _) => {
-                            file.seek(SeekFrom::Start(offset))
-                        },
-                        ByteRange::Suffix(length) => {
-                            file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
-                        }
-                    }?;
+                    return Ok(Bytes::from(last_bytes));
+                }
+                // Seek
+                match byte_range {
+                    ByteRange::FromStart(offset, _) => {
+                        file.seek(SeekFrom::Start(offset))
+                    },
+                    ByteRange::Suffix(length) => {
+                        file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
+                    }
+                }?;
 
-                    // Read
-                    match byte_range {
-                        ByteRange::FromStart(_, None) => {
-                            let mut buffer = Vec::new();
-                            file.read_to_end(&mut buffer)?;
-                            Ok(Bytes::from(buffer))
-                        }
-                        ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
-                            let length = usize::try_from(length).unwrap();
-                            let mut buffer = vec![0; length];
-                            file.read_exact(&mut buffer)?;
-                            Ok(Bytes::from(buffer))
-                        }
+                // Read
+                match byte_range {
+                    ByteRange::FromStart(_, None) => {
+                        let mut buffer = Vec::new();
+                        file.read_to_end(&mut buffer)?;
+                        Ok(Bytes::from(buffer))
+                    }
+                    ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
+                        let length = usize::try_from(length).unwrap();
+                        let mut buffer = vec![0; length];
+                        file.read_exact(&mut buffer)?;
+                        Ok(Bytes::from(buffer))
                     }
                 }
             })
