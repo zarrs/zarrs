@@ -20,7 +20,12 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use std::{
-    collections::HashMap, fs::OpenOptions, io::{self, Read, Seek, SeekFrom, Write}, os::{fd::AsRawFd, unix::fs::MetadataExt}, path::{Path, PathBuf}, sync::{Arc, Mutex}
+    collections::HashMap,
+    fs::OpenOptions,
+    io::{self, Read, Seek, SeekFrom, Write},
+    os::{fd::AsRawFd, unix::fs::MetadataExt},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 #[cfg(target_os = "linux")]
@@ -253,8 +258,7 @@ impl ReadableStorageTraits for FilesystemStore {
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
-        let enable_direct =
-        cfg!(target_os = "linux") && self.options.direct_io;
+        let enable_direct = cfg!(target_os = "linux") && self.options.direct_io;
         let mut flags = OpenOptions::new();
         flags.read(true);
         #[cfg(target_os = "linux")]
@@ -316,7 +320,7 @@ impl ReadableStorageTraits for FilesystemStore {
                     match byte_range {
                         ByteRange::FromStart(offset, _) => {
                             file.seek(SeekFrom::Start(offset))
-                        }, 
+                        },
                         ByteRange::Suffix(length) => {
                             file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
                         }
@@ -328,7 +332,6 @@ impl ReadableStorageTraits for FilesystemStore {
                             let mut buffer = Vec::new();
                             file.read_to_end(&mut buffer)?;
                             Ok(Bytes::from(buffer))
-    
                         }
                         ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
                             let length = usize::try_from(length).unwrap();

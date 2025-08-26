@@ -37,7 +37,9 @@ fn filesystem() -> Result<(), Box<dyn Error>> {
 // #[cfg_attr(miri, ignore)]
 fn direct_io() -> Result<(), Box<dyn Error>> {
     use zarrs_filesystem::FilesystemStoreOptions;
-    use zarrs_storage::{byte_range::ByteRange, Bytes, ReadableStorageTraits, WritableStorageTraits};
+    use zarrs_storage::{
+        byte_range::ByteRange, Bytes, ReadableStorageTraits, WritableStorageTraits,
+    };
 
     let tmpfile = tempfile::NamedTempFile::new()?;
     if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
@@ -56,14 +58,37 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
 
     // Test out fetching different kinds of non-page aligned reads against a larger file.
     let ps = page_size::get();
-    let base_vec: Bytes = (0..(ps * 5) + 15).map(|i| (i % 256) as u8).collect::<Vec<u8>>().into();
+    let base_vec: Bytes = (0..(ps * 5) + 15)
+        .map(|i| (i % 256) as u8)
+        .collect::<Vec<u8>>()
+        .into();
     let prefix: Bytes = base_vec.get(1..11).unwrap().to_owned().into(); // prefix
-    let suffix: Bytes = base_vec.get((base_vec.len() - 1500)..).unwrap().to_owned().into(); // suffix large enough to trigger large double ps, see comment
+    let suffix: Bytes = base_vec
+        .get((base_vec.len() - 1500)..)
+        .unwrap()
+        .to_owned()
+        .into(); // suffix large enough to trigger large double ps, see comment
     let small_suffix: Bytes = base_vec.get((ps * 5)..).unwrap().to_owned().into(); // suffix to fit in one page
-    let chunk: Bytes = base_vec.get(1..ps+3).unwrap().to_owned().into(); // > ps request
+    let chunk: Bytes = base_vec.get(1..ps + 3).unwrap().to_owned().into(); // > ps request
     let chunk_2: Bytes = base_vec.get((5)..(5 + (ps * 2))).unwrap().to_owned().into(); // > 2 * ps request
 
     store.set(&"big_buff".try_into()?, base_vec.into())?;
-    assert_eq!(vec![prefix, suffix, chunk, chunk_2, small_suffix], store.get_partial_values_key(&"big_buff".try_into()?,  &mut [ByteRange::FromStart(1, Some(10)), ByteRange::Suffix(1500), ByteRange::FromStart(1, Some((ps + 2) as u64)), ByteRange::FromStart(5, Some((ps * 2) as u64)), ByteRange::Suffix(15)].into_iter()).unwrap().unwrap());
+    assert_eq!(
+        vec![prefix, suffix, chunk, chunk_2, small_suffix],
+        store
+            .get_partial_values_key(
+                &"big_buff".try_into()?,
+                &mut [
+                    ByteRange::FromStart(1, Some(10)),
+                    ByteRange::Suffix(1500),
+                    ByteRange::FromStart(1, Some((ps + 2) as u64)),
+                    ByteRange::FromStart(5, Some((ps * 2) as u64)),
+                    ByteRange::Suffix(15)
+                ]
+                .into_iter()
+            )
+            .unwrap()
+            .unwrap()
+    );
     Ok(())
 }
