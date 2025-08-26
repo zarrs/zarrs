@@ -278,16 +278,20 @@ impl ReadableStorageTraits for FilesystemStore {
         let out = byte_ranges
             .map(|byte_range| {
                 if enable_direct {
-                    let file_size = file.metadata().unwrap().size() as usize; // FIXME: unwrap
+                    let file_size = usize::try_from(file.metadata().unwrap().size()).unwrap(); // FIXME: unwraps
                     let ps: usize = page_size::get();
                     let (offset, length) = match byte_range {
                         ByteRange::FromStart(offset, option_length) => {
+                            let usize_offset = usize::try_from(offset).unwrap();
                             match option_length {
-                                Some(length) => (offset as usize, length as usize),
-                                None => (offset as usize, file_size - offset as usize)
+                                Some(length) => (usize_offset, usize::try_from(length).unwrap()),
+                                None => (usize_offset, file_size - usize_offset)
                             }
                         },
-                        ByteRange::Suffix(offset) => (file_size - offset as usize, offset as usize)
+                        ByteRange::Suffix(offset) => {
+                            let usize_offset = usize::try_from(offset).unwrap();
+                            (file_size - usize_offset, usize_offset)
+                        }
                     };
                     if length > file_size {
                         return Err(StorageError::IOError(Arc::new(io::Error::new(io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
@@ -301,16 +305,12 @@ impl ReadableStorageTraits for FilesystemStore {
                     // Because we can't `read_exact` more bytes than are in the file, we need to use these libc calls to do O_DIRECT reading.
                     let mut buf_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
                     let ret = unsafe { libc::posix_memalign(&mut buf_ptr, ps,  buf_len) };
-                    if ret != 0 {
-                        panic!("posix_memalign failed during O_DIRECT reading");
-                    }
-                    let buf = unsafe { std::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
-                    let read_bytes = unsafe { libc::pread(fd, buf_ptr, buf_len, aligned_offset as i64) };
-                    if read_bytes < 0 {
-                        panic!("pread failed during O_DIRECT reading");
-                    }
+                    assert!(ret == 0, "posix_memalign failed during O_DIRECT reading");
+                    let buf = unsafe { std::slice::from_raw_parts_mut(buf_ptr.cast::<u8>(), buf_len) };
+                    let read_bytes = unsafe { libc::pread(fd, buf_ptr, buf_len, i64::try_from(aligned_offset).unwrap()) };
+                    assert!(read_bytes >= 0, "pread failed during O_DIRECT reading");
 
-                    let start_in_buf = (offset - aligned_offset) as usize;
+                    let start_in_buf = offset - aligned_offset;
                     let last_bytes = buf[start_in_buf..(start_in_buf + length)].to_vec();
                     // Free the unused memory
                     unsafe { libc::free(buf_ptr) };
