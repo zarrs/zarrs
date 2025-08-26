@@ -311,7 +311,7 @@ impl ReadableStorageTraits for FilesystemStore {
                     }
 
                     let start_in_buf = (offset - aligned_offset) as usize;
-                    let last_bytes = (&buf[start_in_buf..(start_in_buf + length)]).to_vec();
+                    let last_bytes = buf[start_in_buf..(start_in_buf + length)].to_vec();
                     // Free the unused memory
                     unsafe { libc::free(buf_ptr) };
                     Ok(Bytes::from(last_bytes))
