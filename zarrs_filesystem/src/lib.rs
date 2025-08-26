@@ -30,7 +30,10 @@ use std::{
 #[cfg(target_os = "linux")]
 use libc::O_DIRECT;
 #[cfg(target_os = "linux")]
-use std::os::{fd::AsRawFd, unix::fs::{MetadataExt, OpenOptionsExt}};
+use std::os::{
+    fd::AsRawFd,
+    unix::fs::{MetadataExt, OpenOptionsExt},
+};
 
 // // Register the store.
 // inventory::submit! {
