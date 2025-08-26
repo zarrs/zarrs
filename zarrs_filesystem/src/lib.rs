@@ -278,18 +278,18 @@ impl ReadableStorageTraits for FilesystemStore {
         let out = byte_ranges
             .map(|byte_range| {
                 if enable_direct {
-                    let size = file.metadata().unwrap().size() as usize; // FIXME: unwrap
+                    let file_size = file.metadata().unwrap().size() as usize; // FIXME: unwrap
                     let ps: usize = page_size::get();
                     let (offset, length) = match byte_range {
                         ByteRange::FromStart(offset, option_length) => {
                             match option_length {
                                 Some(length) => (offset as usize, length as usize),
-                                None => (offset as usize, size - offset as usize)
+                                None => (offset as usize, file_size - offset as usize)
                             }
                         },
-                        ByteRange::Suffix(offset) => (size - offset as usize, offset as usize)
+                        ByteRange::Suffix(offset) => (file_size - offset as usize, offset as usize)
                     };
-                    if length > size {
+                    if length > file_size {
                         return Err(StorageError::IOError(Arc::new(io::Error::new(io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
                     }
                     let fd = file.as_raw_fd();
