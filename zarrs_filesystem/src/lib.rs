@@ -23,7 +23,7 @@ use std::{
     collections::HashMap,
     fs::OpenOptions,
     io::{self, Read, Seek, SeekFrom, Write},
-    os::{fd::AsRawFd, unix::fs::MetadataExt},
+    os::fd::AsRawFd,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -31,7 +31,7 @@ use std::{
 #[cfg(target_os = "linux")]
 use libc::O_DIRECT;
 #[cfg(target_os = "linux")]
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{OpenOptionsExt, MetadataExt};
 
 // // Register the store.
 // inventory::submit! {
@@ -277,6 +277,7 @@ impl ReadableStorageTraits for FilesystemStore {
 
         let out = byte_ranges
             .map(|byte_range| {
+                #[cfg(target_os = "linux")]
                 if enable_direct {
                     let file_size = usize::try_from(file.metadata().unwrap().size()).unwrap(); // FIXME: unwraps
                     let ps: usize = page_size::get();
