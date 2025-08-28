@@ -101,11 +101,6 @@ package = "getrandom"
 version = "0.3"
 features = ["wasm_js"]
 
-[dependencies.getrandom_v02]
-package = "getrandom"
-version = "0.2"
-features = ["js"]
-
 [dependencies.num-complex]
 version = "0.4.3"
 features = ["bytemuck"]
