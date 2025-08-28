@@ -481,19 +481,17 @@ async fn partial_decode_fixed_indexer(
         let size = shard_index[shard_index_idx * 2 + 1];
 
         #[cfg(not(target_arch = "wasm32"))]
-        let inner_partial_decoder = {
-            let inner_partial_decoder_entry = inner_chunk_partial_decoders
-                .entry(chunk_index_1d)
-                .or_try_insert_with(get_inner_chunk_partial_decoder(
-                    partial_decoder,
-                    options,
-                    offset,
-                    size,
-                ))
-                .await
-                .map_err(Arc::unwrap_or_clone)?;
-            inner_partial_decoder_entry.value()
-        };
+        let inner_partial_decoder = inner_chunk_partial_decoders
+            .entry(chunk_index_1d)
+            .or_try_insert_with(get_inner_chunk_partial_decoder(
+                partial_decoder,
+                options,
+                offset,
+                size,
+            ))
+            .await
+            .map_err(Arc::unwrap_or_clone)?
+            .into_value();
         #[cfg(target_arch = "wasm32")]
         let inner_partial_decoder = inner_chunk_partial_decoders
             .get_or_insert_async(&chunk_index_1d, async {
@@ -579,20 +577,17 @@ async fn partial_decode_variable_indexer(
         let size = shard_index[shard_index_idx * 2 + 1];
         
         #[cfg(not(target_arch = "wasm32"))]
-        let inner_partial_decoder = {
-            let inner_partial_decoder_entry = inner_chunk_partial_decoders
-                .entry(chunk_index_1d)
-                .or_try_insert_with(get_inner_chunk_partial_decoder(
-                    partial_decoder,
-                    options,
-                    offset,
-                    size,
-                ))
-                .await
-                .map_err(Arc::unwrap_or_clone)?;
-
-            inner_partial_decoder_entry.value()
-        };
+        let inner_partial_decoder = inner_chunk_partial_decoders
+            .entry(chunk_index_1d)
+            .or_try_insert_with(get_inner_chunk_partial_decoder(
+                partial_decoder,
+                options,
+                offset,
+                size,
+            ))
+            .await
+            .map_err(Arc::unwrap_or_clone)?
+            .into_value();
         #[cfg(target_arch = "wasm32")]
         let inner_partial_decoder = inner_chunk_partial_decoders
             .get_or_insert_async(&chunk_index_1d, async {
