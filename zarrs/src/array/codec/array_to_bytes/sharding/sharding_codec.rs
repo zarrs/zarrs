@@ -774,7 +774,7 @@ impl ShardingCodec {
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
             shard_concurrent_limit,
-            (0..n_chunks).into_par_iter(),
+            (0..n_chunks),
             filter_map,
             encode_chunk
         )
