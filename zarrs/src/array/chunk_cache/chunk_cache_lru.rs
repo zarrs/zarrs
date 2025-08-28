@@ -15,7 +15,7 @@ use moka::{
 };
 
 #[cfg(target_arch = "wasm32")]
-use mini_moka::unsync::{Cache, CacheBuilder};
+use quick_cache::sync::Cache;
 #[cfg(target_arch = "wasm32")]
 use std::{
     cell::{Cell, RefCell},
@@ -156,7 +156,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     #[must_use]
     #[cfg(target_arch = "wasm32")]
     pub fn new(array: Arc<Array<dyn ReadableStorageTraits>>, chunk_capacity: u64) -> Self {
-        let cache = CacheBuilder::new(chunk_capacity).build();
+        let cache = Cache::new(usize::try_from(chunk_capacity).unwrap_or(usize::MAX));
         Self { array, cache: RefCell::new(cache) }
     }
 
@@ -190,13 +190,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
         F: FnOnce() -> Result<CT, ArrayError>,
     {
         let mut cache = self.cache.borrow_mut();
-        if cache.contains_key(&chunk_indices) {
-            Ok(cache.get(&chunk_indices).unwrap().clone())
-        } else {
-            let value = f()?;
-            cache.insert(chunk_indices, value.clone());
-            Ok(value)
-        }
+        cache
+            .get_or_insert_with(&chunk_indices, || f().map_err(Arc::new))
+            .map_err(|e| Arc::clone(&e))
     }
 }
 
@@ -275,8 +271,8 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimitThreadLocal<CT> {
     where
         F: FnOnce() -> Result<CT, ArrayError>,
     {
-        self.cache()
-            .borrow_mut()
+        let mut cache = self.cache.borrow_mut();
+        cache
             .try_get_or_insert(chunk_indices, f)
             .cloned()
             .map_err(Arc::new)
@@ -299,9 +295,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     #[must_use]
     #[cfg(target_arch = "wasm32")]
     pub fn new(array: Arc<Array<dyn ReadableStorageTraits>>, capacity: u64) -> Self {
-        let cache = CacheBuilder::new(capacity)
-            .weigher(|_k, v: &CT| u32::try_from(v.size()).unwrap_or(u32::MAX))
-            .build();
+        let cache = Cache::new(usize::try_from(capacity).unwrap_or(usize::MAX));
+            //.weigher(|_k, v: &CT| u32::try_from(v.size()).unwrap_or(u32::MAX))
+            //.build();
         Self { array, cache: RefCell::new(cache) }
     }
 
@@ -335,13 +331,9 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
         F: FnOnce() -> Result<CT, ArrayError>,
     {
         let mut cache = self.cache.borrow_mut();
-        if cache.contains_key(&chunk_indices) {
-            Ok(cache.get(&chunk_indices).unwrap().clone())
-        } else {
-            let value = f()?;
-            cache.insert(chunk_indices, value.clone());
-            Ok(value)
-        }
+        cache
+            .get_or_insert_with(&chunk_indices, || f().map_err(Arc::new))
+            .map_err(|e| Arc::clone(&e))
     }
 
 }
@@ -475,7 +467,7 @@ macro_rules! impl_ChunkCacheLruCommon {
         #[cfg(target_arch = "wasm32")]
         fn len(&self) -> usize {
             // self.cache.run_pending_tasks();
-            usize::try_from(self.cache.borrow().entry_count()).unwrap()
+            usize::try_from(self.cache.borrow().len()).unwrap()
         }
     };
 }
