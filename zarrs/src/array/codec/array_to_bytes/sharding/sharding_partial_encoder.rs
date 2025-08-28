@@ -292,7 +292,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
         
         #[cfg(not(target_arch = "wasm32"))]
-        let mut iterator = inner_chunks.indices().into_par_iter();
+        let iterator = inner_chunks.indices().into_par_iter();
         #[cfg(target_arch = "wasm32")]
         let mut iterator = inner_chunks.indices().into_iter();
 

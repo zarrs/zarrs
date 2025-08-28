@@ -19,7 +19,6 @@ use quick_cache::sync::Cache;
 #[cfg(target_arch = "wasm32")]
 use std::{
     cell::{Cell, RefCell},
-    borrow::{Borrow, BorrowMut},
 };
 
 
@@ -189,7 +188,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruChunkLimit<CT> {
     where
         F: FnOnce() -> Result<CT, ArrayError>,
     {
-        let mut cache = self.cache.borrow_mut();
+        let cache = self.cache.borrow_mut();
         cache
             .get_or_insert_with(&chunk_indices, || f().map_err(Arc::new))
             .map_err(|e| Arc::clone(&e))
@@ -330,7 +329,7 @@ impl<CT: ChunkCacheType> ChunkCacheLruSizeLimit<CT> {
     where
         F: FnOnce() -> Result<CT, ArrayError>,
     {
-        let mut cache = self.cache.borrow_mut();
+        let cache = self.cache.borrow_mut();
         cache
             .get_or_insert_with(&chunk_indices, || f().map_err(Arc::new))
             .map_err(|e| Arc::clone(&e))
