@@ -37,8 +37,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
+          targets: "wasm32-unknown-unknown"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build
       - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async"
         working-directory: ./zarrs
   test_windows:
