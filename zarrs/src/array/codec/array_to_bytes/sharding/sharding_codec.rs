@@ -772,9 +772,14 @@ impl ShardingCodec {
             }
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = (0..n_chunks).into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = (0..n_chunks).into_iter();
+        
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
             shard_concurrent_limit,
-            (0..n_chunks),
+            iterator,
             filter_map,
             encode_chunk
         )
