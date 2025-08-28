@@ -453,7 +453,7 @@ pub(crate) fn partial_decode_fixed_indexer(
     
     
     #[cfg(not(target_arch = "wasm32"))]
-    let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    let inner_chunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
     let inner_chunk_partial_decoders = quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
     
@@ -562,7 +562,7 @@ pub(crate) fn partial_decode_variable_indexer(
     offsets.push(0);
 
     #[cfg(not(target_arch = "wasm32"))]
-    let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    let inner_chunk_partial_decoders = moka::sync::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
     let inner_chunk_partial_decoders = quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
     
