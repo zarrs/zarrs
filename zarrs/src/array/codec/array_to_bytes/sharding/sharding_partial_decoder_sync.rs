@@ -501,12 +501,12 @@ pub(crate) fn partial_decode_fixed_indexer(
         let inner_partial_decoder = inner_chunk_partial_decoders
             .get_or_insert_with(&chunk_index_1d, || {
                 get_inner_chunk_partial_decoder(
-                        input_handle.clone(),
-                        inner_codecs.clone(),
-                        chunk_representation,
-                        options,
-                        offset,
-                        size,
+                    input_handle.clone(),
+                    inner_codecs.clone(),
+                    chunk_representation,
+                    options,
+                    offset,
+                    size,
                 )
             })?;
 
@@ -610,13 +610,13 @@ pub(crate) fn partial_decode_variable_indexer(
         let inner_partial_decoder = inner_chunk_partial_decoders
             .get_or_insert_with(&chunk_index_1d, || {
                 get_inner_chunk_partial_decoder(
-                        input_handle.clone(),
-                        inner_codecs.clone(),
-                        chunk_representation,
-                        options,
-                        offset,
-                        size,
-                    )
+                    input_handle.clone(),
+                    inner_codecs.clone(),
+                    chunk_representation,
+                    options,
+                    offset,
+                    size,
+                )
             })?;
 
         // Get the element index
