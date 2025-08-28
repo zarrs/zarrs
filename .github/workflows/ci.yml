@@ -30,6 +30,16 @@ jobs:
       - run: cargo build ${{ matrix.features }}
       - run: cargo test ${{ matrix.features }}
       - run: cargo test ${{ matrix.features }} --examples
+  build_wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "stable"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --target wasm32-unknown-unknown --no-default-features
+        working-directory: ./zarrs
   test_windows:
     runs-on: windows-latest
     steps:

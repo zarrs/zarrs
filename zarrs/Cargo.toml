@@ -63,6 +63,7 @@ inventory.workspace = true
 itertools = "0.14.0"
 lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
+mini-moka = { version = "0.10.3", default-features = false }
 ndarray = { version = ">=0.15.4,<17", optional = true }
 num.workspace = true
 pco = { version = "0.4.0", optional = true }
@@ -90,6 +91,18 @@ chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.4.1", optional = true, features = ["bytemuck"] }
 simd-adler32 = { version = "0.3.7", optional = true }
 itoa = "1.0.15"
+uuid = { version = "1", features = ["v4", "js"] }
+
+# Reference: https://github.com/kylebarron/parquet-wasm/blob/ad18b841a8e788b0d4b17eb9deaca581d02bf887/Cargo.toml#L100C1-L110C18
+[dependencies.getrandom_v03]
+package = "getrandom"
+version = "0.3"
+features = ["wasm_js"]
+
+[dependencies.getrandom_v02]
+package = "getrandom"
+version = "0.2"
+features = ["js"]
 
 [dependencies.num-complex]
 version = "0.4.3"
