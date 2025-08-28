@@ -290,58 +290,58 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Update all of the intersecting inner chunks
         let inner_chunks_decoded = Arc::new(Mutex::new(inner_chunks_decoded));
         let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
-        
+
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = inner_chunks.indices().into_par_iter();
         #[cfg(target_arch = "wasm32")]
         let mut iterator = inner_chunks.indices().into_iter();
 
         iterator.try_for_each(|inner_chunk_indices: Vec<u64>| {
-                // Extract the inner chunk bytes that overlap with the chunk subset
-                let inner_chunk_index =
-                    ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-                let inner_chunk_subset = self
-                    .chunk_grid
-                    .subset(&inner_chunk_indices)
-                    .expect("matching dimensionality");
-                let inner_chunk_subset_overlap =
-                    chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
-                let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
-                    &inner_chunk_subset_overlap
-                        .relative_to(chunk_subset_indexer.start())
-                        .unwrap(),
-                    chunk_subset_indexer.shape(),
-                    self.inner_chunk_representation.data_type(),
-                )?;
+            // Extract the inner chunk bytes that overlap with the chunk subset
+            let inner_chunk_index =
+                ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+            let inner_chunk_subset = self
+                .chunk_grid
+                .subset(&inner_chunk_indices)
+                .expect("matching dimensionality");
+            let inner_chunk_subset_overlap =
+                chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
+            let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
+                &inner_chunk_subset_overlap
+                    .relative_to(chunk_subset_indexer.start())
+                    .unwrap(),
+                chunk_subset_indexer.shape(),
+                self.inner_chunk_representation.data_type(),
+            )?;
 
-                // Decode the inner chunk
-                let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
-                    .lock()
-                    .unwrap()
-                    .remove(&inner_chunk_index)
-                {
-                    inner_chunk_decoded.into_owned()
-                } else {
-                    inner_chunk_fill_value()
-                };
+            // Decode the inner chunk
+            let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
+                .lock()
+                .unwrap()
+                .remove(&inner_chunk_index)
+            {
+                inner_chunk_decoded.into_owned()
+            } else {
+                inner_chunk_fill_value()
+            };
 
-                // Update the inner chunk
-                let inner_chunk_updated = update_array_bytes(
-                    inner_chunk_decoded,
-                    &self.inner_chunk_representation.shape_u64(),
-                    &inner_chunk_subset_overlap
-                        .relative_to(inner_chunk_subset.start())
-                        .unwrap(),
-                    &inner_chunk_bytes,
-                    self.inner_chunk_representation.data_type().size(),
-                )?;
-                inner_chunks_decoded
-                    .lock()
-                    .unwrap()
-                    .insert(inner_chunk_index, inner_chunk_updated);
+            // Update the inner chunk
+            let inner_chunk_updated = update_array_bytes(
+                inner_chunk_decoded,
+                &self.inner_chunk_representation.shape_u64(),
+                &inner_chunk_subset_overlap
+                    .relative_to(inner_chunk_subset.start())
+                    .unwrap(),
+                &inner_chunk_bytes,
+                self.inner_chunk_representation.data_type().size(),
+            )?;
+            inner_chunks_decoded
+                .lock()
+                .unwrap()
+                .insert(inner_chunk_index, inner_chunk_updated);
 
-                Ok::<_, CodecError>(())
-            })?;
+            Ok::<_, CodecError>(())
+        })?;
         let inner_chunks_decoded = Arc::try_unwrap(inner_chunks_decoded)
             .expect("inner_chunks_decoded should have one strong reference")
             .into_inner()
@@ -353,7 +353,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         #[cfg(target_arch = "wasm32")]
         let iterator = inner_chunks_decoded.into_iter();
 
-        let updated_inner_chunks = iterator.map(|(inner_chunk_index, inner_chunk_decoded)| {
+        let updated_inner_chunks = iterator
+            .map(|(inner_chunk_index, inner_chunk_decoded)| {
                 if inner_chunk_decoded.is_fill_value(self.inner_chunk_representation.fill_value()) {
                     Ok((inner_chunk_index, None))
                 } else {
