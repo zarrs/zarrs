@@ -1,3 +1,3 @@
 # Reference: https://github.com/kylebarron/parquet-wasm/blob/ad18b841a8e788b0d4b17eb9deaca581d02bf887/.cargo/config.toml#L2
 [target.wasm32-unknown-unknown]
-rustflags = []
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

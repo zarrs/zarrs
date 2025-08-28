@@ -98,7 +98,7 @@ uuid = { version = "1", features = ["v4", "js"] }
 # Reference: https://github.com/kylebarron/parquet-wasm/blob/ad18b841a8e788b0d4b17eb9deaca581d02bf887/Cargo.toml#L100C1-L110C18
 [dependencies.getrandom_v03]
 package = "getrandom"
-version = "0.3"
+version = "0.3.x"
 features = ["wasm_js"]
 
 [dependencies.num-complex]
