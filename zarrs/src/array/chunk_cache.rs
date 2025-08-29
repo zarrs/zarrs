@@ -19,6 +19,7 @@ use crate::{
 
 use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};
 
+pub(crate) mod chunk_cache_lru_macros;
 pub(crate) mod chunk_cache_lru;
 
 /// The chunk type of an encoded chunk cache.
