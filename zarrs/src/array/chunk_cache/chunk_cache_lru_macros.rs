@@ -1,20 +1,11 @@
-use crate::{
-    array::{
-        chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded},
-        codec::ArrayToBytesCodecTraits,
-        Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize, ChunkCacheTypePartialDecoder,
-    },
-    array_subset::ArraySubset,
-    storage::StorageError,
-};
-
+/// Macro shared by both WASM- and non-WASM `chunk_cache_lru` implementations.
 #[macro_export]
 macro_rules! impl_ChunkCacheLruEncoded {
     () => {
         fn retrieve_chunk(
             &self,
             chunk_indices: &[u64],
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -59,7 +50,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded: ChunkCacheTypeEncoded = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -96,13 +87,14 @@ macro_rules! impl_ChunkCacheLruEncoded {
     };
 }
 
+/// Macro shared by both WASM- and non-WASM `chunk_cache_lru` implementations.
 #[macro_export]
 macro_rules! impl_ChunkCacheLruDecoded {
     () => {
         fn retrieve_chunk(
             &self,
             chunk_indices: &[u64],
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             self.try_get_or_insert_with(chunk_indices.to_vec(), || {
                 Ok(Arc::new(
@@ -123,7 +115,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -152,13 +144,14 @@ macro_rules! impl_ChunkCacheLruDecoded {
     };
 }
 
+/// Macro shared by both WASM- and non-WASM `chunk_cache_lru` implementations.
 #[macro_export]
 macro_rules! impl_ChunkCacheLruPartialDecoder {
     () => {
         fn retrieve_chunk(
             &self,
             chunk_indices: &[u64],
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -171,7 +164,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                     })
                 })?;
             let chunk_shape =
-                crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
+                $crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
             Ok(partial_decoder
                 .partial_decode(&ArraySubset::new_with_shape(chunk_shape), options)?
                 .into_owned()
@@ -182,7 +175,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
-            options: &crate::array::codec::CodecOptions,
+            options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
