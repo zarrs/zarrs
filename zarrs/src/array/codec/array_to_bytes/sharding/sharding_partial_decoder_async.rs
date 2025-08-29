@@ -451,7 +451,13 @@ async fn partial_decode_fixed_indexer(
 
     let output_len = usize::try_from(indexer.len() * data_type_size as u64).unwrap();
     let mut output: Vec<u8> = Vec::with_capacity(output_len);
+
+    #[cfg(not(target_arch = "wasm32"))]
     let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    #[cfg(target_arch = "wasm32")]
+    let inner_chunk_partial_decoders =
+        quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
+
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {
@@ -474,7 +480,9 @@ async fn partial_decode_fixed_indexer(
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
-        let inner_partial_decoder_entry = inner_chunk_partial_decoders
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let inner_partial_decoder = inner_chunk_partial_decoders
             .entry(chunk_index_1d)
             .or_try_insert_with(get_inner_chunk_partial_decoder(
                 partial_decoder,
@@ -483,8 +491,14 @@ async fn partial_decode_fixed_indexer(
                 size,
             ))
             .await
-            .map_err(Arc::unwrap_or_clone)?;
-        let inner_partial_decoder = inner_partial_decoder_entry.value();
+            .map_err(Arc::unwrap_or_clone)?
+            .into_value();
+        #[cfg(target_arch = "wasm32")]
+        let inner_partial_decoder = inner_chunk_partial_decoders
+            .get_or_insert_async(&chunk_index_1d, async {
+                get_inner_chunk_partial_decoder(partial_decoder, options, offset, size).await
+            })
+            .await?;
 
         // Get the element index
         let indices_in_inner_chunk: ArrayIndices = indices
@@ -534,7 +548,13 @@ async fn partial_decode_variable_indexer(
     let mut bytes: Vec<u8> = Vec::new();
     let mut offsets: Vec<usize> = Vec::with_capacity(offsets_len);
     offsets.push(0);
+
+    #[cfg(not(target_arch = "wasm32"))]
     let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    #[cfg(target_arch = "wasm32")]
+    let inner_chunk_partial_decoders =
+        quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
+
     for indices in indexer.iter_indices() {
         // Get intersected index
         if indices.len() != partial_decoder.chunk_representation.dimensionality() {
@@ -557,7 +577,9 @@ async fn partial_decode_variable_indexer(
         let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
-        let inner_partial_decoder_entry = inner_chunk_partial_decoders
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let inner_partial_decoder = inner_chunk_partial_decoders
             .entry(chunk_index_1d)
             .or_try_insert_with(get_inner_chunk_partial_decoder(
                 partial_decoder,
@@ -566,8 +588,14 @@ async fn partial_decode_variable_indexer(
                 size,
             ))
             .await
-            .map_err(Arc::unwrap_or_clone)?;
-        let inner_partial_decoder = inner_partial_decoder_entry.value();
+            .map_err(Arc::unwrap_or_clone)?
+            .into_value();
+        #[cfg(target_arch = "wasm32")]
+        let inner_partial_decoder = inner_chunk_partial_decoders
+            .get_or_insert_async(&chunk_index_1d, async {
+                get_inner_chunk_partial_decoder(partial_decoder, options, offset, size).await
+            })
+            .await?;
 
         // Get the element index
         let indices_in_inner_chunk: ArrayIndices = indices

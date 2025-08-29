@@ -20,6 +20,7 @@ use crate::{
 use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};
 
 pub(crate) mod chunk_cache_lru;
+pub(crate) mod chunk_cache_lru_macros;
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Arc<RawBytes<'static>>>;
