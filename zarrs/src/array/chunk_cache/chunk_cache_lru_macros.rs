@@ -1,18 +1,8 @@
-use std::{
-    num::NonZeroUsize,
-    sync::{atomic, atomic::AtomicUsize, Arc, Mutex},
-};
-
-use lru::LruCache;
-use zarrs_storage::ReadableStorageTraits;
-
 use crate::{
     array::{
-        codec::ArrayToBytesCodecTraits, Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize,
-        ChunkCacheTypePartialDecoder,
-        chunk_cache::{
-            ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-        }
+        chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded},
+        codec::ArrayToBytesCodecTraits,
+        Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize, ChunkCacheTypePartialDecoder,
     },
     array_subset::ArraySubset,
     storage::StorageError,

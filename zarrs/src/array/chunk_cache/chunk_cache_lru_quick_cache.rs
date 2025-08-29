@@ -1,7 +1,4 @@
-use std::{
-    num::NonZeroUsize,
-    sync::Arc,
-};
+use std::{num::NonZeroUsize, sync::Arc};
 
 use lru::LruCache;
 
@@ -14,15 +11,13 @@ use std::cell::{Cell, RefCell};
 
 use crate::{
     array::{
-        codec::ArrayToBytesCodecTraits, Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize,
-        ChunkCacheTypePartialDecoder,
-        chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded}
+        chunk_cache::{ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded},
+        codec::ArrayToBytesCodecTraits,
+        Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize, ChunkCacheTypePartialDecoder,
     },
     array_subset::ArraySubset,
+    impl_ChunkCacheLruDecoded, impl_ChunkCacheLruEncoded, impl_ChunkCacheLruPartialDecoder,
     storage::StorageError,
-    impl_ChunkCacheLruEncoded,
-    impl_ChunkCacheLruDecoded,
-    impl_ChunkCacheLruPartialDecoder,
 };
 
 use std::borrow::Cow;
@@ -312,7 +307,6 @@ macro_rules! impl_ChunkCacheLruCommon {
     };
 }
 
-
 impl ChunkCache for ChunkCacheEncodedLruChunkLimit {
     impl_ChunkCacheLruEncoded!();
     impl_ChunkCacheLruCommon!();
@@ -322,7 +316,6 @@ impl ChunkCache for ChunkCacheEncodedLruSizeLimit {
     impl_ChunkCacheLruEncoded!();
     impl_ChunkCacheLruCommon!();
 }
-
 
 impl ChunkCache for ChunkCacheDecodedLruChunkLimit {
     impl_ChunkCacheLruDecoded!();

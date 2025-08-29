@@ -1,4 +1,3 @@
-
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "chunk_cache_lru_moka.rs"]
 mod cache_impl;
@@ -16,11 +15,12 @@ pub use cache_impl::{
     ChunkCachePartialDecoderLruSizeLimit, ChunkCachePartialDecoderLruSizeLimitThreadLocal,
 };
 
-
 #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
-    use zarrs_storage::{ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits};
+    use zarrs_storage::{
+        ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
+    };
 
     use super::*;
 
@@ -28,11 +28,10 @@ mod tests {
 
     use crate::{
         array::{
-            Array,
+            chunk_cache::ChunkCache,
             codec::{CodecOptions, ShardingCodecBuilder},
-            ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+            Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
             ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, DataType,
-            chunk_cache::{ChunkCache},
         },
         array_subset::ArraySubset,
         storage::{
