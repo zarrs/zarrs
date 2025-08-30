@@ -22,7 +22,7 @@ mod store_key;
 mod store_prefix;
 
 pub mod byte_range;
-use byte_range::{ByteOffset, ByteRange, InvalidByteRangeError};
+use byte_range::{ByteOffset, InvalidByteRangeError};
 
 pub use maybe::{MaybeSend, MaybeSync};
 
@@ -126,29 +126,6 @@ type AsyncBytesIterator<'a> = futures::stream::BoxStream<'a, Result<Bytes, Stora
 #[cfg(feature = "async")]
 /// An asynchronous iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
 pub type AsyncMaybeBytesIterator<'a> = Option<AsyncBytesIterator<'a>>;
-
-/// A [`StoreKey`] and [`ByteRange`].
-#[derive(Debug, Clone)]
-pub struct StoreKeyRange {
-    /// The key for the range.
-    key: StoreKey,
-    /// The byte range.
-    byte_range: ByteRange,
-}
-
-impl StoreKeyRange {
-    /// Create a new [`StoreKeyRange`].
-    #[must_use]
-    pub const fn new(key: StoreKey, byte_range: ByteRange) -> Self {
-        Self { key, byte_range }
-    }
-}
-
-impl std::fmt::Display for StoreKeyRange {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}:{}", self.key, self.byte_range)
-    }
-}
 
 /// A [`StoreKey`], [`ByteOffset`], and value (bytes).
 #[derive(Debug, Clone)]

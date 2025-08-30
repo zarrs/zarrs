@@ -99,7 +99,7 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
         }
     }
 
-    async fn get_partial_values_key<'a>(
+    async fn get_byte_ranges<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,

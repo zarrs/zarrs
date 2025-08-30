@@ -99,7 +99,7 @@ impl ReadableStorageTraits for HTTPStore {
         }
     }
 
-    fn get_partial_values_key<'a>(
+    fn get_byte_ranges<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
@@ -232,9 +232,9 @@ mod tests {
         let store = HTTPStore::new("https://raw.githubusercontent.com/bad").unwrap();
         assert!(store.get(&"zarr.json".try_into().unwrap()).is_err());
         assert!(store
-            .get_partial_values_key(
+            .get_byte_range(
                 &"zarr.json".try_into().unwrap(),
-                Box::new([ByteRange::FromStart(0, None)].into_iter())
+                ByteRange::FromStart(0, None)
             )
             .is_err());
         assert!(store.size_key(&"zarr.json".try_into().unwrap()).is_err());

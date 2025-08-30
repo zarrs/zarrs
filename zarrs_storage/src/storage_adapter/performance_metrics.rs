@@ -2,7 +2,7 @@
 
 use crate::{
     byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
@@ -108,13 +108,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         value
     }
 
-    fn get_partial_values_key<'a>(
+    fn get_byte_ranges<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_partial_values_key(key, byte_ranges)?;
+        let values = self.storage.get_byte_ranges(key, byte_ranges)?;
         if let Some(values) = values {
             let values = values.collect::<Vec<_>>();
             let bytes_read = values
@@ -131,20 +131,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
             }
             Ok(None)
         }
-    }
-
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges)?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, Bytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
-        Ok(values)
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
@@ -231,16 +217,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         value
     }
 
-    async fn get_partial_values_key<'a>(
+    async fn get_byte_ranges<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self
-            .storage
-            .get_partial_values_key(key, byte_ranges)
-            .await?;
+        let values = self.storage.get_byte_ranges(key, byte_ranges).await?;
         if let Some(values) = values {
             use futures::{stream, StreamExt};
             let values = values.collect::<Vec<_>>().await;
@@ -258,20 +241,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
             }
             Ok(None)
         }
-    }
-
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges).await?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, Bytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
-        Ok(values)
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
