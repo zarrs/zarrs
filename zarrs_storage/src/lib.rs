@@ -113,18 +113,6 @@ pub type Bytes = bytes::Bytes;
 /// An array to bytes partial decoder must take care of converting missing chunks to the fill value.
 pub type MaybeBytes = Option<Bytes>;
 
-#[cfg(feature = "async")]
-/// The type for bytes used in asynchronous store set and get methods.
-///
-/// An alias for [`bytes::Bytes`].
-pub type AsyncBytes = bytes::Bytes;
-
-#[cfg(feature = "async")]
-/// An alias for bytes which may or may not be available.
-///
-/// When a value is read from a store, it returns `MaybeAsyncBytes` which is [`None`] if the key is not available.
-pub type MaybeAsyncBytes = Option<AsyncBytes>;
-
 /// A [`StoreKey`] and [`ByteRange`].
 #[derive(Debug, Clone)]
 pub struct StoreKeyRange {

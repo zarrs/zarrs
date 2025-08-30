@@ -7,10 +7,7 @@ use crate::{
 };
 
 #[cfg(feature = "async")]
-use crate::{
-    AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes,
-};
+use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -214,11 +211,11 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let value = self.storage.get(key).await;
         let bytes_read = value
             .as_ref()
-            .map_or(0, |v| v.as_ref().map_or(0, AsyncBytes::len));
+            .map_or(0, |v| v.as_ref().map_or(0, Bytes::len));
         self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
         self.reads.fetch_add(1, Ordering::Relaxed);
         value
@@ -228,14 +225,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+    ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self
             .storage
             .get_partial_values_key(key, byte_ranges)
             .await?;
         if let Some(values) = &values {
-            let bytes_read = values.iter().map(AsyncBytes::len).sum();
+            let bytes_read = values.iter().map(Bytes::len).sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
         } else if size_hint_lower_bound > 0 {
@@ -248,11 +245,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     async fn get_partial_values(
         &self,
         key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
+    ) -> Result<Vec<MaybeBytes>, StorageError> {
         let values = self.storage.get_partial_values(key_ranges).await?;
         let bytes_read = values
             .iter()
-            .map(|value| value.as_ref().map_or(0, AsyncBytes::len))
+            .map(|value| value.as_ref().map_or(0, Bytes::len))
             .sum::<usize>();
         self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
         self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
@@ -297,7 +294,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value).await
