@@ -7,8 +7,8 @@
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator, MaybeSend,
-    MaybeSync, ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 use futures::StreamExt;
@@ -104,11 +104,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn
         self.block_on(self.storage.set(key, value))
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[crate::StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        self.block_on(self.storage.set_partial_values(key_offset_values))
+        self.block_on(self.storage.set_partial_many(key, offset_values))
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {

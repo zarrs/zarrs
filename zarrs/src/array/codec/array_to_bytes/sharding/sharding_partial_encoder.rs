@@ -449,17 +449,20 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             match self.index_location {
                 ShardingIndexLocation::Start => {
                     self.input_output_handle.partial_encode(
-                        &[
-                            (0, Cow::Owned(encoded_array_index)),
-                            (offset_new_chunks, Cow::Owned(encoded_output)),
-                        ],
+                        Box::new(
+                            [
+                                (0, Cow::Owned(encoded_array_index)),
+                                (offset_new_chunks, Cow::Owned(encoded_output)),
+                            ]
+                            .into_iter(),
+                        ),
                         options,
                     )?;
                 }
                 ShardingIndexLocation::End => {
                     encoded_output.extend(encoded_array_index);
                     self.input_output_handle.partial_encode(
-                        &[(offset_new_chunks, Cow::Owned(encoded_output))],
+                        Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
                         options,
                     )?;
                 }

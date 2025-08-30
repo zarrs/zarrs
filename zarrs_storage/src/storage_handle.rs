@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::OffsetBytesIterator;
+
 use super::{
     byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StorePrefix, WritableStorageTraits,
@@ -75,11 +77,12 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
         self.0.set(key, value)
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[super::StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), super::StorageError> {
-        self.0.set_partial_values(key_offset_values)
+        self.0.set_partial_many(key, offset_values)
     }
 
     fn erase(&self, key: &super::StoreKey) -> Result<(), super::StorageError> {
@@ -161,11 +164,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         self.0.set(key, value).await
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[super::StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), super::StorageError> {
-        self.0.set_partial_values(key_offset_values).await
+        self.0.set_partial_many(key, offset_values).await
     }
 
     async fn erase(&self, key: &super::StoreKey) -> Result<(), super::StorageError> {

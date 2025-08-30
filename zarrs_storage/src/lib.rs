@@ -42,14 +42,14 @@ pub use store_prefix::{StorePrefix, StorePrefixError, StorePrefixes};
 
 #[cfg(feature = "async")]
 pub use self::storage_async::{
-    async_discover_children, async_store_set_partial_values, AsyncListableStorageTraits,
+    async_discover_children, async_store_set_partial_many, AsyncListableStorageTraits,
     AsyncReadableListableStorageTraits, AsyncReadableStorageTraits,
     AsyncReadableWritableListableStorageTraits, AsyncReadableWritableStorageTraits,
     AsyncWritableStorageTraits,
 };
 
 pub use self::storage_sync::{
-    discover_children, store_set_partial_values, ListableStorageTraits,
+    discover_children, store_set_partial_many, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
@@ -127,42 +127,17 @@ type AsyncBytesIterator<'a> = futures::stream::BoxStream<'a, Result<Bytes, Stora
 /// An asynchronous iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
 pub type AsyncMaybeBytesIterator<'a> = Option<AsyncBytesIterator<'a>>;
 
-/// A [`StoreKey`], [`ByteOffset`], and value (bytes).
-#[derive(Debug, Clone)]
-#[must_use]
-pub struct StoreKeyOffsetValue<'a> {
-    /// The key.
-    key: StoreKey,
-    /// The starting byte offset.
-    offset: ByteOffset,
-    /// The store value.
-    value: &'a [u8],
+/// This trait combines [`Iterator<Item = (Bytes, ByteOffset)>`] and [`MaybeSend`],
+/// as they cannot be combined together directly in function signatures.
+pub trait MaybeSendOffsetBytesIterator<T>: Iterator<Item = (ByteOffset, T)> + MaybeSend {}
+
+impl<I, T> MaybeSendOffsetBytesIterator<T> for I where
+    I: Iterator<Item = (ByteOffset, T)> + MaybeSend
+{
 }
 
-impl StoreKeyOffsetValue<'_> {
-    /// Create a new [`StoreKeyOffsetValue`].
-    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue<'_> {
-        StoreKeyOffsetValue { key, offset, value }
-    }
-
-    /// Get the key.
-    #[must_use]
-    pub const fn key(&self) -> &StoreKey {
-        &self.key
-    }
-
-    /// Get the offset.
-    #[must_use]
-    pub const fn offset(&self) -> ByteOffset {
-        self.offset
-    }
-
-    /// Get the value.
-    #[must_use]
-    pub const fn value(&self) -> &[u8] {
-        self.value
-    }
-}
+/// A [`Bytes`] and [`ByteOffset`] iterator.
+pub type OffsetBytesIterator<'a, T = Bytes> = Box<dyn MaybeSendOffsetBytesIterator<T> + 'a>;
 
 /// [`StoreKeys`] and [`StorePrefixes`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
