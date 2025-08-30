@@ -11,12 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` for `Error` structs
 - Add `MaybeSend`/`MaybeSync` for WASM compatibility ([#245] by [@keller-mark])
 - Add missing `AsyncReadableWritableStorage`
+- Add `[Async]MaybeBytesIterator`
 
 ### Changed
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
 - **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: ByteRangeIterator` for
   - `extract_byte_ranges[{_concat,_read_seek,_read}]`
   - `[Async]ReadableStorageTraits::get_partial_values_key`
+- **Breaking**: `[Async]ReadableStorageTraits::get_partial_values_key` returns `[Async]MaybeBytesIterator` instead of `Option<Vec<Bytes>>`
+- **Breaking**: Increase MSRV to 1.82
+- Optimise `MemoryStore`
 
 ### Removed
 - **Breaking**: Remove `extract_byte_ranges_unchecked`

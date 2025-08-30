@@ -113,6 +113,20 @@ pub type Bytes = bytes::Bytes;
 /// An array to bytes partial decoder must take care of converting missing chunks to the fill value.
 pub type MaybeBytes = Option<Bytes>;
 
+/// An iterator of [`Bytes`].
+type BytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
+
+/// An iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
+pub type MaybeBytesIterator<'a> = Option<BytesIterator<'a>>;
+
+#[cfg(feature = "async")]
+/// An asynchronous iterator of [`Bytes`].
+type AsyncBytesIterator<'a> = futures::stream::BoxStream<'a, Result<Bytes, StorageError>>;
+
+#[cfg(feature = "async")]
+/// An asynchronous iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
+pub type AsyncMaybeBytesIterator<'a> = Option<AsyncBytesIterator<'a>>;
+
 /// A [`StoreKey`] and [`ByteRange`].
 #[derive(Debug, Clone)]
 pub struct StoreKeyRange {

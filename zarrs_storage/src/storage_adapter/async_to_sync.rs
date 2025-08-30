@@ -6,11 +6,12 @@
 
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeSend, MaybeSync,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator, MaybeSend,
+    MaybeSync, ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, WritableStorageTraits,
 };
 
+use futures::StreamExt;
 use std::sync::Arc;
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -57,12 +58,18 @@ impl<TStorage: ?Sized, TBlockOn: AsyncToSyncBlockOn> AsyncToSyncStorageAdapter<T
 impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
     ReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_values_key<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        self.block_on(self.storage.get_partial_values_key(key, byte_ranges))
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        let results = self.block_on(self.storage.get_partial_values_key(key, byte_ranges))?;
+        if let Some(results) = results {
+            let results = self.block_on(results.collect::<Vec<_>>());
+            Ok(Some(Box::new(results.into_iter())))
+        } else {
+            Ok(None)
+        }
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {

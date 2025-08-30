@@ -73,8 +73,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
                 Box::new([ByteRange::FromStart(self.pos, Some(len))].into_iter()),
             )
             .map_err(|err| std::io::Error::other(err.to_string()))?
-            .map(|mut v| v.remove(0));
+            .map(|mut v| {
+                let bytes = v.next().expect("one byte range");
+                debug_assert!(v.next().is_none());
+                bytes
+            });
         if let Some(data) = data {
+            let data = data.map_err(|e| std::io::Error::other(e.to_string()))?;
             buf.copy_from_slice(&data);
             self.pos += data.len() as u64;
             Ok(data.len())

@@ -1,13 +1,16 @@
 //! A storage transformer which records performance metrics.
 
 use crate::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
-use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
+use crate::{
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
+};
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -105,22 +108,29 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         value
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_values_key<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self.storage.get_partial_values_key(key, byte_ranges)?;
-        if let Some(values) = &values {
-            let bytes_read = values.iter().map(Bytes::len).sum();
+        if let Some(values) = values {
+            let values = values.collect::<Vec<_>>();
+            let bytes_read = values
+                .iter()
+                .map(|b| b.as_ref().map_or(0, Bytes::len))
+                .sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
-            // If the key is found to be empty, consider that as a read
-            self.reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(Box::new(values.into_iter())))
+        } else {
+            if size_hint_lower_bound > 0 {
+                // If the key is found to be empty, consider that as a read
+                self.reads.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(None)
         }
-        Ok(values)
     }
 
     fn get_partial_values(
@@ -225,21 +235,29 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
         let values = self
             .storage
             .get_partial_values_key(key, byte_ranges)
             .await?;
-        if let Some(values) = &values {
-            let bytes_read = values.iter().map(Bytes::len).sum();
+        if let Some(values) = values {
+            use futures::{stream, StreamExt};
+            let values = values.collect::<Vec<_>>().await;
+            let bytes_read = values
+                .iter()
+                .map(|b| b.as_ref().map_or(0, Bytes::len))
+                .sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
-            // If the key is found to be empty, consider that as a read
-            self.reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(stream::iter(values).boxed()))
+        } else {
+            if size_hint_lower_bound > 0 {
+                // If the key is found to be empty, consider that as a read
+                self.reads.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(None)
         }
-        Ok(values)
     }
 
     async fn get_partial_values(

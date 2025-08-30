@@ -37,13 +37,14 @@
 
 pub use object_store;
 
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
     async_store_set_partial_values, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
-    AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes, MaybeBytes, StorageError,
-    StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,
+    MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes,
+    StorePrefix,
 };
 
 /// Maps a [`StoreKey`] to an [`object_store`] path.
@@ -102,41 +103,34 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
         };
         let ranges = byte_ranges
             .map(|byte_range| byte_range.to_range(size))
             .collect::<Vec<_>>();
-        let get_ranges = self
-            .object_store
-            .get_ranges(&key_to_path(key), &ranges)
-            .await;
-        match get_ranges {
-            Ok(get_ranges) => Ok(Some(
-                std::iter::zip(ranges, get_ranges)
-                    .map(|(range, bytes)| {
-                        let range_len = range.end.saturating_sub(range.start);
-                        if range_len == bytes.len() as u64 {
-                            Ok(bytes)
-                        } else {
-                            Err(StorageError::Other(format!(
-                                "Unexpected length of bytes returned, expected {}, got {}",
-                                range_len,
-                                bytes.len()
-                            )))
-                        }
-                    })
-                    .collect::<Result<_, StorageError>>()?,
-            )),
-            Err(err) => {
-                if matches!(err, object_store::Error::NotFound { .. }) {
-                    Ok(None)
+        let get_ranges = handle_result_notfound(
+            self.object_store
+                .get_ranges(&key_to_path(key), &ranges)
+                .await,
+        )?;
+        if let Some(get_ranges) = get_ranges {
+            let result = std::iter::zip(ranges, get_ranges).map(|(range, bytes)| {
+                let range_len = range.end.saturating_sub(range.start);
+                if range_len == bytes.len() as u64 {
+                    Ok(bytes)
                 } else {
-                    Err(StorageError::Other(err.to_string()))
+                    Err(StorageError::Other(format!(
+                        "Unexpected length of bytes returned, expected {}, got {}",
+                        range_len,
+                        bytes.len()
+                    )))
                 }
-            }
+            });
+            Ok(Some(stream::iter(result).boxed()))
+        } else {
+            Ok(None)
         }
     }
 

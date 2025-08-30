@@ -3,6 +3,8 @@ use std::sync::Arc;
 use auto_impl::auto_impl;
 use itertools::Itertools;
 
+use crate::MaybeBytesIterator;
+
 use super::{
     byte_range::{ByteRange, ByteRangeIterator},
     Bytes, MaybeBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
@@ -19,9 +21,15 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        Ok(self
-            .get_partial_values_key(key, Box::new([ByteRange::FromStart(0, None)].into_iter()))?
-            .map(|mut v| v.remove(0)))
+        let mut bytes = self
+            .get_partial_values_key(key, Box::new([ByteRange::FromStart(0, None)].into_iter()))?;
+        if let Some(bytes) = &mut bytes {
+            let output = bytes.next().expect("one byte range")?;
+            debug_assert!(bytes.next().is_none());
+            Ok(Some(output))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -30,11 +38,11 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_values_key<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError>;
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
     ///
@@ -82,15 +90,20 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
 
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self.get_partial_values_key(
-                    last_key.unwrap(),
-                    Box::new(byte_ranges_key.iter().copied()),
-                )?)
-                .map_or_else(
-                    || vec![None; byte_ranges_key.len()],
-                    |partial_values| partial_values.into_iter().map(Some).collect(),
-                );
-                out.extend(bytes);
+                {
+                    let bytes = self.get_partial_values_key(
+                        last_key.unwrap(),
+                        Box::new(byte_ranges_key.iter().copied()),
+                    )?;
+                    if let Some(bytes) = bytes {
+                        out.reserve(byte_ranges_key.len());
+                        for bytes in bytes {
+                            out.push(Some(bytes?));
+                        }
+                    } else {
+                        out.resize(out.len() + byte_ranges_key.len(), None);
+                    }
+                }
                 last_key = Some(&key_range.key);
                 byte_ranges_key.clear();
             }
@@ -100,15 +113,18 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
 
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
-            let bytes = (self.get_partial_values_key(
+            let bytes = self.get_partial_values_key(
                 last_key.unwrap(),
                 Box::new(byte_ranges_key.iter().copied()),
-            )?)
-            .map_or_else(
-                || vec![None; byte_ranges_key.len()],
-                |partial_values| partial_values.into_iter().map(Some).collect(),
-            );
-            out.extend(bytes);
+            )?;
+            if let Some(bytes) = bytes {
+                out.reserve(byte_ranges_key.len());
+                for bytes in bytes {
+                    out.push(Some(bytes?));
+                }
+            } else {
+                out.resize(out.len() + byte_ranges_key.len(), None);
+            }
         }
 
         Ok(out)

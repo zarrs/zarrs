@@ -644,15 +644,17 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(self
+        let bytes = self
             .storage
-            .get_partial_values_key(&self.key, decoded_regions)?
-            .map(|vec_bytes| {
-                vec_bytes
-                    .into_iter()
-                    .map(|bytes| Cow::Owned(bytes.to_vec()))
-                    .collect()
-            }))
+            .get_partial_values_key(&self.key, decoded_regions)?;
+        if let Some(bytes) = bytes {
+            let bytes = bytes
+                .map(|b| Ok::<_, StorageError>(Cow::Owned(b?.to_vec())))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Some(bytes))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -680,16 +682,21 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
         decoded_regions: ByteRangeIterator<'a>,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(self
+        let bytes = self
             .storage
             .get_partial_values_key(&self.key, decoded_regions)
-            .await?
-            .map(|vec_bytes| {
-                vec_bytes
-                    .into_iter()
-                    .map(|bytes| Cow::Owned(bytes.to_vec()))
-                    .collect()
-            }))
+            .await?;
+        Ok(if let Some(bytes) = bytes {
+            use futures::{StreamExt, TryStreamExt};
+            Some(
+                bytes
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.to_vec())))
+                    .try_collect()
+                    .await?,
+            )
+        } else {
+            None
+        })
     }
 }
 
@@ -779,15 +786,19 @@ impl BytesPartialDecoderTraits for StoragePartialEncoder {
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        Ok(self
+        let results = self
             .storage
-            .get_partial_values_key(&self.key, decoded_regions)?
-            .map(|vec_bytes| {
-                vec_bytes
+            .get_partial_values_key(&self.key, decoded_regions)?;
+        if let Some(results) = results {
+            Ok(Some(
+                results
                     .into_iter()
-                    .map(|bytes| Cow::Owned(bytes.to_vec()))
-                    .collect()
-            }))
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.to_vec())))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        } else {
+            Ok(None)
+        }
     }
 }
 

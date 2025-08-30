@@ -65,11 +65,14 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
     assert_eq!(store.size_key(&"a/c".try_into()?)?, Some(1));
     assert_eq!(store.size_key(&"i/j/k".try_into()?)?, Some(2));
     assert_eq!(
-        store.get_partial_values_key(
-            &"a/b".try_into()?,
-            Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
-        )?,
-        Some(vec![vec![1].into(), vec![3].into()])
+        store
+            .get_partial_values_key(
+                &"a/b".try_into()?,
+                Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
+            )?
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()?,
+        vec![vec![1], vec![3]]
     );
     assert_eq!(
         store.get_partial_values(&[
@@ -238,6 +241,8 @@ pub async fn async_store_write<T: AsyncWritableStorageTraits>(
 pub async fn async_store_read<T: AsyncReadableStorageTraits>(
     store: &T,
 ) -> Result<(), Box<dyn Error>> {
+    use futures::TryStreamExt;
+
     assert!(store.get(&"notfound".try_into()?).await?.is_none());
     assert!(store.size_key(&"notfound".try_into()?).await?.is_none());
     assert_eq!(
@@ -253,8 +258,11 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
                 &"a/b".try_into()?,
                 Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
             )
+            .await?
+            .unwrap()
+            .try_collect::<Vec<_>>()
             .await?,
-        Some(vec![vec![1].into(), vec![3].into()])
+        vec![vec![1], vec![3]]
     );
     assert_eq!(
         store
