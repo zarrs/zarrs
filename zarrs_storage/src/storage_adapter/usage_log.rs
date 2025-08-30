@@ -9,13 +9,16 @@ use itertools::Itertools;
 
 use crate::{
     byte_range::{ByteRange, ByteRangeIterator},
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
-use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
+use crate::{
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
+};
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
 /// as they cannot be combined together directly in function signatures.
@@ -96,26 +99,34 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         result
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_values_key<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
-            .get_partial_values_key(key, Box::new(byte_ranges.iter().copied()));
+            .get_partial_values_key(key, Box::new(byte_ranges.iter().copied()))?;
+        let result = if let Some(result) = result {
+            Some(result.collect::<Result<Vec<_>, _>>()?)
+        } else {
+            None
+        };
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
-            })
+            result
+                .as_ref()
+                .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
         )?;
-        result
+        if let Some(result) = result {
+            Ok(Some(Box::new(result.into_iter().map(Ok))))
+        } else {
+            Ok(None)
+        }
     }
 
     fn get_partial_values(
@@ -309,23 +320,33 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
+        use futures::{stream, StreamExt, TryStreamExt};
+
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
             .get_partial_values_key(key, Box::new(byte_ranges.iter().copied()))
-            .await;
+            .await?;
+        let result = if let Some(result) = result {
+            Some(result.try_collect::<Vec<_>>().await?)
+        } else {
+            None
+        };
         writeln!(
             self.handle.lock().unwrap(),
             "{}get_partial_values_key({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
-            })
+            result
+                .as_ref()
+                .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
         )?;
-        result
+        if let Some(result) = result {
+            Ok(Some(stream::iter(result.into_iter().map(Ok)).boxed()))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn get_partial_values(

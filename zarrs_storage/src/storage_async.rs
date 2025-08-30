@@ -4,10 +4,11 @@ use auto_impl::auto_impl;
 use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 
+use crate::{byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes};
+
 use super::{
-    byte_range::{ByteRange, ByteRangeIterator},
-    Bytes, MaybeBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
-    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey,
+    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
@@ -26,10 +27,16 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        Ok(self
+        let mut result = self
             .get_partial_values_key(key, Box::new([ByteRange::FromStart(0, None)].into_iter()))
-            .await?
-            .map(|mut v| v.remove(0)))
+            .await?;
+        if let Some(result) = &mut result {
+            let bytes = result.next().await.expect("one byte range")?;
+            debug_assert!(result.next().await.is_none());
+            Ok(Some(bytes))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -43,7 +50,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<Bytes>>, StorageError>;
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
     ///
@@ -93,17 +100,22 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
 
             if key_range.key != *last_key_val {
                 // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self
-                    .get_partial_values_key(
-                        last_key.unwrap(),
-                        Box::new(byte_ranges_key.iter().copied()),
-                    )
-                    .await?)
-                    .map_or_else(
-                        || vec![None; byte_ranges_key.len()],
-                        |partial_values| partial_values.into_iter().map(Some).collect(),
-                    );
-                out.extend(bytes);
+                {
+                    let mut bytes = self
+                        .get_partial_values_key(
+                            last_key.unwrap(),
+                            Box::new(byte_ranges_key.iter().copied()),
+                        )
+                        .await?;
+                    if let Some(bytes) = &mut bytes {
+                        out.reserve(byte_ranges_key.len());
+                        while let Some(bytes) = bytes.next().await {
+                            out.push(Some(bytes?));
+                        }
+                    } else {
+                        out.resize(out.len() + byte_ranges_key.len(), None);
+                    }
+                }
                 last_key = Some(&key_range.key);
                 byte_ranges_key.clear();
             }
@@ -113,17 +125,20 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
 
         if !byte_ranges_key.is_empty() {
             // Get the byte ranges of the last key
-            let bytes = (self
+            let mut bytes = self
                 .get_partial_values_key(
                     last_key.unwrap(),
                     Box::new(byte_ranges_key.iter().copied()),
                 )
-                .await?)
-                .map_or_else(
-                    || vec![None; byte_ranges_key.len()],
-                    |partial_values| partial_values.into_iter().map(Some).collect(),
-                );
-            out.extend(bytes);
+                .await?;
+            if let Some(bytes) = &mut bytes {
+                out.reserve(byte_ranges_key.len());
+                while let Some(bytes) = bytes.next().await {
+                    out.push(Some(bytes?));
+                }
+            } else {
+                out.resize(out.len() + byte_ranges_key.len(), None);
+            }
         }
 
         Ok(out)
