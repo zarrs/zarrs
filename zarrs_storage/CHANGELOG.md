@@ -12,13 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `MaybeSend`/`MaybeSync` for WASM compatibility ([#245] by [@keller-mark])
 - Add missing `AsyncReadableWritableStorage`
 - Add `[Async]MaybeBytesIterator`
+- Add `[Async]ReadableStorageTraits::get_byte_range`
+- Add `[Async]ReadableStorageTraits::get_byte_ranges`, replaces `get_partial_values`
+  - Consumes and returns iterators
 
 ### Changed
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
 - **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: ByteRangeIterator` for
   - `extract_byte_ranges[{_concat,_read_seek,_read}]`
-  - `[Async]ReadableStorageTraits::get_partial_values_key`
-- **Breaking**: `[Async]ReadableStorageTraits::get_partial_values_key` returns `[Async]MaybeBytesIterator` instead of `Option<Vec<Bytes>>`
 - **Breaking**: Increase MSRV to 1.82
 - Optimise `MemoryStore`
 
@@ -26,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `extract_byte_ranges_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_concat_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_read`, no longer needed by `zarrs_zip`
+- **Breaking**: Remove `StoreKeyRange`
+- **Breaking**: Remove `[Async]ReadableStorageTraits::get_partial_values[_batched_by_key]`
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 
