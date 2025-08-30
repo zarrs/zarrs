@@ -8,7 +8,7 @@ use crate::{byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes};
 
 use super::{
     byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
@@ -27,8 +27,37 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
+        self.get_byte_range(key, ByteRange::FromStart(0, None))
+            .await
+    }
+
+    /// Retrieve partial bytes from a list of byte ranges for a store key.
+    ///
+    /// Returns [`None`] if the key is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`] if there is an underlying storage error.
+    async fn get_byte_ranges<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError>;
+
+    /// Retrieve partial bytes from a single byte range for a store key.
+    ///
+    /// Returns [`None`] if the key is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`] if there is an underlying storage error.
+    async fn get_byte_range<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
         let mut result = self
-            .get_partial_values_key(key, Box::new([ByteRange::FromStart(0, None)].into_iter()))
+            .get_byte_ranges(key, Box::new([byte_range].into_iter()))
             .await?;
         if let Some(result) = &mut result {
             let bytes = result.next().await.expect("one byte range")?;
@@ -39,36 +68,6 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
         }
     }
 
-    /// Retrieve partial bytes from a list of byte ranges for a store key.
-    ///
-    /// Returns [`None`] if the key is not found.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values_key<'a>(
-        &'a self,
-        key: &StoreKey,
-        byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError>;
-
-    /// Retrieve partial bytes from a list of [`StoreKeyRange`].
-    ///
-    /// # Parameters
-    /// * `key_ranges`: ordered set of ([`StoreKey`], [`ByteRange`]) pairs. A key may occur multiple times with different ranges.
-    ///
-    /// # Output
-    /// A a list of values in the order of the `key_ranges`. It will be [`None`] for missing keys.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        self.get_partial_values_batched_by_key(key_ranges).await
-    }
-
     /// Return the size in bytes of the value at `key`.
     ///
     /// Returns [`None`] if the key is not found.
@@ -77,72 +76,6 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError>;
-
-    /// A utility method with the same input and output as [`get_partial_values`](AsyncReadableStorageTraits::get_partial_values) that internally calls [`get_partial_values_key`](AsyncReadableStorageTraits::get_partial_values_key) with byte ranges grouped by key.
-    ///
-    /// Readable storage can use this function in the implementation of [`get_partial_values`](AsyncReadableStorageTraits::get_partial_values) if that is optimal.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values_batched_by_key(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let mut out: Vec<MaybeBytes> = Vec::with_capacity(key_ranges.len());
-        let mut last_key = None;
-        let mut byte_ranges_key = Vec::new();
-        for key_range in key_ranges {
-            if last_key.is_none() {
-                last_key = Some(&key_range.key);
-            }
-            let last_key_val = last_key.unwrap();
-
-            if key_range.key != *last_key_val {
-                // Found a new key, so do a batched get of the byte ranges of the last key
-                {
-                    let mut bytes = self
-                        .get_partial_values_key(
-                            last_key.unwrap(),
-                            Box::new(byte_ranges_key.iter().copied()),
-                        )
-                        .await?;
-                    if let Some(bytes) = &mut bytes {
-                        out.reserve(byte_ranges_key.len());
-                        while let Some(bytes) = bytes.next().await {
-                            out.push(Some(bytes?));
-                        }
-                    } else {
-                        out.resize(out.len() + byte_ranges_key.len(), None);
-                    }
-                }
-                last_key = Some(&key_range.key);
-                byte_ranges_key.clear();
-            }
-
-            byte_ranges_key.push(key_range.byte_range);
-        }
-
-        if !byte_ranges_key.is_empty() {
-            // Get the byte ranges of the last key
-            let mut bytes = self
-                .get_partial_values_key(
-                    last_key.unwrap(),
-                    Box::new(byte_ranges_key.iter().copied()),
-                )
-                .await?;
-            if let Some(bytes) = &mut bytes {
-                out.reserve(byte_ranges_key.len());
-                while let Some(bytes) = bytes.next().await {
-                    out.push(Some(bytes?));
-                }
-            } else {
-                out.resize(out.len() + byte_ranges_key.len(), None);
-            }
-        }
-
-        Ok(out)
-    }
 }
 
 /// Async listable storage traits.

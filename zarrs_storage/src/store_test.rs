@@ -2,7 +2,7 @@ use std::error::Error;
 
 use crate::{
     byte_range::ByteRange, ListableStorageTraits, ReadableStorageTraits, StoreKeyOffsetValue,
-    StoreKeyRange, StorePrefix, WritableStorageTraits,
+    StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
@@ -66,7 +66,7 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
     assert_eq!(store.size_key(&"i/j/k".try_into()?)?, Some(2));
     assert_eq!(
         store
-            .get_partial_values_key(
+            .get_byte_ranges(
                 &"a/b".try_into()?,
                 Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
             )?
@@ -75,32 +75,25 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
         vec![vec![1], vec![3]]
     );
     assert_eq!(
-        store.get_partial_values(&[
-            StoreKeyRange::new("a/b".try_into()?, ByteRange::FromStart(1, None)),
-            StoreKeyRange::new("a/b".try_into()?, ByteRange::Suffix(2)),
-            StoreKeyRange::new("i/j/k".try_into()?, ByteRange::FromStart(1, Some(1))),
-        ])?,
-        vec![
-            Some(vec![1, 2, 3].into()),
-            Some(vec![2, 3].into()),
-            Some(vec![1].into())
-        ]
+        store.get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, None))?,
+        Some(vec![1, 2, 3].into())
+    );
+    assert_eq!(
+        store.get_byte_range(&"a/b".try_into()?, ByteRange::Suffix(2))?,
+        Some(vec![2, 3].into())
+    );
+    assert_eq!(
+        store.get_byte_range(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))?,
+        Some(vec![1].into())
     );
     assert!(store
-        .get_partial_values(&[StoreKeyRange::new(
-            "a/b".try_into()?,
-            ByteRange::FromStart(1, Some(10))
-        ),])
+        .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
         .is_err());
-
     assert_eq!(
         store
-            .get_partial_values(&[StoreKeyRange::new(
-                "notfound".try_into()?,
-                ByteRange::FromStart(1, Some(10))
-            ),])
+            .get_byte_range(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
             .unwrap(),
-        vec![None]
+        None
     );
 
     Ok(())
@@ -254,7 +247,7 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
     assert_eq!(store.size_key(&"i/j/k".try_into()?).await?, Some(2));
     assert_eq!(
         store
-            .get_partial_values_key(
+            .get_byte_ranges(
                 &"a/b".try_into()?,
                 Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
             )
@@ -266,35 +259,32 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
     );
     assert_eq!(
         store
-            .get_partial_values(&[
-                StoreKeyRange::new("a/b".try_into()?, ByteRange::FromStart(1, None)),
-                StoreKeyRange::new("a/b".try_into()?, ByteRange::Suffix(2)),
-                StoreKeyRange::new("i/j/k".try_into()?, ByteRange::FromStart(1, Some(1))),
-            ])
+            .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, None))
             .await?,
-        vec![
-            Some(vec![1, 2, 3].into()),
-            Some(vec![2, 3].into()),
-            Some(vec![1].into())
-        ]
+        Some(vec![1, 2, 3].into())
     );
-    assert!(store
-        .get_partial_values(&[StoreKeyRange::new(
-            "a/b".try_into()?,
-            ByteRange::FromStart(1, Some(10))
-        ),])
-        .await
-        .is_err());
-
     assert_eq!(
         store
-            .get_partial_values(&[StoreKeyRange::new(
-                "notfound".try_into()?,
-                ByteRange::FromStart(1, Some(10))
-            ),])
+            .get_byte_range(&"a/b".try_into()?, ByteRange::Suffix(2))
+            .await?,
+        Some(vec![2, 3].into())
+    );
+    assert_eq!(
+        store
+            .get_byte_range(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))
+            .await?,
+        Some(vec![1].into())
+    );
+    assert!(store
+        .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
+        .await
+        .is_err());
+    assert_eq!(
+        store
+            .get_byte_range(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
             .await
             .unwrap(),
-        vec![None]
+        None
     );
 
     Ok(())

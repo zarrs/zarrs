@@ -249,7 +249,7 @@ impl FilesystemStore {
 }
 
 impl ReadableStorageTraits for FilesystemStore {
-    fn get_partial_values_key<'a>(
+    fn get_byte_ranges<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
