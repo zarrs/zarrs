@@ -32,7 +32,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges)
     }
@@ -112,10 +112,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         self.0.get(key).await
     }
 
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_values_key<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges).await
     }

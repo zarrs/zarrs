@@ -37,10 +37,10 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions.map(|range| match range {
+        let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
             }
@@ -48,7 +48,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(&mut decoded_regions, options)
+            .partial_decode(Box::new(decoded_regions), options)
     }
 }
 
@@ -77,12 +77,12 @@ impl AsyncStripPrefixPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions.map(|range| match range {
+        let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
             }
@@ -90,7 +90,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(&mut decoded_regions, options)
+            .partial_decode(Box::new(decoded_regions), options)
             .await
     }
 }

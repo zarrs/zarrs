@@ -78,7 +78,7 @@ impl ReadableStorageTraits for MemoryStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);

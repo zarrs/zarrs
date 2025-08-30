@@ -330,7 +330,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
 
@@ -344,7 +344,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
     fn partial_decode_concat(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -360,7 +360,10 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails.
     fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
+            .partial_decode(
+                Box::new([ByteRange::FromStart(0, None)].into_iter()),
+                options,
+            )?
             .map(|mut v| v.remove(0)))
     }
 }
@@ -376,9 +379,9 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
 
@@ -388,9 +391,9 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or a byte range is invalid.
-    async fn partial_decode_concat(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode_concat<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
@@ -407,7 +410,10 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails.
     async fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
         Ok(self
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
+            .partial_decode(
+                Box::new([ByteRange::FromStart(0, None)].into_iter()),
+                options,
+            )
             .await?
             .map(|mut v| v.remove(0)))
     }
@@ -635,7 +641,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(self
@@ -669,9 +675,9 @@ impl AsyncStoragePartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(self
@@ -694,7 +700,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         if let Some(input) = self.lock().unwrap().as_ref() {
@@ -770,7 +776,7 @@ impl BytesPartialDecoderTraits for StoragePartialEncoder {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(self
@@ -1303,7 +1309,7 @@ impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
@@ -1322,7 +1328,7 @@ impl BytesPartialDecoderTraits for Vec<u8> {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
@@ -1338,9 +1344,9 @@ impl BytesPartialDecoderTraits for Vec<u8> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(
@@ -1356,9 +1362,9 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Vec<u8> {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(Some(

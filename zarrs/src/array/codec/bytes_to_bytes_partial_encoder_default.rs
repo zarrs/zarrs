@@ -104,7 +104,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialEncoderDefault {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         super::bytes_to_bytes_partial_decoder_default::partial_decode(
@@ -170,9 +170,9 @@ impl AsyncBytesToBytesPartialEncoderDefault {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialEncoderDefault {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         super::bytes_to_bytes_partial_decoder_default::partial_decode_async(

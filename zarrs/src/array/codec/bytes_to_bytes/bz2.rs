@@ -123,7 +123,7 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
         let input_handle = Arc::new(encoded);
@@ -136,7 +136,7 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // bz2 partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(Box::new(decoded_regions), &CodecOptions::default())
             .unwrap()
             .unwrap();
 
@@ -171,7 +171,7 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
             .byte_ranges(array_representation.shape(), data_type_size)
             .unwrap();
         let input_handle = Arc::new(encoded);
@@ -184,7 +184,7 @@ mod tests {
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode_concat(Box::new(decoded_regions), &CodecOptions::default())
             .await
             .unwrap()
             .unwrap();

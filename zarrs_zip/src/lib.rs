@@ -93,7 +93,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
     fn get_impl(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let mut zip_archive = self.zip_archive.lock().unwrap();
         let mut file = {
@@ -126,7 +126,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.get_impl(key, byte_ranges)
     }
@@ -264,8 +264,8 @@ mod tests {
     };
 
     // https://github.com/zip-rs/zip/blob/master/examples/write_dir.rs
-    fn zip_dir(
-        it: &mut dyn Iterator<Item = walkdir::DirEntry>,
+    fn zip_dir<I: Iterator<Item = walkdir::DirEntry>>(
+        it: I,
         prefix: &str,
         writer: File,
         method: zip::CompressionMethod,
