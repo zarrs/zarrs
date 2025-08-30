@@ -68,12 +68,12 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
 
         let chunk_shape = self.decoded_representation.shape_u64();
         // Get byte ranges
-        let mut byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
 
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(&mut byte_ranges, options)?
+            .partial_decode_concat(Box::new(byte_ranges), options)?
             .map_or_else(
                 || {
                     let array_size = ArraySize::new(
@@ -154,12 +154,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         let chunk_shape = self.decoded_representation.shape_u64();
 
         // Get byte ranges
-        let mut byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
 
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(&mut byte_ranges, options)
+            .partial_decode_concat(Box::new(byte_ranges), options)
             .await?
             .map_or_else(
                 || {

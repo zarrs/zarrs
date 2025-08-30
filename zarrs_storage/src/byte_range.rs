@@ -309,10 +309,8 @@ pub fn extract_byte_ranges_read_seek<T: Read + Seek>(
         .collect::<std::io::Result<Vec<Vec<u8>>>>()
 }
 
-/// This trait combines `Iterator` and `MaybeSend`,
-/// as they cannot be combined together directly in function signatures.
-pub trait ByteRangeIterator: Iterator<Item = ByteRange> + MaybeSend {}
-impl<T: Iterator<Item = ByteRange> + MaybeSend> ByteRangeIterator for T {}
+/// A [`ByteRange`] iterator.
+pub type ByteRangeIterator<'a> = Box<dyn Iterator<Item = ByteRange> + MaybeSend + 'a>;
 
 #[cfg(test)]
 mod tests {

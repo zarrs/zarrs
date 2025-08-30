@@ -27,7 +27,10 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
+            .partial_decode(
+                Box::new([ByteRange::FromStart(0, None)].into_iter()),
+                options,
+            )?
             .map(|mut bytes| bytes.remove(0).into_owned());
         Ok(Self { cache })
     }
@@ -42,7 +45,10 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<BytesPartialDecoderCache, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
+            .partial_decode(
+                Box::new([ByteRange::FromStart(0, None)].into_iter()),
+                options,
+            )
             .await?
             .map(|mut bytes| bytes.remove(0).into_owned());
         Ok(Self { cache })
@@ -56,7 +62,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
@@ -76,9 +82,9 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    async fn partial_decode<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode(self, decoded_regions, options)

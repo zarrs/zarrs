@@ -116,8 +116,8 @@ fn read_array_from_store<TStorage: ReadableStorageTraits + 'static>(
 }
 
 // https://github.com/zip-rs/zip/blob/master/examples/write_dir.rs
-fn zip_dir(
-    it: &mut dyn Iterator<Item = walkdir::DirEntry>,
+fn zip_dir<I: Iterator<Item = walkdir::DirEntry>>(
+    it: I,
     prefix: &str,
     writer: File,
     method: zip::CompressionMethod,

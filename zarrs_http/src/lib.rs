@@ -101,7 +101,7 @@ impl ReadableStorageTraits for HTTPStore {
     fn get_partial_values_key(
         &self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
     ) -> Result<Option<Vec<Bytes>>, StorageError> {
         let url = self.key_to_url(key).map_err(handle_url_error)?;
         let Some(size) = self.size_key(key)? else {
@@ -239,7 +239,7 @@ mod tests {
         assert!(store
             .get_partial_values_key(
                 &"zarr.json".try_into().unwrap(),
-                &mut [ByteRange::FromStart(0, None)].into_iter()
+                Box::new([ByteRange::FromStart(0, None)].into_iter())
             )
             .is_err());
         assert!(store.size_key(&"zarr.json".try_into().unwrap()).is_err());

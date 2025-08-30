@@ -70,7 +70,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
             .storage
             .get_partial_values_key(
                 &self.key,
-                &mut [ByteRange::FromStart(self.pos, Some(len))].into_iter(),
+                Box::new([ByteRange::FromStart(self.pos, Some(len))].into_iter()),
             )
             .map_err(|err| std::io::Error::other(err.to_string()))?
             .map(|mut v| v.remove(0));

@@ -92,7 +92,7 @@ impl ShardingPartialDecoder {
         let byte_range = self.inner_chunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle
-                .partial_decode_concat(&mut [byte_range].into_iter(), &CodecOptions::default())
+                .partial_decode_concat(Box::new([byte_range].into_iter()), &CodecOptions::default())
         } else {
             Ok(None)
         }

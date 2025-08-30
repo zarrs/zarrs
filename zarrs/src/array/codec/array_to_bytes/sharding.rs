@@ -268,7 +268,7 @@ fn decode_shard_index_partial_decoder(
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
-        .partial_decode(&mut [index_byte_range].into_iter(), options)?
+        .partial_decode(Box::new([index_byte_range].into_iter()), options)?
         .map(|mut v| v.remove(0));
     Ok(match encoded_shard_index {
         Some(encoded_shard_index) => Some(decode_shard_index(
@@ -296,7 +296,7 @@ async fn decode_shard_index_async_partial_decoder(
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
-        .partial_decode(&mut [index_byte_range].into_iter(), options)
+        .partial_decode(Box::new([index_byte_range].into_iter()), options)
         .await?
         .map(|mut v| v.remove(0));
     Ok(match encoded_shard_index {
