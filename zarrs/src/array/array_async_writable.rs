@@ -9,7 +9,7 @@ use crate::{
     array_subset::ArraySubset,
     config::{global_config, MetadataEraseVersion},
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
-    storage::{AsyncBytes, AsyncWritableStorageTraits, StorageError, StorageHandle},
+    storage::{AsyncWritableStorageTraits, Bytes, StorageError, StorageHandle},
 };
 
 use super::{
@@ -262,7 +262,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                 .codecs()
                 .encode(chunk_bytes, &chunk_array_representation, options)
                 .map_err(ArrayError::CodecError)?;
-            let chunk_encoded = AsyncBytes::from(chunk_encoded.to_vec());
+            let chunk_encoded = Bytes::from(chunk_encoded.to_vec());
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }
         Ok(())
@@ -273,7 +273,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     pub async unsafe fn async_store_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-        encoded_chunk_bytes: AsyncBytes,
+        encoded_chunk_bytes: Bytes,
     ) -> Result<(), ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self

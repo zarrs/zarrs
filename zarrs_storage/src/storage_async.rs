@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use super::{
     byte_range::{ByteRange, ByteRangeIterator},
-    AsyncBytes, MaybeAsyncBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
+    Bytes, MaybeBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
     StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
@@ -25,7 +25,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         Ok(self
             .get_partial_values_key(key, Box::new([ByteRange::FromStart(0, None)].into_iter()))
             .await?
@@ -43,7 +43,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
+    ) -> Result<Option<Vec<Bytes>>, StorageError>;
 
     /// Retrieve partial bytes from a list of [`StoreKeyRange`].
     ///
@@ -58,7 +58,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     async fn get_partial_values(
         &self,
         key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
+    ) -> Result<Vec<MaybeBytes>, StorageError> {
         self.get_partial_values_batched_by_key(key_ranges).await
     }
 
@@ -81,8 +81,8 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     async fn get_partial_values_batched_by_key(
         &self,
         key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let mut out: Vec<MaybeAsyncBytes> = Vec::with_capacity(key_ranges.len());
+    ) -> Result<Vec<MaybeBytes>, StorageError> {
+        let mut out: Vec<MaybeBytes> = Vec::with_capacity(key_ranges.len());
         let mut last_key = None;
         let mut byte_ranges_key = Vec::new();
         for key_range in key_ranges {
@@ -252,7 +252,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError>;
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError>;
 
     /// Store bytes according to a list of [`StoreKeyOffsetValue`].
     ///

@@ -6,10 +6,7 @@ use super::{
 };
 
 #[cfg(feature = "async")]
-use super::{
-    AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes,
-};
+use super::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
 
 /// A storage handle.
 ///
@@ -108,7 +105,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for StorageHandle<TStorage>
 {
-    async fn get(&self, key: &super::StoreKey) -> Result<MaybeAsyncBytes, super::StorageError> {
+    async fn get(&self, key: &super::StoreKey) -> Result<MaybeBytes, super::StorageError> {
         self.0.get(key).await
     }
 
@@ -116,14 +113,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+    ) -> Result<Option<Vec<Bytes>>, StorageError> {
         self.0.get_partial_values_key(key, byte_ranges).await
     }
 
     async fn get_partial_values(
         &self,
         key_ranges: &[super::StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
+    ) -> Result<Vec<MaybeBytes>, StorageError> {
         self.0.get_partial_values(key_ranges).await
     }
 
@@ -171,7 +168,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for StorageHandle<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         self.0.set(key, value).await
     }
 

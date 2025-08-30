@@ -127,6 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArraySubset::chunks()` and `array_subset::iterators::Chunks`
 - **Breaking**: Remove `storage::byte_range` re-export
 - **Breaking**: Remove `array_subset::IncompatibleArraySubsetAndShapeError`, replaced by `indexer::IncompatibleIndexerError`
+- **Breaking**: Remove `[Maybe]AsyncBytes`, which are identical to `[Maybe]Bytes`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
