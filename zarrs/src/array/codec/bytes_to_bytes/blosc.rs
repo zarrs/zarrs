@@ -396,9 +396,10 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // blosc partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_concat(Box::new(decoded_regions), &CodecOptions::default())
+            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded: Vec<u16> = decoded
             .to_vec()
@@ -445,10 +446,11 @@ mod tests {
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_concat(Box::new(decoded_regions), &CodecOptions::default())
+            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .await
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded: Vec<u16> = decoded
             .to_vec()

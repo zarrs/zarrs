@@ -39,7 +39,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         self.input_handle.size()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
         byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
@@ -56,7 +56,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
             }
         });
         self.input_handle
-            .partial_decode(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options)
     }
 }
 
@@ -90,7 +90,7 @@ impl AsyncByteIntervalPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
-    async fn partial_decode<'a>(
+    async fn partial_decode_many<'a>(
         &'a self,
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
@@ -107,7 +107,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
             }
         });
         self.input_handle
-            .partial_decode(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options)
             .await
     }
 }

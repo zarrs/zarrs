@@ -35,7 +35,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         self.input_handle.size()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
@@ -48,7 +48,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(Box::new(decoded_regions), options)
+            .partial_decode_many(Box::new(decoded_regions), options)
     }
 }
 
@@ -77,7 +77,7 @@ impl AsyncStripPrefixPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
-    async fn partial_decode<'a>(
+    async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
@@ -90,7 +90,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(Box::new(decoded_regions), options)
+            .partial_decode_many(Box::new(decoded_regions), options)
             .await
     }
 }

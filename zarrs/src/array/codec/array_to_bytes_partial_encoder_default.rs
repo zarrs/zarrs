@@ -91,13 +91,13 @@ fn partial_encode(
         #[cfg(feature = "async")]
         if _async {
             input_output_handle
-                .partial_encode(Box::new([(0, chunk_bytes)].into_iter()), options)
+                .partial_encode(0, chunk_bytes, options)
                 .await
         } else {
-            input_output_handle.partial_encode(Box::new([(0, chunk_bytes)].into_iter()), options)
+            input_output_handle.partial_encode(0, chunk_bytes, options)
         }
         #[cfg(not(feature = "async"))]
-        input_output_handle.partial_encode(Box::new([(0, chunk_bytes)].into_iter()), options)
+        input_output_handle.partial_encode(0, chunk_bytes, options)
     }
 }
 
