@@ -103,11 +103,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
         let bytes = self.input_handle.decode(options).await?;
         decode_vlen_bytes(

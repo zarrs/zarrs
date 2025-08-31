@@ -132,11 +132,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         let Some(data_type_size) = self.data_type().fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type().clone(),

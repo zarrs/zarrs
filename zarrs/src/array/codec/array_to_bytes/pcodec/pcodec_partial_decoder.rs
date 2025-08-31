@@ -169,11 +169,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncPCodecPartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         if indexer.dimensionality() != self.decoded_representation.dimensionality() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),

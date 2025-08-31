@@ -83,7 +83,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);

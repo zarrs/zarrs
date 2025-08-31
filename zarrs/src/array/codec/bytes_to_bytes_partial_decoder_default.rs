@@ -126,7 +126,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialDecoderDefault {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         partial_decode_async(
             &self.input_handle,
             &self.decoded_representation,

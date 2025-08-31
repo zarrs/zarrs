@@ -29,11 +29,11 @@ enum MaybeShardingPartialDecoder {
 }
 
 impl MaybeShardingPartialDecoder {
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         match self {
             Self::Sharding(partial_decoder) => {
                 partial_decoder.partial_decode(indexer, options).await
@@ -230,12 +230,12 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     ///
     /// See [`Array::retrieve_chunk_opt`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_inner_chunk_opt(
-        &self,
+    async fn async_retrieve_inner_chunk_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<ArrayBytes<'a>, ArrayError>;
 
     /// Read and decode the inner chunk at `chunk_indices` into a vector of its elements.
     ///
@@ -264,12 +264,12 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     ///
     /// See [`Array::retrieve_chunks_opt`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_inner_chunks_opt(
-        &self,
+    async fn async_retrieve_inner_chunks_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<ArrayBytes<'a>, ArrayError>;
 
     /// Read and decode the inner chunks at `inner_chunks` into a vector of their elements.
     ///
@@ -298,12 +298,12 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     ///
     /// See [`Array::retrieve_array_subset_opt`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_array_subset_sharded_opt(
-        &self,
+    async fn async_retrieve_array_subset_sharded_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<ArrayBytes<'a>, ArrayError>;
 
     /// Read and decode the `array_subset` of array into a vector of its elements.
     ///
@@ -440,12 +440,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         }
     }
 
-    async fn async_retrieve_inner_chunk_opt(
-        &self,
+    async fn async_retrieve_inner_chunk_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
         if cache.array_is_sharded() {
             let (shard_indices, shard_subset) =
                 inner_chunk_shard_index_and_subset(self, cache, inner_chunk_indices)?;
@@ -497,12 +497,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         }
     }
 
-    async fn async_retrieve_inner_chunks_opt(
-        &self,
+    async fn async_retrieve_inner_chunks_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
         if cache.array_is_sharded() {
             let inner_chunk_grid = cache.inner_chunk_grid();
             let array_subset = inner_chunk_grid
@@ -556,12 +556,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn async_retrieve_array_subset_sharded_opt(
-        &self,
+    async fn async_retrieve_array_subset_sharded_opt<'a>(
+        &'a self,
         cache: &AsyncArrayShardedReadableExtCache,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
         if cache.array_is_sharded() {
             // Find the shards intersecting this array subset
             let shards = self.chunks_in_array_subset(array_subset)?;

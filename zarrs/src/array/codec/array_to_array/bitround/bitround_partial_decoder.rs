@@ -100,11 +100,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncBitroundPartialDecoder {
         &self.data_type
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         let bytes = self.input_handle.partial_decode(indexer, options).await?;
 
         let mut bytes = bytes.into_fixed()?;

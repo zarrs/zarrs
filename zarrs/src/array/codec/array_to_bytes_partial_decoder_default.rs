@@ -133,11 +133,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncArrayToBytesPartialDecoderDefault {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
-    ) -> Result<ArrayBytes<'_>, super::CodecError> {
+    ) -> Result<ArrayBytes<'a>, super::CodecError> {
         partial_decode_async(
             &self.input_handle,
             &self.decoded_representation,

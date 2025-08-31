@@ -81,7 +81,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)

@@ -96,11 +96,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncTransposePartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             let encoded_value = self

@@ -372,11 +372,11 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or the byte range is invalid.
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         decoded_region: ByteRange,
         options: &CodecOptions,
-    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+    ) -> Result<Option<RawBytes<'a>>, CodecError> {
         Ok(self
             .partial_decode_many(Box::new([decoded_region].into_iter()), options)
             .await?
@@ -393,7 +393,7 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError>;
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError>;
 
     /// Decode all bytes.
     ///
@@ -401,7 +401,10 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails.
-    async fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
+    async fn decode<'a>(
+        &'a self,
+        options: &CodecOptions,
+    ) -> Result<Option<RawBytes<'a>>, CodecError> {
         self.partial_decode(ByteRange::FromStart(0, None), options)
             .await
     }
@@ -605,11 +608,11 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError>;
+    ) -> Result<ArrayBytes<'a>, CodecError>;
 
     /// Async variant of [`ArrayPartialDecoderTraits::partial_decode_into`].
     #[allow(clippy::missing_safety_doc)]
@@ -694,7 +697,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         let bytes = self
             .storage
             .get_byte_ranges(&self.key, decoded_regions)
@@ -1365,7 +1368,7 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
                 .into_iter()
@@ -1383,7 +1386,7 @@ impl AsyncBytesPartialDecoderTraits for Vec<u8> {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         _parallel: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         Ok(Some(
             extract_byte_ranges(self, decoded_regions)?
                 .into_iter()

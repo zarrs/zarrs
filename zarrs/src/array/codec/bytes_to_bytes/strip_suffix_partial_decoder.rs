@@ -89,7 +89,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
         let futures = decoded_regions.map(|decoded_region| async move {

@@ -108,11 +108,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         self.shard_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         if indexer.dimensionality() != self.shard_representation.dimensionality() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),

@@ -85,11 +85,11 @@ impl AsyncArrayPartialDecoderTraits for AsyncSqueezePartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
             let array_subset_squeezed =
                 get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;

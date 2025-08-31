@@ -94,7 +94,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         &'a self,
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
