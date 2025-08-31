@@ -41,9 +41,9 @@ use futures::{stream, StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
-    async_store_set_partial_values, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
+    async_store_set_partial_many, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
     AsyncMaybeBytesIterator, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,
-    MaybeBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
     StorePrefix,
 };
 
@@ -150,11 +150,12 @@ impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectSto
         Ok(())
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        async_store_set_partial_values(self, key_offset_values).await
+        async_store_set_partial_many(self, key, offset_values).await
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {

@@ -2,7 +2,7 @@
 
 use crate::{
     byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
@@ -171,19 +171,22 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         self.storage.set(key, value)
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        let bytes_written = key_offset_values
+        let offset_values: Vec<_> = offset_values.collect();
+        let bytes_written = offset_values
             .iter()
-            .map(|ksv| ksv.value().len())
+            .map(|(_, bytes)| bytes.len())
             .sum::<usize>();
         self.bytes_written
             .fetch_add(bytes_written, Ordering::Relaxed);
         self.writes
-            .fetch_add(key_offset_values.len(), Ordering::Relaxed);
-        self.storage.set_partial_values(key_offset_values)
+            .fetch_add(offset_values.len(), Ordering::Relaxed);
+        self.storage
+            .set_partial_many(key, Box::new(offset_values.into_iter()))
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -287,19 +290,23 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         self.storage.set(key, value).await
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let bytes_written = key_offset_values
+        let offset_values: Vec<_> = offset_values.collect();
+        let bytes_written = offset_values
             .iter()
-            .map(|ksv| ksv.value().len())
+            .map(|(_, bytes)| bytes.len())
             .sum::<usize>();
         self.bytes_written
             .fetch_add(bytes_written, Ordering::Relaxed);
         self.writes
-            .fetch_add(key_offset_values.len(), Ordering::Relaxed);
-        self.storage.set_partial_values(key_offset_values).await
+            .fetch_add(offset_values.len(), Ordering::Relaxed);
+        self.storage
+            .set_partial_many(key, Box::new(offset_values.into_iter()))
+            .await
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {

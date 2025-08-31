@@ -8,9 +8,9 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::{ByteRange, ByteRangeIterator},
+    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
     Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
@@ -221,30 +221,28 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         result
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        struct DebugStoreKeyOffsetValue<'a>(&'a StoreKeyOffsetValue<'a>);
-        impl core::fmt::Debug for DebugStoreKeyOffsetValue<'_> {
+        struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
+        impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(
-                    f,
-                    "({} offset={} len={})",
-                    self.0.key(),
-                    self.0.offset(),
-                    self.0.value().len()
-                )
+                write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
             }
         }
-        let result = self.storage.set_partial_values(key_offset_values);
+        let offset_values: Vec<_> = offset_values.collect();
+        let result = self
+            .storage
+            .set_partial_many(key, Box::new(offset_values.iter().cloned()));
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_values({:?}) -> {result:?}",
+            "{}set_partial_many({:?}) -> {result:?}",
             (self.prefix_func)(),
-            key_offset_values
-                .iter()
-                .map(DebugStoreKeyOffsetValue)
+            offset_values
+                .into_iter()
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
                 .collect_vec()
         )?;
         result
@@ -429,14 +427,19 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         result
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let result = self.storage.set_partial_values(key_offset_values).await;
+        let offset_values: Vec<_> = offset_values.collect();
+        let result = self
+            .storage
+            .set_partial_many(key, Box::new(offset_values.iter().cloned()))
+            .await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_values({key_offset_values:?}) -> {result:?}",
+            "{}set_partial_many({key}, {offset_values:?}) -> {result:?}",
             (self.prefix_func)()
         )?;
         result

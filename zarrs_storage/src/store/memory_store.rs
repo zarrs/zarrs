@@ -5,8 +5,8 @@ use std::sync::Mutex;
 
 use crate::{
     byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
 
@@ -101,29 +101,14 @@ impl WritableStorageTraits for MemoryStore {
         Ok(())
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        use itertools::Itertools;
-
-        // Group by key
-        key_offset_values
-            .iter()
-            .chunk_by(|key_offset_value| key_offset_value.key())
-            .into_iter()
-            .map(|(key, group)| (key.clone(), group.into_iter().cloned().collect::<Vec<_>>()))
-            .try_for_each(|(key, group)| {
-                for key_offset_value in group {
-                    self.set_impl(
-                        &key,
-                        key_offset_value.value(),
-                        key_offset_value.offset(),
-                        false,
-                    );
-                }
-                Ok::<_, StorageError>(())
-            })?;
+        for (offset, value) in offset_values {
+            self.set_impl(key, &value, offset, false);
+        }
         Ok(())
     }
 

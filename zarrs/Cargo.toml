@@ -51,7 +51,7 @@ bench = false
 async-trait = { version = "0.1.74", optional = true }
 blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
-bytes = "1.6.0"
+bytes = "1.7.0"
 bzip2 = { version = "0.6.0", optional = true }
 crc32c = { version = "0.6.5", optional = true }
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }

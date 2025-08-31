@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use auto_impl::auto_impl;
-use futures::{StreamExt, TryStreamExt};
-use itertools::Itertools;
+use bytes::BytesMut;
+use futures::StreamExt;
 
-use crate::{byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes};
+use crate::{
+    byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator,
+};
 
 use super::{
-    byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
@@ -135,57 +137,26 @@ pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
 ///
 /// # Panics
 /// Panics if a key ends beyond `usize::MAX`.
-pub async fn async_store_set_partial_values<T: AsyncReadableWritableStorageTraits>(
+pub async fn async_store_set_partial_many<T: AsyncReadableWritableStorageTraits>(
     store: &T,
-    key_offset_values: &[StoreKeyOffsetValue<'_>],
-    // truncate: bool
+    key: &StoreKey,
+    offset_values: OffsetBytesIterator<'_>,
 ) -> Result<(), StorageError> {
-    let groups = key_offset_values
-        .iter()
-        .chunk_by(|key_offset_value| key_offset_value.key())
-        .into_iter()
-        .map(|(key, group)| (key, group.into_iter().cloned().collect::<Vec<_>>()))
-        .collect::<Vec<_>>();
-    futures::stream::iter(&groups)
-        .map(Ok)
-        .try_for_each_concurrent(None, |(key, group)| async move {
-            // Lock the store key
-            // let mutex = store.mutex(&key).await?;
-            // let _lock = mutex.lock().await;
+    // Read the store key
+    let bytes_out = store.get(key).await?.unwrap_or_default();
+    let mut bytes_out: BytesMut = bytes_out.into();
 
-            // Read the store key
-            let bytes = store.get(key).await?.unwrap_or_default();
-            let mut bytes = Vec::<u8>::from(bytes);
+    // Update the store key
+    for (offset, value) in offset_values {
+        let offset = usize::try_from(offset).unwrap();
+        if bytes_out.len() < offset + value.len() {
+            bytes_out.resize(offset + value.len(), 0);
+        }
+        bytes_out[offset..offset + value.len()].copy_from_slice(&value);
+    }
 
-            // Expand the store key if needed
-            let end_max = group
-                .iter()
-                .map(|key_offset_value| {
-                    usize::try_from(
-                        key_offset_value.offset() + key_offset_value.value().len() as u64,
-                    )
-                    .unwrap()
-                })
-                .max()
-                .unwrap();
-            if bytes.len() < end_max {
-                bytes.resize_with(end_max, Default::default);
-            }
-            // else if truncate {
-            //     bytes.truncate(end_max);
-            // };
-
-            // Update the store key
-            for key_offset_value in group {
-                let start = usize::try_from(key_offset_value.offset()).unwrap();
-                bytes[start..start + key_offset_value.value().len()]
-                    .copy_from_slice(key_offset_value.value());
-            }
-
-            // Write the store key
-            store.set(key, bytes.into()).await
-        })
-        .await
+    // Write the store key
+    store.set(key, bytes_out.into()).await
 }
 
 /// Async writable storage traits.
@@ -202,13 +173,28 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// Returns a [`StorageError`] on failure to store.
     async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError>;
 
-    /// Store bytes according to a list of [`StoreKeyOffsetValue`].
+    /// Store bytes from an offset and value.
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    async fn set_partial_values(
+    async fn set_partial(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset: u64,
+        value: Bytes,
+    ) -> Result<(), StorageError> {
+        self.set_partial_many(key, Box::new([(offset, value)].into_iter()))
+            .await
+    }
+
+    /// Store bytes from a [`OffsetBytesIterator`].
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] on failure to store.
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError>;
 
     /// Erase a [`StoreKey`].

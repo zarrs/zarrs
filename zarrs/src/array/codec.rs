@@ -116,16 +116,16 @@ use zarrs_metadata::{v3::MetadataV3, ArrayShape};
 use zarrs_plugin::PluginUnsupportedError;
 use zarrs_registry::ExtensionAliasesCodecV3;
 use zarrs_storage::byte_range::extract_byte_ranges;
+use zarrs_storage::OffsetBytesIterator;
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::config::global_config;
-use crate::storage::{ReadableWritableStorage, StoreKeyOffsetValue};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     indexer::IncompatibleIndexerError,
     plugin::{Plugin, PluginCreateError},
-    storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError},
-    storage::{ReadableStorage, StorageError, StoreKey},
+    storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError},
+    storage::{ReadableStorage, ReadableWritableStorage, StorageError, StoreKey},
 };
 
 #[cfg(feature = "async")]
@@ -546,7 +546,7 @@ pub trait BytesPartialEncoderTraits:
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_encode(
         &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+        offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 }
@@ -571,9 +571,9 @@ pub trait AsyncBytesPartialEncoderTraits:
     ///
     /// # Errors
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
-    async fn partial_encode(
-        &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+    async fn partial_encode<'a>(
+        &'a self,
+        offset_values: OffsetBytesIterator<'a, crate::array::RawBytes<'_>>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
 }
@@ -737,24 +737,18 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
 
     fn partial_encode(
         &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+        offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         _options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let mut v = self.lock().unwrap();
         let mut output = v.as_ref().cloned().unwrap_or_default();
-        let length = offsets_and_bytes
-            .iter()
-            .map(|(offset, bytes)| offset + bytes.len() as u64)
-            .max()
-            .unwrap_or_default();
-        let length = usize::try_from(length).unwrap();
-        if output.len() < length {
-            output.resize(length, 0);
-        }
 
-        for (offset, bytes) in offsets_and_bytes {
-            let offset = usize::try_from(*offset).unwrap();
-            output[offset..offset + bytes.len()].copy_from_slice(bytes);
+        for (offset, value) in offset_values {
+            let offset = usize::try_from(offset).unwrap();
+            if output.len() < offset + value.len() {
+                output.resize(offset + value.len(), 0);
+            }
+            output[offset..offset + value.len()].copy_from_slice(&value);
         }
         *v = Some(output);
         Ok(())
@@ -809,14 +803,15 @@ impl BytesPartialEncoderTraits for StoragePartialEncoder {
 
     fn partial_encode(
         &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+        offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         _options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let key_offset_values = offsets_and_bytes
-            .iter()
-            .map(|(offset, bytes)| StoreKeyOffsetValue::new(self.key.clone(), *offset, bytes))
-            .collect::<Vec<_>>();
-        Ok(self.storage.set_partial_values(&key_offset_values)?)
+        let offset_values = offset_values
+            .into_iter()
+            .map(|(offset, bytes)| (offset, bytes::Bytes::from(bytes.into_owned())));
+        Ok(self
+            .storage
+            .set_partial_many(&self.key, Box::new(offset_values))?)
     }
 }
 

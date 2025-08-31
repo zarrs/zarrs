@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_storage::byte_range::{ByteOffset, ByteRangeIterator};
+use zarrs_storage::{byte_range::ByteRangeIterator, OffsetBytesIterator};
 
 use crate::array::{
     codec::{CodecError, CodecOptions},
@@ -17,14 +17,14 @@ use crate::array::codec::{AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncod
     input_output_handle: &Arc<dyn AsyncBytesPartialEncoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+    offset_values: OffsetBytesIterator<'_, crate::array::RawBytes<'_>>,
     options: &super::CodecOptions,
 )))]
 fn partial_encode(
     input_output_handle: &Arc<dyn BytesPartialEncoderTraits>,
     decoded_representation: &BytesRepresentation,
     codec: &Arc<dyn BytesToBytesCodecTraits>,
-    offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+    offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
     options: &super::CodecOptions,
 ) -> Result<(), super::CodecError> {
     #[cfg(feature = "async")]
@@ -45,17 +45,12 @@ fn partial_encode(
         vec![]
     };
 
-    // The decoded value must be resized to the maximum byte range end
-    let decoded_value_len = offsets_and_bytes
-        .iter()
-        .map(|(offset, bytes)| usize::try_from(offset + bytes.len() as u64).unwrap())
-        .max()
-        .unwrap();
-    decoded_value.resize(decoded_value_len, 0);
-
-    for (offset, bytes) in offsets_and_bytes {
-        let start = usize::try_from(*offset).unwrap();
-        decoded_value[start..start + bytes.len()].copy_from_slice(bytes);
+    for (offset, value) in offset_values {
+        let offset = usize::try_from(offset).unwrap();
+        if decoded_value.len() < offset + value.len() {
+            decoded_value.resize(offset + value.len(), 0);
+        }
+        decoded_value[offset..offset + value.len()].copy_from_slice(&value);
     }
 
     let bytes_encoded = codec
@@ -65,13 +60,22 @@ fn partial_encode(
     #[cfg(feature = "async")]
     if _async {
         input_output_handle
-            .partial_encode(&[(0, Cow::Owned(bytes_encoded))], options)
+            .partial_encode(
+                Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
+                options,
+            )
             .await
     } else {
-        input_output_handle.partial_encode(&[(0, Cow::Owned(bytes_encoded))], options)
+        input_output_handle.partial_encode(
+            Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
+            options,
+        )
     }
     #[cfg(not(feature = "async"))]
-    input_output_handle.partial_encode(&[(0, Cow::Owned(bytes_encoded))], options)
+    input_output_handle.partial_encode(
+        Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
+        options,
+    )
 }
 
 /// The default bytes-to-bytes partial encoder. Decodes the entire chunk, updates it, and writes the entire chunk.
@@ -128,14 +132,14 @@ impl BytesPartialEncoderTraits for BytesToBytesPartialEncoderDefault {
 
     fn partial_encode(
         &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+        offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode(
             &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
-            offsets_and_bytes,
+            offset_values,
             options,
         )
     }
@@ -198,16 +202,16 @@ impl AsyncBytesPartialEncoderTraits for AsyncBytesToBytesPartialEncoderDefault {
         self.input_output_handle.erase().await
     }
 
-    async fn partial_encode(
-        &self,
-        offsets_and_bytes: &[(ByteOffset, crate::array::RawBytes<'_>)],
+    async fn partial_encode<'a>(
+        &'a self,
+        offset_values: OffsetBytesIterator<'a, crate::array::RawBytes<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         partial_encode_async(
             &self.input_output_handle,
             &self.decoded_representation,
             &self.codec,
-            offsets_and_bytes,
+            offset_values,
             options,
         )
         .await
