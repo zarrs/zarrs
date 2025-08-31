@@ -129,12 +129,13 @@ mod tests {
             .unwrap();
         assert_eq!(partial_decoder.size(), input_handle.size()); // zstd partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
-            .partial_decode_concat(
+            .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
             )
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .to_vec()
@@ -174,13 +175,14 @@ mod tests {
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder
-            .partial_decode_concat(
+            .partial_decode_many(
                 Box::new(decoded_regions.into_iter()),
                 &CodecOptions::default(),
             )
             .await
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .to_vec()

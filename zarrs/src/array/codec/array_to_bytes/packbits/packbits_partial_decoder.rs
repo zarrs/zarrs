@@ -90,13 +90,13 @@ fn partial_decode<'a>(
     #[cfg(feature = "async")]
     let encoded_bytes = if _async {
         input_handle
-            .partial_decode(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options)
             .await
     } else {
-        input_handle.partial_decode(Box::new(byte_ranges), options)
+        input_handle.partial_decode_many(Box::new(byte_ranges), options)
     }?;
     #[cfg(not(feature = "async"))]
-    let encoded_bytes = input_handle.partial_decode(Box::new(byte_ranges), options)?;
+    let encoded_bytes = input_handle.partial_decode_many(Box::new(byte_ranges), options)?;
 
     // Convert to elements
     let decoded_bytes = if let Some(encoded_bytes) = encoded_bytes {

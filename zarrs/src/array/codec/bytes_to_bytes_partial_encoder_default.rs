@@ -60,22 +60,13 @@ fn partial_encode(
     #[cfg(feature = "async")]
     if _async {
         input_output_handle
-            .partial_encode(
-                Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
-                options,
-            )
+            .partial_encode(0, Cow::Owned(bytes_encoded), options)
             .await
     } else {
-        input_output_handle.partial_encode(
-            Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
-            options,
-        )
+        input_output_handle.partial_encode(0, Cow::Owned(bytes_encoded), options)
     }
     #[cfg(not(feature = "async"))]
-    input_output_handle.partial_encode(
-        Box::new([(0, Cow::Owned(bytes_encoded))].into_iter()),
-        options,
-    )
+    input_output_handle.partial_encode(0, Cow::Owned(bytes_encoded), options)
 }
 
 /// The default bytes-to-bytes partial encoder. Decodes the entire chunk, updates it, and writes the entire chunk.
@@ -106,7 +97,7 @@ impl BytesPartialDecoderTraits for BytesToBytesPartialEncoderDefault {
         self.input_output_handle.size()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
@@ -130,7 +121,7 @@ impl BytesPartialEncoderTraits for BytesToBytesPartialEncoderDefault {
         self.input_output_handle.erase()
     }
 
-    fn partial_encode(
+    fn partial_encode_many(
         &self,
         offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         options: &super::CodecOptions,
@@ -174,7 +165,7 @@ impl AsyncBytesToBytesPartialEncoderDefault {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncBytesToBytesPartialEncoderDefault {
-    async fn partial_decode<'a>(
+    async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
@@ -202,7 +193,7 @@ impl AsyncBytesPartialEncoderTraits for AsyncBytesToBytesPartialEncoderDefault {
         self.input_output_handle.erase().await
     }
 
-    async fn partial_encode<'a>(
+    async fn partial_encode_many<'a>(
         &'a self,
         offset_values: OffsetBytesIterator<'a, crate::array::RawBytes<'_>>,
         options: &super::CodecOptions,

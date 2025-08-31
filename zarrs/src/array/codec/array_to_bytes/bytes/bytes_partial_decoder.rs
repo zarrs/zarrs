@@ -73,7 +73,7 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(Box::new(byte_ranges), options)?
+            .partial_decode_many(Box::new(byte_ranges), options)?
             .map_or_else(
                 || {
                     let array_size = ArraySize::new(
@@ -82,11 +82,12 @@ impl ArrayPartialDecoderTraits for BytesPartialDecoder {
                     );
                     ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
                 },
-                |mut decoded| {
+                |decoded| {
+                    let mut decoded = decoded.concat();
                     if let Some(endian) = &self.endian {
                         if !endian.is_native() {
                             reverse_endianness(
-                                decoded.to_mut(),
+                                &mut decoded,
                                 self.decoded_representation.data_type(),
                             );
                         }
@@ -159,7 +160,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
         // Decode
         let decoded = self
             .input_handle
-            .partial_decode_concat(Box::new(byte_ranges), options)
+            .partial_decode_many(Box::new(byte_ranges), options)
             .await?
             .map_or_else(
                 || {
@@ -169,11 +170,12 @@ impl AsyncArrayPartialDecoderTraits for AsyncBytesPartialDecoder {
                     );
                     ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
                 },
-                |mut decoded| {
+                |decoded| {
+                    let mut decoded = decoded.concat();
                     if let Some(endian) = &self.endian {
                         if !endian.is_native() {
                             reverse_endianness(
-                                decoded.to_mut(),
+                                &mut decoded,
                                 self.decoded_representation.data_type(),
                             );
                         }

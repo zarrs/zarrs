@@ -66,7 +66,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayPartialEncoderTraits:` trait changes:
   - `partial_encode()`: parameter `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
 - **Breaking**: `[Async]BytesPartialDecoderTraits` trait changes:
-  - `partial_decode[_concat]`: parameter `decoded_regions: &[ByteRange]` changed to `ByteRangeIterator`
+  - Rename `partial_decode` to `partial_decode_many` and change parameter `decoded_regions: &[ByteRange]` to `ByteRangeIterator`
+  - Add `partial_decode` for decoding a single byte range
+  - Remove `partial_decode_concat`
+- **Breaking**: `[Async]BytesPartialEncoderTraits` trait changes:
+  - Rename `partial_encode` to `partial_encode_many` and change parameter `offsets_and_bytes: &[(ByteOffset, RawBytes<'_>)]` to `offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>`
+  - Add `partial_encode` for decoding a single byte range
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape

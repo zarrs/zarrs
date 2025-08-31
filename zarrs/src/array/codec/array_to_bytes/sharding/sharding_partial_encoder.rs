@@ -258,7 +258,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling inner chunks
         let inner_chunks_encoded = self
             .input_output_handle
-            .partial_decode(Box::new(byte_ranges.into_iter()), options)?
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
         // Decode the straddling inner chunks
@@ -448,7 +448,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             // Write the encoded index and updated inner chunks
             match self.index_location {
                 ShardingIndexLocation::Start => {
-                    self.input_output_handle.partial_encode(
+                    self.input_output_handle.partial_encode_many(
                         Box::new(
                             [
                                 (0, Cow::Owned(encoded_array_index)),
@@ -461,7 +461,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 }
                 ShardingIndexLocation::End => {
                     encoded_output.extend(encoded_array_index);
-                    self.input_output_handle.partial_encode(
+                    self.input_output_handle.partial_encode_many(
                         Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
                         options,
                     )?;

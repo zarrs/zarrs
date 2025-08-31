@@ -28,7 +28,7 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
         self.input_handle.size()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
@@ -66,7 +66,7 @@ impl AsyncTestUnboundedPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
-    async fn partial_decode<'a>(
+    async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
