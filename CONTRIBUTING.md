@@ -20,7 +20,11 @@ When opening an issue, please provide:
 ## Pull Request Guidelines
 
 - **Add Tests**: Add tests for any new functionality or bug fixes.
-- **Code Quality**: Run `make check` to format your code, run clippy, and ensure all tests pass. Or alternatively:
+- **Code Quality**: Run `just check`[^1] to build `zarrs`, run `rustfmt` and `clippy`, and ensure all tests pass. Or alternatively:
+  - Build with
+    - `cargo check`
+    - `cargo check --all-features`
+    - `cargo check --no-default-features`
   - Format your code using `cargo fmt`.
   - Lint with `cargo clippy --all-features -- -D warnings`.
   - Run tests using `cargo test --all-features`.
@@ -30,3 +34,5 @@ When opening an issue, please provide:
 ---
 
 Thanks again for contributing!
+
+[^1]: Just a command runner - https://github.com/casey/just
