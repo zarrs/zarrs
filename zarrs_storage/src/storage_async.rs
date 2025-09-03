@@ -29,8 +29,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
     async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        self.get_byte_range(key, ByteRange::FromStart(0, None))
-            .await
+        self.get_partial(key, ByteRange::FromStart(0, None)).await
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -40,7 +39,7 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_byte_ranges<'a>(
+    async fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
@@ -53,13 +52,13 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_byte_range<'a>(
+    async fn get_partial<'a>(
         &'a self,
         key: &StoreKey,
         byte_range: ByteRange,
     ) -> Result<MaybeBytes, StorageError> {
         let mut result = self
-            .get_byte_ranges(key, Box::new([byte_range].into_iter()))
+            .get_partial_many(key, Box::new([byte_range].into_iter()))
             .await?;
         if let Some(result) = &mut result {
             let bytes = result.next().await.expect("one byte range")?;
@@ -209,7 +208,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
         let futures_erase = keys.iter().map(|key| self.erase(key));
         futures::future::join_all(futures_erase)
             .await

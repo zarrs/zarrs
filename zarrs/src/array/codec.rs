@@ -662,7 +662,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let bytes = self.storage.get_byte_ranges(&self.key, decoded_regions)?;
+        let bytes = self.storage.get_partial_many(&self.key, decoded_regions)?;
         if let Some(bytes) = bytes {
             let bytes = bytes
                 .map(|b| Ok::<_, StorageError>(Cow::Owned(b?.to_vec())))
@@ -700,7 +700,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
     ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         let bytes = self
             .storage
-            .get_byte_ranges(&self.key, decoded_regions)
+            .get_partial_many(&self.key, decoded_regions)
             .await?;
         Ok(if let Some(bytes) = bytes {
             use futures::{StreamExt, TryStreamExt};
@@ -796,7 +796,7 @@ impl BytesPartialDecoderTraits for StoragePartialEncoder {
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let results = self.storage.get_byte_ranges(&self.key, decoded_regions)?;
+        let results = self.storage.get_partial_many(&self.key, decoded_regions)?;
         if let Some(results) = results {
             Ok(Some(
                 results

@@ -41,9 +41,9 @@ pub fn store_write<T: WritableStorageTraits>(store: &T) -> Result<(), Box<dyn Er
     store.erase(&"erase".try_into()?)?;
     store.erase(&"erase".try_into()?)?; // succeeds
 
-    store.set(&"erase_values_0".try_into()?, vec![].into())?;
-    store.set(&"erase_values_1".try_into()?, vec![].into())?;
-    store.erase_values(&["erase_values_0".try_into()?, "erase_values_1".try_into()?])?;
+    store.set(&"erase_many_0".try_into()?, vec![].into())?;
+    store.set(&"erase_many_1".try_into()?, vec![].into())?;
+    store.erase_many(&["erase_many_0".try_into()?, "erase_many_1".try_into()?])?;
 
     store.set(&"erase_prefix/0".try_into()?, vec![].into())?;
     store.set(&"erase_prefix/1".try_into()?, vec![].into())?;
@@ -66,7 +66,7 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
     assert_eq!(store.size_key(&"i/j/k".try_into()?)?, Some(2));
     assert_eq!(
         store
-            .get_byte_ranges(
+            .get_partial_many(
                 &"a/b".try_into()?,
                 Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
             )?
@@ -75,23 +75,23 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
         vec![vec![1], vec![3]]
     );
     assert_eq!(
-        store.get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, None))?,
+        store.get_partial(&"a/b".try_into()?, ByteRange::FromStart(1, None))?,
         Some(vec![1, 2, 3].into())
     );
     assert_eq!(
-        store.get_byte_range(&"a/b".try_into()?, ByteRange::Suffix(2))?,
+        store.get_partial(&"a/b".try_into()?, ByteRange::Suffix(2))?,
         Some(vec![2, 3].into())
     );
     assert_eq!(
-        store.get_byte_range(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))?,
+        store.get_partial(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))?,
         Some(vec![1].into())
     );
     assert!(store
-        .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
+        .get_partial(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
         .is_err());
     assert_eq!(
         store
-            .get_byte_range(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
+            .get_partial(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
             .unwrap(),
         None
     );
@@ -209,13 +209,13 @@ pub async fn async_store_write<T: AsyncWritableStorageTraits>(
     store.erase(&"erase".try_into()?).await?; // succeeds
 
     store
-        .set(&"erase_values_0".try_into()?, vec![].into())
+        .set(&"erase_many_0".try_into()?, vec![].into())
         .await?;
     store
-        .set(&"erase_values_1".try_into()?, vec![].into())
+        .set(&"erase_many_1".try_into()?, vec![].into())
         .await?;
     store
-        .erase_values(&["erase_values_0".try_into()?, "erase_values_1".try_into()?])
+        .erase_many(&["erase_many_0".try_into()?, "erase_many_1".try_into()?])
         .await?;
 
     store
@@ -248,7 +248,7 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
     assert_eq!(store.size_key(&"i/j/k".try_into()?).await?, Some(2));
     assert_eq!(
         store
-            .get_byte_ranges(
+            .get_partial_many(
                 &"a/b".try_into()?,
                 Box::new([ByteRange::FromStart(1, Some(1)), ByteRange::Suffix(1)].into_iter())
             )
@@ -260,29 +260,29 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
     );
     assert_eq!(
         store
-            .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, None))
+            .get_partial(&"a/b".try_into()?, ByteRange::FromStart(1, None))
             .await?,
         Some(vec![1, 2, 3].into())
     );
     assert_eq!(
         store
-            .get_byte_range(&"a/b".try_into()?, ByteRange::Suffix(2))
+            .get_partial(&"a/b".try_into()?, ByteRange::Suffix(2))
             .await?,
         Some(vec![2, 3].into())
     );
     assert_eq!(
         store
-            .get_byte_range(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))
+            .get_partial(&"i/j/k".try_into()?, ByteRange::FromStart(1, Some(1)))
             .await?,
         Some(vec![1].into())
     );
     assert!(store
-        .get_byte_range(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
+        .get_partial(&"a/b".try_into()?, ByteRange::FromStart(1, Some(10)))
         .await
         .is_err());
     assert_eq!(
         store
-            .get_byte_range(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
+            .get_partial(&"notfound".try_into()?, ByteRange::FromStart(1, Some(10)))
             .await
             .unwrap(),
         None

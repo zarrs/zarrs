@@ -124,7 +124,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
 impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     for ZipStorageAdapter<TStorage>
 {
-    fn get_byte_ranges<'a>(
+    fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,

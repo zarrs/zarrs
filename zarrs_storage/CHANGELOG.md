@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add missing `AsyncReadableWritableStorage`
 - Add `[Async]MaybeBytesIterator`
 - Add `OffsetBytesIterator`
-- Add `[Async]ReadableStorageTraits::get_byte_range`
+- Add `[Async]ReadableStorageTraits::get_partial`
 - Add `[Async]WritableStorageTraits::set_partial`
 
 ### Changed
@@ -21,11 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: ByteRangeIterator` for
   - `extract_byte_ranges[{_concat,_read_seek,_read}]`
 - **Breaking**: Increase MSRV to 1.82
-- **Breaking**: Rename `[Async]ReadableStorageTraits::get_partial_values` to `get_byte_ranges`
+- **Breaking**: Rename `[Async]ReadableStorageTraits::get_partial_values` to `get_partial_many`
   - Change parameter `byte_ranges: &[ByteRange]` to `byte_ranges: ByteRangeIterator`
   - Change return value to an `[Async]MaybeBytesIterator`
 - **Breaking**: Rename `[Async]WritableStorageTraits::set_partial_values` to `set_partial_many` and `[async_]store_set_partial_values` to `[async_]store_set_partial_many`
   - Change parameter `key_offset_values: &[StoreKeyOffsetValue]` to `key: &StoreKey` and `offset_values: OffsetBytesIterator`
+- **Breaking**: Rename `[Async]WritableStorageTraits::erase_values` to `erase_many`
 - Optimise `MemoryStore`
 
 ### Removed

@@ -31,12 +31,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         self.0.get(key)
     }
 
-    fn get_byte_ranges<'a>(
+    fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
-        self.0.get_byte_ranges(key, byte_ranges)
+        self.0.get_partial_many(key, byte_ranges)
     }
 
     fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
@@ -89,8 +89,8 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
         self.0.erase(key)
     }
 
-    fn erase_values(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
-        self.0.erase_values(keys)
+    fn erase_many(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
+        self.0.erase_many(keys)
     }
 
     fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
@@ -108,12 +108,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         self.0.get(key).await
     }
 
-    async fn get_byte_ranges<'a>(
+    async fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
-        self.0.get_byte_ranges(key, byte_ranges).await
+        self.0.get_partial_many(key, byte_ranges).await
     }
 
     async fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
@@ -176,8 +176,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         self.0.erase(key).await
     }
 
-    async fn erase_values(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
-        self.0.erase_values(keys).await
+    async fn erase_many(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
+        self.0.erase_many(keys).await
     }
 
     async fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {

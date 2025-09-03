@@ -48,8 +48,8 @@ impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 /// Applying array methods with the above [`UsageLogStorageAdapter`] prints outputs like:
 /// ```text
 /// [23:41:19.885] set(group/array/c/1/0, len=140) -> Ok(())
-/// [23:41:19.885] get_byte_ranges(group/array/c/0/0, [-36..-0]) -> len=Ok([36])
-/// [23:41:19.886] get_byte_ranges(group/array/c/0/0, [52..104]) -> len=Ok([52])
+/// [23:41:19.885] get_partial_many(group/array/c/0/0, [-36..-0]) -> len=Ok([36])
+/// [23:41:19.886] get_partial_many(group/array/c/0/0, [52..104]) -> len=Ok([52])
 /// [23:41:19.887] get(group/array/c/1/0) -> len=Ok(140)
 /// [23:41:19.891] get(zarr.json) -> len=Ok(0)
 /// [23:41:19.891] list_dir() -> (keys:[], prefixes:[group/])
@@ -99,7 +99,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         result
     }
 
-    fn get_byte_ranges<'a>(
+    fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
@@ -107,7 +107,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
-            .get_byte_ranges(key, Box::new(byte_ranges.iter().copied()))?;
+            .get_partial_many(key, Box::new(byte_ranges.iter().copied()))?;
         let result = if let Some(result) = result {
             Some(result.collect::<Result<Vec<_>, _>>()?)
         } else {
@@ -115,7 +115,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         };
         writeln!(
             self.handle.lock().unwrap(),
-            "{}get_byte_ranges({key}, [{}]) -> len={:?}",
+            "{}get_partial_many({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
             result
@@ -258,11 +258,11 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         result
     }
 
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let result = self.storage.erase_values(keys);
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        let result = self.storage.erase_many(keys);
         writeln!(
             self.handle.lock().unwrap(),
-            "{}erase_values([{}]) -> {result:?}",
+            "{}erase_many([{}]) -> {result:?}",
             keys.iter().format(", "),
             (self.prefix_func)()
         )?;
@@ -297,7 +297,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         result
     }
 
-    async fn get_byte_ranges<'a>(
+    async fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
@@ -307,7 +307,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
-            .get_byte_ranges(key, Box::new(byte_ranges.iter().copied()))
+            .get_partial_many(key, Box::new(byte_ranges.iter().copied()))
             .await?;
         let result = if let Some(result) = result {
             Some(result.try_collect::<Vec<_>>().await?)
@@ -316,7 +316,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         };
         writeln!(
             self.handle.lock().unwrap(),
-            "{}get_byte_ranges({key}, [{}]) -> len={:?}",
+            "{}get_partial_many({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
             result
@@ -455,11 +455,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         result
     }
 
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let result = self.storage.erase_values(keys).await;
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        let result = self.storage.erase_many(keys).await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}erase_values([{}]) -> {result:?}",
+            "{}erase_many([{}]) -> {result:?}",
             (self.prefix_func)(),
             keys.iter().format(", ")
         )?;

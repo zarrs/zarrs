@@ -108,13 +108,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         value
     }
 
-    fn get_byte_ranges<'a>(
+    fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_byte_ranges(key, byte_ranges)?;
+        let values = self.storage.get_partial_many(key, byte_ranges)?;
         if let Some(values) = values {
             let values = values.collect::<Vec<_>>();
             let bytes_read = values
@@ -194,9 +194,9 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         self.storage.erase(key)
     }
 
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
         self.keys_erased.fetch_add(keys.len(), Ordering::Relaxed);
-        self.storage.erase_values(keys)
+        self.storage.erase_many(keys)
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
@@ -220,13 +220,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
         value
     }
 
-    async fn get_byte_ranges<'a>(
+    async fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_byte_ranges(key, byte_ranges).await?;
+        let values = self.storage.get_partial_many(key, byte_ranges).await?;
         if let Some(values) = values {
             use futures::{stream, StreamExt};
             let values = values.collect::<Vec<_>>().await;
@@ -313,8 +313,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         self.storage.erase(key).await
     }
 
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        self.storage.erase_values(keys).await
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        self.storage.erase_many(keys).await
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {

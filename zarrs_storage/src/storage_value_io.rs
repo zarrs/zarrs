@@ -68,7 +68,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Read for StorageValueIO<TStorage>
         let len = buf.len() as u64;
         let data = self
             .storage
-            .get_byte_range(&self.key, ByteRange::FromStart(self.pos, Some(len)))
+            .get_partial(&self.key, ByteRange::FromStart(self.pos, Some(len)))
             .map_err(|err| std::io::Error::other(err.to_string()))?;
         if let Some(data) = data {
             buf.copy_from_slice(&data);

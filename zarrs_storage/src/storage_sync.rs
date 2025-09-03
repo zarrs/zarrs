@@ -18,7 +18,7 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
-        self.get_byte_range(key, ByteRange::FromStart(0, None))
+        self.get_partial(key, ByteRange::FromStart(0, None))
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -27,7 +27,7 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn get_byte_ranges<'a>(
+    fn get_partial_many<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
@@ -39,12 +39,12 @@ pub trait ReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn get_byte_range(
+    fn get_partial(
         &self,
         key: &StoreKey,
         byte_range: ByteRange,
     ) -> Result<MaybeBytes, StorageError> {
-        let mut bytes = self.get_byte_ranges(key, Box::new([byte_range].into_iter()))?;
+        let mut bytes = self.get_partial_many(key, Box::new([byte_range].into_iter()))?;
         if let Some(bytes) = &mut bytes {
             let output = bytes.next().expect("one byte range")?;
             debug_assert!(bytes.next().is_none());
@@ -169,7 +169,7 @@ pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
         keys.iter().try_for_each(|key| self.erase(key))?;
         Ok(())
     }
