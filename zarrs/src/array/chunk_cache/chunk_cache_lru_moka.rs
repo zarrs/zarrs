@@ -45,7 +45,7 @@ pub struct ChunkCacheLruSizeLimit<T: ChunkCacheType> {
     cache: Cache<ChunkIndices, T>,
 }
 
-/// A thread local chunk cache with a fixed chunk capacity per thread.
+/// A thread local chunk cache with a fixed size capacity per thread.
 pub struct ChunkCacheLruSizeLimitThreadLocal<T: ChunkCacheType> {
     array: Arc<Array<dyn ReadableStorageTraits>>,
     cache: ThreadLocal<Mutex<LruCache<ChunkIndices, T>>>,
@@ -60,10 +60,10 @@ pub type ChunkCacheEncodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheType
 pub type ChunkCacheEncodedLruChunkLimitThreadLocal =
     ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeEncoded>;
 
-/// An LRU (least recently used) encoded chunk cache with a fixed size capacity in bytes.
+/// An LRU (least recently used) encoded chunk cache with a fixed size capacity.
 pub type ChunkCacheEncodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeEncoded>;
 
-/// An LRU (least recently used) encoded chunk cache with a fixed chunk capacity.
+/// An LRU (least recently used) encoded chunk cache with a fixed size capacity.
 pub type ChunkCacheEncodedLruSizeLimitThreadLocal =
     ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeEncoded>;
 
@@ -74,10 +74,10 @@ pub type ChunkCacheDecodedLruChunkLimit = ChunkCacheLruChunkLimit<ChunkCacheType
 pub type ChunkCacheDecodedLruChunkLimitThreadLocal =
     ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypeDecoded>;
 
-/// An LRU (least recently used) decoded chunk cache with a fixed size capacity in bytes.
+/// An LRU (least recently used) decoded chunk cache with a fixed size capacity .
 pub type ChunkCacheDecodedLruSizeLimit = ChunkCacheLruSizeLimit<ChunkCacheTypeDecoded>;
 
-/// An LRU (least recently used) decoded chunk cache with a fixed chunk capacity.
+/// An LRU (least recently used) decoded chunk cache with a fixed size capacity.
 pub type ChunkCacheDecodedLruSizeLimitThreadLocal =
     ChunkCacheLruSizeLimitThreadLocal<ChunkCacheTypeDecoded>;
 
@@ -89,7 +89,7 @@ pub type ChunkCachePartialDecoderLruChunkLimit =
 pub type ChunkCachePartialDecoderLruChunkLimitThreadLocal =
     ChunkCacheLruChunkLimitThreadLocal<ChunkCacheTypePartialDecoder>;
 
-/// An LRU (least recently used) partial decoder chunk cache with a fixed size capacity in bytes.
+/// An LRU (least recently used) partial decoder chunk cache with a fixed size capacity.
 pub type ChunkCachePartialDecoderLruSizeLimit =
     ChunkCacheLruSizeLimit<ChunkCacheTypePartialDecoder>;
 
