@@ -1022,7 +1022,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// # Errors
     /// Returns a [`CodecError`] if initialisation fails.
     #[allow(unused_variables)]
-    fn async_partial_encoder(
+    async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         decoded_representation: &ChunkRepresentation,
