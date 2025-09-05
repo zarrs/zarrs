@@ -17,10 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `[Async]WritableStorageTraits::set_partial`
 
 ### Changed
+- **Breaking**: Increase MSRV to 1.82
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
 - **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: ByteRangeIterator` for
-  - `extract_byte_ranges[{_concat,_read_seek,_read}]`
-- **Breaking**: Increase MSRV to 1.82
+  - `extract_byte_ranges[{_concat,_read_seek}]`
 - **Breaking**: Rename `[Async]ReadableStorageTraits::get_partial_values` to `get_partial_many`
   - Change parameter `byte_ranges: &[ByteRange]` to `byte_ranges: ByteRangeIterator`
   - Change return value to an `[Async]MaybeBytesIterator`
