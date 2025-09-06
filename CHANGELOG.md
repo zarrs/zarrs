@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0-beta.0] - 2025-09-06
+
 ### Added
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
@@ -1538,7 +1540,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.0-beta.0...HEAD
+[0.22.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.0
 [0.21.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.2
 [0.21.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.1
 [0.21.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.0
