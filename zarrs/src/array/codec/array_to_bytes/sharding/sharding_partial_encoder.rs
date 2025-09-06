@@ -5,9 +5,11 @@ use std::{
 };
 
 use itertools::Itertools;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 
 use crate::{
     array::{

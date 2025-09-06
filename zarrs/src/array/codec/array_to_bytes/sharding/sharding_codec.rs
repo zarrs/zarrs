@@ -37,9 +37,11 @@ use super::{
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
-use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_registry::codec::SHARDING;
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -775,7 +777,7 @@ impl ShardingCodec {
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = (0..n_chunks).into_par_iter();
         #[cfg(target_arch = "wasm32")]
-        let iterator = (0..n_chunks).into_iter();
+        let iterator = 0..n_chunks;
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
             shard_concurrent_limit,
