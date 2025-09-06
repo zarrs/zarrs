@@ -101,9 +101,9 @@ pub struct ArrayMetadataV3 {
     /// An optional list of dimension names.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dimension_names: Option<Vec<DimensionName>>,
-    /// Extension definitions (Zarr 3.1, [ZEP0009](https://zarr.dev/zeps/draft/ZEP0009.html)).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extensions: Vec<MetadataV3>,
+    // /// Extension definitions (Zarr 3.2, [ZEP0010](https://github.com/zarr-developers/zeps/pull/67)).
+    // #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    // pub extensions: Vec<MetadataV3>,
     /// Additional fields.
     #[serde(flatten)]
     pub additional_fields: AdditionalFieldsV3,
@@ -156,7 +156,7 @@ impl ArrayMetadataV3 {
             storage_transformers: Vec::default(),
             dimension_names: None,
             additional_fields: AdditionalFieldsV3::default(),
-            extensions: Vec::default(),
+            // extensions: Vec::default(),
         }
     }
 
@@ -218,10 +218,10 @@ impl ArrayMetadataV3 {
         self
     }
 
-    /// Set the extension definitions.
-    #[must_use]
-    pub fn with_extensions(mut self, extensions: Vec<MetadataV3>) -> Self {
-        self.extensions = extensions;
-        self
-    }
+    // /// Set the extension definitions.
+    // #[must_use]
+    // pub fn with_extensions(mut self, extensions: Vec<MetadataV3>) -> Self {
+    //     self.extensions = extensions;
+    //     self
+    // }
 }

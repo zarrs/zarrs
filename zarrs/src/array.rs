@@ -923,22 +923,22 @@ impl<TStorage: ?Sized> Array<TStorage> {
     fn validate_metadata(metadata: &ArrayMetadata) -> Result<(), ArrayCreateError> {
         match &metadata {
             ArrayMetadata::V2(_) => {}
-            ArrayMetadata::V3(metadata) => {
-                for extension in &metadata.extensions {
-                    if extension.must_understand() {
-                        return Err(ArrayCreateError::AdditionalFieldUnsupportedError(
-                            AdditionalFieldUnsupportedError::new(
-                                extension.name().to_string(),
-                                extension
-                                    .configuration()
-                                    .map(|configuration| {
-                                        serde_json::Value::Object(configuration.clone().into())
-                                    })
-                                    .unwrap_or_default(),
-                            ),
-                        ));
-                    }
-                }
+            ArrayMetadata::V3(_metadata) => {
+                // for extension in &metadata.extensions {
+                //     if extension.must_understand() {
+                //         return Err(ArrayCreateError::AdditionalFieldUnsupportedError(
+                //             AdditionalFieldUnsupportedError::new(
+                //                 extension.name().to_string(),
+                //                 extension
+                //                     .configuration()
+                //                     .map(|configuration| {
+                //                         serde_json::Value::Object(configuration.clone().into())
+                //                     })
+                //                     .unwrap_or_default(),
+                //             ),
+                //         ));
+                //     }
+                // }
             }
         }
 
