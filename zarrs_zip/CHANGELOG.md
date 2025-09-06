@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ## Changed
-- Bump `zarrs_storage` to 0.4.0
+- **Breaking**: Bump `zarrs_storage` to 0.4.0
 
 ## Fixed
 - Use `ZipFileSeek` instead of `ZipFile`, avoiding unnecessary reads
