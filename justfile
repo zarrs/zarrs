@@ -31,6 +31,14 @@ doc:
 check: build test clippy doc
     cargo +{{TOOLCHAIN}} fmt --all -- --check
 
+# Build (WASM)
+build_wasm:
+    cargo check -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async"
+
+# Build/clippy (WASM)
+check_wasm: build_wasm
+    cargo clippy -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async" -- -A clippy::arc_with_non_send_sync
+
 # Run clippy with extra lints
 _clippy_extra:
     cargo +{{TOOLCHAIN}} clippy --all-features -- -D warnings -W clippy::nursery -A clippy::significant-drop-tightening -A clippy::significant-drop-in-scrutinee

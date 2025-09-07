@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
@@ -455,8 +457,9 @@ async fn partial_decode_fixed_indexer(
     #[cfg(not(target_arch = "wasm32"))]
     let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
-    let inner_chunk_partial_decoders =
-        quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
+    let inner_chunk_partial_decoders = quick_cache::sync::Cache::new(
+        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
+    );
 
     for indices in indexer.iter_indices() {
         // Get intersected index
@@ -552,8 +555,9 @@ async fn partial_decode_variable_indexer(
     #[cfg(not(target_arch = "wasm32"))]
     let inner_chunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
-    let inner_chunk_partial_decoders =
-        quick_cache::sync::Cache::new(chunks_per_shard.iter().product::<u64>() as usize);
+    let inner_chunk_partial_decoders = quick_cache::sync::Cache::new(
+        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
+    );
 
     for indices in indexer.iter_indices() {
         // Get intersected index
