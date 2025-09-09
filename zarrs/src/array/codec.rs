@@ -80,17 +80,13 @@ pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 #[cfg(feature = "async")]
 pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
 
-mod array_to_array_codec_partial_default;
-pub use array_to_array_codec_partial_default::ArrayToArrayCodecPartialDefault;
-
-mod array_to_bytes_codec_partial_default;
-pub use array_to_bytes_codec_partial_default::ArrayToBytesCodecPartialDefault;
+mod codec_partial_default;
+pub use codec_partial_default::CodecPartialDefault;
+use codec_partial_default::{
+    ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
+    BytesToBytesCodecPartialDefault,
+};
 use zarrs_metadata::Configuration;
-
-
-
-mod bytes_to_bytes_codec_partial_default;
-pub use bytes_to_bytes_codec_partial_default::BytesToBytesCodecPartialDefault;
 
 use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
 use zarrs_metadata::{v3::MetadataV3, ArrayShape};

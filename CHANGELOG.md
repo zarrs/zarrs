@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
-- Add `{ArrayToArray,ArrayToBytes,BytesToBytes}CodecPartialDefault`
+- Add `CodecPartialDefault`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -139,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `array_subset::IncompatibleArraySubsetAndShapeError`, replaced by `indexer::IncompatibleIndexerError`
 - **Breaking**: Remove `[Maybe]AsyncBytes`, which are identical to `[Maybe]Bytes`
 - **Breaking**: Remove `[Async]{ArrayToArray,ArrayToBytes,BytesToBytes}Partial{Encoder,Decoder}Default`
-  - Replaced by generic `{ArrayToArray,ArrayToBytes,BytesToBytes}CodecPartialDefault`
+  - Replaced by generic `CodecPartialDefault`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
