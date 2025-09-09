@@ -142,7 +142,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::squeeze_partial_decoder::SqueezePartialDecoder::new(
+            super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
             ),
@@ -156,7 +156,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::squeeze_partial_encoder::SqueezePartialEncoder::new(
+            super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_output_handle,
                 decoded_representation.clone(),
             ),
@@ -171,7 +171,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::squeeze_partial_decoder::AsyncSqueezePartialDecoder::new(
+            super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
             ),

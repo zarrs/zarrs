@@ -28,8 +28,7 @@
 //! ```
 
 mod squeeze_codec;
-mod squeeze_partial_decoder;
-mod squeeze_partial_encoder;
+mod squeeze_codec_partial;
 
 use std::{num::NonZeroU64, sync::Arc};
 
