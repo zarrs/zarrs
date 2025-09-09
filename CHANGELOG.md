@@ -142,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Permit data types with empty configurations that do not require one
 - Erase chunks before writing the updated chunk in `ArrayTo{Array,Bytes}PartialEncoderDefault`
 - Fix `squeeze` and `transpose` codec partial encoding
+- Fix `bitround` partial decoder needlessly rounding on decode
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 

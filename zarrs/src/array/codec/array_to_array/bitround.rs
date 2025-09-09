@@ -42,7 +42,7 @@
 //! ```
 
 mod bitround_codec;
-mod bitround_partial_decoder;
+mod bitround_codec_partial;
 
 use std::sync::Arc;
 

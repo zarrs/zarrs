@@ -1,0 +1,116 @@
+use std::sync::Arc;
+
+use zarrs_registry::codec::BITROUND;
+
+use crate::array::{
+    codec::{
+        ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+    },
+    DataType,
+};
+
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncArrayPartialDecoderTraits;
+
+use super::round_bytes;
+
+/// Generic partial codec for the bitround codec.
+pub(crate) struct BitroundCodecPartial<T: ?Sized> {
+    input_output_handle: Arc<T>,
+    data_type: DataType,
+    keepbits: u32,
+}
+
+impl<T: ?Sized> BitroundCodecPartial<T> {
+    /// Create a new [`BitroundCodecPartial`].
+    pub(crate) fn new(
+        input_output_handle: Arc<T>,
+        data_type: &DataType,
+        keepbits: u32,
+    ) -> Result<Self, CodecError> {
+        match data_type {
+            super::supported_dtypes!() => Ok(Self {
+                input_output_handle,
+                data_type: data_type.clone(),
+                keepbits,
+            }),
+            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                BITROUND.to_string(),
+            )),
+        }
+    }
+}
+
+impl<T: ?Sized> ArrayPartialDecoderTraits for BitroundCodecPartial<T>
+where
+    T: ArrayPartialDecoderTraits,
+{
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn size(&self) -> usize {
+        self.input_output_handle.size()
+    }
+
+    fn partial_decode(
+        &self,
+        indexer: &dyn crate::indexer::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        // Bytes codec does pass-through decoding
+        self.input_output_handle.partial_decode(indexer, options)
+    }
+}
+
+impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
+where
+    T: ArrayPartialEncoderTraits,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    fn erase(&self) -> Result<(), CodecError> {
+        self.input_output_handle.erase()
+    }
+
+    fn partial_encode(
+        &self,
+        indexer: &dyn crate::indexer::Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        // For bitround codec, we need to apply the rounding to the input bytes before encoding
+        let mut bytes_copy = bytes.clone().into_fixed()?;
+        round_bytes(bytes_copy.to_mut(), &self.data_type, self.keepbits)?;
+        let rounded_bytes = ArrayBytes::from(bytes_copy);
+
+        self.input_output_handle
+            .partial_encode(indexer, &rounded_bytes, options)
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderTraits for BitroundCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderTraits,
+{
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
+        indexer: &dyn crate::indexer::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Bytes codec does pass-through decoding
+        self.input_output_handle
+            .partial_decode(indexer, options)
+            .await
+    }
+}

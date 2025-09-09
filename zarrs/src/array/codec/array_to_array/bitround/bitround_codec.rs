@@ -6,8 +6,9 @@ use zarrs_registry::codec::BITROUND;
 
 use crate::array::{
     codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits,
-        CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
+        ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+        ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+        RecommendedConcurrency,
     },
     ChunkRepresentation, DataType,
 };
@@ -16,7 +17,7 @@ use crate::array::{
 use crate::array::codec::AsyncArrayPartialDecoderTraits;
 
 use super::{
-    bitround_partial_decoder, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
+    bitround_codec_partial, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
 
 /// A `bitround` codec implementation.
@@ -131,13 +132,24 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            bitround_partial_decoder::BitroundPartialDecoder::new(
-                input_handle,
-                decoded_representation.data_type(),
-                self.keepbits,
-            )?,
-        ))
+        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
+            input_handle,
+            decoded_representation.data_type(),
+            self.keepbits,
+        )?))
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
+            input_output_handle,
+            decoded_representation.data_type(),
+            self.keepbits,
+        )?))
     }
 
     #[cfg(feature = "async")]
@@ -147,13 +159,11 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            bitround_partial_decoder::AsyncBitroundPartialDecoder::new(
-                input_handle,
-                decoded_representation.data_type(),
-                self.keepbits,
-            )?,
-        ))
+        Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
+            input_handle,
+            decoded_representation.data_type(),
+            self.keepbits,
+        )?))
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
