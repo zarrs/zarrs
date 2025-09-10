@@ -50,7 +50,7 @@ impl BytesPartialDecoderCache {
 }
 
 impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.cache.as_ref().map_or(0, Vec::len)
     }
 
@@ -76,7 +76,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.cache.as_ref().map_or(0, Vec::len)
     }
 

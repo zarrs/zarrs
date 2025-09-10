@@ -53,8 +53,8 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     fn partial_decode(
@@ -103,8 +103,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     async fn partial_decode<'a>(

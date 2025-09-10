@@ -70,8 +70,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     fn partial_decode(
@@ -188,8 +188,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     fn partial_decode(
@@ -306,8 +306,8 @@ impl<T: ?Sized> BytesPartialDecoderTraits
 where
     T: BytesPartialDecoderTraits,
 {
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     fn partial_decode_many(
@@ -397,8 +397,8 @@ impl<T: ?Sized> AsyncArrayPartialDecoderTraits
 where
     T: AsyncArrayPartialDecoderTraits,
 {
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     fn data_type(&self) -> &super::DataType {
@@ -530,8 +530,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     async fn partial_decode<'a>(
@@ -655,8 +655,8 @@ impl<T: ?Sized> AsyncBytesPartialDecoderTraits
 where
     T: AsyncBytesPartialDecoderTraits,
 {
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     async fn partial_decode_many<'a>(

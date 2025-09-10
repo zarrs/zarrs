@@ -28,8 +28,8 @@ impl BloscPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for BloscPartialDecoder {
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     fn partial_decode_many(
@@ -79,8 +79,8 @@ impl AsyncBloscPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     async fn partial_decode_many<'a>(

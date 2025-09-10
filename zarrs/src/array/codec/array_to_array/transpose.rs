@@ -353,7 +353,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // transpose partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..4, 0..4]),
             ArraySubset::new_with_ranges(&[1..3, 1..4]),

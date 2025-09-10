@@ -297,7 +297,7 @@ pub trait ArrayCodecTraits: CodecTraits {
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of chunk bytes held by the partial decoder.
-    fn size(&self) -> usize;
+    fn size_held(&self) -> usize;
 
     /// Partially decode a byte range.
     ///
@@ -344,7 +344,7 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of chunk bytes held by the partial decoder.
-    fn size(&self) -> usize;
+    fn size_held(&self) -> usize;
 
     /// Partially decode a byte range.
     ///
@@ -396,7 +396,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn data_type(&self) -> &DataType;
 
     /// Returns the size of chunk bytes held by the partial decoder.
-    fn size(&self) -> usize;
+    fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
     ///
@@ -585,7 +585,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn data_type(&self) -> &DataType;
 
     /// Returns the size of chunk bytes held by the partial decoder.
-    fn size(&self) -> usize;
+    fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
     ///
@@ -636,7 +636,7 @@ impl StoragePartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StoragePartialDecoder {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         0
     }
 
@@ -676,7 +676,7 @@ impl AsyncStoragePartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         0
     }
 
@@ -704,7 +704,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.lock().unwrap().as_ref().map_or(0, Vec::len)
     }
 
@@ -774,7 +774,7 @@ impl StoragePartialEncoder {
 }
 
 impl BytesPartialDecoderTraits for StoragePartialEncoder {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         0
     }
 
@@ -1310,7 +1310,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
 }
 
 impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.as_ref().len()
     }
 
@@ -1329,7 +1329,7 @@ impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
 }
 
 impl BytesPartialDecoderTraits for Vec<u8> {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.len()
     }
 
@@ -1351,7 +1351,7 @@ impl BytesPartialDecoderTraits for Vec<u8> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.as_ref().len()
     }
 
@@ -1373,7 +1373,7 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Vec<u8> {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.len()
     }
 

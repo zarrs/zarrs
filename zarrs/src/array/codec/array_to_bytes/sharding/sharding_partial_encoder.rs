@@ -100,7 +100,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.shard_index.lock().unwrap().len()
     }
 

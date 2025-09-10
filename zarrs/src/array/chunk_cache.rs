@@ -53,7 +53,7 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
 
 impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
-        self.as_ref().size()
+        self.as_ref().size_held()
     }
 }
 

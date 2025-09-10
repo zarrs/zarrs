@@ -887,7 +887,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), decoded.size()); // codec chain caches with most decompression codecs
+        assert_eq!(partial_decoder.size_held(), decoded.size()); // codec chain caches with most decompression codecs
         let decoded_partial_chunk = partial_decoder
             .partial_decode(decoded_region, &CodecOptions::default())
             .unwrap();
