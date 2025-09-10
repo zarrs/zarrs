@@ -30,7 +30,7 @@
 //! ```
 
 mod bytes_codec;
-mod bytes_partial_decoder;
+mod bytes_codec_partial;
 
 use std::sync::Arc;
 
@@ -40,10 +40,7 @@ pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecCo
 use zarrs_registry::codec::BYTES;
 
 pub use bytes_codec::BytesCodec;
-
-#[cfg(feature = "async")]
-pub(crate) use bytes_partial_decoder::AsyncBytesPartialDecoder;
-pub(crate) use bytes_partial_decoder::BytesPartialDecoder;
+pub(crate) use bytes_codec_partial::BytesCodecPartial;
 
 use crate::{
     array::{
