@@ -34,7 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `indexer` module with `Indexer` trait and `IncompatibleIndexerError`
   - Implement `Indexer` for `ArraySubset`, `&ArraySubset`, `&[ArrayIndices]`, `&[T]` where `T: Indexer`, and more
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
-  - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
 - Add `CodecPartialDefault`
 - Add partial encoding support for the `bytes` codec
@@ -120,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
   - Add `[Async]{Array,Bytes}PartialEncoderTraits::into_dyn_decoder`
   - Impl `{Array,Bytes}PartialEncoderTrait` for `Mutex<Option<Vec<u8>>>`
+- **Breaking**: Remove `ArraySubset::byte_ranges`
+  - Replaced by `Indexer::iter_contiguous_byte_ranges`
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Use WASM compatible `rayon_iter_concurrent_limit` internally

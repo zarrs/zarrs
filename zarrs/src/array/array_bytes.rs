@@ -254,8 +254,8 @@ impl<'a> ArrayBytes<'a> {
                 Ok(array_bytes)
             }
             ArrayBytes::Fixed(bytes) => {
-                let byte_ranges =
-                    indexer.byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
+                let byte_ranges = indexer
+                    .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
                 let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
@@ -549,13 +549,14 @@ pub fn update_array_bytes<'a>(
             DataTypeSize::Fixed(data_type_size),
         ) => {
             let mut bytes = bytes.into_owned();
-            let byte_ranges = update_indexer.byte_ranges(shape, data_type_size)?;
+            let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, data_type_size)?;
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
-                let byte_range_len =
-                    usize::try_from(byte_range.length(bytes.len() as u64)).unwrap();
+                let start = usize::try_from(byte_range.start).unwrap();
+                let end = usize::try_from(byte_range.end).unwrap();
+                let byte_range_len = end.saturating_sub(start);
                 bytes
-                    .index_mut(byte_range.to_range_usize(bytes.len() as u64))
+                    .index_mut(start..end)
                     .copy_from_slice(&update_bytes[offset..offset + byte_range_len]);
                 offset += byte_range_len;
             }
