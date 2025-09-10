@@ -80,36 +80,13 @@ pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 #[cfg(feature = "async")]
 pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
 
-mod array_to_array_partial_encoder_default;
-pub use array_to_array_partial_encoder_default::ArrayToArrayPartialEncoderDefault;
-#[cfg(feature = "async")]
-pub use array_to_array_partial_encoder_default::AsyncArrayToArrayPartialEncoderDefault;
-
-mod array_to_bytes_partial_encoder_default;
-pub use array_to_bytes_partial_encoder_default::ArrayToBytesPartialEncoderDefault;
-#[cfg(feature = "async")]
-pub use array_to_bytes_partial_encoder_default::AsyncArrayToBytesPartialEncoderDefault;
+mod codec_partial_default;
+pub use codec_partial_default::CodecPartialDefault;
+use codec_partial_default::{
+    ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
+    BytesToBytesCodecPartialDefault,
+};
 use zarrs_metadata::Configuration;
-
-mod array_to_array_partial_decoder_default;
-pub use array_to_array_partial_decoder_default::ArrayToArrayPartialDecoderDefault;
-#[cfg(feature = "async")]
-pub use array_to_array_partial_decoder_default::AsyncArrayToArrayPartialDecoderDefault;
-
-mod array_to_bytes_partial_decoder_default;
-pub use array_to_bytes_partial_decoder_default::ArrayToBytesPartialDecoderDefault;
-#[cfg(feature = "async")]
-pub use array_to_bytes_partial_decoder_default::AsyncArrayToBytesPartialDecoderDefault;
-
-mod bytes_to_bytes_partial_encoder_default;
-#[cfg(feature = "async")]
-pub use bytes_to_bytes_partial_encoder_default::AsyncBytesToBytesPartialEncoderDefault;
-pub use bytes_to_bytes_partial_encoder_default::BytesToBytesPartialEncoderDefault;
-
-mod bytes_to_bytes_partial_decoder_default;
-#[cfg(feature = "async")]
-pub use bytes_to_bytes_partial_decoder_default::AsyncBytesToBytesPartialDecoderDefault;
-pub use bytes_to_bytes_partial_decoder_default::BytesToBytesPartialDecoderDefault;
 
 use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
 use zarrs_metadata::{v3::MetadataV3, ArrayShape};
@@ -966,7 +943,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(ArrayToArrayPartialDecoderDefault::new(
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -986,7 +963,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(ArrayToArrayPartialEncoderDefault::new(
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1007,7 +984,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncArrayToArrayPartialDecoderDefault::new(
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1028,7 +1005,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncArrayToArrayPartialEncoderDefault::new(
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
             input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1123,7 +1100,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(ArrayToBytesPartialDecoderDefault::new(
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1143,7 +1120,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(ArrayToBytesPartialEncoderDefault::new(
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1164,7 +1141,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncArrayToBytesPartialDecoderDefault::new(
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1185,7 +1162,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncArrayToBytesPartialEncoderDefault::new(
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
             input_output_handle,
             decoded_representation.clone(),
             self.into_dyn(),
@@ -1252,7 +1229,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesPartialDecoderDefault::new(
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new(
             input_handle,
             *decoded_representation,
             self.into_dyn(),
@@ -1272,7 +1249,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn BytesPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(BytesToBytesPartialEncoderDefault::new(
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new(
             input_output_handle,
             *decoded_representation,
             self.into_dyn(),
@@ -1293,7 +1270,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncBytesToBytesPartialDecoderDefault::new(
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new(
             input_handle,
             *decoded_representation,
             self.into_dyn(),
@@ -1314,7 +1291,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncBytesToBytesPartialEncoderDefault::new(
+        Ok(Arc::new(BytesToBytesCodecPartialDefault::new(
             input_output_handle,
             *decoded_representation,
             self.into_dyn(),

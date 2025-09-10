@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Partial decoders and encoders use `&dyn Indexer` instead of `&ArraySubset`
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
+- Add `CodecPartialDefault`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -137,11 +138,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `storage::byte_range` re-export
 - **Breaking**: Remove `array_subset::IncompatibleArraySubsetAndShapeError`, replaced by `indexer::IncompatibleIndexerError`
 - **Breaking**: Remove `[Maybe]AsyncBytes`, which are identical to `[Maybe]Bytes`
+- **Breaking**: Remove `[Async]{ArrayToArray,ArrayToBytes,BytesToBytes}Partial{Encoder,Decoder}Default`
+  - Replaced by generic `CodecPartialDefault`
 
 ### Fixed
 - Permit data types with empty configurations that do not require one
 - Erase chunks before writing the updated chunk in `ArrayTo{Array,Bytes}PartialEncoderDefault`
 - Fix `squeeze` and `transpose` codec partial encoding
+- Fix `bitround` partial decoder needlessly rounding on decode
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 

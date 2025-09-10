@@ -27,8 +27,7 @@
 //! ```
 
 mod transpose_codec;
-mod transpose_partial_decoder;
-mod transpose_partial_encoder;
+mod transpose_codec_partial;
 
 use std::sync::Arc;
 
