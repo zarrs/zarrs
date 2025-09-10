@@ -297,6 +297,8 @@ pub trait ArrayCodecTraits: CodecTraits {
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
 
     /// Partially decode a byte range.
@@ -344,6 +346,8 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
 
     /// Partially decode a byte range.
@@ -396,6 +400,8 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn data_type(&self) -> &DataType;
 
     /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
@@ -585,6 +591,8 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn data_type(&self) -> &DataType;
 
     /// Returns the size of chunk bytes held by the partial decoder.
+    ///
+    /// Intended for use by size-constrained partial decoder caches.
     fn size_held(&self) -> usize;
 
     /// Partially decode a chunk.
