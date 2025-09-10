@@ -343,6 +343,9 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+    /// Returns the size of chunk bytes held by the partial decoder.
+    fn size(&self) -> usize;
+
     /// Partially decode a byte range.
     ///
     /// Returns [`None`] if partial decoding of the input handle returns [`None`].
@@ -581,6 +584,9 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
 
+    /// Returns the size of chunk bytes held by the partial decoder.
+    fn size(&self) -> usize;
+
     /// Partially decode a chunk.
     ///
     /// # Errors
@@ -670,6 +676,10 @@ impl AsyncStoragePartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
+    fn size(&self) -> usize {
+        0
+    }
+
     async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
@@ -1341,6 +1351,10 @@ impl BytesPartialDecoderTraits for Vec<u8> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
+    fn size(&self) -> usize {
+        self.as_ref().len()
+    }
+
     async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
@@ -1359,6 +1373,10 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Vec<u8> {
+    fn size(&self) -> usize {
+        self.len()
+    }
+
     async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,

@@ -90,6 +90,10 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.cache.size()
+    }
+
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::indexer::Indexer,

@@ -110,6 +110,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
         self.shard_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size() + self.shard_index.as_ref().map_or(0, Vec::len) * size_of::<u64>()
+    }
+
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::indexer::Indexer,

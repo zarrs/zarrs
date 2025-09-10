@@ -162,6 +162,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_handle.size()
+    }
+
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::indexer::Indexer,

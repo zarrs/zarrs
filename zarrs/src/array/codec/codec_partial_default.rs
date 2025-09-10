@@ -397,6 +397,10 @@ impl<T: ?Sized> AsyncArrayPartialDecoderTraits
 where
     T: AsyncArrayPartialDecoderTraits,
 {
+    fn size(&self) -> usize {
+        self.input_output_handle.size()
+    }
+
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
     }
@@ -526,6 +530,10 @@ where
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> usize {
+        self.input_output_handle.size()
+    }
+
     async fn partial_decode<'a>(
         &'a self,
         indexer: &dyn crate::indexer::Indexer,
@@ -647,6 +655,10 @@ impl<T: ?Sized> AsyncBytesPartialDecoderTraits
 where
     T: AsyncBytesPartialDecoderTraits,
 {
+    fn size(&self) -> usize {
+        self.input_output_handle.size()
+    }
+
     async fn partial_decode_many<'a>(
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
