@@ -60,7 +60,7 @@ impl ArrayPartialDecoderCache {
 }
 
 impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.cache.size()
     }
 
@@ -88,6 +88,10 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn size_held(&self) -> usize {
+        self.cache.size()
     }
 
     async fn partial_decode<'a>(

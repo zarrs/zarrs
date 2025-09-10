@@ -235,7 +235,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // squeeze partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // squeeze partial decoder does not hold bytes
 
         let decoded_regions = [
             ArraySubset::new_with_ranges(&[0..1, 0..4, 0..1, 0..4, 0..1]),

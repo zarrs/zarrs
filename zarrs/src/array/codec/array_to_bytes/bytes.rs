@@ -316,7 +316,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // bytes partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bytes partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();

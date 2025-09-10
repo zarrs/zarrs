@@ -397,7 +397,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // blosc partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // blosc partial decoder does not hold bytes
         let decoded = partial_decoder
             .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .unwrap()
