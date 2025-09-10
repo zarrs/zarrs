@@ -2,7 +2,6 @@
 
 use thiserror::Error;
 use zarrs_metadata::ArrayShape;
-use zarrs_storage::byte_range::ByteRange;
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::{
@@ -94,20 +93,21 @@ pub trait Indexer: MaybeSend + MaybeSync {
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IncompatibleIndexerError>;
 
-    /// Return the byte ranges of the indexer in an array with `array_shape` and `element_size`.
+    /// Return the byte ranges of the indexer in an array with `array_shape` and a fixed element size of `element_size`.
     ///
     /// # Errors
     /// Returns [`IncompatibleIndexerError`] if the `array_shape` does not encapsulate indices of the indexer.
-    fn byte_ranges(
+    fn iter_contiguous_byte_ranges(
         &self,
         array_shape: &[u64],
         element_size: usize,
-    ) -> Result<Box<dyn IndexerIterator<Item = ByteRange>>, IncompatibleIndexerError> {
+    ) -> Result<Box<dyn IndexerIterator<Item = std::ops::Range<u64>>>, IncompatibleIndexerError>
+    {
         let element_size_u64 = element_size as u64;
         let byte_ranges = self.iter_contiguous_linearised_indices(array_shape)?.map(
             move |(array_index, contiguous_elements)| {
                 let byte_index = array_index * element_size_u64;
-                ByteRange::FromStart(byte_index, Some(contiguous_elements * element_size_u64))
+                byte_index..byte_index + contiguous_elements * element_size_u64
             },
         );
         Ok(Box::new(byte_ranges))

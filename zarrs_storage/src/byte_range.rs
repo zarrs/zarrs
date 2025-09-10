@@ -191,13 +191,14 @@ fn is_valid(byte_range: ByteRange, bytes_len: u64) -> bool {
 ///
 /// # Panics
 /// Panics if requesting bytes beyond [`usize::MAX`].
-pub fn extract_byte_ranges(
+pub fn extract_byte_ranges<R: Into<ByteRange>>(
     bytes: &[u8],
-    byte_ranges: impl Iterator<Item = ByteRange>,
+    byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<Vec<u8>>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
     byte_ranges
         .map(|byte_range| {
+            let byte_range: ByteRange = byte_range.into();
             let valid = is_valid(byte_range, bytes_len);
             if !valid {
                 return Err(InvalidByteRangeError(byte_range, bytes_len));
@@ -216,21 +217,19 @@ pub fn extract_byte_ranges(
 ///
 /// # Panics
 /// Panics if requesting bytes beyond [`usize::MAX`].
-pub fn extract_byte_ranges_concat(
+pub fn extract_byte_ranges_concat<R: Into<ByteRange>>(
     bytes: &[u8],
-    byte_ranges: impl Iterator<Item = ByteRange>,
+    byte_ranges: impl Iterator<Item = R>,
 ) -> Result<Vec<u8>, InvalidByteRangeError> {
     let bytes_len = bytes.len() as u64;
     let lengths_and_starts = byte_ranges
         .map(|byte_range| {
+            let byte_range: ByteRange = byte_range.into();
             let valid = is_valid(byte_range, bytes_len);
             if !valid {
                 return Err(InvalidByteRangeError(byte_range, bytes_len));
             }
-            Ok((
-                byte_range.length(bytes.len() as u64),
-                byte_range.start(bytes.len() as u64),
-            ))
+            Ok((byte_range.length(bytes_len), byte_range.start(bytes_len)))
         })
         .collect::<Result<Vec<(u64, u64)>, InvalidByteRangeError>>()?;
     let out_size = usize::try_from(

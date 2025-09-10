@@ -85,7 +85,7 @@ impl ArrayPartialDecoderTraits for ZfpPartialDecoder {
                 &self.decoded_representation,
                 false, // FIXME
             )?;
-            let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+            let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
                 byte_ranges,
@@ -170,7 +170,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncZfpPartialDecoder {
                 &self.decoded_representation,
                 false, // FIXME
             )?;
-            let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+            let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
             Ok(ArrayBytes::from(extract_byte_ranges_concat(
                 &decoded_value,
                 byte_ranges,
