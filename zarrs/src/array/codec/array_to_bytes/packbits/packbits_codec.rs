@@ -13,7 +13,7 @@ use zarrs_registry::codec::PACKBITS;
 
 use crate::array::{
     codec::{
-        array_to_bytes::{bytes::BytesPartialDecoder, packbits::div_rem_8bit},
+        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         InvalidBytesLengthError, RecommendedConcurrency,
@@ -26,9 +26,6 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
-
-#[cfg(feature = "async")]
-use crate::array::codec::array_to_bytes::bytes::AsyncBytesPartialDecoder;
 
 use super::{
     pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
@@ -366,7 +363,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            Ok(Arc::new(BytesPartialDecoder::new(
+            Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 Some(Endianness::Little),
@@ -400,7 +397,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            Ok(Arc::new(AsyncBytesPartialDecoder::new(
+            Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 Some(Endianness::Little),

@@ -21,7 +21,7 @@ use crate::array::{
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 
 use super::{
-    bytes_partial_decoder, reverse_endianness, BytesCodecConfiguration, BytesCodecConfigurationV1,
+    bytes_codec_partial, reverse_endianness, BytesCodecConfiguration, BytesCodecConfigurationV1,
     Endianness,
 };
 
@@ -203,7 +203,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(bytes_partial_decoder::BytesPartialDecoder::new(
+        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
             decoded_representation.clone(),
             self.endian,
@@ -217,13 +217,11 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            bytes_partial_decoder::AsyncBytesPartialDecoder::new(
-                input_handle,
-                decoded_representation.clone(),
-                self.endian,
-            ),
-        ))
+        Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
+            input_handle,
+            decoded_representation.clone(),
+            self.endian,
+        )))
     }
 
     fn encoded_representation(
