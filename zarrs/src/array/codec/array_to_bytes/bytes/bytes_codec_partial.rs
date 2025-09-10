@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use zarrs_registry::codec::BYTES;
+use zarrs_storage::byte_range::ByteRange;
 
 use crate::{
     array::{
@@ -77,7 +78,9 @@ where
 
         let chunk_shape = self.decoded_representation.shape_u64();
         // Get byte ranges
-        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer
+            .iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?
+            .map(ByteRange::new);
 
         // Decode
         let decoded = self
@@ -143,7 +146,9 @@ where
         let chunk_shape = self.decoded_representation.shape_u64();
 
         // Get byte ranges
-        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer
+            .iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?
+            .map(ByteRange::new);
 
         // Decode
         let decoded = self
@@ -210,7 +215,7 @@ where
         }
 
         let chunk_shape = self.decoded_representation.shape_u64();
-        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
 
         let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
         if let Some(endian) = &self.endian {
@@ -222,16 +227,9 @@ where
             }
         }
 
-        let total_size = u64::try_from(
-            self.decoded_representation
-                .size()
-                .fixed_size()
-                .expect("representation is fixed"),
-        )
-        .unwrap();
         let offset_bytes: Vec<_> = byte_ranges
             .zip(bytes_to_encode.chunks_exact(data_type_size))
-            .map(|(range, chunk)| (range.start(total_size), crate::array::RawBytes::from(chunk)))
+            .map(|(range, chunk)| (range.start, crate::array::RawBytes::from(chunk)))
             .collect();
 
         self.input_output_handle
@@ -276,7 +274,7 @@ where
         }
 
         let chunk_shape = self.decoded_representation.shape_u64();
-        let byte_ranges = indexer.byte_ranges(&chunk_shape, data_type_size)?;
+        let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
 
         let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
         if let Some(endian) = &self.endian {
@@ -288,16 +286,9 @@ where
             }
         }
 
-        let total_size = u64::try_from(
-            self.decoded_representation
-                .size()
-                .fixed_size()
-                .expect("representation is fixed"),
-        )
-        .unwrap();
         let offset_bytes: Vec<_> = byte_ranges
             .zip(bytes_to_encode.chunks_exact(data_type_size))
-            .map(|(range, chunk)| (range.start(total_size), crate::array::RawBytes::from(chunk)))
+            .map(|(range, chunk)| (range.start, crate::array::RawBytes::from(chunk)))
             .collect();
 
         self.input_output_handle
