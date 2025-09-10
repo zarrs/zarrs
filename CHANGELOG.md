@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Move `ArraySubset::byte_ranges` to `Indexer` trait
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
 - Add `CodecPartialDefault`
+- Add partial encoding support for the `bytes` codec
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
