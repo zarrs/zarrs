@@ -69,12 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Major Breaking**: `[Async]ArrayPartialDecoderTraits` trait changes: 
   - `partial_decode[_into]()`: parameter `array_subsets: &[ArraySubset]` changed to `indexer: &dyn Indexer`
   - `partial_decode[_into]()`: returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
-- **Breaking**: `ArrayPartialEncoderTraits:` trait changes:
   - `partial_encode()`: parameter `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
+  - Rename `size()` to `size_held()`
 - **Breaking**: `[Async]BytesPartialDecoderTraits` trait changes:
   - Rename `partial_decode` to `partial_decode_many` and change parameter `decoded_regions: &[ByteRange]` to `ByteRangeIterator`
   - Add `partial_decode` for decoding a single byte range
   - Remove `partial_decode_concat`
+  - Rename `size()` to `size_held()`
 - **Breaking**: `[Async]BytesPartialEncoderTraits` trait changes:
   - Rename `partial_encode` to `partial_encode_many` and change parameter `offsets_and_bytes: &[(ByteOffset, RawBytes<'_>)]` to `offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>`
   - Add `partial_encode` for decoding a single byte range
