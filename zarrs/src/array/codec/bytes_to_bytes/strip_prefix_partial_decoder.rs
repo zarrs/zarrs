@@ -50,6 +50,10 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         self.input_handle
             .partial_decode_many(Box::new(decoded_regions), options)
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]

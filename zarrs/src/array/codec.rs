@@ -121,6 +121,34 @@ use super::{
     RawBytes, RawBytesOffsetsOutOfBoundsError,
 };
 
+/// Describes the partial decoding capabilities of a codec.
+///
+/// The capability describes:
+/// - `partial_read`: Whether the codec can perform partial reading from its input.
+/// - `partial_decode`: Whether the codec supports partial decoding decoding, or it must decode the entire input.
+///
+/// If `partial_read` is false and `partial_decode` is true, input should be cached for optimal performance.
+/// If `partial_decode` is false, a cache should be inserted after this codec in a [`CodecChain`] partial decoder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PartialDecoderCapability {
+    /// Whether the codec can perform partial reading from its input.
+    /// If false, the codec needs to read all input data before decoding.
+    pub partial_read: bool,
+    /// Whether the codec supports partial decoding operations.
+    /// If false, the codec needs to decode the entire input.
+    pub partial_decode: bool,
+}
+
+/// Describes the partial encoding capabilities of a codec.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PartialEncoderCapability {
+    /// Whether the codec supports partial encoding operations.
+    ///
+    /// If this returns `true`, the codec can efficiently handle partial encoding operations if supported by the parent codec or storage handle.
+    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
+    pub partial_encode: bool,
+}
+
 /// A codec plugin.
 #[derive(derive_more::Deref)]
 pub struct CodecPlugin(Plugin<Codec, MetadataV3>);
@@ -261,13 +289,11 @@ pub trait CodecTraits: MaybeSend + MaybeSync {
         self.configuration_opt(name, &CodecMetadataOptions::default())
     }
 
-    /// Indicates if the input to a codecs partial decoder should be cached for optimal performance.
-    /// If true, a cache may be inserted *before* it in a [`CodecChain`] partial decoder.
-    fn partial_decoder_should_cache_input(&self) -> bool;
+    /// Returns the partial decoder capability of this codec.
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability;
 
-    /// Indicates if a partial decoder decodes all bytes from its input handle and its output should be cached for optimal performance.
-    /// If true, a cache will be inserted at some point *after* it in a [`CodecChain`] partial decoder.
-    fn partial_decoder_decodes_all(&self) -> bool;
+    /// Returns the partial encoder capability of this codec.
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability;
 }
 
 /// Traits for both array to array and array to bytes codecs.
@@ -338,6 +364,12 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn decode(&self, options: &CodecOptions) -> Result<Option<RawBytes<'_>>, CodecError> {
         self.partial_decode(ByteRange::FromStart(0, None), options)
     }
+
+    /// Returns whether this decoder supports partial decoding.
+    ///
+    /// If this returns `true`, the decoder can efficiently handle partial decoding operations.
+    /// If this returns `false`, partial decoding will fall back to a full decode operation.
+    fn supports_partial_decode(&self) -> bool;
 }
 
 #[cfg(feature = "async")]
@@ -474,6 +506,12 @@ pub trait ArrayPartialEncoderTraits:
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
+
+    /// Returns whether this encoder supports partial encoding.
+    ///
+    /// If this returns `true`, the encoder can efficiently handle partial encoding operations.
+    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
+    fn supports_partial_encode(&self) -> bool;
 }
 
 #[cfg(feature = "async")]
@@ -502,6 +540,12 @@ pub trait AsyncArrayPartialEncoderTraits:
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
+
+    /// Returns whether this encoder supports partial encoding.
+    ///
+    /// If this returns `true`, the encoder can efficiently handle partial encoding operations.
+    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
+    fn supports_partial_encode(&self) -> bool;
 }
 
 /// Partial bytes encoder traits.
@@ -539,6 +583,12 @@ pub trait BytesPartialEncoderTraits:
         offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
+
+    /// Returns whether this encoder supports partial encoding.
+    ///
+    /// If this returns `true`, the encoder can efficiently handle partial encoding operations.
+    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
+    fn supports_partial_encode(&self) -> bool;
 }
 
 #[cfg(feature = "async")]
@@ -580,6 +630,12 @@ pub trait AsyncBytesPartialEncoderTraits:
         offset_values: OffsetBytesIterator<'a, crate::array::RawBytes<'_>>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
+
+    /// Returns whether this encoder supports partial encoding.
+    ///
+    /// If this returns `true`, the encoder can efficiently handle partial encoding operations.
+    /// If this returns `false`, partial encoding will fall back to a full decode and encode operation.
+    fn supports_partial_encode(&self) -> bool;
 }
 
 #[cfg(feature = "async")]
@@ -663,6 +719,10 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
             Ok(None)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.storage.supports_get_partial()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -736,6 +796,10 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
             Ok(None)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
@@ -765,6 +829,10 @@ impl BytesPartialEncoderTraits for Mutex<Option<Vec<u8>>> {
         }
         *v = Some(output);
         Ok(())
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        true
     }
 }
 
@@ -803,6 +871,10 @@ impl BytesPartialDecoderTraits for StoragePartialEncoder {
             Ok(None)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.storage.supports_get_partial()
+    }
 }
 
 impl BytesPartialEncoderTraits for StoragePartialEncoder {
@@ -825,6 +897,10 @@ impl BytesPartialEncoderTraits for StoragePartialEncoder {
         Ok(self
             .storage
             .set_partial_many(&self.key, Box::new(offset_values))?)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }
 
@@ -1334,6 +1410,10 @@ impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
                 .collect(),
         ))
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 impl BytesPartialDecoderTraits for Vec<u8> {
@@ -1352,6 +1432,10 @@ impl BytesPartialDecoderTraits for Vec<u8> {
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }
 

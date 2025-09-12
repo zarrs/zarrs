@@ -239,6 +239,10 @@ where
         self.input_output_handle
             .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -298,5 +302,9 @@ where
         self.input_output_handle
             .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
             .await
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }

@@ -93,6 +93,10 @@ where
                 .partial_encode(&indexer_squeezed, bytes, options)
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 #[cfg(feature = "async")]

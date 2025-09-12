@@ -58,6 +58,10 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
             })
             .collect()
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]

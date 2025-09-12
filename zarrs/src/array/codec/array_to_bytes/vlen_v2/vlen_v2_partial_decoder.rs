@@ -62,7 +62,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+        // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options)?;
         decode_vlen_bytes(
             bytes,
@@ -112,7 +112,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+        // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options).await?;
         decode_vlen_bytes(
             bytes,

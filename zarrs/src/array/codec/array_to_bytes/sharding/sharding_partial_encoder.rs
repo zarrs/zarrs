@@ -472,4 +472,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         }
         Ok(())
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }

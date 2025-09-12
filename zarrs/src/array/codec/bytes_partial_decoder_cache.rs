@@ -70,6 +70,10 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
             None => None,
         })
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]

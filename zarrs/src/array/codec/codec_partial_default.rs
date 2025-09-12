@@ -177,6 +177,10 @@ where
                 .partial_encode(&array_subset_all, &encoded_value, options)
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits
@@ -299,6 +303,10 @@ where
                 .partial_encode(0, chunk_bytes, options)
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 impl<T: ?Sized> BytesPartialDecoderTraits
@@ -333,6 +341,10 @@ where
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -386,6 +398,10 @@ where
 
         self.input_output_handle
             .partial_encode(0, Cow::Owned(bytes_encoded), options)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }
 
@@ -516,6 +532,10 @@ where
                 .await
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -645,6 +665,10 @@ where
                 .await
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -740,5 +764,9 @@ where
         self.input_output_handle
             .partial_encode(0, Cow::Owned(bytes_encoded), options)
             .await
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }

@@ -9,7 +9,8 @@ use crate::{
     array::{
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
-            CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
+            CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+            PartialEncoderCapability, RecommendedConcurrency,
         },
         ChunkRepresentation, DataType,
     },
@@ -185,12 +186,17 @@ impl CodecTraits for FixedScaleOffsetCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,   // TODO
+            partial_decode: false, // TODO
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false, // TODO
+        }
     }
 }
 

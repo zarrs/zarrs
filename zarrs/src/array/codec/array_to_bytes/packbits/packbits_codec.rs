@@ -16,7 +16,8 @@ use crate::array::{
         array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, RecommendedConcurrency,
+        InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+        RecommendedConcurrency,
     },
     ArrayBytes, BytesRepresentation, ChunkRepresentation, RawBytes,
 };
@@ -121,12 +122,17 @@ impl CodecTraits for PackBitsCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

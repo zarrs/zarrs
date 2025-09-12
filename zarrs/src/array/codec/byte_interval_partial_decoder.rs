@@ -58,6 +58,10 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         self.input_handle
             .partial_decode_many(Box::new(byte_ranges), options)
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]

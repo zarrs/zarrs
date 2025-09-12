@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::array::DataType;
+use crate::array::{codec::PartialEncoderCapability, DataType};
 use zarrs_data_type::DataTypeExtensionError;
 use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
@@ -12,7 +12,7 @@ use crate::array::{
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, RecommendedConcurrency,
+        InvalidBytesLengthError, PartialDecoderCapability, RecommendedConcurrency,
     },
     ArrayBytes, BytesRepresentation, ChunkRepresentation, DataTypeSize, RawBytes,
 };
@@ -120,12 +120,17 @@ impl CodecTraits for BytesCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
     }
 }
 

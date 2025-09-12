@@ -46,6 +46,10 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
                 .collect(),
         ))
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]

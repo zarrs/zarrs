@@ -75,9 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `partial_decode` for decoding a single byte range
   - Remove `partial_decode_concat`
   - Rename `size()` to `size_held()` and add to `AsyncBytesPartialDecoderTraits`
-- **Breaking**: `[Async]BytesPartialEncoderTraits` trait changes:
-  - Rename `partial_encode` to `partial_encode_many` and change parameter `offsets_and_bytes: &[(ByteOffset, RawBytes<'_>)]` to `offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>`
-  - Add `partial_encode` for decoding a single byte range
+  - Add `supports_partial_decode`
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
@@ -119,8 +117,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
   - Add `[Async]{Array,Bytes}PartialEncoderTraits::into_dyn_decoder`
   - Impl `{Array,Bytes}PartialEncoderTrait` for `Mutex<Option<Vec<u8>>>`
+  - Add `supports_partial_encode`
+  - `[Async]BytesPartialEncoderTraits` specific trait changes:
+    - Rename `partial_encode` to `partial_encode_many` and change parameter `offsets_and_bytes: &[(ByteOffset, RawBytes<'_>)]` to `offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>`
+    - Add `partial_encode` for decoding a single byte range
 - **Breaking**: Remove `ArraySubset::byte_ranges`
   - Replaced by `Indexer::iter_contiguous_byte_ranges`
+  - Add `CodecTraits::partial_decoder_capability` and `PartialDecoderCapability`
+    - `partial_decoder_capability` replaces `partial_decoder_should_cache_input` and `partial_decoder_decodes_all`
+  - Add `CodecTraits::partial_encoder_capability` and `PartialEncoderCapability`
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Use WASM compatible `rayon_iter_concurrent_limit` internally
