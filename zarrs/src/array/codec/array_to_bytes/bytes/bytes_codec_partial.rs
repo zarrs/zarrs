@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<T> ArrayPartialEncoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> ArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: BytesPartialEncoderTraits,
 {
@@ -232,8 +232,15 @@ where
         }
 
         let offset_bytes: Vec<_> = byte_ranges
-            .zip(bytes_to_encode.chunks_exact(data_type_size))
-            .map(|(range, chunk)| (range.start, crate::array::RawBytes::from(chunk)))
+            .scan(0usize, |offset_in, range_out| {
+                let len = usize::try_from(range_out.end - range_out.start).unwrap();
+                let range_in = *offset_in..*offset_in + len;
+                *offset_in += len;
+                Some((
+                    range_out.start,
+                    crate::array::RawBytes::from(&bytes_to_encode[range_in]),
+                ))
+            })
             .collect();
 
         self.input_output_handle
@@ -248,7 +255,7 @@ where
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<T> AsyncArrayPartialEncoderTraits for BytesCodecPartial<T>
+impl<T: ?Sized> AsyncArrayPartialEncoderTraits for BytesCodecPartial<T>
 where
     T: AsyncBytesPartialEncoderTraits,
 {
@@ -295,8 +302,15 @@ where
         }
 
         let offset_bytes: Vec<_> = byte_ranges
-            .zip(bytes_to_encode.chunks_exact(data_type_size))
-            .map(|(range, chunk)| (range.start, crate::array::RawBytes::from(chunk)))
+            .scan(0usize, |offset_in, range_out| {
+                let len = usize::try_from(range_out.end - range_out.start).unwrap();
+                let range_in = *offset_in..*offset_in + len;
+                *offset_in += len;
+                Some((
+                    range_out.start,
+                    crate::array::RawBytes::from(&bytes_to_encode[range_in]),
+                ))
+            })
             .collect();
 
         self.input_output_handle
