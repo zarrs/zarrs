@@ -7,7 +7,7 @@ use crate::array::{
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        RecommendedConcurrency,
+        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
     ArrayBytes, BytesRepresentation, ChunkRepresentation, DataTypeSize, RawBytes, RawBytesOffsets,
 };
@@ -40,12 +40,17 @@ impl CodecTraits for VlenV2Codec {
         Some(Configuration::default())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false, // NOTE: It is effectively a full decode when separating offsets/bytes
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true // TODO: Vlen could do partial decoding, but needs coalescing etc
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

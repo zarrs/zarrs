@@ -94,7 +94,6 @@ mod zfp_array;
 mod zfp_bitstream;
 mod zfp_codec;
 mod zfp_field;
-mod zfp_partial_decoder;
 mod zfp_stream;
 
 use std::sync::Arc;

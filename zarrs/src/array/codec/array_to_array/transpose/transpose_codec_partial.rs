@@ -69,6 +69,10 @@ where
                 .partial_decode(&indexer_transposed, options)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits for TransposeCodecPartial<T>
@@ -98,6 +102,10 @@ where
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
         }
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }
 
@@ -139,5 +147,9 @@ where
                 .partial_decode(&indexer_transposed, options)
                 .await
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }

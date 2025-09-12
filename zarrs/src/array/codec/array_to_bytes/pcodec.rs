@@ -38,7 +38,6 @@
 //! ```
 
 mod pcodec_codec;
-mod pcodec_partial_decoder;
 
 use std::sync::Arc;
 

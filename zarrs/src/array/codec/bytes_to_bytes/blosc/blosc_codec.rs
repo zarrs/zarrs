@@ -8,7 +8,8 @@ use crate::{
     array::{
         codec::{
             BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-            CodecOptions, CodecTraits, RecommendedConcurrency,
+            CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+            RecommendedConcurrency,
         },
         BytesRepresentation, RawBytes,
     },
@@ -167,12 +168,17 @@ impl CodecTraits for BloscCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false, // TODO: the blosc codec technically supports partial decoding, but it needs coalescing to be efficient. So, use a cache for now
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

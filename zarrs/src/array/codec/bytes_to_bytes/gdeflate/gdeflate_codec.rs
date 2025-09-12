@@ -5,7 +5,10 @@ use zarrs_plugin::PluginCreateError;
 use zarrs_registry::codec::GDEFLATE;
 
 use crate::array::{
-    codec::{BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits},
+    codec::{
+        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+        PartialDecoderCapability, PartialEncoderCapability,
+    },
     BytesRepresentation, RawBytes, RecommendedConcurrency,
 };
 
@@ -67,12 +70,17 @@ impl CodecTraits for GDeflateCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

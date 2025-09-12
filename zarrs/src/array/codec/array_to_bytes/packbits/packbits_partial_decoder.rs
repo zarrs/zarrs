@@ -203,6 +203,10 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
             options,
         )
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -262,5 +266,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
             options,
         )
         .await
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }

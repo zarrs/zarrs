@@ -70,6 +70,10 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
             None => None,
         })
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "async")]
@@ -86,5 +90,9 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }

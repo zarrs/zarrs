@@ -111,6 +111,10 @@ where
             })
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits
@@ -177,6 +181,10 @@ where
                 .partial_encode(&array_subset_all, &encoded_value, options)
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
+    }
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits
@@ -225,6 +233,10 @@ where
                 self.decoded_representation.fill_value(),
             ))
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -299,6 +311,10 @@ where
                 .partial_encode(0, chunk_bytes, options)
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
+    }
 }
 
 impl<T: ?Sized> BytesPartialDecoderTraits
@@ -333,6 +349,10 @@ where
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -386,6 +406,10 @@ where
 
         self.input_output_handle
             .partial_encode(0, Cow::Owned(bytes_encoded), options)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
     }
 }
 
@@ -444,6 +468,10 @@ where
                 }
             })
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }
 
@@ -516,6 +544,10 @@ where
                 .await
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]
@@ -567,6 +599,10 @@ where
                 self.decoded_representation.fill_value(),
             ))
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -645,6 +681,10 @@ where
                 .await
         }
     }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]
@@ -682,6 +722,10 @@ where
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -740,5 +784,9 @@ where
         self.input_output_handle
             .partial_encode(0, Cow::Owned(bytes_encoded), options)
             .await
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        false
     }
 }

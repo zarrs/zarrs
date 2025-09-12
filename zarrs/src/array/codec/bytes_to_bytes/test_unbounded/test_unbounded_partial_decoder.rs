@@ -46,6 +46,10 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
                 .collect(),
         ))
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]
@@ -87,5 +91,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }

@@ -145,6 +145,10 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             }
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 async fn get_inner_chunk_partial_decoder(

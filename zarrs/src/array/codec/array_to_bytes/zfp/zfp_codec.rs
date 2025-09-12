@@ -18,20 +18,16 @@ use zfp_sys::{
 
 use crate::array::{
     codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        RawBytes, RecommendedConcurrency,
+        ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions,
+        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RawBytes,
+        RecommendedConcurrency,
     },
     BytesRepresentation, ChunkRepresentation, DataType,
 };
 
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
 use super::{
     promote_before_zfp_encoding, zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode,
-    zfp_field::ZfpField, zfp_partial_decoder, zfp_stream::ZfpStream, ZfpCodecConfiguration,
-    ZfpCodecConfigurationV1,
+    zfp_field::ZfpField, zfp_stream::ZfpStream, ZfpCodecConfiguration, ZfpCodecConfigurationV1,
 };
 
 /// A `zfp` codec implementation.
@@ -168,12 +164,17 @@ impl CodecTraits for ZfpCodec {
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 
@@ -278,35 +279,6 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
             false, // FIXME
         )
         .map(ArrayBytes::from)
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(zfp_partial_decoder::ZfpPartialDecoder::new(
-            input_handle,
-            decoded_representation,
-            self.mode,
-            self.write_header,
-        )?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(zfp_partial_decoder::AsyncZfpPartialDecoder::new(
-            input_handle,
-            decoded_representation,
-            self.mode,
-            self.write_header,
-        )?))
     }
 
     fn encoded_representation(

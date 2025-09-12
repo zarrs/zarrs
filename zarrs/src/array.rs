@@ -302,9 +302,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
 ///   - Preferred where chunks are repeatedly *partially retrieved*.
 ///   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
-///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs. See:
-///     - [`CodecTraits::partial_decoder_decodes_all`](crate::array::codec::CodecTraits::partial_decoder_decodes_all), and
-///     - [`CodecTraits::partial_decoder_should_cache_input`](crate::array::codec::CodecTraits::partial_decoder_should_cache_input).
+///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](crate::array::codec::PartialDecoderCapability).
 ///
 /// `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 ///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
