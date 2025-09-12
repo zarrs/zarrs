@@ -179,7 +179,7 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
 
@@ -305,7 +305,7 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
 
@@ -401,7 +401,7 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
 
@@ -534,7 +534,7 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
 
@@ -667,7 +667,7 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
 
@@ -767,6 +767,6 @@ where
     }
 
     fn supports_partial_encode(&self) -> bool {
-        self.input_output_handle.supports_partial_encode()
+        false
     }
 }
