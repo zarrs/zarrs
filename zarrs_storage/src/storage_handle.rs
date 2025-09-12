@@ -96,6 +96,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
     fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
         self.0.erase_prefix(prefix)
     }
+
+    fn supports_set_partial(&self) -> bool {
+        self.0.supports_set_partial()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -182,6 +186,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
     async fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
         self.0.erase_prefix(prefix).await
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.0.supports_set_partial()
     }
 }
 

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename `[Async]WritableStorageTraits::set_partial_values` to `set_partial_many` and `[async_]store_set_partial_values` to `[async_]store_set_partial_many`
   - Change parameter `key_offset_values: &[StoreKeyOffsetValue]` to `key: &StoreKey` and `offset_values: OffsetBytesIterator`
 - **Breaking**: Rename `[Async]WritableStorageTraits::erase_values` to `erase_many`
+- **Breaking**: Add `[Async]WritableStorageTraits::supports_set_partial`
 - Optimise `MemoryStore`
 
 ### Removed

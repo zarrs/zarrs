@@ -278,6 +278,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         )?;
         result
     }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -474,6 +478,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             (self.prefix_func)()
         )?;
         result
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }
 
