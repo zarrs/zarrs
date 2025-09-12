@@ -193,6 +193,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             options,
         )
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }
 
 fn get_inner_chunk_partial_decoder(

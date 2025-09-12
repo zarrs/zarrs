@@ -10,8 +10,8 @@ use itertools::Itertools;
 use zarrs::{
     array::{
         codec::{
-            ArrayToBytesCodecTraits, BytesCodec, CodecOptions, ShardingCodecBuilder, SqueezeCodec,
-            VlenCodec,
+            ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
+            BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
         },
         ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
     },
@@ -334,6 +334,14 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
             &CodecOptions::default(),
         )
         .unwrap();
+    assert_eq!(
+        partial_encoder.supports_partial_encode(),
+        codec.partial_encoder_capability().partial_encode && output.supports_partial_encode()
+    );
+    assert_eq!(
+        partial_encoder.supports_partial_decode(),
+        codec.partial_decoder_capability().partial_decode && output.supports_partial_decode()
+    );
 
     partial_encoder
         .partial_encode(

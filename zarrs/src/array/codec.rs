@@ -424,6 +424,12 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
         self.partial_decode(ByteRange::FromStart(0, None), options)
             .await
     }
+
+    /// Returns whether this decoder supports partial decoding.
+    ///
+    /// If this returns `true`, the decoder can efficiently handle partial decoding operations.
+    /// If this returns `false`, partial decoding will fall back to a full decode operation.
+    fn supports_partial_decode(&self) -> bool;
 }
 
 /// Partial array decoder traits.
@@ -481,6 +487,12 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
             Err(CodecError::ExpectedFixedLengthBytes)
         }
     }
+
+    /// Returns whether this decoder supports partial decoding.
+    ///
+    /// If this returns `true`, the decoder can efficiently handle partial decoding operations.
+    /// If this returns `false`, partial decoding will fall back to a full decode operation.
+    fn supports_partial_decode(&self) -> bool;
 }
 
 /// Partial array encoder traits.
@@ -684,6 +696,12 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
             Err(CodecError::ExpectedFixedLengthBytes)
         }
     }
+
+    /// Returns whether this decoder supports partial decoding.
+    ///
+    /// If this returns `true`, the decoder can efficiently handle partial decoding operations.
+    /// If this returns `false`, partial decoding will fall back to a full decode operation.
+    fn supports_partial_decode(&self) -> bool;
 }
 
 /// A [`ReadableStorage`] store value partial decoder.
@@ -768,6 +786,10 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
         } else {
             None
         })
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -1459,6 +1481,10 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
                 .collect(),
         ))
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "async")]
@@ -1480,6 +1506,10 @@ impl AsyncBytesPartialDecoderTraits for Vec<u8> {
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }
 

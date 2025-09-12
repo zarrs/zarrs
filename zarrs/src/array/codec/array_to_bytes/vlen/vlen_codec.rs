@@ -134,7 +134,7 @@ impl CodecTraits for VlenCodec {
     fn partial_decoder_capability(&self) -> PartialDecoderCapability {
         PartialDecoderCapability {
             partial_read: false, // TODO: could read offsets first, ideally cached, then grab values as needed
-            partial_decode: true,
+            partial_decode: false, // TODO
         }
     }
 

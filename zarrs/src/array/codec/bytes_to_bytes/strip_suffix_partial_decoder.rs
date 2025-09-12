@@ -128,4 +128,8 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         let results: Option<Vec<_>> = results.into_iter().collect();
         Ok(results)
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }

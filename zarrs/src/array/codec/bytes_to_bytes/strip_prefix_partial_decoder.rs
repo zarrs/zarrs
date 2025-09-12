@@ -101,4 +101,8 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
             .partial_decode_many(Box::new(decoded_regions), options)
             .await
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }

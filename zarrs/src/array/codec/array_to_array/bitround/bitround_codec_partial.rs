@@ -62,6 +62,10 @@ where
         // Bytes codec does pass-through decoding
         self.input_output_handle.partial_decode(indexer, options)
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits for BitroundCodecPartial<T>
@@ -120,5 +124,9 @@ where
         self.input_output_handle
             .partial_decode(indexer, options)
             .await
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }

@@ -115,4 +115,8 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         }
         Err(CodecError::from("blosc encoded value is invalid"))
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }

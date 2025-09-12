@@ -111,6 +111,11 @@ where
             })
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+            && self.codec.partial_decoder_capability().partial_decode
+    }
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits
@@ -229,6 +234,10 @@ where
                 self.decoded_representation.fill_value(),
             ))
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -461,6 +470,11 @@ where
             })
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+            && self.codec.partial_decoder_capability().partial_decode
+    }
 }
 
 #[cfg(feature = "async")]
@@ -588,6 +602,10 @@ where
             ))
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]
@@ -706,6 +724,10 @@ where
                 .map(Cow::Owned)
                 .collect(),
         ))
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 

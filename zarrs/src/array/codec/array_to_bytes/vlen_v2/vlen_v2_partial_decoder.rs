@@ -72,6 +72,10 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
             &self.decoded_representation.shape_u64(),
         )
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "async")]
@@ -121,5 +125,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
             self.decoded_representation.fill_value(),
             &self.decoded_representation.shape_u64(),
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }

@@ -61,6 +61,10 @@ where
                 .partial_decode(&indexer_squeezed, options)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits for SqueezeCodecPartial<T>
@@ -132,5 +136,9 @@ where
                 .partial_decode(&indexer_squeezed, options)
                 .await
         }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }

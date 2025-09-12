@@ -118,4 +118,8 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
             .partial_decode_many(Box::new(byte_ranges), options)
             .await
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
+    }
 }

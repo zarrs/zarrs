@@ -110,6 +110,10 @@ where
 
         Ok(decoded)
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -182,6 +186,10 @@ where
             );
 
         Ok(decoded)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }
 

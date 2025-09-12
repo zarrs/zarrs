@@ -119,6 +119,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
             options,
         )
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
 impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
