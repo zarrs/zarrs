@@ -37,13 +37,13 @@
 
 pub use object_store;
 
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use object_store::path::Path;
 
 use zarrs_storage::{
-    async_store_set_partial_values, byte_range::ByteRangeIterator, AsyncBytes,
-    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes, StorageError, StoreKey, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes,
+    async_store_set_partial_many, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
+    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,
+    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
     StorePrefix,
 };
 
@@ -89,7 +89,7 @@ impl<T: object_store::ObjectStore> AsyncObjectStore<T> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectStore<T> {
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let get = handle_result_notfound(self.object_store.get(&key_to_path(key)).await)?;
         if let Some(get) = get {
             let bytes = handle_result(get.bytes().await)?;
@@ -99,45 +99,38 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
         }
     }
 
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let Some(size) = self.size_key(key).await? else {
             return Ok(None);
         };
         let ranges = byte_ranges
             .map(|byte_range| byte_range.to_range(size))
             .collect::<Vec<_>>();
-        let get_ranges = self
-            .object_store
-            .get_ranges(&key_to_path(key), &ranges)
-            .await;
-        match get_ranges {
-            Ok(get_ranges) => Ok(Some(
-                std::iter::zip(ranges, get_ranges)
-                    .map(|(range, bytes)| {
-                        let range_len = range.end.saturating_sub(range.start);
-                        if range_len == bytes.len() as u64 {
-                            Ok(bytes)
-                        } else {
-                            Err(StorageError::Other(format!(
-                                "Unexpected length of bytes returned, expected {}, got {}",
-                                range_len,
-                                bytes.len()
-                            )))
-                        }
-                    })
-                    .collect::<Result<_, StorageError>>()?,
-            )),
-            Err(err) => {
-                if matches!(err, object_store::Error::NotFound { .. }) {
-                    Ok(None)
+        let get_ranges = handle_result_notfound(
+            self.object_store
+                .get_ranges(&key_to_path(key), &ranges)
+                .await,
+        )?;
+        if let Some(get_ranges) = get_ranges {
+            let result = std::iter::zip(ranges, get_ranges).map(|(range, bytes)| {
+                let range_len = range.end.saturating_sub(range.start);
+                if range_len == bytes.len() as u64 {
+                    Ok(bytes)
                 } else {
-                    Err(StorageError::Other(err.to_string()))
+                    Err(StorageError::Other(format!(
+                        "Unexpected length of bytes returned, expected {}, got {}",
+                        range_len,
+                        bytes.len()
+                    )))
                 }
-            }
+            });
+            Ok(Some(stream::iter(result).boxed()))
+        } else {
+            Ok(None)
         }
     }
 
@@ -147,21 +140,26 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
                 .map(|meta| meta.size),
         )
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectStore<T> {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         handle_result(self.object_store.put(&key_to_path(key), value.into()).await)?;
         Ok(())
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        async_store_set_partial_values(self, key_offset_values).await
+        async_store_set_partial_many(self, key, offset_values).await
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -183,6 +181,10 @@ impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectSto
                 .await,
         )?;
         Ok(())
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        false
     }
 }
 

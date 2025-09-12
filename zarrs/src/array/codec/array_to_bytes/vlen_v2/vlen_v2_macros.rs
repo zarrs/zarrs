@@ -47,7 +47,7 @@ macro_rules! vlen_v2_codec {
                 array_to_bytes::vlen_v2::VlenV2Codec, ArrayPartialDecoderTraits,
                 ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
                 BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
-                CodecTraits,
+                CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
             },
             ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation, RawBytes,
             RecommendedConcurrency,
@@ -91,12 +91,12 @@ macro_rules! vlen_v2_codec {
                 self.inner.configuration_opt(name, options)
             }
 
-            fn partial_decoder_should_cache_input(&self) -> bool {
-                self.inner.partial_decoder_should_cache_input()
+            fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+                self.inner.partial_decoder_capability()
             }
 
-            fn partial_decoder_decodes_all(&self) -> bool {
-                self.inner.partial_decoder_decodes_all()
+            fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+                self.inner.partial_encoder_capability()
             }
         }
 

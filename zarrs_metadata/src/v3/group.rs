@@ -1,7 +1,7 @@
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-use super::{AdditionalFieldsV3, MetadataV3};
+use super::AdditionalFieldsV3;
 
 /// Zarr V3 group metadata.
 ///
@@ -28,9 +28,9 @@ pub struct GroupMetadataV3 {
     /// Optional user metadata.
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub attributes: serde_json::Map<String, serde_json::Value>,
-    /// Extension definitions (Zarr 3.1, [ZEP0009](https://zarr.dev/zeps/draft/ZEP0009.html)).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extensions: Vec<MetadataV3>,
+    // /// Extension definitions (Zarr 3.2, [ZEP0010](https://github.com/zarr-developers/zeps/pull/67)).
+    // #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    // pub extensions: Vec<MetadataV3>,
     /// Additional fields.
     #[serde(flatten)]
     pub additional_fields: AdditionalFieldsV3,
@@ -60,7 +60,7 @@ impl GroupMetadataV3 {
             zarr_format: monostate::MustBe!(3u64),
             node_type: monostate::MustBe!("group"),
             attributes: serde_json::Map::new(),
-            extensions: Vec::default(),
+            // extensions: Vec::default(),
             additional_fields: AdditionalFieldsV3::default(),
         }
     }
@@ -89,10 +89,10 @@ impl GroupMetadataV3 {
         self
     }
 
-    /// Set the extension definitions.
-    #[must_use]
-    pub fn with_extensions(mut self, extensions: Vec<MetadataV3>) -> Self {
-        self.extensions = extensions;
-        self
-    }
+    // /// Set the extension definitions.
+    // #[must_use]
+    // pub fn with_extensions(mut self, extensions: Vec<MetadataV3>) -> Self {
+    //     self.extensions = extensions;
+    //     self
+    // }
 }

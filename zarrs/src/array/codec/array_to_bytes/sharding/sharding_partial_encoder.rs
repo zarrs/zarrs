@@ -5,9 +5,11 @@ use std::{
 };
 
 use itertools::Itertools;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 
 use crate::{
     array::{
@@ -98,7 +100,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.shard_index.lock().unwrap().len()
     }
 
@@ -116,6 +118,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
             indexer,
             options,
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }
 
@@ -235,8 +241,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         // Get the byte ranges of the straddling inner chunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
-        let (inner_chunks_indices, byte_ranges): (Vec<_>, Vec<_>) = inner_chunks_indices
-            .into_par_iter()
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = inner_chunks_indices.into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = inner_chunks_indices.into_iter();
+
+        let (inner_chunks_indices, byte_ranges): (Vec<_>, Vec<_>) = iterator
             .filter_map(|inner_chunk_index| {
                 let offset = shard_index[usize::try_from(inner_chunk_index * 2).unwrap()];
                 let size = shard_index[usize::try_from(inner_chunk_index * 2 + 1).unwrap()];
@@ -254,14 +264,18 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Read the straddling inner chunks
         let inner_chunks_encoded = self
             .input_output_handle
-            .partial_decode(&mut byte_ranges.into_iter(), options)?
+            .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
         // Decode the straddling inner chunks
         let inner_chunks_decoded: HashMap<_, _> =
             if let Some(inner_chunks_encoded) = inner_chunks_encoded {
-                let inner_chunks_encoded = inner_chunks_indices
-                    .into_par_iter()
+                #[cfg(not(target_arch = "wasm32"))]
+                let iterator = inner_chunks_indices.into_par_iter();
+                #[cfg(target_arch = "wasm32")]
+                let iterator = inner_chunks_indices.into_iter();
+
+                let inner_chunks_encoded = iterator
                     .zip(inner_chunks_encoded)
                     .map(|(inner_chunk_index, inner_chunk_encoded)| {
                         Ok((
@@ -283,63 +297,69 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let inner_chunks_decoded = Arc::new(Mutex::new(inner_chunks_decoded));
         let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
 
-        inner_chunks
-            .indices()
-            .into_par_iter()
-            .try_for_each(|inner_chunk_indices: Vec<u64>| {
-                // Extract the inner chunk bytes that overlap with the chunk subset
-                let inner_chunk_index =
-                    ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-                let inner_chunk_subset = self
-                    .chunk_grid
-                    .subset(&inner_chunk_indices)
-                    .expect("matching dimensionality");
-                let inner_chunk_subset_overlap =
-                    chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
-                let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
-                    &inner_chunk_subset_overlap
-                        .relative_to(chunk_subset_indexer.start())
-                        .unwrap(),
-                    chunk_subset_indexer.shape(),
-                    self.inner_chunk_representation.data_type(),
-                )?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = inner_chunks.indices().into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let mut iterator = inner_chunks.indices().into_iter();
 
-                // Decode the inner chunk
-                let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
-                    .lock()
-                    .unwrap()
-                    .remove(&inner_chunk_index)
-                {
-                    inner_chunk_decoded.into_owned()
-                } else {
-                    inner_chunk_fill_value()
-                };
+        iterator.try_for_each(|inner_chunk_indices: Vec<u64>| {
+            // Extract the inner chunk bytes that overlap with the chunk subset
+            let inner_chunk_index =
+                ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+            let inner_chunk_subset = self
+                .chunk_grid
+                .subset(&inner_chunk_indices)
+                .expect("matching dimensionality");
+            let inner_chunk_subset_overlap =
+                chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
+            let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
+                &inner_chunk_subset_overlap
+                    .relative_to(chunk_subset_indexer.start())
+                    .unwrap(),
+                chunk_subset_indexer.shape(),
+                self.inner_chunk_representation.data_type(),
+            )?;
 
-                // Update the inner chunk
-                let inner_chunk_updated = update_array_bytes(
-                    inner_chunk_decoded,
-                    &self.inner_chunk_representation.shape_u64(),
-                    &inner_chunk_subset_overlap
-                        .relative_to(inner_chunk_subset.start())
-                        .unwrap(),
-                    &inner_chunk_bytes,
-                    self.inner_chunk_representation.data_type().size(),
-                )?;
-                inner_chunks_decoded
-                    .lock()
-                    .unwrap()
-                    .insert(inner_chunk_index, inner_chunk_updated);
+            // Decode the inner chunk
+            let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
+                .lock()
+                .unwrap()
+                .remove(&inner_chunk_index)
+            {
+                inner_chunk_decoded.into_owned()
+            } else {
+                inner_chunk_fill_value()
+            };
 
-                Ok::<_, CodecError>(())
-            })?;
+            // Update the inner chunk
+            let inner_chunk_updated = update_array_bytes(
+                inner_chunk_decoded,
+                &self.inner_chunk_representation.shape_u64(),
+                &inner_chunk_subset_overlap
+                    .relative_to(inner_chunk_subset.start())
+                    .unwrap(),
+                &inner_chunk_bytes,
+                self.inner_chunk_representation.data_type().size(),
+            )?;
+            inner_chunks_decoded
+                .lock()
+                .unwrap()
+                .insert(inner_chunk_index, inner_chunk_updated);
+
+            Ok::<_, CodecError>(())
+        })?;
         let inner_chunks_decoded = Arc::try_unwrap(inner_chunks_decoded)
             .expect("inner_chunks_decoded should have one strong reference")
             .into_inner()
             .expect("inner_chunks_decoded should not be poisoned");
 
         // Encode the updated inner chunks
-        let updated_inner_chunks = inner_chunks_decoded
-            .into_par_iter()
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = inner_chunks_decoded.into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = inner_chunks_decoded.into_iter();
+
+        let updated_inner_chunks = iterator
             .map(|(inner_chunk_index, inner_chunk_decoded)| {
                 if inner_chunk_decoded.is_fill_value(self.inner_chunk_representation.fill_value()) {
                     Ok((inner_chunk_index, None))
@@ -434,23 +454,30 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             // Write the encoded index and updated inner chunks
             match self.index_location {
                 ShardingIndexLocation::Start => {
-                    self.input_output_handle.partial_encode(
-                        &[
-                            (0, Cow::Owned(encoded_array_index)),
-                            (offset_new_chunks, Cow::Owned(encoded_output)),
-                        ],
+                    self.input_output_handle.partial_encode_many(
+                        Box::new(
+                            [
+                                (0, Cow::Owned(encoded_array_index)),
+                                (offset_new_chunks, Cow::Owned(encoded_output)),
+                            ]
+                            .into_iter(),
+                        ),
                         options,
                     )?;
                 }
                 ShardingIndexLocation::End => {
                     encoded_output.extend(encoded_array_index);
-                    self.input_output_handle.partial_encode(
-                        &[(offset_new_chunks, Cow::Owned(encoded_output))],
+                    self.input_output_handle.partial_encode_many(
+                        Box::new([(offset_new_chunks, Cow::Owned(encoded_output))].into_iter()),
                         options,
                     )?;
                 }
             }
         }
         Ok(())
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }

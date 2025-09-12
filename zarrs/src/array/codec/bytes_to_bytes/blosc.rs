@@ -263,6 +263,8 @@ fn blosc_decompress_bytes_partial(
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use zarrs_storage::byte_range::ByteRange;
+
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -383,9 +385,10 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .byte_ranges(array_representation.shape(), data_type_size)
-            .unwrap();
+        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .unwrap()
+            .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .partial_decoder(
@@ -394,11 +397,12 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // blosc partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // blosc partial decoder does not hold bytes
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded: Vec<u16> = decoded
             .to_vec()
@@ -432,9 +436,10 @@ mod tests {
         let encoded = codec
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
-        let mut decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .byte_ranges(array_representation.shape(), data_type_size)
-            .unwrap();
+        let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
+            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .unwrap()
+            .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
             .async_partial_decoder(
@@ -445,10 +450,11 @@ mod tests {
             .await
             .unwrap();
         let decoded = partial_decoder
-            .partial_decode_concat(&mut decoded_regions, &CodecOptions::default())
+            .partial_decode_many(Box::new(decoded_regions), &CodecOptions::default())
             .await
             .unwrap()
-            .unwrap();
+            .unwrap()
+            .concat();
 
         let decoded: Vec<u16> = decoded
             .to_vec()

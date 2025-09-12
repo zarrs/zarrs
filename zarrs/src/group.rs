@@ -207,22 +207,22 @@ impl<TStorage: ?Sized> Group<TStorage> {
     fn validate_metadata(metadata: &GroupMetadata) -> Result<(), GroupCreateError> {
         match &metadata {
             GroupMetadata::V2(_) => {}
-            GroupMetadata::V3(metadata) => {
-                for extension in &metadata.extensions {
-                    if extension.must_understand() {
-                        return Err(GroupCreateError::AdditionalFieldUnsupportedError(
-                            AdditionalFieldUnsupportedError::new(
-                                extension.name().to_string(),
-                                extension
-                                    .configuration()
-                                    .map(|configuration| {
-                                        serde_json::Value::Object(configuration.clone().into())
-                                    })
-                                    .unwrap_or_default(),
-                            ),
-                        ));
-                    }
-                }
+            GroupMetadata::V3(_metadata) => {
+                // for extension in &metadata.extensions {
+                //     if extension.must_understand() {
+                //         return Err(GroupCreateError::AdditionalFieldUnsupportedError(
+                //             AdditionalFieldUnsupportedError::new(
+                //                 extension.name().to_string(),
+                //                 extension
+                //                     .configuration()
+                //                     .map(|configuration| {
+                //                         serde_json::Value::Object(configuration.clone().into())
+                //                     })
+                //                     .unwrap_or_default(),
+                //             ),
+                //         ));
+                //     }
+                // }
             }
         }
 

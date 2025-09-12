@@ -53,8 +53,8 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     fn partial_decode(
@@ -62,7 +62,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+        // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options)?;
         decode_vlen_bytes(
             bytes,
@@ -71,6 +71,10 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
             self.decoded_representation.fill_value(),
             &self.decoded_representation.shape_u64(),
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -103,12 +107,16 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all of the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options).await?;
         decode_vlen_bytes(
             bytes,
@@ -117,5 +125,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
             self.decoded_representation.fill_value(),
             &self.decoded_representation.shape_u64(),
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }

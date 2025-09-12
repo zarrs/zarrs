@@ -1,15 +1,15 @@
 //! A storage transformer which records performance metrics.
 
 use crate::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
 use crate::{
-    AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes,
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
 };
 
 use std::sync::{
@@ -108,40 +108,37 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         value
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self.storage.get_partial_values_key(key, byte_ranges)?;
-        if let Some(values) = &values {
-            let bytes_read = values.iter().map(Bytes::len).sum();
+        let values = self.storage.get_partial_many(key, byte_ranges)?;
+        if let Some(values) = values {
+            let values = values.collect::<Vec<_>>();
+            let bytes_read = values
+                .iter()
+                .map(|b| b.as_ref().map_or(0, Bytes::len))
+                .sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
-            // If the key is found to be empty, consider that as a read
-            self.reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(Box::new(values.into_iter())))
+        } else {
+            if size_hint_lower_bound > 0 {
+                // If the key is found to be empty, consider that as a read
+                self.reads.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(None)
         }
-        Ok(values)
-    }
-
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges)?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, Bytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
-        Ok(values)
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         self.storage.size_key(key)
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -178,19 +175,22 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         self.storage.set(key, value)
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        let bytes_written = key_offset_values
+        let offset_values: Vec<_> = offset_values.collect();
+        let bytes_written = offset_values
             .iter()
-            .map(|ksv| ksv.value().len())
+            .map(|(_, bytes)| bytes.len())
             .sum::<usize>();
         self.bytes_written
             .fetch_add(bytes_written, Ordering::Relaxed);
         self.writes
-            .fetch_add(key_offset_values.len(), Ordering::Relaxed);
-        self.storage.set_partial_values(key_offset_values)
+            .fetch_add(offset_values.len(), Ordering::Relaxed);
+        self.storage
+            .set_partial_many(key, Box::new(offset_values.into_iter()))
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -198,13 +198,17 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         self.storage.erase(key)
     }
 
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
         self.keys_erased.fetch_add(keys.len(), Ordering::Relaxed);
-        self.storage.erase_values(keys)
+        self.storage.erase_many(keys)
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
         self.storage.erase_prefix(prefix)
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }
 
@@ -214,53 +218,48 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let value = self.storage.get(key).await;
         let bytes_read = value
             .as_ref()
-            .map_or(0, |v| v.as_ref().map_or(0, AsyncBytes::len));
+            .map_or(0, |v| v.as_ref().map_or(0, Bytes::len));
         self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
         self.reads.fetch_add(1, Ordering::Relaxed);
         value
     }
 
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
         let size_hint_lower_bound = byte_ranges.size_hint().0;
-        let values = self
-            .storage
-            .get_partial_values_key(key, byte_ranges)
-            .await?;
-        if let Some(values) = &values {
-            let bytes_read = values.iter().map(AsyncBytes::len).sum();
+        let values = self.storage.get_partial_many(key, byte_ranges).await?;
+        if let Some(values) = values {
+            use futures::{stream, StreamExt};
+            let values = values.collect::<Vec<_>>().await;
+            let bytes_read = values
+                .iter()
+                .map(|b| b.as_ref().map_or(0, Bytes::len))
+                .sum();
             self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
             self.reads.fetch_add(values.len(), Ordering::Relaxed);
-        } else if size_hint_lower_bound > 0 {
-            // If the key is found to be empty, consider that as a read
-            self.reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(stream::iter(values).boxed()))
+        } else {
+            if size_hint_lower_bound > 0 {
+                // If the key is found to be empty, consider that as a read
+                self.reads.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(None)
         }
-        Ok(values)
-    }
-
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let values = self.storage.get_partial_values(key_ranges).await?;
-        let bytes_read = values
-            .iter()
-            .map(|value| value.as_ref().map_or(0, AsyncBytes::len))
-            .sum::<usize>();
-        self.bytes_read.fetch_add(bytes_read, Ordering::Relaxed);
-        self.reads.fetch_add(key_ranges.len(), Ordering::Relaxed);
-        Ok(values)
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         self.storage.size_key(key).await
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -297,37 +296,45 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for PerformanceMetricsStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         self.bytes_written.fetch_add(value.len(), Ordering::Relaxed);
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.storage.set(key, value).await
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let bytes_written = key_offset_values
+        let offset_values: Vec<_> = offset_values.collect();
+        let bytes_written = offset_values
             .iter()
-            .map(|ksv| ksv.value().len())
+            .map(|(_, bytes)| bytes.len())
             .sum::<usize>();
         self.bytes_written
             .fetch_add(bytes_written, Ordering::Relaxed);
         self.writes
-            .fetch_add(key_offset_values.len(), Ordering::Relaxed);
-        self.storage.set_partial_values(key_offset_values).await
+            .fetch_add(offset_values.len(), Ordering::Relaxed);
+        self.storage
+            .set_partial_many(key, Box::new(offset_values.into_iter()))
+            .await
     }
 
     async fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
         self.storage.erase(key).await
     }
 
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        self.storage.erase_values(keys).await
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        self.storage.erase_many(keys).await
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
         self.storage.erase_prefix(prefix).await
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }
 

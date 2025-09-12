@@ -262,20 +262,13 @@ pub fn array_metadata_v2_to_v3(
         },
     )?;
 
-    let (Ok(data_type), endianness) = (
-        data_type_metadata_v2_to_v3(
-            &array_metadata_v2.dtype,
-            data_type_aliases_v2,
-            data_type_aliases_v3,
-        ),
-        data_type_metadata_v2_to_endianness(&array_metadata_v2.dtype)
-            .map_err(ArrayMetadataV2ToV3Error::InvalidEndianness)?,
-    ) else {
-        return Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
-            array_metadata_v2.dtype.clone(),
-        ));
-    };
-
+    let endianness = data_type_metadata_v2_to_endianness(&array_metadata_v2.dtype)
+        .map_err(ArrayMetadataV2ToV3Error::InvalidEndianness)?;
+    let data_type = data_type_metadata_v2_to_v3(
+        &array_metadata_v2.dtype,
+        data_type_aliases_v2,
+        data_type_aliases_v3,
+    )?;
     let fill_value = fill_value_metadata_v2_to_v3(&array_metadata_v2.fill_value, &data_type)?;
 
     let codecs = codec_metadata_v2_to_v3(

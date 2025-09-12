@@ -10,20 +10,17 @@ use zarrs_registry::codec::PCODEC;
 
 use crate::array::{
     codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        RawBytes, RecommendedConcurrency,
+        ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions,
+        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RawBytes,
+        RecommendedConcurrency,
     },
     convert_from_bytes_slice, transmute_to_bytes_vec, BytesRepresentation, ChunkRepresentation,
     DataType,
 };
 
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
 use super::{
-    pcodec_partial_decoder, PcodecCodecConfiguration, PcodecCodecConfigurationV1,
-    PcodecCompressionLevel, PcodecDeltaEncodingOrder,
+    PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
+    PcodecDeltaEncodingOrder,
 };
 
 /// A `pcodec` codec implementation.
@@ -135,12 +132,17 @@ impl CodecTraits for PcodecCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 
@@ -283,33 +285,6 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             )),
         }?;
         Ok(ArrayBytes::from(bytes))
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(pcodec_partial_decoder::PcodecPartialDecoder::new(
-            input_handle,
-            decoded_representation.clone(),
-        )))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
-        _options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            pcodec_partial_decoder::AsyncPCodecPartialDecoder::new(
-                input_handle,
-                decoded_representation.clone(),
-            ),
-        ))
     }
 
     fn encoded_representation(

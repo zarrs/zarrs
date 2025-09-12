@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use zarrs_storage::ReadableStorageTraits;
 
 use crate::{
+    array::codec::CodecTraits,
     array::ArrayBytes,
     array_subset::ArraySubset,
     storage::{ReadableWritableStorageTraits, StorageHandle},
@@ -196,8 +199,15 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             // let mutex = self.storage.mutex(&key)?;
             // let _lock = mutex.lock();
 
-            if options.experimental_partial_encoding() {
+            if options.experimental_partial_encoding()
+                && self.codecs.partial_encoder_capability().partial_encode
+                && self.storage.supports_set_partial()
+            {
                 let partial_encoder = self.partial_encoder(chunk_indices, options)?;
+                debug_assert!(
+                    partial_encoder.supports_partial_encode(),
+                    "partial encoder is misrepresenting its capabilities"
+                );
                 Ok(partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options)?)
             } else {
                 // Decode the entire chunk
@@ -331,7 +341,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             };
 
             let indices = chunks.indices();
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 chunk_concurrent_limit,
                 indices,
                 try_for_each,

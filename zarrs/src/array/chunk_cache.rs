@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use crate::iter_concurrent_limit;
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
+
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::ReadableStorageTraits;
@@ -20,6 +22,7 @@ use crate::{
 use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};
 
 pub(crate) mod chunk_cache_lru;
+// pub(crate) mod chunk_cache_lru_macros;
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Arc<RawBytes<'static>>>;
@@ -30,7 +33,7 @@ pub type ChunkCacheTypeDecoded = Arc<ArrayBytes<'static>>;
 /// The chunk type of a partial decoder chunk cache.
 pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
 
-/// A chunk type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
+/// A chunk cache type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
 pub trait ChunkCacheType: MaybeSend + MaybeSync + Clone + 'static {
     /// The size of the chunk in bytes.
     fn size(&self) -> usize;
@@ -50,7 +53,7 @@ impl ChunkCacheType for ChunkCacheTypeDecoded {
 
 impl ChunkCacheType for ChunkCacheTypePartialDecoder {
     fn size(&self) -> usize {
-        self.as_ref().size()
+        self.as_ref().size_held()
     }
 }
 

@@ -1,24 +1,21 @@
 //! A synchronous in-memory store.
 
-use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
+use bytes::BytesMut;
 use std::sync::Mutex;
 
 use crate::{
     byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
-    Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits, StorageError, StoreKey,
-    StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A synchronous in-memory store.
 #[derive(Debug)]
 pub struct MemoryStore {
-    data_map: Mutex<BTreeMap<StoreKey, Arc<RwLock<Vec<u8>>>>>,
-    // locks: StoreLocks,
+    data_map: Mutex<BTreeMap<StoreKey, BytesMut>>,
 }
 
 impl Default for MemoryStore {
@@ -38,16 +35,10 @@ impl MemoryStore {
 
     fn set_impl(&self, key: &StoreKey, value: &[u8], offset: ByteOffset, truncate: bool) {
         let mut data_map = self.data_map.lock().unwrap();
-        let data = data_map
-            .entry(key.clone())
-            .or_insert_with(|| Arc::new(RwLock::default()))
-            .clone();
-        drop(data_map);
-        let mut data = data.write();
+        let data = data_map.entry(key.clone()).or_default();
 
         if offset == 0 && data.is_empty() {
-            // fast path
-            *data = value.to_vec();
+            data.extend_from_slice(value);
         } else {
             let length = usize::try_from(offset + value.len() as u64).unwrap();
             if data.len() < length {
@@ -66,36 +57,30 @@ impl ReadableStorageTraits for MemoryStore {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
         if let Some(data) = data {
-            let data = data.clone();
-            drop(data_map);
-            let data = data.read();
-            Ok(Some(data.clone().into()))
+            Ok(Some(data.clone().freeze()))
         } else {
             Ok(None)
         }
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
         if let Some(data) = data {
-            let data = data.clone();
-            drop(data_map);
-            let data = data.read();
-            let out = byte_ranges
-                .map(|byte_range| {
-                    let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
-                    let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
-                    if end > data.len() {
-                        return Err(InvalidByteRangeError::new(byte_range, data.len() as u64));
-                    }
-                    Ok(data[start..end].to_vec().into())
-                })
-                .collect::<Result<Vec<Bytes>, InvalidByteRangeError>>()?;
+            let data = data.clone().freeze();
+            let out = Box::new(byte_ranges.map(move |byte_range| {
+                let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
+                let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
+                if end > data.len() {
+                    Err(InvalidByteRangeError::new(byte_range, data.len() as u64).into())
+                } else {
+                    Ok(data.slice(start..end))
+                }
+            }));
             Ok(Some(out))
         } else {
             Ok(None)
@@ -106,7 +91,11 @@ impl ReadableStorageTraits for MemoryStore {
         let data_map = self.data_map.lock().unwrap();
         data_map
             .get(key)
-            .map_or_else(|| Ok(None), |entry| Ok(Some(entry.read().len() as u64)))
+            .map_or_else(|| Ok(None), |entry| Ok(Some(entry.len() as u64)))
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        true
     }
 }
 
@@ -116,29 +105,14 @@ impl WritableStorageTraits for MemoryStore {
         Ok(())
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        use itertools::Itertools;
-
-        // Group by key
-        key_offset_values
-            .iter()
-            .chunk_by(|key_offset_value| key_offset_value.key())
-            .into_iter()
-            .map(|(key, group)| (key.clone(), group.into_iter().cloned().collect::<Vec<_>>()))
-            .try_for_each(|(key, group)| {
-                for key_offset_value in group {
-                    self.set_impl(
-                        &key,
-                        key_offset_value.value(),
-                        key_offset_value.offset(),
-                        false,
-                    );
-                }
-                Ok::<_, StorageError>(())
-            })?;
+        for (offset, value) in offset_values {
+            self.set_impl(key, &value, offset, false);
+        }
         Ok(())
     }
 
@@ -157,6 +131,10 @@ impl WritableStorageTraits for MemoryStore {
             }
         }
         Ok(())
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        true
     }
 }
 
@@ -216,7 +194,7 @@ mod tests {
     use crate::ReadableWritableListableStorageTraits;
 
     use super::*;
-    use std::error::Error;
+    use std::{error::Error, sync::Arc};
 
     #[test]
     fn memory() -> Result<(), Box<dyn Error>> {

@@ -5,7 +5,8 @@ use zarrs_metadata::Configuration;
 use crate::array::{
     codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, RecommendedConcurrency,
+        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+        RecommendedConcurrency,
     },
     BytesRepresentation, RawBytes,
 };
@@ -42,12 +43,17 @@ impl CodecTraits for TestUnboundedCodec {
         None
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

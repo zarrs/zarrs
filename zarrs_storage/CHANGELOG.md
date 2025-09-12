@@ -11,17 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` for `Error` structs
 - Add `MaybeSend`/`MaybeSync` for WASM compatibility ([#245] by [@keller-mark])
 - Add missing `AsyncReadableWritableStorage`
+- Add `[Async]MaybeBytesIterator`
+- Add `OffsetBytesIterator`
+- Add `[Async]ReadableStorageTraits::get_partial`
+- Add `[Async]WritableStorageTraits::set_partial`
 
 ### Changed
+- **Breaking**: Increase MSRV to 1.82
 - **Breaking**: Add upcasting methods to storage traits (`readable()`, `writable()`, etc.)
-- **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: impl Iterator<Item = ByteRange>` for
-  - `extract_byte_ranges[{_concat,_read_seek,_read}]`
-  - `[Async]ReadableStorageTraits::get_partial_values_key`
+- **Breaking**: Change `byte_ranges: &[ByteRange]` parameter to `byte_ranges: ByteRangeIterator` for
+  - `extract_byte_ranges[{_concat,_read_seek}]`
+- **Breaking**: Rename `[Async]ReadableStorageTraits::get_partial_values` to `get_partial_many`
+  - Change parameter `byte_ranges: &[ByteRange]` to `byte_ranges: ByteRangeIterator`
+  - Change return value to an `[Async]MaybeBytesIterator`
+- **Breaking**: Rename `[Async]WritableStorageTraits::set_partial_values` to `set_partial_many` and `[async_]store_set_partial_values` to `[async_]store_set_partial_many`
+  - Change parameter `key_offset_values: &[StoreKeyOffsetValue]` to `key: &StoreKey` and `offset_values: OffsetBytesIterator`
+- **Breaking**: Rename `[Async]WritableStorageTraits::erase_values` to `erase_many`
+- **Breaking**: Add `[Async]WritableStorageTraits::supports_set_partial`
+- **Breaking**: Add `[Async]ReadableStorageTraits::supports_get_partial`
+- Optimise `MemoryStore`
 
 ### Removed
 - **Breaking**: Remove `extract_byte_ranges_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_concat_unchecked`
 - **Breaking**: Remove `extract_byte_ranges_read`, no longer needed by `zarrs_zip`
+- **Breaking**: Remove `StoreKeyRange`
+- **Breaking**: Remove `StoreKeyOffsetValue`
+- **Breaking**: Remove `[Async]ReadableStorageTraits::get_partial_values_batched_by_key`
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
 

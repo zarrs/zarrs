@@ -8,16 +8,16 @@ use std::{
 use itertools::Itertools;
 
 use crate::{
-    byte_range::{ByteRange, ByteRangeIterator},
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeSend, MaybeSync, ReadableStorageTraits,
-    StorageError, StoreKey, StoreKeyOffsetValue, StoreKeyRange, StoreKeys, StoreKeysPrefixes,
-    StorePrefix, WritableStorageTraits,
+    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
 use crate::{
-    AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes,
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -48,8 +48,8 @@ impl<T: Write + MaybeSend + MaybeSync> WriteMaybeSendSync for T {}
 /// Applying array methods with the above [`UsageLogStorageAdapter`] prints outputs like:
 /// ```text
 /// [23:41:19.885] set(group/array/c/1/0, len=140) -> Ok(())
-/// [23:41:19.885] get_partial_values_key(group/array/c/0/0, [-36..-0]) -> len=Ok([36])
-/// [23:41:19.886] get_partial_values_key(group/array/c/0/0, [52..104]) -> len=Ok([52])
+/// [23:41:19.885] get_partial_many(group/array/c/0/0, [-36..-0]) -> len=Ok([36])
+/// [23:41:19.886] get_partial_many(group/array/c/0/0, [52..104]) -> len=Ok([52])
 /// [23:41:19.887] get(group/array/c/1/0) -> len=Ok(140)
 /// [23:41:19.891] get(zarr.json) -> len=Ok(0)
 /// [23:41:19.891] list_dir() -> (keys:[], prefixes:[group/])
@@ -99,43 +99,34 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         result
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
-            .get_partial_values_key(key, &mut byte_ranges.iter().copied());
+            .get_partial_many(key, Box::new(byte_ranges.iter().copied()))?;
+        let result = if let Some(result) = result {
+            Some(result.collect::<Result<Vec<_>, _>>()?)
+        } else {
+            None
+        };
         writeln!(
             self.handle.lock().unwrap(),
-            "{}get_partial_values_key({key}, [{}]) -> len={:?}",
+            "{}get_partial_many({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
-            })
-        )?;
-        result
-    }
-
-    fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        let result = self.storage.get_partial_values(key_ranges);
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get_partial_values([{}]) -> len={:?}",
-            (self.prefix_func)(),
-            key_ranges.iter().format(", "),
             result
                 .as_ref()
-                .map(|v| { v.iter().map(|v| v.iter().map(Bytes::len).collect_vec()) })
+                .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
         )?;
-        result
+        if let Some(result) = result {
+            Ok(Some(Box::new(result.into_iter().map(Ok))))
+        } else {
+            Ok(None)
+        }
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
@@ -146,6 +137,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
             (self.prefix_func)()
         )?;
         result
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -230,30 +225,28 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         result
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        struct DebugStoreKeyOffsetValue<'a>(&'a StoreKeyOffsetValue<'a>);
-        impl core::fmt::Debug for DebugStoreKeyOffsetValue<'_> {
+        struct DebugBytesWithOffsets<'a>(&'a StoreKey, ByteOffset, Bytes);
+        impl core::fmt::Debug for DebugBytesWithOffsets<'_> {
             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(
-                    f,
-                    "({} offset={} len={})",
-                    self.0.key(),
-                    self.0.offset(),
-                    self.0.value().len()
-                )
+                write!(f, "(key={} offset={} len={})", self.0, self.1, self.2.len())
             }
         }
-        let result = self.storage.set_partial_values(key_offset_values);
+        let offset_values: Vec<_> = offset_values.collect();
+        let result = self
+            .storage
+            .set_partial_many(key, Box::new(offset_values.iter().cloned()));
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_values({:?}) -> {result:?}",
+            "{}set_partial_many({:?}) -> {result:?}",
             (self.prefix_func)(),
-            key_offset_values
-                .iter()
-                .map(DebugStoreKeyOffsetValue)
+            offset_values
+                .into_iter()
+                .map(|(offset, bytes)| DebugBytesWithOffsets(key, offset, bytes))
                 .collect_vec()
         )?;
         result
@@ -269,11 +262,11 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         result
     }
 
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let result = self.storage.erase_values(keys);
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        let result = self.storage.erase_many(keys);
         writeln!(
             self.handle.lock().unwrap(),
-            "{}erase_values([{}]) -> {result:?}",
+            "{}erase_many([{}]) -> {result:?}",
             keys.iter().format(", "),
             (self.prefix_func)()
         )?;
@@ -289,6 +282,10 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
         )?;
         result
     }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
+    }
 }
 
 #[cfg(feature = "async")]
@@ -297,58 +294,48 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let result = self.storage.get(key).await;
         writeln!(
             self.handle.lock().unwrap(),
             "{}get({key}) -> len={:?}",
             (self.prefix_func)(),
-            result
-                .as_ref()
-                .map(|v| v.as_ref().map_or(0, AsyncBytes::len))
+            result.as_ref().map(|v| v.as_ref().map_or(0, Bytes::len))
         )?;
         result
     }
 
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        let byte_ranges: Vec<ByteRange> = byte_ranges.collect::<Vec<ByteRange>>();
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
+        use futures::{stream, StreamExt, TryStreamExt};
+
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
         let result = self
             .storage
-            .get_partial_values_key(key, &mut byte_ranges.iter().copied())
-            .await;
+            .get_partial_many(key, Box::new(byte_ranges.iter().copied()))
+            .await?;
+        let result = if let Some(result) = result {
+            Some(result.try_collect::<Vec<_>>().await?)
+        } else {
+            None
+        };
         writeln!(
             self.handle.lock().unwrap(),
-            "{}get_partial_values_key({key}, [{}]) -> len={:?}",
+            "{}get_partial_many({key}, [{}]) -> len={:?}",
             (self.prefix_func)(),
             byte_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.as_ref()
-                    .map_or(vec![], |v| v.iter().map(AsyncBytes::len).collect_vec())
-            })
+            result
+                .as_ref()
+                .map_or(vec![], |v| v.iter().map(Bytes::len).collect_vec())
         )?;
-        result
-    }
-
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let result = self.storage.get_partial_values(key_ranges).await;
-        writeln!(
-            self.handle.lock().unwrap(),
-            "{}get_partial_values([{}]) -> len={:?}",
-            (self.prefix_func)(),
-            key_ranges.iter().format(", "),
-            result.as_ref().map(|v| {
-                v.iter()
-                    .map(|v| v.iter().map(AsyncBytes::len).collect_vec())
-            })
-        )?;
-        result
+        if let Some(result) = result {
+            Ok(Some(stream::iter(result.into_iter().map(Ok)).boxed()))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
@@ -359,6 +346,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
             (self.prefix_func)()
         )?;
         result
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -437,7 +428,7 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for UsageLogStorageAdapter<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         let len = value.len();
         let result = self.storage.set(key, value).await;
         writeln!(
@@ -448,14 +439,19 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         result
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError> {
-        let result = self.storage.set_partial_values(key_offset_values).await;
+        let offset_values: Vec<_> = offset_values.collect();
+        let result = self
+            .storage
+            .set_partial_many(key, Box::new(offset_values.iter().cloned()))
+            .await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}set_partial_values({key_offset_values:?}) -> {result:?}",
+            "{}set_partial_many({key}, {offset_values:?}) -> {result:?}",
             (self.prefix_func)()
         )?;
         result
@@ -471,11 +467,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
         result
     }
 
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        let result = self.storage.erase_values(keys).await;
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        let result = self.storage.erase_many(keys).await;
         writeln!(
             self.handle.lock().unwrap(),
-            "{}erase_values([{}]) -> {result:?}",
+            "{}erase_many([{}]) -> {result:?}",
             (self.prefix_func)(),
             keys.iter().format(", ")
         )?;
@@ -490,6 +486,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
             (self.prefix_func)()
         )?;
         result
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }
 

@@ -15,7 +15,7 @@ use crate::{
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 /// Unique identifier for the `default_suffix` chunk key encoding (extension).
-pub const DEFAULT_SUFFIX: &str = "zarrs.default_suffix"; // TODO: Move to zarrs_registry on stabilisation
+const DEFAULT_SUFFIX: &str = "zarrs.default_suffix"; // TODO: Move to zarrs_registry on stabilisation
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
 // TODO: move to zarrs_metadata_ex on stabilisation

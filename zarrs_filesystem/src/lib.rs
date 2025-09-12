@@ -9,9 +9,9 @@
 
 use zarrs_storage::{
     byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
-    store_set_partial_values, Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError,
-    StoreKey, StoreKeyError, StoreKeyOffsetValue, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    StorePrefixes, WritableStorageTraits,
+    store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
+    StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
 use bytes::BytesMut;
@@ -88,7 +88,6 @@ pub struct FilesystemStore {
     readonly: bool,
     options: FilesystemStoreOptions,
     files: Mutex<HashMap<StoreKey, Arc<RwLock<()>>>>,
-    // locks: StoreLocks,
 }
 
 impl FilesystemStore {
@@ -250,11 +249,11 @@ impl FilesystemStore {
 }
 
 impl ReadableStorageTraits for FilesystemStore {
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let file = self.get_file_mutex(key);
         let _lock = file.read();
 
@@ -268,42 +267,44 @@ impl ReadableStorageTraits for FilesystemStore {
             }
         };
 
-        let out = byte_ranges
-            .map(|byte_range| {
-                let bytes = {
-                    // Seek
-                    match byte_range {
-                        ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
-                        ByteRange::Suffix(length) => {
-                            file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
-                        }
-                    }?;
-
-                    // Read
-                    match byte_range {
-                        ByteRange::FromStart(_, None) => {
-                            let mut buffer = Vec::new();
-                            file.read_to_end(&mut buffer)?;
-                            buffer
-                        }
-                        ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
-                            let length = usize::try_from(length).unwrap();
-                            let mut buffer = vec![0; length];
-                            file.read_exact(&mut buffer)?;
-                            buffer
-                        }
+        let out = byte_ranges.map(move |byte_range| {
+            let bytes = {
+                // Seek
+                match byte_range {
+                    ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
+                    ByteRange::Suffix(length) => {
+                        file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
                     }
-                };
-                Ok(Bytes::from(bytes))
-            })
-            .collect::<Result<Vec<Bytes>, StorageError>>()?;
+                }?;
 
-        Ok(Some(out))
+                // Read
+                match byte_range {
+                    ByteRange::FromStart(_, None) => {
+                        let mut buffer = Vec::new();
+                        file.read_to_end(&mut buffer)?;
+                        buffer
+                    }
+                    ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
+                        let length = usize::try_from(length).unwrap();
+                        let mut buffer = vec![0; length];
+                        file.read_exact(&mut buffer)?;
+                        buffer
+                    }
+                }
+            };
+            Ok(Bytes::from(bytes))
+        });
+
+        Ok(Some(Box::new(out)))
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         let key_path = self.key_to_fspath(key);
         std::fs::metadata(key_path).map_or_else(|_| Ok(None), |metadata| Ok(Some(metadata.len())))
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        true
     }
 }
 
@@ -316,15 +317,16 @@ impl WritableStorageTraits for FilesystemStore {
         }
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
         if self.readonly {
             return Err(StorageError::ReadOnly);
         }
 
-        store_set_partial_values(self, key_offset_values)
+        store_set_partial_many(self, key, offset_values)
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
@@ -364,6 +366,10 @@ impl WritableStorageTraits for FilesystemStore {
         } else {
             Ok(())
         }
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        true
     }
 }
 

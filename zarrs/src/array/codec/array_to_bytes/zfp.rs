@@ -94,7 +94,6 @@ mod zfp_array;
 mod zfp_bitstream;
 mod zfp_codec;
 mod zfp_field;
-mod zfp_partial_decoder;
 mod zfp_stream;
 
 use std::sync::Arc;
@@ -691,7 +690,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // zfp partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zfp partial decoder does not hold bytes
 
         for (decoded_region, expected) in decoded_regions.into_iter().zip([
             vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0],

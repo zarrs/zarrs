@@ -127,7 +127,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     array_sync_read(&array)?;
 
     // uncompressed partial decoder holds no data
-    assert_eq!(array.partial_decoder(&[0, 0])?.size(), 0);
+    assert_eq!(array.partial_decoder(&[0, 0])?.size_held(), 0);
 
     Ok(())
 }
@@ -171,11 +171,11 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     // sharding partial decoder holds the shard index, which has double the number of elements
     assert_eq!(
-        array.partial_decoder(&[0, 0])?.size(),
+        array.partial_decoder(&[0, 0])?.size_held(),
         size_of::<u64>() * 4 * 2
     );
     // this chunk is empty, so it has no shard index
-    assert_eq!(array.partial_decoder(&[1, 1])?.size(), 0);
+    assert_eq!(array.partial_decoder(&[1, 1])?.size_held(), 0);
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 [package]
 name = "zarrs"
-version = "0.22.0-dev"
+version = "0.22.0-beta.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.82"
@@ -51,7 +51,7 @@ bench = false
 async-trait = { version = "0.1.74", optional = true }
 blosc-src = { version = "0.3.6", features = ["snappy", "lz4", "zlib", "zstd"], optional = true }
 bytemuck = { version = "1.14.0", features = ["extern_crate_alloc", "must_cast", "min_const_generics"] }
-bytes = "1.6.0"
+bytes = "1.7.0"
 bzip2 = { version = "0.6.0", optional = true }
 crc32c = { version = "0.6.5", optional = true }
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
@@ -90,6 +90,16 @@ chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.4.1", optional = true, features = ["bytemuck"] }
 simd-adler32 = { version = "0.3.7", optional = true }
 itoa = "1.0.15"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+quick_cache = { version = "0.6.16" }
+uuid = { version = "^1.1.0", features = ["v4", "js"] }
+
+# Reference: https://github.com/kylebarron/parquet-wasm/blob/ad18b841a8e788b0d4b17eb9deaca581d02bf887/Cargo.toml#L100C1-L110C18
+[target.'cfg(target_arch = "wasm32")'.dependencies.getrandom_v03]
+package = "getrandom"
+version = "^0.3.1"
+features = ["wasm_js"]
 
 [dependencies.num-complex]
 version = "0.4.3"

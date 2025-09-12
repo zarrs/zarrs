@@ -30,7 +30,7 @@
 //! ```
 
 mod bytes_codec;
-mod bytes_partial_decoder;
+mod bytes_codec_partial;
 
 use std::sync::Arc;
 
@@ -40,10 +40,7 @@ pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecCo
 use zarrs_registry::codec::BYTES;
 
 pub use bytes_codec::BytesCodec;
-
-#[cfg(feature = "async")]
-pub(crate) use bytes_partial_decoder::AsyncBytesPartialDecoder;
-pub(crate) use bytes_partial_decoder::BytesPartialDecoder;
+pub(crate) use bytes_codec_partial::BytesCodecPartial;
 
 use crate::{
     array::{
@@ -319,7 +316,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), input_handle.size()); // bytes partial decoder does not hold bytes
+        assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bytes partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_region, &CodecOptions::default())
             .unwrap();

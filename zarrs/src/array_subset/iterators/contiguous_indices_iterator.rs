@@ -59,6 +59,22 @@ impl ContiguousIndices {
             ));
         }
 
+        if subset.is_empty() {
+            if std::iter::zip(subset.start(), array_shape).any(|(start, shape)| start >= shape) {
+                // The empty subset is out-of-bounds.
+                return Err(IncompatibleIndexerError::new_oob(
+                    subset.start().to_vec(),
+                    array_shape.to_vec(),
+                ));
+            }
+
+            // The empty subset is in-bounds, not an error.
+            return Ok(Self {
+                subset_contiguous_start: subset.clone(),
+                contiguous_elements: 0,
+            });
+        }
+
         let mut contiguous = true;
         let mut contiguous_elements = 1;
         let mut shape_out: Vec<u64> = Vec::with_capacity(array_shape.len());

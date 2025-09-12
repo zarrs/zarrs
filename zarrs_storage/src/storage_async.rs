@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
 use auto_impl::auto_impl;
-use futures::{StreamExt, TryStreamExt};
-use itertools::Itertools;
+use bytes::BytesMut;
+use futures::StreamExt;
+
+use crate::{
+    byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator,
+};
 
 use super::{
-    byte_range::{ByteRange, ByteRangeIterator},
-    AsyncBytes, MaybeAsyncBytes, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeyOffsetValue,
-    StoreKeyRange, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 /// Async readable storage traits.
@@ -25,11 +28,8 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if the store key does not exist or there is an error with the underlying store.
-    async fn get(&self, key: &StoreKey) -> Result<MaybeAsyncBytes, StorageError> {
-        Ok(self
-            .get_partial_values_key(key, &mut [ByteRange::FromStart(0, None)].into_iter())
-            .await?
-            .map(|mut v| v.remove(0)))
+    async fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
+        self.get_partial(key, ByteRange::FromStart(0, None)).await
     }
 
     /// Retrieve partial bytes from a list of byte ranges for a store key.
@@ -39,27 +39,34 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError>;
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError>;
 
-    /// Retrieve partial bytes from a list of [`StoreKeyRange`].
+    /// Retrieve partial bytes from a single byte range for a store key.
     ///
-    /// # Parameters
-    /// * `key_ranges`: ordered set of ([`StoreKey`], [`ByteRange`]) pairs. A key may occur multiple times with different ranges.
-    ///
-    /// # Output
-    /// A a list of values in the order of the `key_ranges`. It will be [`None`] for missing keys.
+    /// Returns [`None`] if the key is not found.
     ///
     /// # Errors
+    ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        self.get_partial_values_batched_by_key(key_ranges).await
+    async fn get_partial<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_range: ByteRange,
+    ) -> Result<MaybeBytes, StorageError> {
+        let mut result = self
+            .get_partial_many(key, Box::new([byte_range].into_iter()))
+            .await?;
+        if let Some(result) = &mut result {
+            let bytes = result.next().await.expect("one byte range")?;
+            debug_assert!(result.next().await.is_none());
+            Ok(Some(bytes))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Return the size in bytes of the value at `key`.
@@ -71,57 +78,11 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError>;
 
-    /// A utility method with the same input and output as [`get_partial_values`](AsyncReadableStorageTraits::get_partial_values) that internally calls [`get_partial_values_key`](AsyncReadableStorageTraits::get_partial_values_key) with byte ranges grouped by key.
+    /// Returns whether this store supports partial reads.
     ///
-    /// Readable storage can use this function in the implementation of [`get_partial_values`](AsyncReadableStorageTraits::get_partial_values) if that is optimal.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn get_partial_values_batched_by_key(
-        &self,
-        key_ranges: &[StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        let mut out: Vec<MaybeAsyncBytes> = Vec::with_capacity(key_ranges.len());
-        let mut last_key = None;
-        let mut byte_ranges_key = Vec::new();
-        for key_range in key_ranges {
-            if last_key.is_none() {
-                last_key = Some(&key_range.key);
-            }
-            let last_key_val = last_key.unwrap();
-
-            if key_range.key != *last_key_val {
-                // Found a new key, so do a batched get of the byte ranges of the last key
-                let bytes = (self
-                    .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())
-                    .await?)
-                    .map_or_else(
-                        || vec![None; byte_ranges_key.len()],
-                        |partial_values| partial_values.into_iter().map(Some).collect(),
-                    );
-                out.extend(bytes);
-                last_key = Some(&key_range.key);
-                byte_ranges_key.clear();
-            }
-
-            byte_ranges_key.push(key_range.byte_range);
-        }
-
-        if !byte_ranges_key.is_empty() {
-            // Get the byte ranges of the last key
-            let bytes = (self
-                .get_partial_values_key(last_key.unwrap(), &mut byte_ranges_key.iter().copied())
-                .await?)
-                .map_or_else(
-                    || vec![None; byte_ranges_key.len()],
-                    |partial_values| partial_values.into_iter().map(Some).collect(),
-                );
-            out.extend(bytes);
-        }
-
-        Ok(out)
-    }
+    /// If this returns `true`, the store can efficiently handle `get_partial` and `get_partial_many` operations.
+    /// If this returns `false`, partial reads will fall back to a full read operation.
+    fn supports_get_partial(&self) -> bool;
 }
 
 /// Async listable storage traits.
@@ -181,57 +142,26 @@ pub trait AsyncListableStorageTraits: MaybeSend + MaybeSync {
 ///
 /// # Panics
 /// Panics if a key ends beyond `usize::MAX`.
-pub async fn async_store_set_partial_values<T: AsyncReadableWritableStorageTraits>(
+pub async fn async_store_set_partial_many<T: AsyncReadableWritableStorageTraits>(
     store: &T,
-    key_offset_values: &[StoreKeyOffsetValue<'_>],
-    // truncate: bool
+    key: &StoreKey,
+    offset_values: OffsetBytesIterator<'_>,
 ) -> Result<(), StorageError> {
-    let groups = key_offset_values
-        .iter()
-        .chunk_by(|key_offset_value| key_offset_value.key())
-        .into_iter()
-        .map(|(key, group)| (key, group.into_iter().cloned().collect::<Vec<_>>()))
-        .collect::<Vec<_>>();
-    futures::stream::iter(&groups)
-        .map(Ok)
-        .try_for_each_concurrent(None, |(key, group)| async move {
-            // Lock the store key
-            // let mutex = store.mutex(&key).await?;
-            // let _lock = mutex.lock().await;
+    // Read the store key
+    let bytes_out = store.get(key).await?.unwrap_or_default();
+    let mut bytes_out: BytesMut = bytes_out.into();
 
-            // Read the store key
-            let bytes = store.get(key).await?.unwrap_or_default();
-            let mut bytes = Vec::<u8>::from(bytes);
+    // Update the store key
+    for (offset, value) in offset_values {
+        let offset = usize::try_from(offset).unwrap();
+        if bytes_out.len() < offset + value.len() {
+            bytes_out.resize(offset + value.len(), 0);
+        }
+        bytes_out[offset..offset + value.len()].copy_from_slice(&value);
+    }
 
-            // Expand the store key if needed
-            let end_max = group
-                .iter()
-                .map(|key_offset_value| {
-                    usize::try_from(
-                        key_offset_value.offset() + key_offset_value.value().len() as u64,
-                    )
-                    .unwrap()
-                })
-                .max()
-                .unwrap();
-            if bytes.len() < end_max {
-                bytes.resize_with(end_max, Default::default);
-            }
-            // else if truncate {
-            //     bytes.truncate(end_max);
-            // };
-
-            // Update the store key
-            for key_offset_value in group {
-                let start = usize::try_from(key_offset_value.offset()).unwrap();
-                bytes[start..start + key_offset_value.value().len()]
-                    .copy_from_slice(key_offset_value.value());
-            }
-
-            // Write the store key
-            store.set(key, bytes.into()).await
-        })
-        .await
+    // Write the store key
+    store.set(key, bytes_out.into()).await
 }
 
 /// Async writable storage traits.
@@ -246,15 +176,30 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError>;
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError>;
 
-    /// Store bytes according to a list of [`StoreKeyOffsetValue`].
+    /// Store bytes from an offset and value.
     ///
     /// # Errors
     /// Returns a [`StorageError`] on failure to store.
-    async fn set_partial_values(
+    async fn set_partial(
         &self,
-        key_offset_values: &[StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset: u64,
+        value: Bytes,
+    ) -> Result<(), StorageError> {
+        self.set_partial_many(key, Box::new([(offset, value)].into_iter()))
+            .await
+    }
+
+    /// Store bytes from a [`OffsetBytesIterator`].
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] on failure to store.
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), StorageError>;
 
     /// Erase a [`StoreKey`].
@@ -269,7 +214,7 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
-    async fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+    async fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
         let futures_erase = keys.iter().map(|key| self.erase(key));
         futures::future::join_all(futures_erase)
             .await
@@ -283,6 +228,12 @@ pub trait AsyncWritableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError>;
+
+    /// Returns whether this store supports partial writes.
+    ///
+    /// If this returns `true`, the store can efficiently handle `set_partial` and `set_partial_many` operations.
+    /// If this returns `false`, partial sets will fall back to a full read and write operation.
+    fn supports_set_partial(&self) -> bool;
 }
 
 /// A supertrait of [`AsyncReadableStorageTraits`] and [`AsyncWritableStorageTraits`].

@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
+use crate::OffsetBytesIterator;
+
 use super::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, ReadableStorageTraits,
-    StorageError, StoreKey, StorePrefix, WritableStorageTraits,
+    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StorePrefix, WritableStorageTraits,
 };
 
 #[cfg(feature = "async")]
 use super::{
-    AsyncBytes, AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
-    MaybeAsyncBytes,
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits,
 };
 
 /// A storage handle.
@@ -29,23 +31,20 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
         self.0.get(key)
     }
 
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        self.0.get_partial_values_key(key, byte_ranges)
-    }
-
-    fn get_partial_values(
-        &self,
-        key_ranges: &[super::StoreKeyRange],
-    ) -> Result<Vec<MaybeBytes>, StorageError> {
-        self.0.get_partial_values(key_ranges)
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        self.0.get_partial_many(key, byte_ranges)
     }
 
     fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key)
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.0.supports_get_partial()
     }
 }
 
@@ -82,23 +81,28 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
         self.0.set(key, value)
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[super::StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), super::StorageError> {
-        self.0.set_partial_values(key_offset_values)
+        self.0.set_partial_many(key, offset_values)
     }
 
     fn erase(&self, key: &super::StoreKey) -> Result<(), super::StorageError> {
         self.0.erase(key)
     }
 
-    fn erase_values(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
-        self.0.erase_values(keys)
+    fn erase_many(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
+        self.0.erase_many(keys)
     }
 
     fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
         self.0.erase_prefix(prefix)
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.0.supports_set_partial()
     }
 }
 
@@ -108,27 +112,24 @@ impl<TStorage: ?Sized + WritableStorageTraits> WritableStorageTraits for Storage
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
     for StorageHandle<TStorage>
 {
-    async fn get(&self, key: &super::StoreKey) -> Result<MaybeAsyncBytes, super::StorageError> {
+    async fn get(&self, key: &super::StoreKey) -> Result<MaybeBytes, super::StorageError> {
         self.0.get(key).await
     }
 
-    async fn get_partial_values_key(
-        &self,
+    async fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<AsyncBytes>>, StorageError> {
-        self.0.get_partial_values_key(key, byte_ranges).await
-    }
-
-    async fn get_partial_values(
-        &self,
-        key_ranges: &[super::StoreKeyRange],
-    ) -> Result<Vec<MaybeAsyncBytes>, StorageError> {
-        self.0.get_partial_values(key_ranges).await
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<AsyncMaybeBytesIterator<'a>, StorageError> {
+        self.0.get_partial_many(key, byte_ranges).await
     }
 
     async fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key).await
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.0.supports_get_partial()
     }
 }
 
@@ -171,27 +172,32 @@ impl<TStorage: ?Sized + AsyncListableStorageTraits> AsyncListableStorageTraits
 impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
     for StorageHandle<TStorage>
 {
-    async fn set(&self, key: &StoreKey, value: AsyncBytes) -> Result<(), StorageError> {
+    async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         self.0.set(key, value).await
     }
 
-    async fn set_partial_values(
-        &self,
-        key_offset_values: &[super::StoreKeyOffsetValue],
+    async fn set_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator<'a>,
     ) -> Result<(), super::StorageError> {
-        self.0.set_partial_values(key_offset_values).await
+        self.0.set_partial_many(key, offset_values).await
     }
 
     async fn erase(&self, key: &super::StoreKey) -> Result<(), super::StorageError> {
         self.0.erase(key).await
     }
 
-    async fn erase_values(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
-        self.0.erase_values(keys).await
+    async fn erase_many(&self, keys: &[super::StoreKey]) -> Result<(), super::StorageError> {
+        self.0.erase_many(keys).await
     }
 
     async fn erase_prefix(&self, prefix: &super::StorePrefix) -> Result<(), super::StorageError> {
         self.0.erase_prefix(prefix).await
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.0.supports_set_partial()
     }
 }
 

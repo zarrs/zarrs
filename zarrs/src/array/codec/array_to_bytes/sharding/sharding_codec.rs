@@ -14,7 +14,7 @@ use crate::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
             CodecChain, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-            RecommendedConcurrency,
+            PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
         transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize,
@@ -37,9 +37,11 @@ use super::{
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
-use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_registry::codec::SHARDING;
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -117,12 +119,17 @@ impl CodecTraits for ShardingCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
     }
 }
 
@@ -259,7 +266,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 };
 
                 // Decode the inner chunks
-                let chunk_bytes_and_subsets = rayon_iter_concurrent_limit::iter_concurrent_limit!(
+                let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     (0..num_chunks),
                     map,
@@ -323,7 +330,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         Ok::<_, CodecError>(())
                     };
 
-                    rayon_iter_concurrent_limit::iter_concurrent_limit!(
+                    crate::iter_concurrent_limit!(
                         shard_concurrent_limit,
                         (0..num_chunks),
                         try_for_each,
@@ -417,7 +424,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             Ok::<_, CodecError>(())
         };
 
-        rayon_iter_concurrent_limit::iter_concurrent_limit!(
+        crate::iter_concurrent_limit!(
             shard_concurrent_limit,
             (0..num_chunks),
             try_for_each,
@@ -623,7 +630,7 @@ impl ShardingCodec {
                 .iter()
                 .map(|i| usize::try_from(i.get()).unwrap())
                 .product::<usize>();
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 shard_concurrent_limit,
                 (0..n_chunks),
                 try_for_each,
@@ -772,14 +779,18 @@ impl ShardingCodec {
             }
         };
 
-        let encoded_chunks: Vec<(usize, Vec<u8>)> =
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
-                shard_concurrent_limit,
-                (0..n_chunks).into_par_iter(),
-                filter_map,
-                encode_chunk
-            )
-            .collect::<Result<Vec<_>, _>>()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = (0..n_chunks).into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = 0..n_chunks;
+
+        let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
+            shard_concurrent_limit,
+            iterator,
+            filter_map,
+            encode_chunk
+        )
+        .collect::<Result<Vec<_>, _>>()?;
 
         // Allocate the shard
         let encoded_chunk_length = encoded_chunks
@@ -800,7 +811,7 @@ impl ShardingCodec {
         if !encoded_chunks.is_empty() {
             let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
             let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
-            rayon_iter_concurrent_limit::iter_concurrent_limit!(
+            crate::iter_concurrent_limit!(
                 options.concurrent_target(),
                 encoded_chunks,
                 for_each,

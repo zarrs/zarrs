@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 
 // use zarrs_registry::chunk_grid::REGULAR_BOUNDED;
 /// Unique identifier for the `regular_bounded` chunk grid (extension).
-pub const REGULAR_BOUNDED: &str = "zarrs.regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
+const REGULAR_BOUNDED: &str = "zarrs.regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
 
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation

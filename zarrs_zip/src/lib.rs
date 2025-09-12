@@ -22,8 +22,8 @@
 
 use zarrs_storage::{
     byte_range::{extract_byte_ranges_read_seek, ByteRangeIterator},
-    Bytes, ListableStorageTraits, ReadableStorageTraits, StorageError, StorageValueIO, StoreKey,
-    StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    Bytes, ListableStorageTraits, MaybeBytesIterator, ReadableStorageTraits, StorageError,
+    StorageValueIO, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };
 
 use itertools::Itertools;
@@ -90,11 +90,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
         zip_name.to_string()
     }
 
-    fn get_impl(
-        &self,
+    fn get_impl<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         let mut zip_archive = self.zip_archive.lock().unwrap();
         let mut file = {
             let zip_file = zip_archive.by_name_seek(&self.key_str_to_zip_path(key.as_str()));
@@ -107,10 +107,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
             }
         };
 
-        let out = extract_byte_ranges_read_seek(&mut file, byte_ranges)?
-            .into_iter()
-            .map(Bytes::from)
-            .collect();
+        let out = Box::new(
+            extract_byte_ranges_read_seek(&mut file, byte_ranges)?
+                .into_iter()
+                .map(|b| Ok(Bytes::from(b))),
+        );
         Ok(Some(out))
     }
 
@@ -123,11 +124,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ZipStorageAdapter<TStorage> {
 impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
     for ZipStorageAdapter<TStorage>
 {
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         self.get_impl(key, byte_ranges)
     }
 
@@ -141,6 +142,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
                 _ => Err(StorageError::Other(err.to_string())),
             },
         }
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        true
     }
 }
 
@@ -264,8 +269,8 @@ mod tests {
     };
 
     // https://github.com/zip-rs/zip/blob/master/examples/write_dir.rs
-    fn zip_dir(
-        it: &mut dyn Iterator<Item = walkdir::DirEntry>,
+    fn zip_dir<I: Iterator<Item = walkdir::DirEntry>>(
+        it: I,
         prefix: &str,
         writer: File,
         method: zip::CompressionMethod,

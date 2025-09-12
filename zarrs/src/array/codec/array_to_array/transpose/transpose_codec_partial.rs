@@ -9,18 +9,21 @@ use crate::array::{
 
 use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
 
-/// The `transpose` partial encoder.
-pub(crate) struct TransposePartialEncoder {
-    input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncArrayPartialDecoderTraits;
+
+/// Generic partial codec for the Transpose codec.
+pub(crate) struct TransposeCodecPartial<T: ?Sized> {
+    input_output_handle: Arc<T>,
     decoded_representation: ChunkRepresentation,
     order: TransposeOrder,
 }
 
-impl TransposePartialEncoder {
-    /// Create a new [`TransposePartialEncoder`].
+impl<T: ?Sized> TransposeCodecPartial<T> {
+    /// Create a new [`TransposeCodecPartial`].
     #[must_use]
     pub(crate) fn new(
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        input_output_handle: Arc<T>,
         decoded_representation: ChunkRepresentation,
         order: TransposeOrder,
     ) -> Self {
@@ -32,13 +35,16 @@ impl TransposePartialEncoder {
     }
 }
 
-impl ArrayPartialDecoderTraits for TransposePartialEncoder {
+impl<T: ?Sized> ArrayPartialDecoderTraits for TransposeCodecPartial<T>
+where
+    T: ArrayPartialDecoderTraits,
+{
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_output_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
     }
 
     fn partial_decode(
@@ -63,9 +69,16 @@ impl ArrayPartialDecoderTraits for TransposePartialEncoder {
                 .partial_decode(&indexer_transposed, options)
         }
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
+    }
 }
 
-impl ArrayPartialEncoderTraits for TransposePartialEncoder {
+impl<T: ?Sized> ArrayPartialEncoderTraits for TransposeCodecPartial<T>
+where
+    T: ArrayPartialEncoderTraits,
+{
     fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
         self.clone()
     }
@@ -89,5 +102,54 @@ impl ArrayPartialEncoderTraits for TransposePartialEncoder {
             self.input_output_handle
                 .partial_encode(&indexer_transposed, bytes, options)
         }
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialDecoderTraits for TransposeCodecPartial<T>
+where
+    T: AsyncArrayPartialDecoderTraits,
+{
+    fn data_type(&self) -> &DataType {
+        self.decoded_representation.data_type()
+    }
+
+    fn size_held(&self) -> usize {
+        self.input_output_handle.size_held()
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
+        indexer: &dyn crate::indexer::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        if let Some(array_subset) = indexer.as_array_subset() {
+            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            let encoded_value = self
+                .input_output_handle
+                .partial_decode(&array_subset_transposed, options)
+                .await?;
+            do_transpose(
+                encoded_value,
+                array_subset,
+                &self.order,
+                &self.decoded_representation,
+            )
+        } else {
+            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            self.input_output_handle
+                .partial_decode(&indexer_transposed, options)
+                .await
+        }
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_output_handle.supports_partial_decode()
     }
 }
