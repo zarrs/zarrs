@@ -187,9 +187,10 @@ impl CodecTraits for FixedScaleOffsetCodec {
     }
 
     fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        // NOTE: the default array-to-array partial decoder supports partial read/decode
         PartialDecoderCapability {
-            partial_read: false,   // TODO
-            partial_decode: false, // TODO
+            partial_read: true,
+            partial_decode: true,
         }
     }
 

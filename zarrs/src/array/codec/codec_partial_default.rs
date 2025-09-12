@@ -114,7 +114,6 @@ where
 
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
-            && self.codec.partial_decoder_capability().partial_decode
     }
 }
 
@@ -473,7 +472,6 @@ where
 
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
-            && self.codec.partial_decoder_capability().partial_decode
     }
 }
 
