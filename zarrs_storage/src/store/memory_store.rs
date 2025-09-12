@@ -128,6 +128,10 @@ impl WritableStorageTraits for MemoryStore {
         }
         Ok(())
     }
+
+    fn supports_set_partial(&self) -> bool {
+        true
+    }
 }
 
 impl ListableStorageTraits for MemoryStore {

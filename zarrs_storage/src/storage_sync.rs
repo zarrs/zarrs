@@ -179,6 +179,12 @@ pub trait WritableStorageTraits: MaybeSend + MaybeSync {
     /// # Errors
     /// Returns a [`StorageError`] is the prefix is not in the store, or the erase otherwise fails.
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError>;
+
+    /// Returns whether this store supports partial writes.
+    ///
+    /// If this returns `true`, the store can efficiently handle `set_partial` and `set_partial_many` operations.
+    /// If this returns `false`, partial sets will fall back to a full read and write operation.
+    fn supports_set_partial(&self) -> bool;
 }
 
 /// A supertrait of [`ReadableStorageTraits`] and [`WritableStorageTraits`].

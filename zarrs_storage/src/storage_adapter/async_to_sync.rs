@@ -123,4 +123,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
         self.block_on(self.storage.erase_prefix(prefix))
     }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
+    }
 }

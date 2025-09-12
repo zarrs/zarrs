@@ -363,6 +363,10 @@ impl WritableStorageTraits for FilesystemStore {
             Ok(())
         }
     }
+
+    fn supports_set_partial(&self) -> bool {
+        true
+    }
 }
 
 impl ListableStorageTraits for FilesystemStore {

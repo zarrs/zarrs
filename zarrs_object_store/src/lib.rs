@@ -178,6 +178,10 @@ impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectSto
         )?;
         Ok(())
     }
+
+    fn supports_set_partial(&self) -> bool {
+        false
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
