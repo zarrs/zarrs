@@ -185,6 +185,11 @@ impl ReadableStorageTraits for HTTPStore {
             ))),
         }
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true // NOTE: Not all HTTP servers support range requests, but optimistically assume so here.
+             // FIXME: Do a capability check on init?
+    }
 }
 
 /// A HTTP store creation error.

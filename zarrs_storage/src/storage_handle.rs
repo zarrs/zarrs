@@ -42,6 +42,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits for Storage
     fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key)
     }
+
+    fn supports_get_partial(&self) -> bool {
+        self.0.supports_get_partial()
+    }
 }
 
 impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits for StorageHandle<TStorage> {
@@ -122,6 +126,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
 
     async fn size_key(&self, key: &super::StoreKey) -> Result<Option<u64>, super::StorageError> {
         self.0.size_key(key).await
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.0.supports_get_partial()
     }
 }
 

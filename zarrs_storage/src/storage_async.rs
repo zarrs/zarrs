@@ -77,6 +77,12 @@ pub trait AsyncReadableStorageTraits: MaybeSend + MaybeSync {
     ///
     /// Returns a [`StorageError`] if there is an underlying storage error.
     async fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError>;
+
+    /// Returns whether this store supports partial reads.
+    ///
+    /// If this returns `true`, the store can efficiently handle `get_partial` and `get_partial_many` operations.
+    /// If this returns `false`, partial reads will fall back to a full read operation.
+    fn supports_get_partial(&self) -> bool;
 }
 
 /// Async listable storage traits.
