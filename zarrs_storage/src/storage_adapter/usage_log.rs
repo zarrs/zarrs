@@ -138,6 +138,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
         )?;
         result
     }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
+    }
 }
 
 impl<TStorage: ?Sized + ListableStorageTraits> ListableStorageTraits
@@ -342,6 +346,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> AsyncReadableStorageTraits
             (self.prefix_func)()
         )?;
         result
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 

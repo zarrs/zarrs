@@ -140,6 +140,10 @@ impl<T: object_store::ObjectStore> AsyncReadableStorageTraits for AsyncObjectSto
                 .map(|meta| meta.size),
         )
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]

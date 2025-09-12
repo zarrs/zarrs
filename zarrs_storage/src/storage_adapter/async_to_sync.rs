@@ -75,6 +75,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         self.block_on(self.storage.size_key(key))
     }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
+    }
 }
 
 impl<TStorage: ?Sized + AsyncListableStorageTraits, TBlockOn: AsyncToSyncBlockOn>

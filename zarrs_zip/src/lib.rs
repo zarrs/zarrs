@@ -143,6 +143,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits> ReadableStorageTraits
             },
         }
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
 }
 
 impl<TStorage: ?Sized + ReadableStorageTraits> ListableStorageTraits

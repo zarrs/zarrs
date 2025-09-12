@@ -302,6 +302,10 @@ impl ReadableStorageTraits for FilesystemStore {
         let key_path = self.key_to_fspath(key);
         std::fs::metadata(key_path).map_or_else(|_| Ok(None), |metadata| Ok(Some(metadata.len())))
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
 }
 
 impl WritableStorageTraits for FilesystemStore {

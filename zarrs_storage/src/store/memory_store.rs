@@ -93,6 +93,10 @@ impl ReadableStorageTraits for MemoryStore {
             .get(key)
             .map_or_else(|| Ok(None), |entry| Ok(Some(entry.len() as u64)))
     }
+
+    fn supports_get_partial(&self) -> bool {
+        true
+    }
 }
 
 impl WritableStorageTraits for MemoryStore {
