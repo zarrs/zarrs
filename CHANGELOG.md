@@ -127,6 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `CodecTraits::partial_decoder_capability` and `PartialDecoderCapability`
     - `partial_decoder_capability` replaces `partial_decoder_should_cache_input` and `partial_decoder_decodes_all`
   - Add `CodecTraits::partial_encoder_capability` and `PartialEncoderCapability`
+- **Breaking**: remove `experimental_` prefix from `codec_store_metadata_if_encode_only` and switch default to `true`
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Use WASM compatible `rayon_iter_concurrent_limit` internally
