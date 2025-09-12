@@ -3,7 +3,10 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use crate::array::{
-    codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits},
+    codec::{
+        ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, PartialDecoderCapability,
+        PartialEncoderCapability,
+    },
     DataType, FillValue,
 };
 use num::Integer;
@@ -74,12 +77,17 @@ impl CodecTraits for ReshapeCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,   // FIXME
+            partial_decode: false, // FIXME
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        true // TODO: implement partial decoder and change to false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false, // FIXME
+        }
     }
 }
 
