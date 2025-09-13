@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `[StorageTransformerChain,StorageTransformerExtension]::create[_async]_readable_writable_transformer`
 - Add `CodecPartialDefault`
 - Add partial encoding support for the `bytes` codec
+- Add experimental `reshape` codec
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
