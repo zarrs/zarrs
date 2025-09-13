@@ -26,21 +26,43 @@
 //! ```
 
 mod reshape_codec;
-// mod reshape_partial_decoder;
+mod reshape_codec_partial;
 
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 
+// use itertools::Itertools;
 pub use reshape_codec::ReshapeCodec;
 pub use zarrs_metadata_ext::codec::reshape::{
-    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1,
+    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
 use zarrs_registry::codec::RESHAPE;
 
 use crate::{
-    array::codec::{Codec, CodecPlugin},
+    array::{
+        codec::{Codec, CodecError, CodecPlugin},
+        ArrayIndices,
+    },
+    array_subset::ArraySubset,
+    indexer::{IncompatibleIndexerError, Indexer},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
+
+fn get_reshaped_array_subset(
+    decoded_region: &ArraySubset,
+    decoded_shape: &[NonZeroU64],
+    reshape_shape: &ReshapeShape,
+) -> Result<ArraySubset, CodecError> {
+    todo!()
+}
+
+fn get_reshaped_indexer(
+    indexer: &dyn Indexer,
+    decoded_shape: &[NonZeroU64],
+    reshape_shape: &ReshapeShape,
+) -> Result<impl Indexer, CodecError> {
+    todo!()
+}
 
 // Register the codec.
 inventory::submit! {

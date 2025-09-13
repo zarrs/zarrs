@@ -79,14 +79,14 @@ impl CodecTraits for ReshapeCodec {
 
     fn partial_decoder_capability(&self) -> PartialDecoderCapability {
         PartialDecoderCapability {
-            partial_read: false,   // FIXME
-            partial_decode: false, // FIXME
+            partial_read: true,
+            partial_decode: true,
         }
     }
 
     fn partial_encoder_capability(&self) -> PartialEncoderCapability {
         PartialEncoderCapability {
-            partial_encode: false, // FIXME
+            partial_encode: true,
         }
     }
 }
@@ -187,30 +187,48 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        todo!("the reshape codec does not yet support partial decoding")
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                decoded_representation.clone(),
+                self.shape.clone(),
+            ),
+        ))
     }
 
     fn partial_encoder(
         self: Arc<Self>,
-        _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        todo!("the reshape codec does not yet support partial encoding")
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_output_handle,
+                decoded_representation.clone(),
+                self.shape.clone(),
+            ),
+        ))
     }
 
     #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        todo!("the reshape codec does not yet support partial decoding")
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                decoded_representation.clone(),
+                self.shape.clone(),
+            ),
+        ))
     }
 }
 
