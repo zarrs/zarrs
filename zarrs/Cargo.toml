@@ -1,6 +1,6 @@
 [package]
 name = "zarrs"
-version = "0.22.0-beta.1"
+version = "0.22.0-beta.2"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.82"
@@ -9,9 +9,9 @@ homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs"
 repository = "https://github.com/zarrs/zarrs"
 license = "MIT OR Apache-2.0"
-keywords = ["zarr"]
-categories = ["encoding"]
-exclude = [".dockerignore", ".github", ".editorconfig", "Dockerfile", "coverage.sh", "TODO.md", "tests/"]
+keywords = ["zarr", "zarrs", "array"]
+categories = ["encoding", "science"]
+exclude = [".github/", "doc/TODO.md", "tests/"]
 
 [features]
 default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
