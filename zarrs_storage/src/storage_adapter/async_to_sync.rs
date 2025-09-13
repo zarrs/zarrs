@@ -6,11 +6,12 @@
 
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncReadableStorageTraits,
-    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeSend, MaybeSync,
-    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
-    WritableStorageTraits,
+    AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator, MaybeSend,
+    MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
+use futures::StreamExt;
 use std::sync::Arc;
 
 /// Trait for an asynchronous runtime implementing `block_on`.
@@ -57,16 +58,26 @@ impl<TStorage: ?Sized, TBlockOn: AsyncToSyncBlockOn> AsyncToSyncStorageAdapter<T
 impl<TStorage: ?Sized + AsyncReadableStorageTraits, TBlockOn: AsyncToSyncBlockOn>
     ReadableStorageTraits for AsyncToSyncStorageAdapter<TStorage, TBlockOn>
 {
-    fn get_partial_values_key(
-        &self,
+    fn get_partial_many<'a>(
+        &'a self,
         key: &StoreKey,
-        byte_ranges: &mut dyn ByteRangeIterator,
-    ) -> Result<Option<Vec<Bytes>>, StorageError> {
-        self.block_on(self.storage.get_partial_values_key(key, byte_ranges))
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        let results = self.block_on(self.storage.get_partial_many(key, byte_ranges))?;
+        if let Some(results) = results {
+            let results = self.block_on(results.collect::<Vec<_>>());
+            Ok(Some(Box::new(results.into_iter())))
+        } else {
+            Ok(None)
+        }
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
         self.block_on(self.storage.size_key(key))
+    }
+
+    fn supports_get_partial(&self) -> bool {
+        self.storage.supports_get_partial()
     }
 }
 
@@ -97,22 +108,27 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits, TBlockOn: AsyncToSyncBlockOn
         self.block_on(self.storage.set(key, value))
     }
 
-    fn set_partial_values(
+    fn set_partial_many(
         &self,
-        key_offset_values: &[crate::StoreKeyOffsetValue],
+        key: &StoreKey,
+        offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        self.block_on(self.storage.set_partial_values(key_offset_values))
+        self.block_on(self.storage.set_partial_many(key, offset_values))
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
         self.block_on(self.storage.erase(key))
     }
 
-    fn erase_values(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
-        self.block_on(self.storage.erase_values(keys))
+    fn erase_many(&self, keys: &[StoreKey]) -> Result<(), StorageError> {
+        self.block_on(self.storage.erase_many(keys))
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
         self.block_on(self.storage.erase_prefix(prefix))
+    }
+
+    fn supports_set_partial(&self) -> bool {
+        self.storage.supports_set_partial()
     }
 }

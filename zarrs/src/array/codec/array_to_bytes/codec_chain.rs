@@ -10,6 +10,7 @@ use crate::{
             BytesPartialDecoderCache, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
             BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
             CodecTraits, NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
+            PartialDecoderCapability, PartialEncoderCapability,
         },
         concurrency::RecommendedConcurrency,
         ArrayBytes, ArrayBytesFixedDisjointView, BytesRepresentation, ChunkRepresentation,
@@ -28,8 +29,8 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 /// A codec chain partial decoder may insert a cache.
 /// For example, the output of the `blosc`/`gzip` codecs should be cached since they read and decode an entire chunk.
 /// If decoding (i.e. going backwards through a codec chain), then a cache may be inserted
-///    - following the last codec with [`partial_decoder_decodes_all`](crate::array::codec::CodecTraits::partial_decoder_decodes_all) true, or
-///    - preceding the first codec with [`partial_decoder_should_cache_input`](crate::array::codec::CodecTraits::partial_decoder_should_cache_input), whichever is further.
+///    - following the last codec with `partial_decode` false, otherwise
+///    - preceding the first codec with `partial_decode` true and `partial_read` false.
 #[derive(Debug, Clone)]
 pub struct CodecChain {
     array_to_array: Vec<NamedArrayToArrayCodec>,
@@ -70,10 +71,11 @@ impl CodecChain {
         let mut cache_index_should = None;
         let mut codec_index = 0;
         for codec in bytes_to_bytes.iter().rev() {
-            if cache_index_should.is_none() && codec.partial_decoder_should_cache_input() {
+            let capability = codec.partial_decoder_capability();
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
-            if codec.partial_decoder_decodes_all() {
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
             codec_index += 1;
@@ -81,20 +83,22 @@ impl CodecChain {
 
         {
             let codec = &array_to_bytes;
-            if cache_index_should.is_none() && codec.partial_decoder_should_cache_input() {
+            let capability = codec.partial_decoder_capability();
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
-            if codec.partial_decoder_decodes_all() {
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
             codec_index += 1;
         }
 
         for codec in array_to_array.iter().rev() {
-            if cache_index_should.is_none() && codec.partial_decoder_should_cache_input() {
+            let capability = codec.partial_decoder_capability();
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
-            if codec.partial_decoder_decodes_all() {
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
             codec_index += 1;
@@ -285,12 +289,48 @@ impl CodecTraits for CodecChain {
         None
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        // All codecs in the chain must support partial decoding capabilities
+        itertools::chain!(
+            self.array_to_array
+                .iter()
+                .map(|codec| codec.partial_decoder_capability()),
+            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_decoder_capability()),
+            self.bytes_to_bytes
+                .iter()
+                .map(|codec| codec.partial_decoder_capability())
+        )
+        .fold(
+            PartialDecoderCapability {
+                partial_read: true,
+                partial_decode: true,
+            },
+            |acc, capability| PartialDecoderCapability {
+                partial_read: acc.partial_read && capability.partial_read,
+                partial_decode: acc.partial_decode && capability.partial_decode,
+            },
+        )
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        // All codecs in the chain must support partial encoding capabilities
+        itertools::chain!(
+            self.array_to_array
+                .iter()
+                .map(|codec| codec.partial_encoder_capability()),
+            std::iter::once(&self.array_to_bytes).map(|codec| codec.partial_encoder_capability()),
+            self.bytes_to_bytes
+                .iter()
+                .map(|codec| codec.partial_encoder_capability())
+        )
+        .fold(
+            PartialEncoderCapability {
+                partial_encode: true,
+            },
+            |acc, capability| PartialEncoderCapability {
+                partial_encode: acc.partial_encode && capability.partial_encode,
+            },
+        )
     }
 }
 
@@ -887,7 +927,7 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        assert_eq!(partial_decoder.size(), decoded.size()); // codec chain caches with most decompression codecs
+        assert_eq!(partial_decoder.size_held(), decoded.size()); // codec chain caches with most decompression codecs
         let decoded_partial_chunk = partial_decoder
             .partial_decode(decoded_region, &CodecOptions::default())
             .unwrap();

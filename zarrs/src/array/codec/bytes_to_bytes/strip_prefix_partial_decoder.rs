@@ -31,16 +31,16 @@ impl StripPrefixPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions.map(|range| match range {
+        let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
             }
@@ -48,7 +48,11 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(&mut decoded_regions, options)
+            .partial_decode_many(Box::new(decoded_regions), options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }
 
@@ -77,12 +81,16 @@ impl AsyncStripPrefixPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut decoded_regions = decoded_regions.map(|range| match range {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+        let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
             }
@@ -90,7 +98,11 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         });
 
         self.input_handle
-            .partial_decode(&mut decoded_regions, options)
+            .partial_decode_many(Box::new(decoded_regions), options)
             .await
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }

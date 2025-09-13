@@ -27,8 +27,8 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)?
-            .map(|mut bytes| bytes.remove(0).into_owned());
+            .partial_decode(ByteRange::FromStart(0, None), options)?
+            .map(Cow::into_owned);
         Ok(Self { cache })
     }
 
@@ -42,21 +42,21 @@ impl BytesPartialDecoderCache {
         options: &CodecOptions,
     ) -> Result<BytesPartialDecoderCache, CodecError> {
         let cache = input_handle
-            .partial_decode(&mut [ByteRange::FromStart(0, None)].into_iter(), options)
+            .partial_decode(ByteRange::FromStart(0, None), options)
             .await?
-            .map(|mut bytes| bytes.remove(0).into_owned());
+            .map(Cow::into_owned);
         Ok(Self { cache })
     }
 }
 
 impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.cache.as_ref().map_or(0, Vec::len)
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         Ok(match &self.cache {
@@ -70,17 +70,29 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
             None => None,
         })
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "async")]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    fn size_held(&self) -> usize {
+        self.cache.as_ref().map_or(0, Vec::len)
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        BytesPartialDecoderTraits::partial_decode(self, decoded_regions, options)
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+        BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }

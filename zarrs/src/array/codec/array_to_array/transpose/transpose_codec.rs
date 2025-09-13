@@ -1,6 +1,9 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use crate::array::{codec::ArrayPartialEncoderTraits, DataType, FillValue};
+use crate::array::{
+    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
+    DataType, FillValue,
+};
 use zarrs_metadata::Configuration;
 use zarrs_registry::codec::TRANSPOSE;
 
@@ -8,7 +11,8 @@ use crate::{
     array::{
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits,
-            CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
+            CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+            RecommendedConcurrency,
         },
         ChunkRepresentation, ChunkShape,
     },
@@ -72,12 +76,17 @@ impl CodecTraits for TransposeCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
     }
 }
 
@@ -234,7 +243,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::transpose_partial_decoder::TransposePartialDecoder::new(
+            super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 self.order.clone(),
@@ -249,7 +258,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::transpose_partial_encoder::TransposePartialEncoder::new(
+            super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_output_handle,
                 decoded_representation.clone(),
                 self.order.clone(),
@@ -265,7 +274,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
-            super::transpose_partial_decoder::AsyncTransposePartialDecoder::new(
+            super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 self.order.clone(),

@@ -60,7 +60,7 @@ impl ArrayPartialDecoderCache {
 }
 
 impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
-    fn size(&self) -> usize {
+    fn size_held(&self) -> usize {
         self.cache.size()
     }
 
@@ -80,6 +80,10 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
             self.decoded_representation.data_type(),
         )
     }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "async")]
@@ -90,11 +94,19 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    fn size_held(&self) -> usize {
+        self.cache.size()
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
+    ) -> Result<ArrayBytes<'a>, CodecError> {
         ArrayPartialDecoderTraits::partial_decode(self, indexer, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
     }
 }

@@ -76,19 +76,22 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
     assert_eq!(
         vec![prefix, suffix, chunk, chunk_2, small_suffix],
         store
-            .get_partial_values_key(
+            .get_partial_many(
                 &"big_buff".try_into()?,
-                &mut [
-                    ByteRange::FromStart(1, Some(10)),
-                    ByteRange::Suffix(1500),
-                    ByteRange::FromStart(1, Some((ps + 2) as u64)),
-                    ByteRange::FromStart(5, Some((ps * 2) as u64)),
-                    ByteRange::Suffix(15)
-                ]
-                .into_iter()
+                Box::new(
+                    [
+                        ByteRange::FromStart(1, Some(10)),
+                        ByteRange::Suffix(1500),
+                        ByteRange::FromStart(1, Some((ps + 2) as u64)),
+                        ByteRange::FromStart(5, Some((ps * 2) as u64)),
+                        ByteRange::Suffix(15)
+                    ]
+                    .into_iter()
+                )
             )
             .unwrap()
             .unwrap()
+            .collect::<Result<Vec<_>, _>>()?
     );
     Ok(())
 }

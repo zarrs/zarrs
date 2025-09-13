@@ -96,8 +96,8 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
     fn partial_decode(
@@ -105,7 +105,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+        // Get all the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options)?;
         decode_vlen_bytes(
             &self.index_codecs,
@@ -118,6 +118,10 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
             &self.decoded_representation.shape_u64(),
             options,
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }
 
@@ -162,12 +166,16 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn partial_decode(
-        &self,
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
+    }
+
+    async fn partial_decode<'a>(
+        &'a self,
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, CodecError> {
-        // Get all the input bytes (cached due to CodecTraits::partial_decoder_decodes_all() == true)
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Get all the input bytes (cached due to PartialDecoderCapability.partial_read == false)
         let bytes = self.input_handle.decode(options).await?;
         decode_vlen_bytes(
             &self.index_codecs,
@@ -180,5 +188,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
             &self.decoded_representation.shape_u64(),
             options,
         )
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        false
     }
 }

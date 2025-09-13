@@ -13,10 +13,11 @@ use zarrs_registry::codec::PACKBITS;
 
 use crate::array::{
     codec::{
-        array_to_bytes::{bytes::BytesPartialDecoder, packbits::div_rem_8bit},
+        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, RecommendedConcurrency,
+        InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+        RecommendedConcurrency,
     },
     ArrayBytes, BytesRepresentation, ChunkRepresentation, RawBytes,
 };
@@ -26,9 +27,6 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
-
-#[cfg(feature = "async")]
-use crate::array::codec::array_to_bytes::bytes::AsyncBytesPartialDecoder;
 
 use super::{
     pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
@@ -124,12 +122,17 @@ impl CodecTraits for PackBitsCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 
@@ -366,7 +369,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            Ok(Arc::new(BytesPartialDecoder::new(
+            Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 Some(Endianness::Little),
@@ -400,7 +403,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            Ok(Arc::new(AsyncBytesPartialDecoder::new(
+            Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 decoded_representation.clone(),
                 Some(Endianness::Little),

@@ -14,7 +14,7 @@ use crate::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
             CodecChain, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-            RecommendedConcurrency,
+            PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
         transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize,
@@ -37,9 +37,11 @@ use super::{
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 
-use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_registry::codec::SHARDING;
+
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -117,12 +119,17 @@ impl CodecTraits for ShardingCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: true,
+            partial_decode: true,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: true,
+        }
     }
 }
 
@@ -772,9 +779,14 @@ impl ShardingCodec {
             }
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let iterator = (0..n_chunks).into_par_iter();
+        #[cfg(target_arch = "wasm32")]
+        let iterator = 0..n_chunks;
+
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
             shard_concurrent_limit,
-            (0..n_chunks).into_par_iter(),
+            iterator,
             filter_map,
             encode_chunk
         )

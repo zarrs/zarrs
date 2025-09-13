@@ -267,9 +267,7 @@ fn decode_shard_index_partial_decoder(
         get_index_array_representation(chunk_shape, decoded_representation)?;
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
-    let encoded_shard_index = input_handle
-        .partial_decode(&mut [index_byte_range].into_iter(), options)?
-        .map(|mut v| v.remove(0));
+    let encoded_shard_index = input_handle.partial_decode(index_byte_range, options)?;
     Ok(match encoded_shard_index {
         Some(encoded_shard_index) => Some(decode_shard_index(
             &encoded_shard_index,
@@ -296,9 +294,8 @@ async fn decode_shard_index_async_partial_decoder(
     let index_byte_range =
         get_index_byte_range(&index_array_representation, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
-        .partial_decode(&mut [index_byte_range].into_iter(), options)
-        .await?
-        .map(|mut v| v.remove(0));
+        .partial_decode(index_byte_range, options)
+        .await?;
     Ok(match encoded_shard_index {
         Some(encoded_shard_index) => Some(decode_shard_index(
             &encoded_shard_index,
@@ -738,8 +735,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            partial_decoder.size(),
-            input_handle.size() + size_of::<u64>() * 2 * 2 * 2 * 2
+            partial_decoder.size_held(),
+            input_handle.size_held() + size_of::<u64>() * 2 * 2 * 2 * 2
         ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_region, &CodecOptions::default())
@@ -781,8 +778,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            partial_decoder.size(),
-            input_handle.size() + size_of::<u64>() * 2 * 2 * 2
+            partial_decoder.size_held(),
+            input_handle.size_held() + size_of::<u64>() * 2 * 2 * 2
         ); // sharding partial decoder holds the shard index
         let decoded_partial_chunk = partial_decoder
             .partial_decode(&decoded_region, &CodecOptions::default())

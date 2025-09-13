@@ -35,16 +35,16 @@ impl ByteIntervalPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
-        byte_ranges: &mut dyn ByteRangeIterator,
+        byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
+        let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
             }
@@ -55,7 +55,12 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
                 ByteRange::FromStart(self.byte_offset + self.byte_length - length, Some(length))
             }
         });
-        self.input_handle.partial_decode(&mut byte_ranges, options)
+        self.input_handle
+            .partial_decode_many(Box::new(byte_ranges), options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }
 
@@ -89,12 +94,16 @@ impl AsyncByteIntervalPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
-    async fn partial_decode(
-        &self,
-        byte_ranges: &mut dyn ByteRangeIterator,
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
-        let mut byte_ranges = byte_ranges.map(|byte_range| match byte_range {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+        let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
             }
@@ -106,7 +115,11 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
             }
         });
         self.input_handle
-            .partial_decode(&mut byte_ranges, options)
+            .partial_decode_many(Box::new(byte_ranges), options)
             .await
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }

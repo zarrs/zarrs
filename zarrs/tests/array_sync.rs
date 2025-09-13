@@ -127,7 +127,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     array_sync_read(&array)?;
 
     // uncompressed partial decoder holds no data
-    assert_eq!(array.partial_decoder(&[0, 0])?.size(), 0);
+    assert_eq!(array.partial_decoder(&[0, 0])?.size_held(), 0);
 
     Ok(())
 }
@@ -171,11 +171,11 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     // sharding partial decoder holds the shard index, which has double the number of elements
     assert_eq!(
-        array.partial_decoder(&[0, 0])?.size(),
+        array.partial_decoder(&[0, 0])?.size_held(),
         size_of::<u64>() * 4 * 2
     );
     // this chunk is empty, so it has no shard index
-    assert_eq!(array.partial_decoder(&[1, 1])?.size(), 0);
+    assert_eq!(array.partial_decoder(&[1, 1])?.size_held(), 0);
 
     Ok(())
 }
@@ -386,6 +386,42 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
             vec![], vec![0, 1, 2], vec![0, 1, 2, 3], vec![],
         ],
     );
+
+    Ok(())
+}
+
+#[cfg(feature = "zfp")]
+#[test]
+fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs_data_type::FillValue;
+    use zarrs_metadata_ext::codec::reshape::ReshapeShape;
+
+    let store = std::sync::Arc::new(MemoryStore::default());
+    let mut builder = ArrayBuilder::new(
+        vec![4, 4, 4, 4, 4],
+        vec![1, 1, 4, 4, 4],
+        DataType::UInt32,
+        FillValue::from(0u32),
+    );
+    builder.array_to_array_codecs(vec![Arc::new(zarrs::array::codec::ReshapeCodec::new(
+        ReshapeShape::new([[0, 1, 2].into(), [3].into(), [4].into()])?,
+    ))]);
+    builder.array_to_bytes_codec(Arc::new(zarrs::array::codec::ZfpCodec::new_reversible()));
+    let array = builder.build(store.clone(), "/")?;
+    array.store_metadata()?;
+
+    let elements: Vec<u32> = (0..array.shape().iter().product())
+        .map(|u| u as u32)
+        .collect();
+
+    array.store_array_subset_elements(&array.subset_all(), &elements)?;
+    assert_eq!(
+        array.retrieve_array_subset_elements::<u32>(&array.subset_all())?,
+        elements
+    );
+
+    // check reshape is registered
+    let _array = Array::open(store.clone(), "/")?;
 
     Ok(())
 }

@@ -538,7 +538,6 @@ impl From<ArraySubsetError> for ArrayError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::byte_range::ByteRange;
 
     #[test]
     fn array_subset() {
@@ -597,18 +596,14 @@ mod tests {
     fn array_subset_bytes() {
         let array_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
 
-        assert!(array_subset.byte_ranges(&[1, 1], 1).is_err());
+        assert!(array_subset
+            .iter_contiguous_byte_ranges(&[1, 1], 1)
+            .is_err());
         let ranges = array_subset
-            .byte_ranges(&[4, 4], 1)
+            .iter_contiguous_byte_ranges(&[4, 4], 1)
             .unwrap()
-            .collect::<Vec<ByteRange>>();
+            .collect::<Vec<_>>();
 
-        assert_eq!(
-            ranges,
-            vec![
-                ByteRange::FromStart(5, Some(2)),
-                ByteRange::FromStart(9, Some(2))
-            ]
-        );
+        assert_eq!(ranges, vec![5..7, 9..11]);
     }
 }

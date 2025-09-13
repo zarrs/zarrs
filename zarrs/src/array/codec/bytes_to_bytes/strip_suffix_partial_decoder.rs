@@ -31,20 +31,18 @@ impl StripSuffixPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
-    fn size(&self) -> usize {
-        self.input_handle.size()
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
     }
 
-    fn partial_decode(
+    fn partial_decode_many(
         &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+        decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
     ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
-                let bytes = self
-                    .input_handle
-                    .partial_decode_concat(&mut [decoded_region].into_iter(), options)?;
+                let bytes = self.input_handle.partial_decode(decoded_region, options)?;
                 Ok::<_, CodecError>(bytes.map(|bytes| match decoded_region {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
@@ -59,6 +57,10 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                 }))
             })
             .collect()
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }
 
@@ -87,24 +89,28 @@ impl AsyncStripSuffixPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
-    async fn partial_decode(
-        &self,
-        decoded_regions: &mut dyn ByteRangeIterator,
+    fn size_held(&self) -> usize {
+        self.input_handle.size_held()
+    }
+
+    async fn partial_decode_many<'a>(
+        &'a self,
+        decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
         let futures = decoded_regions.map(|decoded_region| async move {
             match decoded_region {
                 ByteRange::FromStart(_, Some(_)) => Ok::<_, CodecError>(
                     self.input_handle
-                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .partial_decode(decoded_region, options)
                         .await?,
                 ),
                 ByteRange::FromStart(_, None) | ByteRange::Suffix(_) => {
                     let bytes = self
                         .input_handle
-                        .partial_decode_concat(&mut [decoded_region].into_iter(), options)
+                        .partial_decode(decoded_region, options)
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
@@ -121,5 +127,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
             .await?;
         let results: Option<Vec<_>> = results.into_iter().collect();
         Ok(results)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.input_handle.supports_partial_decode()
     }
 }

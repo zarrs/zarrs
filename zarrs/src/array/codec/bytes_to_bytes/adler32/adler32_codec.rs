@@ -12,7 +12,8 @@ use crate::array::{
             strip_suffix_partial_decoder::StripSuffixPartialDecoder,
         },
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, RecommendedConcurrency,
+        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+        RecommendedConcurrency,
     },
     BytesRepresentation, RawBytes,
 };
@@ -75,12 +76,17 @@ impl CodecTraits for Adler32Codec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,   // TODO
+            partial_decode: false, // TODO
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

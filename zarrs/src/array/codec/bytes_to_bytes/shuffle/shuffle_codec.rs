@@ -7,7 +7,7 @@ use zarrs_registry::codec::SHUFFLE;
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        RecommendedConcurrency,
+        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
     BytesRepresentation, RawBytes,
 };
@@ -61,12 +61,17 @@ impl CodecTraits for ShuffleCodec {
         Some(configuration.into())
     }
 
-    fn partial_decoder_should_cache_input(&self) -> bool {
-        false
+    fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+        PartialDecoderCapability {
+            partial_read: false,
+            partial_decode: false,
+        }
     }
 
-    fn partial_decoder_decodes_all(&self) -> bool {
-        false
+    fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+        PartialEncoderCapability {
+            partial_encode: false,
+        }
     }
 }
 

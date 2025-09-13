@@ -9,7 +9,7 @@ use crate::{
     array_subset::ArraySubset,
     config::MetadataRetrieveVersion,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
-    storage::{AsyncBytes, AsyncReadableStorageTraits, StorageError, StorageHandle},
+    storage::{AsyncReadableStorageTraits, Bytes, StorageError, StorageHandle},
 };
 
 use super::{
@@ -129,7 +129,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     pub async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<AsyncBytes>, StorageError> {
+    ) -> Result<Option<Bytes>, StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -475,7 +475,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<Vec<Option<AsyncBytes>>, StorageError> {
+    ) -> Result<Vec<Option<Bytes>>, StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()

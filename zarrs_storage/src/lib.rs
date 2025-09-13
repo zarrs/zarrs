@@ -22,7 +22,7 @@ mod store_key;
 mod store_prefix;
 
 pub mod byte_range;
-use byte_range::{ByteOffset, ByteRange, InvalidByteRangeError};
+use byte_range::{ByteOffset, InvalidByteRangeError};
 
 pub use maybe::{MaybeSend, MaybeSync};
 
@@ -42,14 +42,14 @@ pub use store_prefix::{StorePrefix, StorePrefixError, StorePrefixes};
 
 #[cfg(feature = "async")]
 pub use self::storage_async::{
-    async_discover_children, async_store_set_partial_values, AsyncListableStorageTraits,
+    async_discover_children, async_store_set_partial_many, AsyncListableStorageTraits,
     AsyncReadableListableStorageTraits, AsyncReadableStorageTraits,
     AsyncReadableWritableListableStorageTraits, AsyncReadableWritableStorageTraits,
     AsyncWritableStorageTraits,
 };
 
 pub use self::storage_sync::{
-    discover_children, store_set_partial_values, ListableStorageTraits,
+    discover_children, store_set_partial_many, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
@@ -113,77 +113,31 @@ pub type Bytes = bytes::Bytes;
 /// An array to bytes partial decoder must take care of converting missing chunks to the fill value.
 pub type MaybeBytes = Option<Bytes>;
 
-#[cfg(feature = "async")]
-/// The type for bytes used in asynchronous store set and get methods.
-///
-/// An alias for [`bytes::Bytes`].
-pub type AsyncBytes = bytes::Bytes;
+/// An iterator of [`Bytes`].
+type BytesIterator<'a> = Box<dyn Iterator<Item = Result<Bytes, StorageError>> + 'a>;
+
+/// An iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
+pub type MaybeBytesIterator<'a> = Option<BytesIterator<'a>>;
 
 #[cfg(feature = "async")]
-/// An alias for bytes which may or may not be available.
-///
-/// When a value is read from a store, it returns `MaybeAsyncBytes` which is [`None`] if the key is not available.
-pub type MaybeAsyncBytes = Option<AsyncBytes>;
+/// An asynchronous iterator of [`Bytes`].
+type AsyncBytesIterator<'a> = futures::stream::BoxStream<'a, Result<Bytes, StorageError>>;
 
-/// A [`StoreKey`] and [`ByteRange`].
-#[derive(Debug, Clone)]
-pub struct StoreKeyRange {
-    /// The key for the range.
-    key: StoreKey,
-    /// The byte range.
-    byte_range: ByteRange,
+#[cfg(feature = "async")]
+/// An asynchronous iterator of [`Bytes`] which may be [`None`] indicating the bytes are not present.
+pub type AsyncMaybeBytesIterator<'a> = Option<AsyncBytesIterator<'a>>;
+
+/// This trait combines [`Iterator<Item = (Bytes, ByteOffset)>`] and [`MaybeSend`],
+/// as they cannot be combined together directly in function signatures.
+pub trait MaybeSendOffsetBytesIterator<T>: Iterator<Item = (ByteOffset, T)> + MaybeSend {}
+
+impl<I, T> MaybeSendOffsetBytesIterator<T> for I where
+    I: Iterator<Item = (ByteOffset, T)> + MaybeSend
+{
 }
 
-impl StoreKeyRange {
-    /// Create a new [`StoreKeyRange`].
-    #[must_use]
-    pub const fn new(key: StoreKey, byte_range: ByteRange) -> Self {
-        Self { key, byte_range }
-    }
-}
-
-impl std::fmt::Display for StoreKeyRange {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}:{}", self.key, self.byte_range)
-    }
-}
-
-/// A [`StoreKey`], [`ByteOffset`], and value (bytes).
-#[derive(Debug, Clone)]
-#[must_use]
-pub struct StoreKeyOffsetValue<'a> {
-    /// The key.
-    key: StoreKey,
-    /// The starting byte offset.
-    offset: ByteOffset,
-    /// The store value.
-    value: &'a [u8],
-}
-
-impl StoreKeyOffsetValue<'_> {
-    /// Create a new [`StoreKeyOffsetValue`].
-    pub const fn new(key: StoreKey, offset: ByteOffset, value: &[u8]) -> StoreKeyOffsetValue<'_> {
-        StoreKeyOffsetValue { key, offset, value }
-    }
-
-    /// Get the key.
-    #[must_use]
-    pub const fn key(&self) -> &StoreKey {
-        &self.key
-    }
-
-    /// Get the offset.
-    #[must_use]
-    pub const fn offset(&self) -> ByteOffset {
-        self.offset
-    }
-
-    /// Get the value.
-    #[must_use]
-    pub const fn value(&self) -> &[u8] {
-        self.value
-    }
-}
+/// A [`Bytes`] and [`ByteOffset`] iterator.
+pub type OffsetBytesIterator<'a, T = Bytes> = Box<dyn MaybeSendOffsetBytesIterator<T> + 'a>;
 
 /// [`StoreKeys`] and [`StorePrefixes`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
