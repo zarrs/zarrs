@@ -26,43 +26,89 @@
 //! ```
 
 mod reshape_codec;
-mod reshape_codec_partial;
 
 use std::{num::NonZeroU64, sync::Arc};
 
+use num::Integer;
 // use itertools::Itertools;
 pub use reshape_codec::ReshapeCodec;
+use zarrs_metadata::ChunkShape;
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
 use zarrs_registry::codec::RESHAPE;
 
 use crate::{
-    array::{
-        codec::{Codec, CodecError, CodecPlugin},
-        ArrayIndices,
-    },
-    array_subset::ArraySubset,
-    indexer::{IncompatibleIndexerError, Indexer},
+    array::codec::{Codec, CodecError, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
 
-fn get_reshaped_array_subset(
-    decoded_region: &ArraySubset,
-    decoded_shape: &[NonZeroU64],
+fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
-) -> Result<ArraySubset, CodecError> {
-    todo!()
+    decoded_shape: &[NonZeroU64],
+) -> Result<ChunkShape, CodecError> {
+    let mut encoded_shape = Vec::with_capacity(reshape_shape.0.len());
+    let mut fill_index = None;
+    for output_dim in &reshape_shape.0 {
+        match output_dim {
+            ReshapeDim::Size(size) => encoded_shape.push(*size),
+            ReshapeDim::InputDims(input_dims) => {
+                let mut product = NonZeroU64::new(1).unwrap();
+                for input_dim in input_dims {
+                    let input_shape = *decoded_shape
+                        .get(usize::try_from(*input_dim).unwrap())
+                        .ok_or_else(|| {
+                            CodecError::Other(
+                                format!("reshape codec shape references a dimension ({input_dim}) larger than the chunk dimensionality ({})", decoded_shape.len()),
+                            )
+                        })?;
+                    product = product.checked_mul(input_shape).unwrap();
+                }
+                encoded_shape.push(product);
+            }
+            ReshapeDim::Auto(_) => {
+                fill_index = Some(encoded_shape.len());
+                encoded_shape.push(NonZeroU64::new(1).unwrap());
+            }
+        }
+    }
+
+    let num_elements_input = decoded_shape.iter().map(|u| u.get()).product::<u64>();
+    let num_elements_output = encoded_shape.iter().map(|u| u.get()).product::<u64>();
+    if let Some(fill_index) = fill_index {
+        let (quot, rem) = num_elements_input.div_rem(&num_elements_output);
+        if rem == 0 {
+            encoded_shape[fill_index] = NonZeroU64::new(quot).unwrap();
+        } else {
+            return Err(CodecError::Other(
+                format!("reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."),
+            ));
+        }
+    } else if num_elements_input != num_elements_output {
+        return Err(CodecError::Other(
+                format!("reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."),
+            ));
+    }
+
+    Ok(encoded_shape.into())
 }
 
-fn get_reshaped_indexer(
-    indexer: &dyn Indexer,
-    decoded_shape: &[NonZeroU64],
-    reshape_shape: &ReshapeShape,
-) -> Result<impl Indexer, CodecError> {
-    todo!()
-}
+// fn get_reshaped_array_subset(
+//     decoded_region: &ArraySubset,
+//     decoded_shape: &[NonZeroU64],
+//     reshape_shape: &ReshapeShape,
+// ) -> Result<ArraySubset, CodecError> {
+//     todo!()
+// }
+
+// fn get_reshaped_indexer(
+//     indexer: &dyn Indexer,
+//     decoded_shape: &[NonZeroU64],
+//     reshape_shape: &ReshapeShape,
+// ) -> Result<impl Indexer, CodecError> {
+//     todo!()
+// }
 
 // Register the codec.
 inventory::submit! {

@@ -9,7 +9,6 @@ use crate::array::{
     },
     DataType, FillValue,
 };
-use num::Integer;
 use zarrs_metadata::Configuration;
 use zarrs_registry::codec::RESHAPE;
 
@@ -24,7 +23,7 @@ use crate::{
     plugin::PluginCreateError,
 };
 use zarrs_metadata_ext::codec::reshape::{
-    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
+    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
 
 #[cfg(feature = "async")]
@@ -114,50 +113,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     }
 
     fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
-        let mut encoded_shape = Vec::with_capacity(self.shape.0.len());
-        let mut fill_index = None;
-        for output_dim in &self.shape.0 {
-            match output_dim {
-                ReshapeDim::Size(size) => encoded_shape.push(*size),
-                ReshapeDim::InputDims(input_dims) => {
-                    let mut product = NonZeroU64::new(1).unwrap();
-                    for input_dim in input_dims {
-                        let input_shape = *decoded_shape
-                            .get(usize::try_from(*input_dim).unwrap())
-                            .ok_or_else(|| {
-                                CodecError::Other(
-                                    format!("reshape codec shape references a dimension ({input_dim}) larger than the chunk dimensionality ({})", decoded_shape.len()),
-                                )
-                            })?;
-                        product = product.checked_mul(input_shape).unwrap();
-                    }
-                    encoded_shape.push(product);
-                }
-                ReshapeDim::Auto(_) => {
-                    fill_index = Some(encoded_shape.len());
-                    encoded_shape.push(NonZeroU64::new(1).unwrap());
-                }
-            }
-        }
-
-        let num_elements_input = decoded_shape.iter().map(|u| u.get()).product::<u64>();
-        let num_elements_output = encoded_shape.iter().map(|u| u.get()).product::<u64>();
-        if let Some(fill_index) = fill_index {
-            let (quot, rem) = num_elements_input.div_rem(&num_elements_output);
-            if rem == 0 {
-                encoded_shape[fill_index] = NonZeroU64::new(quot).unwrap();
-            } else {
-                return Err(CodecError::Other(
-                    format!("reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."),
-                ));
-            }
-        } else if num_elements_input != num_elements_output {
-            return Err(CodecError::Other(
-                    format!("reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."),
-                ));
-        }
-
-        Ok(encoded_shape.into())
+        super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
     fn decoded_shape(
@@ -187,47 +143,38 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::reshape_codec_partial::ReshapeCodecPartial::new(
-                input_handle,
-                decoded_representation.clone(),
-                self.shape.clone(),
-            ),
+        // TODO: reshape partial decoding
+        Err(CodecError::Other(
+            "partial decoding with the reshape codec is not yet supported".to_string(),
         ))
     }
 
     fn partial_encoder(
         self: Arc<Self>,
-        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::reshape_codec_partial::ReshapeCodecPartial::new(
-                input_output_handle,
-                decoded_representation.clone(),
-                self.shape.clone(),
-            ),
+        // TODO: reshape partial encoding
+        Err(CodecError::Other(
+            "partial encoding with the reshape codec is not yet supported".to_string(),
         ))
     }
 
     #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
-        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        _decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            super::reshape_codec_partial::ReshapeCodecPartial::new(
-                input_handle,
-                decoded_representation.clone(),
-                self.shape.clone(),
-            ),
+        // TODO: reshape partial decoding
+        Err(CodecError::Other(
+            "partial decoding with the reshape codec is not yet supported".to_string(),
         ))
     }
 }
