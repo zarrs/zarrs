@@ -17,7 +17,7 @@ mod registered {
     pub mod gzip;
     /// `packbits` codec metadata (registered).
     pub mod packbits;
-    /// `reshape` codec metadata (registered).
+    /// `reshape` codec metadata (draft).
     pub mod reshape;
     /// `sharding` codec metadata (registered, ZEP0002).
     pub mod sharding;

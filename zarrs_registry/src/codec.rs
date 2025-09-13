@@ -13,7 +13,7 @@ pub const GZIP: &str = "gzip";
 /// Unique identifier for the `packbits` codec (registered).
 pub const PACKBITS: &str = "packbits";
 
-/// Unique identifier for the `reshape` codec (registered).
+/// Unique identifier for the `reshape` codec (draft).
 pub const RESHAPE: &str = "reshape";
 
 /// Unique identifier for the `sharding_indexed` codec (registered, ZEP0002).
