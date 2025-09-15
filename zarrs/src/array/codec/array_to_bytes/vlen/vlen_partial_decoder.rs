@@ -8,6 +8,7 @@ use crate::array::{
     ArrayBytes, ArraySize, ChunkRepresentation, CodecChain, DataType, FillValue, RawBytes,
 };
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
+use zarrs_storage::StorageError;
 
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -96,6 +97,10 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_handle.size()
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }
@@ -164,6 +169,10 @@ impl AsyncVlenPartialDecoder {
 impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_handle.size().await
     }
 
     fn size_held(&self) -> usize {

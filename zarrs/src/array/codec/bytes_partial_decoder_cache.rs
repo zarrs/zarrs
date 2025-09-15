@@ -2,6 +2,9 @@
 
 use std::borrow::Cow;
 
+#[cfg(feature = "async")]
+use zarrs_storage::StorageError;
+
 use crate::{
     array::RawBytes,
     storage::byte_range::{extract_byte_ranges, ByteRange, ByteRangeIterator},
@@ -50,6 +53,10 @@ impl BytesPartialDecoderCache {
 }
 
 impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        Ok(self.cache.as_ref().map(|v| v.len() as u64))
+    }
+
     fn size_held(&self) -> usize {
         self.cache.as_ref().map_or(0, Vec::len)
     }
@@ -80,6 +87,10 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        Ok(self.cache.as_ref().map(|v| v.len() as u64))
+    }
+
     fn size_held(&self) -> usize {
         self.cache.as_ref().map_or(0, Vec::len)
     }

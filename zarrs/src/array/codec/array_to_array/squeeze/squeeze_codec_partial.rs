@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zarrs_storage::StorageError;
+
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
 
 use crate::array::{
@@ -38,6 +40,10 @@ where
 {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
     }
 
     fn size_held(&self) -> usize {
@@ -112,6 +118,10 @@ where
 {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size().await
     }
 
     fn size_held(&self) -> usize {

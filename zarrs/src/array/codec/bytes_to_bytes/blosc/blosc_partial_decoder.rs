@@ -1,5 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
+use zarrs_storage::StorageError;
+
 use crate::{
     array::{
         codec::{
@@ -28,6 +30,10 @@ impl BloscPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for BloscPartialDecoder {
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_handle.size()
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }
@@ -83,6 +89,10 @@ impl AsyncBloscPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_handle.size().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }

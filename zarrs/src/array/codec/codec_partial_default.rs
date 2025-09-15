@@ -3,7 +3,7 @@ use std::{borrow::Cow, num::NonZero, sync::Arc};
 use zarrs_metadata::DataTypeSize;
 use zarrs_storage::{
     byte_range::{extract_byte_ranges, ByteRangeIterator},
-    OffsetBytesIterator,
+    OffsetBytesIterator, StorageError,
 };
 
 use crate::{
@@ -68,6 +68,10 @@ where
 {
     fn data_type(&self) -> &super::DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
     }
 
     fn size_held(&self) -> usize {
@@ -196,6 +200,10 @@ where
         self.decoded_representation.data_type()
     }
 
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }
@@ -322,6 +330,10 @@ impl<T: ?Sized> BytesPartialDecoderTraits
 where
     T: BytesPartialDecoderTraits,
 {
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }
@@ -421,6 +433,10 @@ impl<T: ?Sized> AsyncArrayPartialDecoderTraits
 where
     T: AsyncArrayPartialDecoderTraits,
 {
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }
@@ -562,6 +578,10 @@ where
         self.decoded_representation.data_type()
     }
 
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }
@@ -695,6 +715,10 @@ impl<T: ?Sized> AsyncBytesPartialDecoderTraits
 where
     T: AsyncBytesPartialDecoderTraits,
 {
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }

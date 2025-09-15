@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use zarrs_registry::codec::BYTES;
-use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::{byte_range::ByteRange, StorageError};
 
 use crate::{
     array::{
@@ -50,6 +50,10 @@ where
 {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
     }
 
     fn size_held(&self) -> usize {
@@ -125,6 +129,10 @@ where
 {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    async fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size().await
     }
 
     fn size_held(&self) -> usize {
@@ -226,6 +234,41 @@ where
             .into());
         }
 
+        // Check if the chunk is empty, if so write the fill value for the entire chunk
+        // TODO: Instead, just write the fill value in the missing byte ranges
+        if self.input_output_handle.size()?.is_none() {
+            let chunk_size = self
+                .decoded_representation
+                .fixed_size()
+                .expect("fixed data type");
+            let mut fill_value_bytes = self
+                .decoded_representation
+                .fill_value()
+                .as_ne_bytes()
+                .to_vec();
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(
+                        &mut fill_value_bytes,
+                        self.decoded_representation.data_type(),
+                    );
+                }
+            }
+
+            let mut chunk_bytes = vec![0u8; chunk_size];
+            for chunk in chunk_bytes.chunks_mut(fill_value_bytes.len()) {
+                chunk.copy_from_slice(&fill_value_bytes);
+            }
+
+            self.input_output_handle.partial_encode_many(
+                Box::new(std::iter::once((
+                    0,
+                    crate::array::RawBytes::from(chunk_bytes),
+                ))),
+                options,
+            )?;
+        }
+
         let chunk_shape = self.decoded_representation.shape_u64();
         let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
 
@@ -294,6 +337,43 @@ where
                 self.decoded_representation.dimensionality(),
             )
             .into());
+        }
+
+        // Check if the chunk is empty, if so write the fill value for the entire chunk
+        // TODO: Instead, just write the fill value in the missing byte ranges
+        if self.input_output_handle.size().await?.is_none() {
+            let chunk_size = self
+                .decoded_representation
+                .fixed_size()
+                .expect("fixed data type");
+            let mut fill_value_bytes = self
+                .decoded_representation
+                .fill_value()
+                .as_ne_bytes()
+                .to_vec();
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(
+                        &mut fill_value_bytes,
+                        self.decoded_representation.data_type(),
+                    );
+                }
+            }
+
+            let mut chunk_bytes = vec![0u8; chunk_size];
+            for chunk in chunk_bytes.chunks_mut(fill_value_bytes.len()) {
+                chunk.copy_from_slice(&fill_value_bytes);
+            }
+
+            self.input_output_handle
+                .partial_encode_many(
+                    Box::new(std::iter::once((
+                        0,
+                        crate::array::RawBytes::from(chunk_bytes),
+                    ))),
+                    options,
+                )
+                .await?;
         }
 
         let chunk_shape = self.decoded_representation.shape_u64();

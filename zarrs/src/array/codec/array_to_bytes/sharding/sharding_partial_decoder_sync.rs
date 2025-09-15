@@ -4,7 +4,10 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
+use zarrs_storage::{
+    byte_range::{ByteLength, ByteOffset, ByteRange},
+    StorageError,
+};
 
 use crate::{
     array::{
@@ -171,6 +174,10 @@ pub(crate) fn partial_decode(
 impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     fn data_type(&self) -> &DataType {
         self.shard_representation.data_type()
+    }
+
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_handle.size()
     }
 
     fn size_held(&self) -> usize {

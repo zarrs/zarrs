@@ -10,6 +10,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
+use zarrs_storage::StorageError;
 
 use crate::{
     array::{
@@ -98,6 +99,10 @@ impl ShardingPartialEncoder {
 impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn size(&self) -> Result<Option<u64>, StorageError> {
+        self.input_output_handle.size()
     }
 
     fn size_held(&self) -> usize {
