@@ -1,4 +1,5 @@
 TOOLCHAIN := "nightly"
+export RUST_BACKTRACE := "1"
 
 # Display the available recipes
 help:
