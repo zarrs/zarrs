@@ -7,7 +7,8 @@ use crate::{
 };
 
 use super::{
-    array_bytes::update_array_bytes, codec::CodecOptions,
+    array_bytes::update_array_bytes, 
+    codec::{StoragePartialEncoder, AsyncArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
     concurrency::concurrency_chunks_and_codec, Array, ArrayError, Element,
 };
 
@@ -158,25 +159,36 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             // let mutex = self.storage.mutex(&key).await?;
             // let _lock = mutex.lock();
 
-            // TODO: Add async partial encoding
+            if options.experimental_partial_encoding()
+                && self.codecs.partial_encoder_capability().partial_encode
+                && self.storage.supports_set_partial()
+            {
+                let partial_encoder = self.async_partial_encoder(chunk_indices, options).await?;
+                debug_assert!(
+                    partial_encoder.supports_partial_encode(),
+                    "partial encoder is misrepresenting its capabilities"
+                );
+                partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options).await?;
+                Ok(())
+            } else {
+                // Decode the entire chunk
+                let chunk_bytes_old = self
+                    .async_retrieve_chunk_opt(chunk_indices, options)
+                    .await?;
 
-            // Decode the entire chunk
-            let chunk_bytes_old = self
-                .async_retrieve_chunk_opt(chunk_indices, options)
-                .await?;
+                // Update the chunk
+                let chunk_bytes_new = update_array_bytes(
+                    chunk_bytes_old,
+                    &chunk_shape,
+                    chunk_subset,
+                    &chunk_subset_bytes,
+                    self.data_type().size(),
+                )?;
 
-            // Update the chunk
-            let chunk_bytes_new = update_array_bytes(
-                chunk_bytes_old,
-                &chunk_shape,
-                chunk_subset,
-                &chunk_subset_bytes,
-                self.data_type().size(),
-            )?;
-
-            // Store the updated chunk
-            self.async_store_chunk_opt(chunk_indices, chunk_bytes_new, options)
-                .await
+                // Store the updated chunk
+                self.async_store_chunk_opt(chunk_indices, chunk_bytes_new, options)
+                    .await
+            }
         }
     }
 
@@ -351,5 +363,44 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         let subset_array = super::ndarray_into_vec(subset_array);
         self.async_store_array_subset_elements_opt(&subset, &subset_array, options)
             .await
+    }
+
+    /// Initialises an asynchronous partial encoder for the chunk at `chunk_indices`.
+    ///
+    /// Only one partial encoder should be created for a chunk at a time because:
+    /// - partial encoders can hold internal state that may become out of sync, and
+    /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
+    ///
+    /// Partial encoding with [`AsyncArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
+    pub async fn async_partial_encoder(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<std::sync::Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
+        use std::sync::Arc;
+        use crate::storage::StorageHandle;
+
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+
+        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
+
+        // Input/output
+        let storage_transformer = self
+            .storage_transformers()
+            .create_async_readable_writable_transformer(storage_handle)
+            .await?;
+        let input_output_handle = Arc::new(StoragePartialEncoder::new(
+            storage_transformer,
+            self.chunk_key(chunk_indices),
+        ));
+
+        Ok(self.codecs.clone().async_partial_encoder(
+            input_output_handle,
+            &chunk_representation,
+            options,
+        ).await?)
     }
 }
