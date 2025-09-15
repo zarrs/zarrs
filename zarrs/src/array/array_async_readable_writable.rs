@@ -7,9 +7,13 @@ use crate::{
 };
 
 use super::{
-    array_bytes::update_array_bytes, 
-    codec::{StoragePartialEncoder, AsyncArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
-    concurrency::concurrency_chunks_and_codec, Array, ArrayError, Element,
+    array_bytes::update_array_bytes,
+    codec::{
+        ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
+        StoragePartialEncoder,
+    },
+    concurrency::concurrency_chunks_and_codec,
+    Array, ArrayError, Element,
 };
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
@@ -168,7 +172,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                     partial_encoder.supports_partial_encode(),
                     "partial encoder is misrepresenting its capabilities"
                 );
-                partial_encoder.partial_encode(chunk_subset, &chunk_subset_bytes, options).await?;
+                partial_encoder
+                    .partial_encode(chunk_subset, &chunk_subset_bytes, options)
+                    .await?;
                 Ok(())
             } else {
                 // Decode the entire chunk
@@ -380,8 +386,8 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<std::sync::Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        use std::sync::Arc;
         use crate::storage::StorageHandle;
+        use std::sync::Arc;
 
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
@@ -397,10 +403,10 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             self.chunk_key(chunk_indices),
         ));
 
-        Ok(self.codecs.clone().async_partial_encoder(
-            input_output_handle,
-            &chunk_representation,
-            options,
-        ).await?)
+        Ok(self
+            .codecs
+            .clone()
+            .async_partial_encoder(input_output_handle, &chunk_representation, options)
+            .await?)
     }
 }
