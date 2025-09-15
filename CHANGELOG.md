@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecPartialDefault`
 - Add partial encoding support for the `bytes` codec
 - Add experimental `reshape` codec
+- Add `Array::async_partial_encoder`  and partial encoding support to `Array::async_store_chunk_subset_opt`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
