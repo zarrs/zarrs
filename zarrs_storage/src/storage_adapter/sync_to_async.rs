@@ -35,10 +35,10 @@ use std::sync::Arc;
 /// ```
 pub trait SyncToAsyncBlockOn: MaybeSend + MaybeSync {
     /// Spawns a blocking task.
-    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
+    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + MaybeSend
     where
-        F: FnOnce() -> R + Send + 'static,
-        R: Send + 'static;
+        F: FnOnce() -> R + MaybeSend + 'static,
+        R: MaybeSend + 'static;
 }
 
 /// A sync to async storage adapter.
@@ -59,8 +59,8 @@ impl<TStorage: ?Sized, TBlockOn: SyncToAsyncBlockOn> SyncToAsyncStorageAdapter<T
 
     async fn spawn_blocking<F, R>(&self, f: F) -> R
     where
-        F: FnOnce() -> R + Send + 'static,
-        R: Send + 'static,
+        F: FnOnce() -> R + MaybeSend + 'static,
+        R: MaybeSend + 'static,
     {
         self.block_on.spawn_blocking(f).await
     }
