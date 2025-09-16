@@ -234,21 +234,8 @@ where
             .into());
         }
 
-        // Check that the chunk is empty or the expected size
-        let size = self.input_output_handle.size()?;
-        if let Some(size) = size {
-            let size = usize::try_from(size).unwrap();
-            let size_expected = self
-                .decoded_representation
-                .fixed_size()
-                .expect("fixed data type");
-            if size != size_expected {
-                return Err(InvalidBytesLengthError::new(size, size_expected).into());
-            }
-        }
-
         // If the chunk is empty, initialise the chunk with the fill value and update
-        if size.is_none() {
+        if self.input_output_handle.size()?.is_none() {
             // Create a chunk filled with the fill value
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
@@ -348,21 +335,8 @@ where
             .into());
         }
 
-        // Check that the chunk is empty or the expected size
-        let size = self.input_output_handle.size().await?;
-        if let Some(size) = size {
-            let size = usize::try_from(size).unwrap();
-            let size_expected = self
-                .decoded_representation
-                .fixed_size()
-                .expect("fixed data type");
-            if size != size_expected {
-                return Err(InvalidBytesLengthError::new(size, size_expected).into());
-            }
-        }
-
         // If the chunk is empty, initialise the chunk with the fill value and update
-        if size.is_none() {
+        if self.input_output_handle.size().await?.is_none() {
             // Create a chunk filled with the fill value
             let array_size = ArraySize::new(
                 self.decoded_representation.data_type().size(),
