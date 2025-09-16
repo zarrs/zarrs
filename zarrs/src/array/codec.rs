@@ -322,6 +322,12 @@ pub trait ArrayCodecTraits: CodecTraits {
 
 /// Partial bytes decoder traits.
 pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    fn exists(&self) -> Result<bool, StorageError>;
+
     /// Returns the size of chunk bytes held by the partial decoder.
     ///
     /// Intended for use by size-constrained partial decoder caches.
@@ -377,6 +383,12 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    async fn exists(&self) -> Result<bool, StorageError>;
+
     /// Returns the size of chunk bytes held by the partial decoder.
     ///
     /// Intended for use by size-constrained partial decoder caches.
@@ -436,6 +448,12 @@ pub trait AsyncBytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
 pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
+
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    fn exists(&self) -> Result<bool, StorageError>;
 
     /// Returns the size of chunk bytes held by the partial decoder.
     ///
@@ -658,6 +676,12 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Return the data type of the partial decoder.
     fn data_type(&self) -> &DataType;
 
+    /// Returns whether the chunk exists.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
+    async fn exists(&self) -> Result<bool, StorageError>;
+
     /// Returns the size of chunk bytes held by the partial decoder.
     ///
     /// Intended for use by size-constrained partial decoder caches.
@@ -718,6 +742,10 @@ impl StoragePartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StoragePartialDecoder {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.storage.size_key(&self.key)?.is_some())
+    }
+
     fn size_held(&self) -> usize {
         0
     }
@@ -762,6 +790,10 @@ impl AsyncStoragePartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.storage.size_key(&self.key).await?.is_some())
+    }
+
     fn size_held(&self) -> usize {
         0
     }
@@ -794,6 +826,10 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.lock().unwrap().is_some())
+    }
+
     fn size_held(&self) -> usize {
         self.lock().unwrap().as_ref().map_or(0, Vec::len)
     }
@@ -872,6 +908,10 @@ impl<TStorage> StoragePartialEncoder<TStorage> {
 }
 
 impl BytesPartialDecoderTraits for StoragePartialEncoder<ReadableWritableStorage> {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.storage.size_key(&self.key)?.is_some())
+    }
+
     fn size_held(&self) -> usize {
         0
     }
@@ -930,6 +970,10 @@ impl BytesPartialEncoderTraits for StoragePartialEncoder<ReadableWritableStorage
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for StoragePartialEncoder<AsyncReadableWritableStorage> {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(self.storage.size_key(&self.key).await?.is_some())
+    }
+
     fn size_held(&self) -> usize {
         0
     }
@@ -1482,6 +1526,10 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
 }
 
 impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
     fn size_held(&self) -> usize {
         self.as_ref().len()
     }
@@ -1505,6 +1553,10 @@ impl BytesPartialDecoderTraits for Cow<'static, [u8]> {
 }
 
 impl BytesPartialDecoderTraits for Vec<u8> {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
     fn size_held(&self) -> usize {
         self.len()
     }
@@ -1531,6 +1583,10 @@ impl BytesPartialDecoderTraits for Vec<u8> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
     fn size_held(&self) -> usize {
         self.as_ref().len()
     }
@@ -1557,6 +1613,10 @@ impl AsyncBytesPartialDecoderTraits for Cow<'static, [u8]> {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for Vec<u8> {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
     fn size_held(&self) -> usize {
         self.len()
     }

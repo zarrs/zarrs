@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zarrs_storage::StorageError;
+
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
 
 use crate::array::{
@@ -10,7 +12,7 @@ use crate::array::{
 };
 
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {
@@ -38,6 +40,10 @@ where
 {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -114,6 +120,10 @@ where
         self.decoded_representation.data_type()
     }
 
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_output_handle.size_held()
     }
@@ -140,5 +150,46 @@ where
 
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialEncoderTraits for SqueezeCodecPartial<T>
+where
+    T: AsyncArrayPartialEncoderTraits,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    async fn erase(&self) -> Result<(), CodecError> {
+        self.input_output_handle.erase().await
+    }
+
+    async fn partial_encode(
+        &self,
+        indexer: &dyn crate::indexer::Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if let Some(array_subset) = indexer.as_array_subset() {
+            let array_subset_squeezed =
+                get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;
+            self.input_output_handle
+                .partial_encode(&array_subset_squeezed, bytes, options)
+                .await
+        } else {
+            let indexer_squeezed =
+                get_squeezed_indexer(indexer, self.decoded_representation.shape())?;
+            self.input_output_handle
+                .partial_encode(&indexer_squeezed, bytes, options)
+                .await
+        }
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }

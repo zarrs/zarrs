@@ -1,5 +1,7 @@
 //! A cache for partial decoders.
 
+use zarrs_storage::StorageError;
+
 use crate::array::{ArrayBytes, ChunkRepresentation, DataType};
 
 use super::{ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions};
@@ -60,6 +62,10 @@ impl ArrayPartialDecoderCache {
 }
 
 impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
     fn size_held(&self) -> usize {
         self.cache.size()
     }
@@ -92,6 +98,10 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
     }
 
     fn size_held(&self) -> usize {

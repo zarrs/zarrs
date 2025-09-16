@@ -5,7 +5,7 @@ use std::{ops::Div, sync::Arc};
 use num::Integer;
 
 use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::{byte_range::ByteRange, StorageError};
 
 use crate::array::{
     codec::{
@@ -184,6 +184,10 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
         self.decoded_representation.data_type()
     }
 
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists()
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }
@@ -245,6 +249,10 @@ impl AsyncPackBitsPartialDecoder {
 impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
     fn data_type(&self) -> &DataType {
         self.decoded_representation.data_type()
+    }
+
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

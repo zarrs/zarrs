@@ -8,6 +8,7 @@
 | [AsyncIcechunkStore]               |        | &check;* | &check;* | &check;* |         | &check; | [zarrs_icechunk]               |
 | [HTTPStore]                        |        | &check;  |          |          | &check; |         | [zarrs_http]                   |
 | [AsyncToSyncStorageAdapter]        |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
+| [SyncToAsyncStorageAdapter]        |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [UsageLogStorageAdapter]           |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [PerformanceMetricsStorageAdapter] |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [ZipStorageAdapter]                |        | &check;  |          | &check;  | &check; |         | [zarrs_zip]                    |
@@ -37,6 +38,7 @@
 [HTTPStore]: https://docs.rs/zarrs_http/latest/zarrs_http/struct.HTTPStore.html
 
 [AsyncToSyncStorageAdapter]: crate::storage::storage_adapter::async_to_sync::AsyncToSyncStorageAdapter
+[SyncToAsyncStorageAdapter]: crate::storage::storage_adapter::sync_to_async::SyncToAsyncStorageAdapter
 [UsageLogStorageAdapter]: crate::storage::storage_adapter::usage_log::UsageLogStorageAdapter
 [PerformanceMetricsStorageAdapter]: crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter
 [ZipStorageAdapter]: https://docs.rs/zarrs_zip/latest/zarrs_zip/struct.ZipStorageAdapter.html

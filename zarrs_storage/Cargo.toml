@@ -36,3 +36,4 @@ unsafe_cell_slice = "0.2.0"
 [dev-dependencies]
 chrono = "0.4"
 tempfile = "3"
+tokio = "1.47.1"
