@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `OffsetBytesIterator`
 - Add `[Async]ReadableStorageTraits::get_partial`
 - Add `[Async]WritableStorageTraits::set_partial`
+- Add `SyncToAsyncStorageAdapter`
 
 ### Changed
 - **Breaking**: Increase MSRV to 1.82
