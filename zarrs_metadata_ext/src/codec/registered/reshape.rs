@@ -54,6 +54,7 @@ pub enum ReshapeDim {
 
 impl ReshapeDim {
     /// Create a new `ReshapeDim` with the corresponding `auto` value.
+    #[must_use]
     pub fn auto() -> Self {
         Self::Auto(MustBe!(-1i64))
     }
