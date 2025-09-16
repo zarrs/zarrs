@@ -325,6 +325,9 @@ pub trait BytesPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of the chunk.
     ///
     /// This returns the size of the chunk and is implemented by returning the size from any inner partial decoders.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
     fn size(&self) -> Result<Option<u64>, StorageError>;
 
     /// Returns the size of chunk bytes held by the partial decoder.
@@ -450,6 +453,9 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns the size of the chunk.
     ///
     /// This returns the size of the chunk and is implemented by returning the size from any inner partial decoders.
+    ///
+    /// # Errors
+    /// Returns [`StorageError`] if a storage operation fails.
     fn size(&self) -> Result<Option<u64>, StorageError>;
 
     /// Returns the size of chunk bytes held by the partial decoder.

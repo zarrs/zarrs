@@ -218,7 +218,7 @@ fn do_transpose<'a>(
             }
             Ok(transpose_vlen(
                 bytes,
-                &offsets,
+                offsets,
                 &subset.shape_usize(),
                 order_decode,
             ))
