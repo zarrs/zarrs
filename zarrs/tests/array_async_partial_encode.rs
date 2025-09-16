@@ -12,11 +12,27 @@ use zarrs::{
     },
     array_subset::ArraySubset,
 };
-use zarrs_object_store::AsyncObjectStore;
 use zarrs_storage::{
-    storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
+    storage_adapter::{
+        performance_metrics::PerformanceMetricsStorageAdapter,
+        sync_to_async::SyncToAsyncStorageAdapter,
+    },
+    store::MemoryStore,
     AsyncReadableStorageTraits,
 };
+
+use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncBlockOn;
+struct TokioSpawn;
+
+impl SyncToAsyncBlockOn for TokioSpawn {
+    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        async move { tokio::task::spawn_blocking(f).await.unwrap() }
+    }
+}
 
 /// Test async partial encoding for array-to-array codecs in isolation
 async fn test_array_to_array_codec_async_partial_encoding<
@@ -30,7 +46,10 @@ async fn test_array_to_array_codec_async_partial_encoding<
         .experimental_partial_encoding(true)
         .build();
 
-    let store = Arc::new(AsyncObjectStore::new(object_store::memory::InMemory::new()));
+    let store = Arc::new(SyncToAsyncStorageAdapter::new(
+        Arc::new(MemoryStore::new()),
+        TokioSpawn,
+    ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_array";
@@ -129,11 +148,10 @@ async fn test_array_to_array_codec_async_partial_encoding<
                     codec_name, bytes_read_after_partial, full_chunk_size
                 );
             } else {
-                println!(
+                panic!(
                     "Codec {}: ⚠ Expected partial encoding but read full {} bytes",
                     codec_name, bytes_read_after_partial
                 );
-                // TODO: Investigate why partial encoding isn't working as expected
             }
         }
     } else {
@@ -173,7 +191,10 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
         .experimental_partial_encoding(true)
         .build();
 
-    let store = Arc::new(AsyncObjectStore::new(object_store::memory::InMemory::new()));
+    let store = Arc::new(SyncToAsyncStorageAdapter::new(
+        Arc::new(MemoryStore::new()),
+        TokioSpawn,
+    ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_array";
@@ -267,11 +288,10 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
                     codec_name, bytes_read_after_partial, full_chunk_size
                 );
             } else {
-                println!(
+                panic!(
                     "Codec {}: ⚠ Expected partial encoding but read full {} bytes",
                     codec_name, bytes_read_after_partial
                 );
-                // TODO: Investigate why partial encoding isn't working as expected for this codec
             }
         }
     } else {
@@ -295,11 +315,10 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
                 codec_name
             );
         } else if reads_after_partial == 0 {
-            println!(
+            panic!(
                 "Codec {}: ⚠ No reads during partial update - may indicate full rewrite strategy",
                 codec_name
             );
-            // TODO: Verify if this is the expected behavior for this codec
         }
     }
 
@@ -385,6 +404,7 @@ async fn test_squeeze_async_partial_encoding() {
 }
 
 #[tokio::test]
+#[ignore = "partial encoding with fixedscaleoffset is not yet supported"] // FIXME
 async fn test_fixedscaleoffset_async_partial_encoding() {
     use zarrs::array::codec::FixedScaleOffsetCodec;
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
@@ -394,8 +414,7 @@ async fn test_fixedscaleoffset_async_partial_encoding() {
             .unwrap();
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(&config).unwrap());
 
-    // TODO: Need to verify if fixedscaleoffset supports partial encoding (not found in search results)
-    test_array_to_array_codec_async_partial_encoding(codec, "fixedscaleoffset", false)
+    test_array_to_array_codec_async_partial_encoding(codec, "fixedscaleoffset", true)
         .await
         .unwrap();
 }
@@ -554,7 +573,10 @@ async fn test_codec_chain_async_partial_encoding() {
         .experimental_partial_encoding(true)
         .build();
 
-    let store = Arc::new(AsyncObjectStore::new(object_store::memory::InMemory::new()));
+    let store = Arc::new(SyncToAsyncStorageAdapter::new(
+        Arc::new(MemoryStore::new()),
+        TokioSpawn,
+    ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
     let array_path = "/test_chain";

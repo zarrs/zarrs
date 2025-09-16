@@ -12,7 +12,7 @@ use crate::array::{
 use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
 
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {
@@ -170,5 +170,50 @@ where
 
     fn supports_partial_decode(&self) -> bool {
         self.input_output_handle.supports_partial_decode()
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialEncoderTraits for TransposeCodecPartial<T>
+where
+    T: AsyncArrayPartialEncoderTraits,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    async fn erase(&self) -> Result<(), CodecError> {
+        self.input_output_handle.erase().await
+    }
+
+    async fn partial_encode(
+        &self,
+        indexer: &dyn crate::indexer::Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        if let Some(array_subset) = indexer.as_array_subset() {
+            let encoded_value = do_transpose(
+                bytes,
+                array_subset,
+                &self.order,
+                self.decoded_representation.data_type().size(),
+            )?;
+            let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
+            self.input_output_handle
+                .partial_encode(&array_subset_transposed, &encoded_value, options)
+                .await
+        } else {
+            let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
+            self.input_output_handle
+                .partial_encode(&indexer_transposed, bytes, options)
+                .await
+        }
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_output_handle.supports_partial_encode()
     }
 }

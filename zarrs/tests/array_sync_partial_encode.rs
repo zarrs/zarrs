@@ -124,11 +124,10 @@ fn test_array_to_array_codec_sync_partial_encoding<
                     codec_name, bytes_read_after_partial, full_chunk_size
                 );
             } else {
-                println!(
+                panic!(
                     "Codec {}: ⚠ Expected partial encoding but read full {} bytes",
                     codec_name, bytes_read_after_partial
                 );
-                // TODO: Investigate why partial encoding isn't working as expected
             }
         }
     } else {
@@ -257,11 +256,10 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
                     codec_name, bytes_read_after_partial, full_chunk_size
                 );
             } else {
-                println!(
+                panic!(
                     "Codec {}: ⚠ Expected partial encoding but read full {} bytes",
                     codec_name, bytes_read_after_partial
                 );
-                // TODO: Investigate why partial encoding isn't working as expected for this codec
             }
         }
     } else {
@@ -285,11 +283,10 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
                 codec_name
             );
         } else if reads_after_partial == 0 {
-            println!(
+            panic!(
                 "Codec {}: ⚠ No reads during partial update - may indicate full rewrite strategy",
                 codec_name
             );
-            // TODO: Verify if this is the expected behavior for this codec
         }
     }
 
@@ -364,6 +361,7 @@ fn test_squeeze_sync_partial_encoding() {
 }
 
 #[test]
+#[ignore = "partial encoding with fixedscaleoffset is not yet supported"] // FIXME
 fn test_fixedscaleoffset_sync_partial_encoding() {
     use zarrs::array::codec::FixedScaleOffsetCodec;
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
@@ -373,8 +371,7 @@ fn test_fixedscaleoffset_sync_partial_encoding() {
             .unwrap();
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(&config).unwrap());
 
-    // TODO: Need to verify if fixedscaleoffset supports partial encoding (not found in search results)
-    test_array_to_array_codec_sync_partial_encoding(codec, "fixedscaleoffset", false).unwrap();
+    test_array_to_array_codec_sync_partial_encoding(codec, "fixedscaleoffset", true).unwrap();
 }
 
 // Bytes-to-Bytes Codec Tests

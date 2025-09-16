@@ -21,7 +21,7 @@ use crate::{
 use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
 
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 use super::{
     calculate_order_decode, calculate_order_encode, permute, transpose_array,
@@ -276,6 +276,22 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
+                decoded_representation.clone(),
+                self.order.clone(),
+            ),
+        ))
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(
+            super::transpose_codec_partial::TransposeCodecPartial::new(
+                input_output_handle,
                 decoded_representation.clone(),
                 self.order.clone(),
             ),

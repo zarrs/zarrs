@@ -21,7 +21,7 @@ use crate::{
 use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
 
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 /// A Squeeze codec implementation.
 #[derive(Clone, Debug)]
@@ -182,6 +182,21 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_handle,
+                decoded_representation.clone(),
+            ),
+        ))
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(
+            super::squeeze_codec_partial::SqueezeCodecPartial::new(
+                input_output_handle,
                 decoded_representation.clone(),
             ),
         ))
