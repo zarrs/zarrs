@@ -7,7 +7,7 @@ use crate::{
     array::{
         codec::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-            BytesPartialEncoderTraits, CodecError, CodecOptions, InvalidBytesLengthError,
+            BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
         update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation, DataType,
     },
@@ -52,8 +52,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_output_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -131,8 +131,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_output_handle.size().await
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists().await
     }
 
     fn size_held(&self) -> usize {
@@ -235,35 +235,7 @@ where
         }
 
         // If the chunk is empty, initialise the chunk with the fill value and update
-        if self.input_output_handle.size()?.is_none() {
-            // Create a chunk filled with the fill value
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
-                self.decoded_representation.num_elements(),
-            );
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
-            let chunk_bytes = update_array_bytes(
-                chunk_bytes,
-                &self.decoded_representation.shape_u64(),
-                indexer,
-                bytes,
-                self.decoded_representation.data_type().size(),
-            )?;
-            let mut chunk_bytes: Vec<u8> = chunk_bytes
-                .into_fixed()
-                .expect("fixed data type")
-                .into_owned();
-
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
-                }
-            }
-
-            self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
-        } else {
+        if self.input_output_handle.exists()? {
             let chunk_shape = self.decoded_representation.shape_u64();
             let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
 
@@ -291,6 +263,34 @@ where
 
             self.input_output_handle
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+        } else {
+            // Create a chunk filled with the fill value
+            let array_size = ArraySize::new(
+                self.decoded_representation.data_type().size(),
+                self.decoded_representation.num_elements(),
+            );
+            let chunk_bytes =
+                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
+            let chunk_bytes = update_array_bytes(
+                chunk_bytes,
+                &self.decoded_representation.shape_u64(),
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?;
+            let mut chunk_bytes: Vec<u8> = chunk_bytes
+                .into_fixed()
+                .expect("fixed data type")
+                .into_owned();
+
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
+                }
+            }
+
+            self.input_output_handle
+                .partial_encode(0, Cow::Owned(chunk_bytes), options)
         }
     }
 
@@ -336,36 +336,7 @@ where
         }
 
         // If the chunk is empty, initialise the chunk with the fill value and update
-        if self.input_output_handle.size().await?.is_none() {
-            // Create a chunk filled with the fill value
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
-                self.decoded_representation.num_elements(),
-            );
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
-            let chunk_bytes = update_array_bytes(
-                chunk_bytes,
-                &self.decoded_representation.shape_u64(),
-                indexer,
-                bytes,
-                self.decoded_representation.data_type().size(),
-            )?;
-            let mut chunk_bytes: Vec<u8> = chunk_bytes
-                .into_fixed()
-                .expect("fixed data type")
-                .into_owned();
-
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
-                }
-            }
-
-            self.input_output_handle
-                .partial_encode(0, Cow::Owned(chunk_bytes), options)
-                .await
-        } else {
+        if self.input_output_handle.exists().await? {
             let chunk_shape = self.decoded_representation.shape_u64();
             let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
 
@@ -393,6 +364,35 @@ where
 
             self.input_output_handle
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
+                .await
+        } else {
+            // Create a chunk filled with the fill value
+            let array_size = ArraySize::new(
+                self.decoded_representation.data_type().size(),
+                self.decoded_representation.num_elements(),
+            );
+            let chunk_bytes =
+                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
+            let chunk_bytes = update_array_bytes(
+                chunk_bytes,
+                &self.decoded_representation.shape_u64(),
+                indexer,
+                bytes,
+                self.decoded_representation.data_type().size(),
+            )?;
+            let mut chunk_bytes: Vec<u8> = chunk_bytes
+                .into_fixed()
+                .expect("fixed data type")
+                .into_owned();
+
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
+                }
+            }
+
+            self.input_output_handle
+                .partial_encode(0, Cow::Owned(chunk_bytes), options)
                 .await
         }
     }

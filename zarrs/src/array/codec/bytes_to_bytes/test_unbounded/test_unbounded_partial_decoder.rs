@@ -26,8 +26,8 @@ impl TestUnboundedPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -76,8 +76,8 @@ impl AsyncTestUnboundedPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size().await
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

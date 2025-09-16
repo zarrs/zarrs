@@ -33,8 +33,8 @@ impl StripSuffixPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -95,8 +95,8 @@ impl AsyncStripSuffixPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size().await
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

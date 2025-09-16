@@ -62,8 +62,8 @@ impl ArrayPartialDecoderCache {
 }
 
 impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        Ok(Some(u64::try_from(self.cache.size()).unwrap()))
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
     }
 
     fn size_held(&self) -> usize {
@@ -100,8 +100,8 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         self.decoded_representation.data_type()
     }
 
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        Ok(Some(u64::try_from(self.cache.size()).unwrap()))
+    async fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
     }
 
     fn size_held(&self) -> usize {

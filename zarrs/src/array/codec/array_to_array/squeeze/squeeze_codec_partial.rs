@@ -42,8 +42,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_output_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -120,8 +120,8 @@ where
         self.decoded_representation.data_type()
     }
 
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_output_handle.size().await
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

@@ -55,8 +55,8 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists()
     }
 
     fn size_held(&self) -> usize {
@@ -113,8 +113,8 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         self.decoded_representation.data_type()
     }
 
-    async fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_handle.size().await
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
     }
 
     fn size_held(&self) -> usize {

@@ -101,8 +101,8 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
         self.decoded_representation.data_type()
     }
 
-    fn size(&self) -> Result<Option<u64>, StorageError> {
-        self.input_output_handle.size()
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_output_handle.exists()
     }
 
     fn size_held(&self) -> usize {
