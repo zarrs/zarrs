@@ -1,8 +1,6 @@
 //! A cache for partial decoders.
 
 use std::borrow::Cow;
-
-#[cfg(feature = "async")]
 use zarrs_storage::StorageError;
 
 use crate::{
