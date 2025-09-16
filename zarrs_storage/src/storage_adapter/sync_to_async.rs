@@ -1,8 +1,6 @@
 //! A sync to async storage adapter.
 //!
-//! This adapter has footguns, see [`SyncToAsyncStorageAdapter`].
-//!
-//! The docs for the [`SyncToAsyncBlockOn`] trait include an example implementation for the `tokio` runtime.
+//! The docs for the [`SyncToAsyncSpawnBlocking`] trait include an example implementation for the `tokio` runtime.
 
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncMaybeBytesIterator,
@@ -16,12 +14,12 @@ use std::sync::Arc;
 
 /// Trait for spawning synchronous work onto an asynchronous runtime.
 ///
-/// ### Example `tokio` implementation of [`SyncToAsyncBlockOn`].
+/// ### Example `tokio` implementation of [`SyncToAsyncSpawnBlocking`].
 /// ```rust,ignore
-/// # use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncBlockOn;
-/// struct TokioSpawn;
+/// # use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
+/// struct TokioSpawnBlocking;
 ///
-/// impl SyncToAsyncBlockOn for TokioSpawn {
+/// impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
 ///     fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
 ///     where
 ///         F: FnOnce() -> R + Send + 'static,
@@ -33,7 +31,7 @@ use std::sync::Arc;
 ///     }
 /// }
 /// ```
-pub trait SyncToAsyncBlockOn: MaybeSend + MaybeSync {
+pub trait SyncToAsyncSpawnBlocking: MaybeSend + MaybeSync {
     /// Spawns a blocking task.
     fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + MaybeSend
     where
@@ -45,16 +43,21 @@ pub trait SyncToAsyncBlockOn: MaybeSend + MaybeSync {
 ///
 /// A [`SyncToAsyncStorageAdapter`] uses `spawn_blocking` to run synchronous operations
 /// asynchronously without blocking the async runtime.
-pub struct SyncToAsyncStorageAdapter<TStorage: ?Sized, TBlockOn: SyncToAsyncBlockOn> {
+pub struct SyncToAsyncStorageAdapter<TStorage: ?Sized, TSpawnBlocking: SyncToAsyncSpawnBlocking> {
     storage: Arc<TStorage>,
-    block_on: TBlockOn,
+    spawn_blocking: TSpawnBlocking,
 }
 
-impl<TStorage: ?Sized, TBlockOn: SyncToAsyncBlockOn> SyncToAsyncStorageAdapter<TStorage, TBlockOn> {
+impl<TStorage: ?Sized, TSpawnBlocking: SyncToAsyncSpawnBlocking>
+    SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
+{
     /// Create a new sync to async storage adapter.
     #[must_use]
-    pub fn new(storage: Arc<TStorage>, block_on: TBlockOn) -> Self {
-        Self { storage, block_on }
+    pub fn new(storage: Arc<TStorage>, spawn_blocking: TSpawnBlocking) -> Self {
+        Self {
+            storage,
+            spawn_blocking,
+        }
     }
 
     async fn spawn_blocking<F, R>(&self, f: F) -> R
@@ -62,14 +65,16 @@ impl<TStorage: ?Sized, TBlockOn: SyncToAsyncBlockOn> SyncToAsyncStorageAdapter<T
         F: FnOnce() -> R + MaybeSend + 'static,
         R: MaybeSend + 'static,
     {
-        self.block_on.spawn_blocking(f).await
+        self.spawn_blocking.spawn_blocking(f).await
     }
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage: ?Sized + ReadableStorageTraits + 'static, TBlockOn: SyncToAsyncBlockOn>
-    AsyncReadableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TBlockOn>
+impl<
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        TSpawnBlocking: SyncToAsyncSpawnBlocking,
+    > AsyncReadableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
     async fn get_partial_many<'a>(
         &'a self,
@@ -114,8 +119,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static, TBlockOn: SyncToAsyncBl
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage: ?Sized + ListableStorageTraits + 'static, TBlockOn: SyncToAsyncBlockOn>
-    AsyncListableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TBlockOn>
+impl<
+        TStorage: ?Sized + ListableStorageTraits + 'static,
+        TSpawnBlocking: SyncToAsyncSpawnBlocking,
+    > AsyncListableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
     async fn list(&self) -> Result<StoreKeys, StorageError> {
         let storage = self.storage.clone();
@@ -145,8 +152,10 @@ impl<TStorage: ?Sized + ListableStorageTraits + 'static, TBlockOn: SyncToAsyncBl
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl<TStorage: ?Sized + WritableStorageTraits + 'static, TBlockOn: SyncToAsyncBlockOn>
-    AsyncWritableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TBlockOn>
+impl<
+        TStorage: ?Sized + WritableStorageTraits + 'static,
+        TSpawnBlocking: SyncToAsyncSpawnBlocking,
+    > AsyncWritableStorageTraits for SyncToAsyncStorageAdapter<TStorage, TSpawnBlocking>
 {
     async fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
         let key = key.clone();

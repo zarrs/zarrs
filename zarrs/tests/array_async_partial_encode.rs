@@ -21,10 +21,10 @@ use zarrs_storage::{
     AsyncReadableStorageTraits,
 };
 
-use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncBlockOn;
-struct TokioSpawn;
+use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
+struct TokioSpawnBlocking;
 
-impl SyncToAsyncBlockOn for TokioSpawn {
+impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
     fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
     where
         F: FnOnce() -> R + Send + 'static,
@@ -48,7 +48,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),
-        TokioSpawn,
+        TokioSpawnBlocking,
     ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
@@ -204,7 +204,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),
-        TokioSpawn,
+        TokioSpawnBlocking,
     ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
@@ -597,7 +597,7 @@ async fn test_codec_chain_async_partial_encoding() {
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),
-        TokioSpawn,
+        TokioSpawnBlocking,
     ));
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
 
