@@ -176,6 +176,17 @@ async fn test_array_to_array_codec_async_partial_encoding<
         ]
     );
 
+    // Test partial encoder methods
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        codec_name, encoder_size_held
+    );
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
+
     Ok(())
 }
 
@@ -336,6 +347,17 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
             -1.0, -1.0, -1.0, -1.0, //
         ]
     );
+
+    // Test partial encoder methods
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        codec_name, encoder_size_held
+    );
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
 
     Ok(())
 }
@@ -674,4 +696,15 @@ async fn test_codec_chain_async_partial_encoding() {
             -1.0, -1.0, -1.0, -1.0, //
         ]
     );
+
+    // Test partial encoder methods
+    let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
+    assert!(partial_encoder.exists().await.unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        "chain", encoder_size_held
+    );
+    partial_encoder.erase().await.unwrap();
+    assert!(!partial_encoder.exists().await.unwrap());
 }

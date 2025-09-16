@@ -149,6 +149,17 @@ fn test_array_to_array_codec_sync_partial_encoding<
         ]
     );
 
+    // Test partial encoder methods
+    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    assert!(partial_encoder.exists().unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        codec_name, encoder_size_held
+    );
+    partial_encoder.erase().unwrap();
+    assert!(!partial_encoder.exists().unwrap());
+
     Ok(())
 }
 
@@ -301,6 +312,17 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
             -1.0, -1.0, -1.0, -1.0, //
         ]
     );
+
+    // Test partial encoder methods
+    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    assert!(partial_encoder.exists().unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        codec_name, encoder_size_held
+    );
+    partial_encoder.erase().unwrap();
+    assert!(!partial_encoder.exists().unwrap());
 
     Ok(())
 }
@@ -600,4 +622,15 @@ fn test_codec_chain_sync_partial_encoding() {
             -1.0, -1.0, -1.0, -1.0, //
         ]
     );
+
+    // Test partial encoder methods
+    let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
+    assert!(partial_encoder.exists().unwrap());
+    let encoder_size_held = partial_encoder.size_held();
+    println!(
+        "Codec {} partial encoder size_held(): {}",
+        "chain", encoder_size_held
+    );
+    partial_encoder.erase().unwrap();
+    assert!(!partial_encoder.exists().unwrap());
 }
