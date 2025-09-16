@@ -64,10 +64,10 @@ where
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)?;
             do_transpose(
-                encoded_value,
+                &encoded_value,
                 array_subset,
                 &self.order,
-                &self.decoded_representation,
+                self.decoded_representation.data_type().size(),
             )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
@@ -100,9 +100,18 @@ where
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
+            let encoded_value = do_transpose(
+                bytes,
+                array_subset,
+                &self.order,
+                self.decoded_representation.data_type().size(),
+            )?;
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
-            self.input_output_handle
-                .partial_encode(&array_subset_transposed, bytes, options)
+            self.input_output_handle.partial_encode(
+                &array_subset_transposed,
+                &encoded_value,
+                options,
+            )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
             self.input_output_handle
@@ -146,10 +155,10 @@ where
                 .partial_decode(&array_subset_transposed, options)
                 .await?;
             do_transpose(
-                encoded_value,
+                &encoded_value,
                 array_subset,
                 &self.order,
-                &self.decoded_representation,
+                self.decoded_representation.data_type().size(),
             )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
