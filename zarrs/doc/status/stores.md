@@ -7,8 +7,8 @@
 | [AsyncObjectStore]                 |        | &check;* | &check;* | &check;* |         | &check; | [zarrs_object_store]           |
 | [AsyncIcechunkStore]               |        | &check;* | &check;* | &check;* |         | &check; | [zarrs_icechunk]               |
 | [HTTPStore]                        |        | &check;  |          |          | &check; |         | [zarrs_http]                   |
-| [AsyncToSyncStorageAdapter]        |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
-| [SyncToAsyncStorageAdapter]        |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
+| [AsyncToSyncStorageAdapter]        |        | &check;  | &check;  | &check;  | &check; |         | [zarrs_storage]<sup>†</sup>    |
+| [SyncToAsyncStorageAdapter]        |        | &check;  | &check;  | &check;  |         | &check; | [zarrs_storage]<sup>†</sup>    |
 | [UsageLogStorageAdapter]           |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [PerformanceMetricsStorageAdapter] |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [ZipStorageAdapter]                |        | &check;  |          | &check;  | &check; |         | [zarrs_zip]                    |
