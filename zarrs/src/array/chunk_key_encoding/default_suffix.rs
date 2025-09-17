@@ -62,6 +62,10 @@ pub(crate) fn create_chunk_key_encoding_default_suffix(
 
 /// A `default_suffix` chunk key encoding.
 ///
+/// <div class="warning">
+/// This chunk key encoding is experimental and may be incompatible with other Zarr V3 implementations.
+/// </div>
+///
 /// This matches the functionality of the `default` chunk key encoding, but a suffix is appended to each key.
 #[derive(Debug, Clone)]
 pub struct DefaultSuffixChunkKeyEncoding {
