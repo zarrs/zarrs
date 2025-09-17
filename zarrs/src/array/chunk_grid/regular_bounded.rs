@@ -51,6 +51,10 @@ pub(crate) fn create_chunk_grid_regular_bounded(
 }
 
 /// A `regular_bounded` chunk grid.
+///
+/// <div class="warning">
+/// This chunk grid is experimental and may be incompatible with other Zarr V3 implementations.
+/// </div>
 #[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone)]
 pub struct RegularBoundedChunkGrid {
