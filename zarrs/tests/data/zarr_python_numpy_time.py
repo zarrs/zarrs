@@ -10,7 +10,7 @@ import numpy as np
 import zarr
 print(zarr.__version__)
 
-for unit in ["Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns"]:
+for unit in ["Y", "W", "D", "h", "m", "s", "ms", "us", "ns"]: # "M" skipped due to case insensitive filesystem issues
     for scale_factor in ["", "10"]:
         if scale_factor == "10" and unit not in ["ms", "us"]:
             continue
