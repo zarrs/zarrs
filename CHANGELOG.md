@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.22.0] - 2025-09-17
 
+### Highlights
+- This release includes several **Major Breaking** changes that will certainly require changes to user code.
+- Many foundational traits have been refactored for consistency, simplicity, and to support new capabilities.
+- Initial generic indexing and WASM support
+- More partial encoding support. It remains experimental and lightly documented.
+- New experimental extensions (codecs, chunk grids, chunk key encodings).
+
 ### Added
 - Add `index_location` support to `vlen` codec
   - Add `VlenCodec::with_index_location()`
