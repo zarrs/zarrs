@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-09-17
+
 ### Added
 - Implement `Clone` for `Error` structs
 - Add `MaybeSend`/`MaybeSync` for WASM compatibility in dependent crates ([#245] by [@keller-mark])
@@ -43,7 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `plugin` module of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_plugin-v0.2.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_plugin-v0.2.2...HEAD
+[0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.2
 [0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.1
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.0
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.1.0

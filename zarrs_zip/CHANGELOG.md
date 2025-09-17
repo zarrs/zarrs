@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Changed
+## [0.3.0] - 2025-09-17
+
+### Changed
 - **Breaking**: Bump `zarrs_storage` to 0.4.0
 
-## Fixed
+### Fixed
 - Use `ZipFileSeek` instead of `ZipFile`, avoiding unnecessary reads
 
 ## [0.2.3] - 2025-06-19
@@ -43,7 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_zip-v0.2.3...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_zip-v0.3.0...HEAD
+[0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_zip-v0.3.0
 [0.2.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_zip-v0.2.3
 [0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_zip-v0.2.2
 [0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_zip-v0.2.1
