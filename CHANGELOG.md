@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.22.0-beta.3] - 2025-09-17
+## [0.22.0] - 2025-09-18
 
-## [0.22.0-beta.2] - 2025-09-13
-
-## [0.22.0-beta.1] - 2025-09-07
-
-## [0.22.0-beta.0] - 2025-09-06
+### Highlights
+- This release includes several **Major Breaking** changes that will certainly require changes to user code.
+- Many foundational traits have been refactored for consistency, simplicity, and to support new capabilities.
+- Initial generic indexing and WASM support
+- More partial encoding support. It remains experimental and lightly documented.
+- New experimental extensions (codecs, chunk grids, chunk key encodings).
 
 ### Added
 - Add `index_location` support to `vlen` codec
@@ -167,6 +168,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `bitround` partial decoder needlessly rounding on decode
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
+
+## [0.22.0-beta.3] - 2025-09-17
+
+## [0.22.0-beta.2] - 2025-09-13
+
+## [0.22.0-beta.1] - 2025-09-07
+
+## [0.22.0-beta.0] - 2025-09-06
 
 ## [0.21.2] - 2025-06-19
 
@@ -1565,7 +1574,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.21.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.0...HEAD
+[0.22.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0
 [0.22.0-beta.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.3
 [0.22.0-beta.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.2
 [0.22.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.1
