@@ -1,4 +1,30 @@
 //! The `regular_bounded` chunk grid.
+//!
+//! This chunk grid is the same as `regular`, except that chunks at the edges of the array may be smaller than the specified chunk shape.
+//!
+//! <div class="warning">
+//! This chunk grid is experimental and may be incompatible with other Zarr V3 implementations.
+//! </div>
+//!
+//! ### Compatible Implementations
+//! None
+//!
+//! ### Specification
+//! - <https://chunkgrid.zarrs.dev/regular_bounded>
+//!
+//! ### Chunk Grid `name` Aliases (Zarr V3)
+//! - `zarrs.regular_bounded`
+//!
+//! ### Chunk Grid `configuration` Example - [`RegularBoundedChunkGridConfiguration`]:
+//! ```rust
+//! # let JSON = r#"
+//! {
+//!   "chunk_shape": [100, 100]
+//! }
+//! # "#;
+//! # use zarrs::array::chunk_grid::RegularBoundedChunkGridConfiguration;
+//! # let configuration: RegularBoundedChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
+//! ```
 
 use itertools::izip;
 use std::num::NonZeroU64;
@@ -51,10 +77,6 @@ pub(crate) fn create_chunk_grid_regular_bounded(
 }
 
 /// A `regular_bounded` chunk grid.
-///
-/// <div class="warning">
-/// This chunk grid is experimental and may be incompatible with other Zarr V3 implementations.
-/// </div>
 #[allow(clippy::struct_field_names)]
 #[derive(Debug, Clone)]
 pub struct RegularBoundedChunkGrid {
