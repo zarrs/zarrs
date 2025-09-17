@@ -2,6 +2,10 @@
 //!
 //! Performs a reshaping operation.
 //!
+//! <div class="warning">
+//! This codec is experimental and may be incompatible with other Zarr V3 implementations.
+//! </div>
+//!
 //! ### Compatible Implementations
 //! None
 //!
