@@ -2,7 +2,7 @@
 | ------------------------ | --------- | ------- | ------- | ------------ |
 | [`default`]              | [ZEP0001] | &check; |         |              |
 | [`v2`]                   | [ZEP0001] | &check; | &check; |              |
-| [`zarrs.default_suffix`] |           | &check; | &check; |              |
+| 🚧[`zarrs.default_suffix`] |           | &check; |         |              |
 
 [`default`]: crate::array::chunk_key_encoding::DefaultChunkKeyEncoding
 [`v2`]: crate::array::chunk_key_encoding::V2ChunkKeyEncoding
