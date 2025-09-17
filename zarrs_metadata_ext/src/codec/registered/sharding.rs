@@ -33,19 +33,14 @@ pub struct ShardingCodecConfigurationV1 {
 }
 
 /// The sharding index location.
-#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq, Debug, Display)]
+#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq, Debug, Display, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ShardingIndexLocation {
     /// The index is at the start of the shard, before the chunks.
     Start,
     /// The index is at the end of the shard, after the chunks.
+    #[default]
     End,
-}
-
-impl Default for ShardingIndexLocation {
-    fn default() -> Self {
-        Self::End
-    }
 }
 
 #[cfg(test)]
