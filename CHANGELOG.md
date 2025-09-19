@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.1] - 2025-09-19
+
+### Fixed
+- Bump `zarrs_data_type` to 0.4.0
+  - 0.3.3 was yanked as it missed a breaking change
+
 ## [0.22.0] - 2025-09-18
+
+*This release was yanked.*
 
 ### Highlights
 - This release includes several **Major Breaking** changes that will certainly require changes to user code.
@@ -1574,7 +1582,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.1...HEAD
+[0.22.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.1
 [0.22.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0
 [0.22.0-beta.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.3
 [0.22.0-beta.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.2
