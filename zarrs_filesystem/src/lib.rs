@@ -283,30 +283,24 @@ impl ReadableStorageTraits for FilesystemStore {
                     let file_size = file.metadata()?.size();
                     let ps: usize = page_size::get();
                     let range = byte_range.to_range(file_size);
-                    let offset = usize::try_from(range.start).unwrap();
-                    let length = usize::try_from(range.end - range.start).unwrap();
-                    if range.end > file_size {
-                        return Err(StorageError::IOError(Arc::new(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
-                    }
-                    let fd = file.as_raw_fd();
-                    let aligned_offset = offset - (offset % ps);
-                    // If the requested length is less than the page size, the aligned_offset could in theory still add on an extra page to the buffer needed to read in the data aligned.
-                    // So offset % ps represents the starting point in the buffer where the requested data is (see the second-to-last line).
-                    // If that point plus length runs over ps, we need another ps worth of data.
-                    let buf_len = if length < ps { ((offset % ps) + length).next_multiple_of(ps) } else { length.next_multiple_of(ps) + ps };
-                    // Because we can't `read_exact` more bytes than are in the file, we need to use these libc calls to do O_DIRECT reading.
-                    let mut buf_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-                    let ret = unsafe { libc::posix_memalign(&mut buf_ptr, ps,  buf_len) };
-                    assert!(ret == 0, "posix_memalign failed during O_DIRECT reading");
-                    let buf = unsafe { std::slice::from_raw_parts_mut(buf_ptr.cast::<u8>(), buf_len) };
-                    let read_bytes = unsafe { libc::pread(fd, buf_ptr, buf_len, i64::try_from(aligned_offset).unwrap()) };
-                    assert!(read_bytes >= 0, "pread failed during O_DIRECT reading");
 
-                    let start_in_buf = offset - aligned_offset;
-                    let last_bytes = buf[start_in_buf..(start_in_buf + length)].to_vec();
-                    // Free the unused memory
-                    unsafe { libc::free(buf_ptr) };
-                    return Ok(Bytes::from(last_bytes));
+                    // Allocate an aligned output buffer
+                    let length = usize::try_from(range.end - range.start).unwrap();
+                    let mut aligned_buf = bytes_aligned(length);
+                    aligned_buf.resize(aligned_buf.capacity(), 0); // NOTE: Could avoid memset with spare_capacity_mut + unsafe
+
+                    // Seek to the start of the page
+                    let page_delta = range.start % (ps as u64);
+                    let page_offset = range.start - page_delta;
+                    file.seek(SeekFrom::Start(page_offset))?;
+
+                    // Read as many bytes as required, last page can be fewer
+                    let length_from_page_offset = usize::try_from(range.end - page_offset).unwrap();
+                    file.read_exact(&mut aligned_buf[..length_from_page_offset])?;
+
+                    // Split out the bytes of interest (zero-copy)
+                    let buf = aligned_buf.split_off(usize::try_from(page_delta).unwrap()).split_to(length).freeze();
+                    return Ok(buf);
                 }
                 // Seek
                 match byte_range {
