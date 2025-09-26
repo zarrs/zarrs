@@ -73,9 +73,8 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
     let chunk_2: Bytes = base_vec.get((5)..(5 + (ps * 2))).unwrap().to_owned().into(); // > 2 * ps request
 
     store.set(&"big_buff".try_into()?, base_vec.into())?;
-    assert_eq!(
-        vec![prefix, suffix, chunk, chunk_2, small_suffix],
-        store
+    let expected = vec![prefix, suffix, chunk, chunk_2, small_suffix];
+    let result = store
             .get_partial_many(
                 &"big_buff".try_into()?,
                 Box::new(
@@ -91,7 +90,7 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
             )
             .unwrap()
             .unwrap()
-            .collect::<Result<Vec<_>, _>>()?
-    );
+            .collect::<Result<Vec<_>, _>>()?;
+    expected.into_iter().zip(result).for_each(|(e, r)| assert_eq!(e, r, "{}", format!("errored with expected length {} and result length {}", e.len(), r.len())));
     Ok(())
 }

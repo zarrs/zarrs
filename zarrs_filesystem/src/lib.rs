@@ -283,21 +283,30 @@ impl ReadableStorageTraits for FilesystemStore {
                     let file_size = file.metadata()?.size();
                     let ps: usize = page_size::get();
                     let range = byte_range.to_range(file_size);
-
-                    // Allocate an aligned output buffer
+                    if range.end > file_size {
+                        return Err(StorageError::IOError(Arc::new(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "TODO: To make test pass and match the behavior in the non-direct_io case, requesting length > file size is not permitted"))));
+                    }
                     let length = usize::try_from(range.end - range.start).unwrap();
-                    let mut aligned_buf = bytes_aligned(length);
-                    aligned_buf.extend(std::iter::repeat(0).take(aligned_buf.capacity().next_multiple_of(ps))); // NOTE: Could avoid memset with spare_capacity_mut + unsafe
 
-                    let fd = file.as_raw_fd();
                     let page_delta = range.start % (ps as u64);
                     let page_offset = range.start - page_delta;
-                    let buf_ptr = aligned_buf.as_mut_ptr();
-                    let read_bytes = unsafe { libc::pread(fd, buf_ptr as *mut libc::c_void, aligned_buf.len(), i64::try_from(page_offset).unwrap()) };
+
+                    // If the length is less than the page size, we still need to account for the page_delta as part of the read length.
+                    // But the total of page_delta+length could be less than a page size, in which case we save reading in some data potentially in this case.
+                    // In contrast, once length is greater than page_size, we can simply take the next multiple and add an extra page to account for the page_delta regardless.
+                    let read_len = if length < ps { (usize::try_from(page_delta).unwrap() + length).next_multiple_of(ps) } else { length.next_multiple_of(ps) + ps };
+                    // Now we add an extra page for doing the actual alignment.
+                    let mut bytes = BytesMut::zeroed(read_len + ps);
+                    let offset = bytes.as_ptr().align_offset(ps);
+                    let mut split_bytes = bytes.split_off(offset);
+
+                    let fd = file.as_raw_fd();
+                    let buf_ptr = split_bytes.as_mut_ptr();
+                    let read_bytes = unsafe { libc::pread(fd, buf_ptr as *mut libc::c_void, read_len, i64::try_from(page_offset).unwrap()) };
                     let last_error = std::io::Error::last_os_error();
                     assert!(read_bytes >= 0, "pread failed during O_DIRECT with {last_error}");
                     // Split out the bytes of interest (zero-copy)
-                    let buf = aligned_buf.split_off(usize::try_from(page_delta).unwrap()).split_to(length).freeze();
+                    let buf = split_bytes.split_off(usize::try_from(page_delta).unwrap()).split_to(length).freeze();
                     return Ok(buf);
                 }
                 // Seek
