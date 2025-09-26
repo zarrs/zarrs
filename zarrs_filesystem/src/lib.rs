@@ -302,7 +302,7 @@ impl ReadableStorageTraits for FilesystemStore {
 
                     let fd = file.as_raw_fd();
                     let buf_ptr = split_bytes.as_mut_ptr();
-                    let read_bytes = unsafe { libc::pread(fd, buf_ptr as *mut libc::c_void, read_len, i64::try_from(page_offset).unwrap()) };
+                    let read_bytes = unsafe { libc::pread(fd, buf_ptr.cast::<libc::c_void>(), read_len, i64::try_from(page_offset).unwrap()) };
                     let last_error = std::io::Error::last_os_error();
                     assert!(read_bytes >= 0, "pread failed during O_DIRECT with {last_error}");
                     // Split out the bytes of interest (zero-copy)

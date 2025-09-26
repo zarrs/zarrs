@@ -75,22 +75,33 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
     store.set(&"big_buff".try_into()?, base_vec.into())?;
     let expected = vec![prefix, suffix, chunk, chunk_2, small_suffix];
     let result = store
-            .get_partial_many(
-                &"big_buff".try_into()?,
-                Box::new(
-                    [
-                        ByteRange::FromStart(1, Some(10)),
-                        ByteRange::Suffix(1500),
-                        ByteRange::FromStart(1, Some((ps + 2) as u64)),
-                        ByteRange::FromStart(5, Some((ps * 2) as u64)),
-                        ByteRange::Suffix(15)
-                    ]
-                    .into_iter()
-                )
+        .get_partial_many(
+            &"big_buff".try_into()?,
+            Box::new(
+                [
+                    ByteRange::FromStart(1, Some(10)),
+                    ByteRange::Suffix(1500),
+                    ByteRange::FromStart(1, Some((ps + 2) as u64)),
+                    ByteRange::FromStart(5, Some((ps * 2) as u64)),
+                    ByteRange::Suffix(15),
+                ]
+                .into_iter(),
+            ),
+        )
+        .unwrap()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()?;
+    expected.into_iter().zip(result).for_each(|(e, r)| {
+        assert_eq!(
+            e,
+            r,
+            "{}",
+            format!(
+                "errored with expected length {} and result length {}",
+                e.len(),
+                r.len()
             )
-            .unwrap()
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()?;
-    expected.into_iter().zip(result).for_each(|(e, r)| assert_eq!(e, r, "{}", format!("errored with expected length {} and result length {}", e.len(), r.len())));
+        )
+    });
     Ok(())
 }
