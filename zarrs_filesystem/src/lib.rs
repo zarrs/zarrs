@@ -287,17 +287,15 @@ impl ReadableStorageTraits for FilesystemStore {
                     // Allocate an aligned output buffer
                     let length = usize::try_from(range.end - range.start).unwrap();
                     let mut aligned_buf = bytes_aligned(length);
-                    aligned_buf.resize(aligned_buf.capacity(), 0); // NOTE: Could avoid memset with spare_capacity_mut + unsafe
+                    aligned_buf.extend(std::iter::repeat(0).take(aligned_buf.capacity().next_multiple_of(ps))); // NOTE: Could avoid memset with spare_capacity_mut + unsafe
 
-                    // Seek to the start of the page
+                    let fd = file.as_raw_fd();
                     let page_delta = range.start % (ps as u64);
                     let page_offset = range.start - page_delta;
-                    file.seek(SeekFrom::Start(page_offset))?;
-
-                    // Read as many bytes as required, last page can be fewer
-                    let length_from_page_offset = usize::try_from(range.end - page_offset).unwrap();
-                    file.read_exact(&mut aligned_buf[..length_from_page_offset])?;
-
+                    let buf_ptr = aligned_buf.as_mut_ptr();
+                    let read_bytes = unsafe { libc::pread(fd, buf_ptr as *mut libc::c_void, aligned_buf.len(), i64::try_from(page_offset).unwrap()) };
+                    let last_error = std::io::Error::last_os_error();
+                    assert!(read_bytes >= 0, "pread failed during O_DIRECT with {last_error}");
                     // Split out the bytes of interest (zero-copy)
                     let buf = aligned_buf.split_off(usize::try_from(page_delta).unwrap()).split_to(length).freeze();
                     return Ok(buf);
