@@ -1,8 +1,29 @@
 //! The `rectangular` chunk grid.
 //!
-//! This chunk grid is considered experimental as it is based on a draft Zarr enhancement proposal.
 //!
-//! See <https://zarr.dev/zeps/draft/ZEP0003.html>.
+//! <div class="warning">
+//! This chunk grid is experimental and may be incompatible with other Zarr V3 implementations.
+//! </div>
+//!
+//! # Compatible Implementations
+//! None
+//!
+//! # Specification
+//! - <https://zarr.dev/zeps/draft/ZEP0003.html>
+//!
+//! # Chunk Grid `name` Aliases (Zarr V3)
+//! - `rectangular`
+//!
+//! ### Chunk grid `configuration` Example - [`RectangularChunkGridConfiguration`]:
+//! ```rust
+//! # let JSON = r#"
+//! {
+//!   "chunk_shape": [[5, 5, 5, 15, 15, 20, 35], 10]
+//! }
+//! # "#;
+//! # use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridConfiguration;
+//! # let configuration: RectangularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
+//! ```
 
 use derive_more::From;
 use itertools::Itertools;

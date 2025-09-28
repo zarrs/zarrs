@@ -1,5 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
+use zarrs_storage::StorageError;
+
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
@@ -24,6 +26,10 @@ impl TestUnboundedPartialDecoder {
 }
 
 impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists()
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }
@@ -70,6 +76,10 @@ impl AsyncTestUnboundedPartialDecoder {
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
+    async fn exists(&self) -> Result<bool, StorageError> {
+        self.input_handle.exists().await
+    }
+
     fn size_held(&self) -> usize {
         self.input_handle.size_held()
     }

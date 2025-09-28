@@ -1,4 +1,5 @@
 //! Benchmark uncompressed unsharded and sharded arrays.
+#![allow(missing_docs)]
 
 use std::sync::Arc;
 

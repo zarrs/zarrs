@@ -1,4 +1,5 @@
 //! Benchmark `FillValue::equas_all()`.
+#![allow(missing_docs)]
 
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,

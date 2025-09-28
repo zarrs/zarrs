@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.22.0-beta.1] - 2025-09-07
+## [0.22.1] - 2025-09-19
 
-## [0.22.0-beta.0] - 2025-09-06
+### Fixed
+- Bump `zarrs_data_type` to 0.4.0
+  - 0.3.3 was yanked as it missed a breaking change
+
+## [0.22.0] - 2025-09-18
+
+*This release was yanked.*
+
+### Highlights
+- This release includes several **Major Breaking** changes that will certainly require changes to user code.
+- Many foundational traits have been refactored for consistency, simplicity, and to support new capabilities.
+- Initial generic indexing and WASM support
+- More partial encoding support. It remains experimental and lightly documented.
+- New experimental extensions (codecs, chunk grids, chunk key encodings).
 
 ### Added
 - Add `index_location` support to `vlen` codec
@@ -38,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `CodecPartialDefault`
 - Add partial encoding support for the `bytes` codec
 - Add experimental `reshape` codec
+- Add `Array::async_partial_encoder`  and partial encoding support to `Array::async_store_chunk_subset_opt`
 
 ### Changed
 - **Major Breaking**: Refactor `ArrayBuilder`
@@ -70,14 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `partial_decode[_into]()`: parameter `array_subsets: &[ArraySubset]` changed to `indexer: &dyn Indexer`
   - `partial_decode[_into]()`: returns `ArrayBytes<'_>` instead of `Vec<ArrayBytes<'_>>`
   - `partial_encode()`: parameter `subsets_and_bytes: &[(&ArraySubset, ArrayBytes<'_>)]` changed to `indexer: &dyn Indexer` and `bytes: &ArrayBytes<'_>`
-  - Rename `size()` to `size_held()` and add to `AsyncArrayPartialDecoderTraits`
+  - Rename `size()` to `size_held()` and add async version
   - Add `supports_partial_decode`
+  - Add `exists()`
 - **Breaking**: `[Async]BytesPartialDecoderTraits` trait changes:
   - Rename `partial_decode` to `partial_decode_many` and change parameter `decoded_regions: &[ByteRange]` to `ByteRangeIterator`
   - Add `partial_decode` for decoding a single byte range
   - Remove `partial_decode_concat`
-  - Rename `size()` to `size_held()` and add to `AsyncBytesPartialDecoderTraits`
+  - Rename `size()` to `size_held()` and add async version
   - Add `supports_partial_decode`
+  - Add `exists()`
 - **Breaking**: `Array::set_shape()` now returns a `Result`
   - Previously it was possible to resize an array to a shape incompatible with a `rectangular` chunk grid
 - **Breaking**: Refactor `ChunkGridTraits` and `ChunkGridPlugin`, chunk grids are initialised with the array shape
@@ -129,6 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `partial_decoder_capability` replaces `partial_decoder_should_cache_input` and `partial_decoder_decodes_all`
   - Add `CodecTraits::partial_encoder_capability` and `PartialEncoderCapability`
 - **Breaking**: remove `experimental_` prefix from `codec_store_metadata_if_encode_only` and switch default to `true`
+- **Breaking**: Make `StoragePartialEncoder` generic over the underlying storage and add async support
 - Optimised chunk key encoders
 - Conditional use of `Send` / `Sync` / `async_trait(?Send)` based on `target_arch` for WASM compatibility ([#245] by [@keller-mark])
 - Use WASM compatible `rayon_iter_concurrent_limit` internally
@@ -159,6 +176,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `bitround` partial decoder needlessly rounding on decode
 
 [#245]: https://github.com/zarrs/zarrs/pull/245
+
+## [0.22.0-beta.3] - 2025-09-17
+
+## [0.22.0-beta.2] - 2025-09-13
+
+## [0.22.0-beta.1] - 2025-09-07
+
+## [0.22.0-beta.0] - 2025-09-06
 
 ## [0.21.2] - 2025-06-19
 
@@ -1557,7 +1582,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.0-beta.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.1...HEAD
+[0.22.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.1
+[0.22.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0
+[0.22.0-beta.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.3
+[0.22.0-beta.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.2
 [0.22.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.1
 [0.22.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.0
 [0.21.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.2

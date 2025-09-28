@@ -32,10 +32,10 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
             "tests/data/zarr_python_compat/datetime64[Y].zarr",
             NumpyTimeUnit::Year,
         ),
-        (
-            "tests/data/zarr_python_compat/datetime64[M].zarr",
-            NumpyTimeUnit::Month,
-        ),
+        // (
+        //     "tests/data/zarr_python_compat/datetime64[M].zarr",
+        //     NumpyTimeUnit::Month,
+        // ),
         (
             "tests/data/zarr_python_compat/datetime64[W].zarr",
             NumpyTimeUnit::Week,

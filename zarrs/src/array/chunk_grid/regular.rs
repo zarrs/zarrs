@@ -1,6 +1,24 @@
 //! The `regular` chunk grid.
 //!
-//! See <https://zarr-specs.readthedocs.io/en/latest/v3/chunk-grids/regular-grid/index.html>.
+//! # Compatible Implementations
+//! - All Zarr V3 implementations
+//!
+//! ### Specification
+//! - <https://zarr-specs.readthedocs.io/en/latest/v3/chunk-grids/regular-grid/index.html>
+//!
+//! ### Chunk grid `name` Aliases (Zarr V3)
+//! - `regular`
+//!
+//! ### Chunk grid `configuration` Example - [`RegularChunkGridConfiguration`]:
+//! ```rust
+//! # let JSON = r#"
+//! {
+//!   "chunk_shape": [100, 100]
+//! }
+//! # "#;
+//! # use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+//! # let configuration: RegularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
+//! ```
 
 use std::num::NonZeroU64;
 use thiserror::Error;
