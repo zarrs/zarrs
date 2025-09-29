@@ -20,6 +20,7 @@ mod storage_value_io;
 pub mod store;
 mod store_key;
 mod store_prefix;
+pub mod url_pipeline;
 
 pub mod byte_range;
 use byte_range::{ByteOffset, InvalidByteRangeError};

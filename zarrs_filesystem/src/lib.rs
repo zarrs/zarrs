@@ -458,3 +458,20 @@ pub enum FilesystemStoreCreateError {
     #[error("base path {0} is not valid")]
     InvalidBasePath(PathBuf),
 }
+
+/// Register the filesystem store with the URL pipeline system.
+///
+/// This function should be called to enable URL pipeline support for the filesystem store.
+/// It is automatically called via the `ctor` crate when this library is loaded.
+#[ctor::ctor]
+fn register_url_pipeline() {
+    use zarrs_storage::url_pipeline::register_root_store;
+
+    register_root_store("file", |component| {
+        let path = PathBuf::from(&component.path);
+        let store = FilesystemStore::new(path).map_err(|e| {
+            zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+        })?;
+        Ok(Arc::new(store))
+    });
+}

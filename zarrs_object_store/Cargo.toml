@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 async-trait = "0.1.74"
+ctor = "0.2"
 futures = "0.3.29"
 object_store = { version = ">=0.12,<0.13", default-features = false }
 zarrs_storage = { workspace = true, features = ["async"] }

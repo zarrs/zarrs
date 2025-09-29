@@ -253,6 +253,40 @@ pub enum ZipStorageAdapterCreateError {
     StorageError(#[from] StorageError),
 }
 
+/// Register the ZIP storage adapter with the URL pipeline system.
+#[ctor::ctor]
+fn register_url_pipeline() {
+    use zarrs_storage::url_pipeline::register_adapter_store;
+
+    register_adapter_store("zip", |parent_store, component| {
+        // The parent store should contain a zip file
+        // For the URL pipeline, we assume the parent store root is the zip file
+        // and component.path is the path within the zip
+        let key = if component.path.is_empty() {
+            StoreKey::new("")?
+        } else {
+            StoreKey::new(&component.path)?
+        };
+
+        // If key is empty, the parent store itself is the zip
+        // Otherwise, parent store contains a file at key which is the zip
+        let adapter = if key.as_str().is_empty() {
+            // This case needs special handling - parent store should be converted to a key
+            return Err(
+                zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(
+                    "ZIP adapter requires a file path".to_string(),
+                ),
+            );
+        } else {
+            ZipStorageAdapter::new(parent_store, key).map_err(|e| {
+                zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+            })?
+        };
+
+        Ok(Arc::new(adapter))
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use walkdir::WalkDir;

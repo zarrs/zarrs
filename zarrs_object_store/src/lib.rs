@@ -276,3 +276,99 @@ impl<T: object_store::ObjectStore> AsyncListableStorageTraits for AsyncObjectSto
         Ok(size)
     }
 }
+
+/// Register the `object_store` with the URL pipeline system.
+#[ctor::ctor]
+fn register_url_pipeline() {
+    #[cfg(any(feature = "aws", feature = "gcp", feature = "azure"))]
+    use zarrs_storage::url_pipeline::register_async_root_store;
+
+    // Register S3
+    #[cfg(feature = "aws")]
+    register_async_root_store("s3", |component| {
+        // Parse s3://bucket/path
+        let parts: Vec<&str> = component.path.splitn(2, '/').collect();
+        if parts.is_empty() {
+            return Err(zarrs_storage::url_pipeline::UrlPipelineError::InvalidUrl(
+                "S3 URL must specify a bucket".to_string(),
+            ));
+        }
+
+        let bucket = parts[0];
+        let prefix = if parts.len() > 1 { parts[1] } else { "" };
+
+        let store = object_store::aws::AmazonS3Builder::from_env()
+            .with_bucket_name(bucket)
+            .build()
+            .map_err(|e| {
+                zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+            })?;
+
+        // Wrap with prefix if needed
+        let store = if prefix.is_empty() {
+            object_store::prefix::PrefixStore::new(store, "")
+        } else {
+            object_store::prefix::PrefixStore::new(store, prefix)
+        };
+
+        Ok(std::sync::Arc::new(AsyncObjectStore::new(store)))
+    });
+
+    // Register GCS
+    #[cfg(feature = "gcp")]
+    register_async_root_store("gs", |component| {
+        let parts: Vec<&str> = component.path.splitn(2, '/').collect();
+        if parts.is_empty() {
+            return Err(zarrs_storage::url_pipeline::UrlPipelineError::InvalidUrl(
+                "GCS URL must specify a bucket".to_string(),
+            ));
+        }
+
+        let bucket = parts[0];
+        let prefix = if parts.len() > 1 { parts[1] } else { "" };
+
+        let store = object_store::gcp::GoogleCloudStorageBuilder::from_env()
+            .with_bucket_name(bucket)
+            .build()
+            .map_err(|e| {
+                zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+            })?;
+
+        let store = if prefix.is_empty() {
+            object_store::prefix::PrefixStore::new(store, "")
+        } else {
+            object_store::prefix::PrefixStore::new(store, prefix)
+        };
+
+        Ok(std::sync::Arc::new(AsyncObjectStore::new(store)))
+    });
+
+    // Register Azure
+    #[cfg(feature = "azure")]
+    register_async_root_store("az", |component| {
+        let parts: Vec<&str> = component.path.splitn(2, '/').collect();
+        if parts.is_empty() {
+            return Err(zarrs_storage::url_pipeline::UrlPipelineError::InvalidUrl(
+                "Azure URL must specify a container".to_string(),
+            ));
+        }
+
+        let container = parts[0];
+        let prefix = if parts.len() > 1 { parts[1] } else { "" };
+
+        let store = object_store::azure::MicrosoftAzureBuilder::from_env()
+            .with_container_name(container)
+            .build()
+            .map_err(|e| {
+                zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+            })?;
+
+        let store = if prefix.is_empty() {
+            object_store::prefix::PrefixStore::new(store, "")
+        } else {
+            object_store::prefix::PrefixStore::new(store, prefix)
+        };
+
+        Ok(std::sync::Arc::new(AsyncObjectStore::new(store)))
+    });
+}

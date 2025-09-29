@@ -203,6 +203,28 @@ pub enum HTTPStoreCreateError {
     InvalidBaseURL(String),
 }
 
+/// Register the HTTP store with the URL pipeline system.
+#[ctor::ctor]
+fn register_url_pipeline() {
+    use zarrs_storage::url_pipeline::register_root_store;
+
+    register_root_store("http", |component| {
+        let url = format!("http://{}", component.path);
+        let store = HTTPStore::new(&url).map_err(|e| {
+            zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+        })?;
+        Ok(std::sync::Arc::new(store))
+    });
+
+    register_root_store("https", |component| {
+        let url = format!("https://{}", component.path);
+        let store = HTTPStore::new(&url).map_err(|e| {
+            zarrs_storage::url_pipeline::UrlPipelineError::StoreCreationFailed(e.to_string())
+        })?;
+        Ok(std::sync::Arc::new(store))
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
