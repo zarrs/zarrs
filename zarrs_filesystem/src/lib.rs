@@ -308,7 +308,7 @@ impl ReadableStorageTraits for FilesystemStore {
                 let a_offset_range = a_offset.to_range(file_size);
                 let last_a_true = a_orig.last().unwrap();
                 let b_true = b_orig.first().unwrap();
-                if b_offset_range.start < a_offset_range.end && last_a_true.end(file_size) < b_true.start(file_size) {
+                if b_offset_range.start <= a_offset_range.end && last_a_true.end(file_size) <= b_true.start(file_size) {
                     return Ok((ByteRange::FromStart(a_offset_range.start, Some(b_offset_range.end)), [&a_orig[..], &b_orig[..]].concat(), [&a_orig_id[..], &b_orig_id[..]].concat()));
                 }
                 Err(((a_offset, a_orig, a_orig_id), (b_offset, b_orig, b_orig_id)))
