@@ -70,7 +70,7 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
         .into(); // suffix large enough to trigger large double ps, see comment
     let small_suffix: Bytes = base_vec.get((ps * 5)..).unwrap().to_owned().into(); // suffix to fit in one page
     let chunk: Bytes = base_vec.get(1..ps + 3).unwrap().to_owned().into(); // > ps request
-    let chunk_2: Bytes = base_vec.get((5)..(5 + (ps * 2))).unwrap().to_owned().into(); // > 2 * ps request
+    let chunk_2: Bytes = base_vec.get((ps + 3)..(ps + 3 + (ps * 2 + 5))).unwrap().to_owned().into(); // consecutive request to the previous one
 
     store.set(&"big_buff".try_into()?, base_vec.into())?;
     let expected = vec![prefix, suffix, chunk, chunk_2, small_suffix];
@@ -82,7 +82,7 @@ fn direct_io() -> Result<(), Box<dyn Error>> {
                     ByteRange::FromStart(1, Some(10)),
                     ByteRange::Suffix(1500),
                     ByteRange::FromStart(1, Some((ps + 2) as u64)),
-                    ByteRange::FromStart(5, Some((ps * 2) as u64)),
+                    ByteRange::FromStart((ps + 3).try_into().unwrap(), Some((ps * 2 + 5) as u64)),
                     ByteRange::Suffix(15),
                 ]
                 .into_iter(),
