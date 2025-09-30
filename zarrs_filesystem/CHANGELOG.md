@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Changed
+## [0.3.0] - 2025-09-18
+
+### Changed
 - **Breaking**: Bump `zarrs_storage` to 0.4.0
 
 ## [0.2.3] - 2025-06-16
@@ -45,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.2.3...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.0...HEAD
+[0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.0
 [0.2.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.3
 [0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.2
 [0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.1

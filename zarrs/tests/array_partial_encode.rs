@@ -216,9 +216,11 @@ fn array_partial_encode_sharding_index_end() {
 
 #[test]
 fn array_partial_encode_sharding_index_compressed() {
+    #[cfg(feature = "blosc")]
     use zarrs_metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
     };
+    #[cfg(feature = "bz2")]
     use zarrs_metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     for index_location in &[ShardingIndexLocation::Start, ShardingIndexLocation::End] {

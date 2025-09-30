@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: ["macos-13", "macos-latest"]
+        runner: ["macos-15-intel", "macos-latest"]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

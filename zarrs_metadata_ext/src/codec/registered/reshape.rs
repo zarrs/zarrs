@@ -52,6 +52,14 @@ pub enum ReshapeDim {
     Auto(MustBe!(-1i64)),
 }
 
+impl ReshapeDim {
+    /// Create a new `ReshapeDim` with the corresponding `auto` value.
+    #[must_use]
+    pub fn auto() -> Self {
+        Self::Auto(MustBe!(-1i64))
+    }
+}
+
 impl<const N: usize> From<[u64; N]> for ReshapeDim {
     fn from(value: [u64; N]) -> Self {
         ReshapeDim::InputDims(value.to_vec())

@@ -1,4 +1,5 @@
 //! Benchmark the `blosc` codec in various configurations.
+#![allow(missing_docs)]
 
 use std::sync::Arc;
 

@@ -22,7 +22,10 @@ use crate::{
 };
 
 #[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::array::codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
@@ -684,6 +687,54 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
 
         Ok(input_handle)
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        mut input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        let array_representations =
+            self.get_array_representations(decoded_representation.clone())?;
+        let bytes_representations =
+            self.get_bytes_representations(array_representations.last().unwrap())?;
+
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            input_output_handle = Arc::clone(codec)
+                .async_partial_encoder(input_output_handle, bytes_representation, options)
+                .await?;
+        }
+
+        let mut input_output_handle = self
+            .array_to_bytes
+            .codec()
+            .clone()
+            .async_partial_encoder(
+                input_output_handle,
+                array_representations.last().unwrap(),
+                options,
+            )
+            .await?;
+
+        if self.array_to_array.is_empty() {
+            return Ok(input_output_handle);
+        }
+
+        for (codec, array_representation) in std::iter::zip(
+            self.array_to_array.iter().rev(),
+            array_representations.iter().rev().skip(1),
+        ) {
+            input_output_handle = Arc::clone(codec)
+                .async_partial_encoder(input_output_handle, array_representation, options)
+                .await?;
+        }
+
+        Ok(input_output_handle)
     }
 
     fn encoded_representation(
