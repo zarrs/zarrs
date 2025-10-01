@@ -90,23 +90,35 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         .unwrap()
         .to_owned()
         .into();
-    let small_suffix: Bytes = base_vec.get((base_vec.len() - 15)..).unwrap().to_owned().into(); // suffix fitting within one page
+    let small_suffix: Bytes = base_vec
+        .get((base_vec.len() - 15)..)
+        .unwrap()
+        .to_owned()
+        .into(); // suffix fitting within one page
 
     // Consecutive chunks with no overlap but are contiguous i.e., pages 2..3 and 3..4
     let chunk_consecutive_1: Bytes = base_vec.get((ps * 2)..(ps * 3)).unwrap().to_owned().into();
-    let chunk_consecutive_2: Bytes = base_vec
-        .get((ps * 3)..(ps * 4))
+    let chunk_consecutive_2: Bytes = base_vec.get((ps * 3)..(ps * 4)).unwrap().to_owned().into();
+
+    // Partially overlapping chunks i.e., pages 5..7 and 6..8
+    let chunk_overlap_1: Bytes = base_vec.get((ps * 6)..(ps * 8)).unwrap().to_owned().into();
+    let chunk_overlap_2: Bytes = base_vec
+        .get((ps * 6) - 1..(ps * 7))
         .unwrap()
         .to_owned()
         .into();
 
-    // Partially overlapping chunks i.e., pages 5..7 and 6..8
-    let chunk_overlap_1: Bytes = base_vec.get((ps * 6)..(ps * 8)).unwrap().to_owned().into();
-    let chunk_overlap_2: Bytes = base_vec.get((ps * 6) - 1..(ps * 7)).unwrap().to_owned().into();
-
     store.set(&"big_buff".try_into()?, base_vec.into())?;
     // Mix up ordering of requests to ensure returned order is independent of the underlying coalescing operation
-    let expected = vec![prefix, suffix, chunk_consecutive_1, small_suffix, chunk_overlap_1, chunk_consecutive_2, chunk_overlap_2];
+    let expected = vec![
+        prefix,
+        suffix,
+        chunk_consecutive_1,
+        small_suffix,
+        chunk_overlap_1,
+        chunk_consecutive_2,
+        chunk_overlap_2,
+    ];
     let result = store
         .get_partial_many(
             &"big_buff".try_into()?,
@@ -114,11 +126,23 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
                 [
                     ByteRange::FromStart(1, Some(10)),
                     ByteRange::Suffix(1500),
-                    ByteRange::FromStart((ps * 2).try_into().unwrap(), Some(ps.try_into().unwrap())),
+                    ByteRange::FromStart(
+                        (ps * 2).try_into().unwrap(),
+                        Some(ps.try_into().unwrap()),
+                    ),
                     ByteRange::Suffix(15),
-                    ByteRange::FromStart((ps * 6).try_into().unwrap(), Some((ps * 2).try_into().unwrap())),
-                    ByteRange::FromStart((ps * 3).try_into().unwrap(), Some(ps.try_into().unwrap())),
-                    ByteRange::FromStart((ps * 6 - 1).try_into().unwrap(), Some((ps + 1).try_into().unwrap())),
+                    ByteRange::FromStart(
+                        (ps * 6).try_into().unwrap(),
+                        Some((ps * 2).try_into().unwrap()),
+                    ),
+                    ByteRange::FromStart(
+                        (ps * 3).try_into().unwrap(),
+                        Some(ps.try_into().unwrap()),
+                    ),
+                    ByteRange::FromStart(
+                        (ps * 6 - 1).try_into().unwrap(),
+                        Some((ps + 1).try_into().unwrap()),
+                    ),
                 ]
                 .into_iter(),
             ),
