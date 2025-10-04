@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump `zarrs_filesystem` to 0.3.1
+  - Add direct I/O read support ([#249] by [@ilan-gold])
+
+[#249]: https://github.com/zarrs/zarrs/pull/249
+
 ## [0.22.1] - 2025-09-19
 
 ### Fixed
