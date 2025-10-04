@@ -21,7 +21,7 @@ use walkdir::WalkDir;
 
 use std::{
     collections::HashMap,
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -30,7 +30,10 @@ use std::{
 #[cfg(target_os = "linux")]
 use libc::O_DIRECT;
 #[cfg(target_os = "linux")]
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::{
+    fd::AsRawFd,
+    unix::fs::{MetadataExt, OpenOptionsExt},
+};
 
 // // Register the store.
 // inventory::submit! {
@@ -246,18 +249,23 @@ impl FilesystemStore {
 
         Ok(())
     }
-}
 
-impl ReadableStorageTraits for FilesystemStore {
-    fn get_partial_many<'a>(
+    #[cfg(target_os = "linux")]
+    #[allow(clippy::too_many_lines)]
+    fn get_partial_many_direct_io<'a>(
         &'a self,
         key: &StoreKey,
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        use std::collections::BTreeMap;
+
+        // Lock and open the file
         let file = self.get_file_mutex(key);
         let _lock = file.read();
-
-        let mut file = match File::open(self.key_to_fspath(key)) {
+        let mut flags = OpenOptions::new();
+        flags.read(true);
+        flags.custom_flags(O_DIRECT);
+        let file = match flags.open(self.key_to_fspath(key)) {
             Ok(file) => file,
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::NotFound {
@@ -267,8 +275,111 @@ impl ReadableStorageTraits for FilesystemStore {
             }
         };
 
-        let out = byte_ranges.map(move |byte_range| {
-            let bytes = {
+        let file_size: u64 = file.metadata()?.size();
+        let ps = page_size::get() as u64;
+        let fd = file.as_raw_fd();
+
+        // Find intersected pages
+        let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
+        let intersected_pages_coalesced =
+            direct_io::coalesce_byte_ranges_with_page_size(file_size, &byte_ranges, ps);
+
+        // Read intersected pages
+        let mut page_bytes = BTreeMap::new();
+        for pages in intersected_pages_coalesced {
+            let num_pages = pages.0.end - pages.0.start;
+            let offset = pages.0.start * ps;
+            let length = usize::try_from(num_pages * ps).unwrap();
+            let mut buf = bytes_aligned(length);
+            let ret = unsafe {
+                libc::pread(
+                    fd,
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
+                    length,
+                    libc::off64_t::try_from(offset).unwrap(),
+                )
+            };
+            if ret < 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            unsafe {
+                buf.set_len(length);
+            }
+            page_bytes.insert(offset, buf.freeze());
+        }
+
+        // Extract the requested byte ranges
+        let out = byte_ranges
+            .into_iter()
+            .map(|byte_range| {
+                use std::ops::Bound;
+
+                let start = byte_range.start(file_size);
+                let length = usize::try_from(byte_range.length(file_size)).unwrap();
+
+                if (start + length as u64) > file_size {
+                    // NOTE: Could put this check earlier
+                    return Err(zarrs_storage::byte_range::InvalidByteRangeError::new(
+                        byte_range, file_size,
+                    )
+                    .into());
+                }
+
+                // Find the first element in page_bytes that is >= start_page_aligned
+                let (intersected_pages_start, bytes) = page_bytes
+                    .range((Bound::Unbounded, Bound::Included(&start)))
+                    .next_back()
+                    .ok_or_else(|| {
+                        StorageError::Other(format!(
+                            "Could not find intersected pages for byte range {byte_range}"
+                        ))
+                    })?;
+                // TODO: use upper bound when btree_cursors stabilises
+                // let (intersected_pages_start, bytes) = page_bytes
+                //     .upper_bound(Bound::Included(&start))
+                //     .peek_prev()
+                //     .ok_or_else(|| {
+                //         StorageError::Other(format!(
+                //             "Could not find intersected pages for byte range {byte_range}"
+                //         ))
+                //     })?;
+
+                let offset = usize::try_from(start - *intersected_pages_start).unwrap();
+                Ok(bytes.slice(offset..offset + length))
+            })
+            .collect::<Vec<_>>();
+        Ok(Some(Box::new(out.into_iter())))
+    }
+}
+
+impl ReadableStorageTraits for FilesystemStore {
+    fn get_partial_many<'a>(
+        &'a self,
+        key: &StoreKey,
+        byte_ranges: ByteRangeIterator<'a>,
+    ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+        #[cfg(target_os = "linux")]
+        if self.options.direct_io {
+            return self.get_partial_many_direct_io(key, byte_ranges);
+        }
+
+        // Lock and open the file
+        let file = self.get_file_mutex(key);
+        let _lock = file.read();
+        let mut flags = OpenOptions::new();
+        flags.read(true);
+        let mut file = match flags.open(self.key_to_fspath(key)) {
+            Ok(file) => file,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(None);
+                }
+                return Err(err.into());
+            }
+        };
+
+        let out = byte_ranges
+            .map(|byte_range| {
                 // Seek
                 match byte_range {
                     ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
@@ -282,20 +393,19 @@ impl ReadableStorageTraits for FilesystemStore {
                     ByteRange::FromStart(_, None) => {
                         let mut buffer = Vec::new();
                         file.read_to_end(&mut buffer)?;
-                        buffer
+                        Ok(Bytes::from(buffer))
                     }
                     ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
                         let length = usize::try_from(length).unwrap();
                         let mut buffer = vec![0; length];
                         file.read_exact(&mut buffer)?;
-                        buffer
+                        Ok(Bytes::from(buffer))
                     }
                 }
-            };
-            Ok(Bytes::from(bytes))
-        });
+            })
+            .collect::<Vec<_>>();
 
-        Ok(Some(Box::new(out)))
+        Ok(Some(Box::new(out.into_iter())))
     }
 
     fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
@@ -457,4 +567,83 @@ pub enum FilesystemStoreCreateError {
     /// The path is not valid on this system.
     #[error("base path {0} is not valid")]
     InvalidBasePath(PathBuf),
+}
+
+#[cfg(target_os = "linux")]
+mod direct_io {
+    /// A range of intersected pages, with `Ord` tailored for coalescing.
+    #[derive(Eq, PartialEq, Debug)]
+    pub(super) struct IntersectedPages(pub std::ops::Range<u64>);
+
+    impl Ord for IntersectedPages {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            // Increasing order for start, decreasing order for end
+            self.0
+                .start
+                .cmp(&other.0.start)
+                .then_with(|| other.0.end.cmp(&self.0.end))
+        }
+    }
+
+    impl PartialOrd for IntersectedPages {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    pub(super) fn coalesce_byte_ranges_with_page_size(
+        file_size: u64,
+        byte_ranges: &[zarrs_storage::byte_range::ByteRange],
+        page_size: u64,
+    ) -> impl Iterator<Item = IntersectedPages> {
+        use itertools::Itertools;
+
+        // Find intersected pages
+        let intersected_pages: std::collections::BTreeSet<IntersectedPages> = byte_ranges
+            .iter()
+            .map(|range| {
+                let start_page = range.start(file_size) / page_size;
+                let end_page = range.end(file_size).div_ceil(page_size);
+                IntersectedPages(start_page..end_page)
+            })
+            .collect();
+
+        // Determine the pages to read (joining neighbouring pages)
+        intersected_pages.into_iter().coalesce(|a, b| {
+            if a.0.end >= b.0.start {
+                Ok(IntersectedPages(a.0.start..b.0.end.max(a.0.end)))
+            } else {
+                Err((a, b))
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::direct_io::*;
+    use zarrs_storage::byte_range::ByteRange;
+
+    #[test]
+    fn test_coalesce_byte_ranges_with_page_size() {
+        let ps = 4;
+        let file_size = 64;
+        let byte_ranges = vec![
+            ByteRange::FromStart(5, Some(2)),  // 1
+            ByteRange::FromStart(0, Some(1)),  // 0
+            ByteRange::FromStart(30, Some(4)), // 7-8
+            ByteRange::Suffix(4),              // 15
+            ByteRange::FromStart(8, Some(4)),  // 2
+            ByteRange::FromStart(8, Some(8)),  // 2-3
+            ByteRange::Suffix(7),              // 14-15
+        ];
+        let pages: Vec<_> =
+            coalesce_byte_ranges_with_page_size(file_size, &byte_ranges, ps).collect();
+        let expected = vec![
+            IntersectedPages(0..4),
+            IntersectedPages(7..9),
+            IntersectedPages(14..16),
+        ];
+        assert_eq!(pages, expected);
+    }
 }
