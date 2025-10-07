@@ -106,6 +106,7 @@ jobs:
           cat > /tmp/off_t_test/src/main.rs << 'EOF'
           fn main() {
               println!("size of libc::off_t: {}", std::mem::size_of::<libc::off_t>());
+              println!("size of libc::off64_t: {}", std::mem::size_of::<libc::off64_t>());
           }
           EOF
           echo 'libc = "0.2"' >> /tmp/off_t_test/Cargo.toml
