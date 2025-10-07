@@ -86,6 +86,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install 32-bit dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev:i386 pkg-config
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
