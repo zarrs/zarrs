@@ -100,6 +100,16 @@ jobs:
         with:
           target: i686-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
+      - name: Print size of libc::off_t
+        run: |
+          cargo new --bin /tmp/off_t_test
+          cat > /tmp/off_t_test/src/main.rs << 'EOF'
+          fn main() {
+              println!("size of libc::off_t: {}", std::mem::size_of::<libc::off_t>());
+          }
+          EOF
+          echo 'libc = "0.2"' >> /tmp/off_t_test/Cargo.toml
+          cargo run --manifest-path /tmp/off_t_test/Cargo.toml --target i686-unknown-linux-gnu
       - run: cargo test --target i686-unknown-linux-gnu --all-features --examples
   fmt:
     runs-on: ubuntu-latest
