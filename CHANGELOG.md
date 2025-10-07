@@ -8,10 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Bump `zarrs_filesystem` to 0.3.1
+- Bump `zarrs_filesystem` to 0.3.2
   - Add direct I/O read support ([#249] by [@ilan-gold])
+- Open and warn zarr stores with non-zarr nodes ([#279] by [@mannreis])
 
 [#249]: https://github.com/zarrs/zarrs/pull/249
+[#279]: https://github.com/zarrs/zarrs/pull/279
 
 ## [0.22.1] - 2025-09-19
 
@@ -1668,3 +1670,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [@ilan-gold]: https://github.com/ilan-gold
 [@jder]: https://github.com/jder
 [@keller-mark]: https://github.com/keller-mark
+[@mannreis]: https://github.com/mannreis
