@@ -109,8 +109,8 @@ jobs:
           }
           EOF
           echo 'libc = "0.2"' >> /tmp/off_t_test/Cargo.toml
-          cargo run --manifest-path /tmp/off_t_test/Cargo.toml --target i686-unknown-linux-gnu
-      - run: cargo test --target i686-unknown-linux-gnu --all-features --examples
+          cargo run --manifest-path /tmp/off_t_test/Cargo.toml
+      - run: cargo test --all-features --examples
   fmt:
     runs-on: ubuntu-latest
     steps:
