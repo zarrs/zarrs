@@ -82,23 +82,23 @@ jobs:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features --examples
-  test_i686:
+  test_armv7:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install 32-bit dependencies
         run: |
-          sudo dpkg --add-architecture i386
+          sudo dpkg --add-architecture armhf
           sudo apt-get update
-          sudo apt-get install -y libssl-dev:i386 pkg-config
+          sudo apt-get install -y libssl-dev:armhf pkg-config
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
-          targets: "i686-unknown-linux-gnu"
+          targets: "armv7-unknown-linux-gnueabihf"
       - name: Install cross-compilation tools
         uses: taiki-e/setup-cross-toolchain-action@v1
         with:
-          target: i686-unknown-linux-gnu
+          target: armv7-unknown-linux-gnueabihf
       - uses: Swatinem/rust-cache@v2
       - name: Print size of libc::off_t
         run: |
