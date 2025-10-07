@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{io::Write, sync::Arc};
 
 use crate::{
     config::MetadataRetrieveVersion,
@@ -21,6 +21,15 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
     path: &NodePath,
     recursive: bool,
 ) -> Result<Vec<Node>, NodeCreateError> {
+    get_child_nodes_with_writer(storage, path, recursive, Some(&mut std::io::stderr()))
+}
+
+fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    recursive: bool,
+    mut warning_buf: Option<&mut dyn Write>,
+) -> Result<Vec<Node>, NodeCreateError> {
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = discover_children(storage, &prefix)?;
     let mut nodes: Vec<Node> = Vec::new();
@@ -28,8 +37,17 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = Node::get_metadata(storage, &path, &MetadataRetrieveVersion::Default)?;
-
+        let child_metadata = match Node::get_metadata(storage, &path, &MetadataRetrieveVersion::Default) {
+            Ok(metadata) => metadata,
+            Err(NodeCreateError::MissingMetadata) => {
+                if let Some(ref mut w) = warning_buf {
+                    writeln!(w, "Warning: Object at {path} is not recognized as a component of a Zarr hierarchy.").unwrap();
+                    continue;
+                }
+                return Err(NodeCreateError::MissingMetadata);
+            },
+            Err(e) => return Err(e.into())
+        };
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
@@ -73,4 +91,51 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
             | keys.contains(&meta_key_v2_array(path))
             | keys.contains(&meta_key_v2_group(path))
     })
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
+    };
+
+    use super::*;
+   
+    #[test]
+    fn warning_get_child_nodes() {
+        const JSON_GROUP: &str = r#"{
+            "zarr_format": 3,
+            "node_type": "group",
+            "attributes": {
+                "info": "The store for this group contains a fake node, which is not part of the dataset."
+            }
+        }"#;
+        let root_md =serde_json::from_str::<NodeMetadata>(JSON_GROUP).unwrap();
+        let json = serde_json::to_vec_pretty(&root_md).unwrap();
+
+        let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
+        store
+            .set(
+                &StoreKey::new("root/zarr.json").unwrap(),
+                json.into(),
+            )
+            .unwrap();
+        
+        store
+            .set(
+                &StoreKey::new("root/fakenode/content").unwrap(),
+                vec![0].into(),
+            )
+            .unwrap();
+        
+        let path: NodePath = "/root".try_into().unwrap();
+
+        let mut warn_buf = Vec::new();
+        let _ = get_child_nodes_with_writer(&store, &path, true, Some(&mut warn_buf));
+        let warn_str = String::from_utf8(warn_buf).unwrap();
+        assert!(warn_str.trim() == "Warning: Object at /root/fakenode is not recognized as a component of a Zarr hierarchy.");
+        
+        assert!(get_child_nodes_with_writer(&store, &path, true, None).is_err());
+    }
 }
