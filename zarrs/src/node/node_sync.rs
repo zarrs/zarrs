@@ -43,12 +43,12 @@ fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + Listab
             &MetadataRetrieveVersion::Default,
         ) {
             Ok(metadata) => metadata,
-            Err(NodeCreateError::MissingMetadata) => {
+            Err(NodeCreateError::MissingMetadata(child_path)) => {
                 if let Some(ref mut w) = warning_buf {
                     writeln!(w, "Warning: Object at {path} is not recognized as a component of a Zarr hierarchy.").unwrap();
                     continue;
                 }
-                return Err(NodeCreateError::MissingMetadata);
+                return Err(NodeCreateError::MissingMetadata(child_path));
             }
             Err(e) => return Err(e),
         };
@@ -99,7 +99,6 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 
 #[cfg(test)]
 mod tests {
-
     use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
 
     use super::*;
@@ -139,7 +138,10 @@ mod tests {
 
         let res = get_child_nodes_with_writer(&store, &path, true, None);
         assert!(res.is_err());
-        assert!(matches!(res.unwrap_err(), NodeCreateError::MissingMetadata));
+        assert!(matches!(
+            res.unwrap_err(),
+            NodeCreateError::MissingMetadata(_)
+        ));
         //assert_eq!(Err(NodeCreateError::MissingMetadata));
 
         // Now make it a real node but corrupted
@@ -155,7 +157,7 @@ mod tests {
         assert!(res.is_err());
         assert_eq!(
             false,
-            matches!(res.unwrap_err(), NodeCreateError::MissingMetadata)
+            matches!(res.unwrap_err(), NodeCreateError::MissingMetadata(_))
         );
     }
 }
