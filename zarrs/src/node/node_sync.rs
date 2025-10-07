@@ -37,7 +37,11 @@ fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + Listab
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = match Node::get_metadata(storage, &path, &MetadataRetrieveVersion::Default) {
+        let child_metadata = match Node::get_metadata(
+            storage,
+            &path,
+            &MetadataRetrieveVersion::Default,
+        ) {
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata) => {
                 if let Some(ref mut w) = warning_buf {
@@ -45,8 +49,8 @@ fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + Listab
                     continue;
                 }
                 return Err(NodeCreateError::MissingMetadata);
-            },
-            Err(e) => return Err(e.into())
+            }
+            Err(e) => return Err(e),
         };
         let path: NodePath = prefix
             .try_into()
@@ -96,12 +100,10 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
-    };
+    use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
 
     use super::*;
-   
+
     #[test]
     fn warning_get_child_nodes() {
         const JSON_GROUP: &str = r#"{
@@ -111,31 +113,49 @@ mod tests {
                 "info": "The store for this group contains a fake node, which is not part of the dataset."
             }
         }"#;
-        let root_md =serde_json::from_str::<NodeMetadata>(JSON_GROUP).unwrap();
+        let root_md = serde_json::from_str::<NodeMetadata>(JSON_GROUP).unwrap();
         let json = serde_json::to_vec_pretty(&root_md).unwrap();
 
         let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
         store
-            .set(
-                &StoreKey::new("root/zarr.json").unwrap(),
-                json.into(),
-            )
+            .set(&StoreKey::new("root/zarr.json").unwrap(), json.into())
             .unwrap();
-        
+
         store
             .set(
-                &StoreKey::new("root/fakenode/content").unwrap(),
+                &StoreKey::new("root/fakenode/content/zarr.json").unwrap(),
                 vec![0].into(),
             )
             .unwrap();
-        
+
         let path: NodePath = "/root".try_into().unwrap();
 
-        let mut warn_buf = Vec::new();
+        let mut warn_buf: Vec<u8> = Vec::new();
         let _ = get_child_nodes_with_writer(&store, &path, true, Some(&mut warn_buf));
         let warn_str = String::from_utf8(warn_buf).unwrap();
-        assert!(warn_str.trim() == "Warning: Object at /root/fakenode is not recognized as a component of a Zarr hierarchy.");
-        
-        assert!(get_child_nodes_with_writer(&store, &path, true, None).is_err());
+        assert_eq!(
+            warn_str.trim(),
+            "Warning: Object at /root/fakenode is not recognized as a component of a Zarr hierarchy.");
+
+        let res = get_child_nodes_with_writer(&store, &path, true, None);
+        assert!(res.is_err());
+        assert!(matches!(res.unwrap_err(), NodeCreateError::MissingMetadata));
+        //assert_eq!(Err(NodeCreateError::MissingMetadata));
+
+        // Now make it a real node but corrupted
+        store
+            .set(
+                &StoreKey::new("root/fakenode/zarr.json").unwrap(),
+                vec![0].into(),
+            )
+            .unwrap();
+
+        let path: NodePath = "/root/fakenode".try_into().unwrap();
+        let res = get_child_nodes(&store, &path, true);
+        assert!(res.is_err());
+        assert_eq!(
+            false,
+            matches!(res.unwrap_err(), NodeCreateError::MissingMetadata)
+        );
     }
 }
