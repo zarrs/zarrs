@@ -74,7 +74,7 @@ jobs:
           args: >
             bash -c
             "uname -a &&
-            lscpu | grep Endian 
+            lscpu | grep Endian
             "
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -82,6 +82,20 @@ jobs:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features --examples
+  test_i686:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "stable"
+          targets: "i686-unknown-linux-gnu"
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: i686-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --target i686-unknown-linux-gnu --all-features --examples
   fmt:
     runs-on: ubuntu-latest
     steps:
