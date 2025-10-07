@@ -296,7 +296,7 @@ impl FilesystemStore {
                     fd,
                     buf.as_mut_ptr().cast::<libc::c_void>(),
                     length,
-                    libc::off64_t::try_from(offset).unwrap(),
+                    libc::off_t::try_from(offset).unwrap(),
                 )
             };
             if ret < 0 {
