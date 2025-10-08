@@ -89,8 +89,8 @@ pub enum NodeCreateError {
     #[error("Found V2 metadata in V3 key or vice-versa")]
     MetadataVersionMismatch,
     /// Missing metadata.
-    #[error("Metadata is missing")]
-    MissingMetadata,
+    #[error("Metadata is missing for {0}")]
+    MissingMetadata(String),
 }
 
 impl From<NodeCreateError> for ArrayCreateError {
@@ -102,8 +102,8 @@ impl From<NodeCreateError> for ArrayCreateError {
             NodeCreateError::MetadataVersionMismatch => {
                 StorageError::Other(NodeCreateError::MetadataVersionMismatch.to_string())
             }
-            NodeCreateError::MissingMetadata => {
-                StorageError::Other(NodeCreateError::MissingMetadata.to_string())
+            NodeCreateError::MissingMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
             }
         })
     }
@@ -118,8 +118,8 @@ impl From<NodeCreateError> for GroupCreateError {
             NodeCreateError::MetadataVersionMismatch => {
                 StorageError::Other(NodeCreateError::MetadataVersionMismatch.to_string())
             }
-            NodeCreateError::MissingMetadata => {
-                StorageError::Other(NodeCreateError::MissingMetadata.to_string())
+            NodeCreateError::MissingMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
             }
         })
     }
@@ -180,7 +180,7 @@ impl Node {
         }
 
         // No metadata has been found
-        Err(NodeCreateError::MissingMetadata)
+        Err(NodeCreateError::MissingMetadata(path.to_string()))
     }
 
     #[cfg(feature = "async")]
@@ -242,7 +242,7 @@ impl Node {
         }
 
         // No metadata has been found
-        Err(NodeCreateError::MissingMetadata)
+        Err(NodeCreateError::MissingMetadata(path.to_string()))
     }
 
     /// Open a node at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
@@ -605,7 +605,7 @@ mod tests {
         );
         assert_eq!(
             Node::open(&store, "/node").unwrap_err().to_string(),
-            "Metadata is missing"
+            "Metadata is missing for /node"
         );
     }
 
