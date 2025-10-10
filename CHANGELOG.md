@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Replace use of removed `doc_auto_cfg` feature with `doc_cfg` (fixes `docs.rs` build)
+
 ## [0.22.2] - 2025-10-07
 
 ### Changed

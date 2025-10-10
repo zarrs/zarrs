@@ -218,7 +218,7 @@
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 //!
 //! [The `zarrs` Book]: https://book.zarrs.dev
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_logo_url = "https://zarrs.dev/zarrs-logo-400x400.png")]
 #![warn(clippy::wildcard_enum_match_arm)]
 
