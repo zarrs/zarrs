@@ -434,9 +434,11 @@ impl DataType {
             ));
         }
 
+        let identifier = data_type_aliases.identifier(metadata.name());
+
         if let Some(configuration) = metadata.configuration() {
             #[allow(clippy::single_match)]
-            match metadata.name() {
+            match identifier {
                 zarrs_registry::data_type::NUMPY_DATETIME64 => {
                     use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
                     let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
@@ -473,7 +475,7 @@ impl DataType {
 
         if metadata.configuration_is_none_or_empty() {
             // Data types with no configuration
-            match metadata.name() {
+            match identifier {
                 zarrs_registry::data_type::BOOL => return Ok(Self::Bool),
                 zarrs_registry::data_type::INT2 => return Ok(Self::Int2),
                 zarrs_registry::data_type::INT4 => return Ok(Self::Int4),
@@ -530,7 +532,6 @@ impl DataType {
         }
 
         // Try an extension
-        let identifier = data_type_aliases.identifier(metadata.name());
         for plugin in inventory::iter::<DataTypePlugin> {
             if plugin.match_name(identifier) {
                 return plugin.create(&metadata.clone()).map(DataType::Extension);
