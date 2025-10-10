@@ -10,7 +10,7 @@
 //! `zarrs_storage` is licensed under either of
 //! - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_storage/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_storage/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod maybe;
 pub mod storage_adapter;
