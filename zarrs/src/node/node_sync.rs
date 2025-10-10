@@ -1,4 +1,4 @@
-use std::{io::Write, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     config::MetadataRetrieveVersion,
@@ -21,15 +21,6 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
     path: &NodePath,
     recursive: bool,
 ) -> Result<Vec<Node>, NodeCreateError> {
-    get_child_nodes_with_writer(storage, path, recursive, Some(&mut std::io::stderr()))
-}
-
-fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-    storage: &Arc<TStorage>,
-    path: &NodePath,
-    recursive: bool,
-    mut warning_buf: Option<&mut dyn Write>,
-) -> Result<Vec<Node>, NodeCreateError> {
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = discover_children(storage, &prefix)?;
     let mut nodes: Vec<Node> = Vec::new();
@@ -44,11 +35,10 @@ fn get_child_nodes_with_writer<TStorage: ?Sized + ReadableStorageTraits + Listab
         ) {
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata) => {
-                if let Some(ref mut w) = warning_buf {
-                    writeln!(w, "Warning: Object at {path} is not recognized as a component of a Zarr hierarchy.").unwrap();
-                    continue;
-                }
-                return Err(NodeCreateError::MissingMetadata);
+                log::warn!(
+                        "Object at {path} is not recognized as a component of a Zarr hierarchy. Ignoring."
+                    );
+                continue;
             }
             Err(e) => return Err(e),
         };
@@ -130,17 +120,28 @@ mod tests {
 
         let path: NodePath = "/root".try_into().unwrap();
 
-        let mut warn_buf: Vec<u8> = Vec::new();
-        let _ = get_child_nodes_with_writer(&store, &path, true, Some(&mut warn_buf));
-        let warn_str = String::from_utf8(warn_buf).unwrap();
-        assert_eq!(
-            warn_str.trim(),
-            "Warning: Object at /root/fakenode is not recognized as a component of a Zarr hierarchy.");
+        // Capture logs
+        testing_logger::setup();
 
-        let res = get_child_nodes_with_writer(&store, &path, true, None);
-        assert!(res.is_err());
-        assert!(matches!(res.unwrap_err(), NodeCreateError::MissingMetadata));
-        //assert_eq!(Err(NodeCreateError::MissingMetadata));
+        let nodes = get_child_nodes(&store, &path, true).unwrap();
+        assert_eq!(nodes.len(), 0); // Should have 0 valid child nodes (fakenode is invalid)
+
+        // Verify the warning was logged
+        testing_logger::validate(|captured_logs| {
+            let found = captured_logs.iter().any(|log| {
+                log.level == log::Level::Warn
+                    && log.body.contains("/root/fakenode")
+                    && log
+                        .body
+                        .contains("is not recognized as a component of a Zarr hierarchy")
+            });
+
+            assert!(
+                found,
+                "Expected warning about /root/fakenode not found. Captured {} logs.",
+                captured_logs.len()
+            );
+        });
 
         // Now make it a real node but corrupted
         store

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add warning when mapping string fill values to bytes for `bytes` equivalent data types
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.2.1
+
 ## [0.22.3] - 2025-10-11
 
 ### Added

@@ -779,6 +779,7 @@ impl DataType {
                     return Ok(FV::from(bytes));
                 } else if let Some(string) = fill_value.as_str() {
                     // NOTE: zarr-python allows string fill values for the `bytes` data type
+                    log::warn!("allowing non-conformant string fill value for `bytes` data type.");
                     return Ok(FV::from(string.as_bytes()));
                 }
                 Err(err0())?
