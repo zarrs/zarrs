@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.3] - 2025-10-11
+
+### Added
+- Add test with v3 `bytes` written by `zarr-python` 3.1 ([#282] by [@kylebarron])
+
+### Changed
+- Bump `zarrs_registry` to 0.1.6
+
 ### Fixed
 - Replace use of removed `doc_auto_cfg` feature with `doc_cfg` (fixes `docs.rs` build)
+- Properly support Zarr V3 data type aliases, which were only being applied to data type plugins
+
+[#282]: https://github.com/zarrs/zarrs/pull/282
 
 ## [0.22.2] - 2025-10-07
 
@@ -1595,7 +1606,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.3...HEAD
+[0.22.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.3
 [0.22.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.2
 [0.22.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.1
 [0.22.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0
@@ -1677,3 +1689,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [@jder]: https://github.com/jder
 [@keller-mark]: https://github.com/keller-mark
 [@mannreis]: https://github.com/mannreis
+[@kylebarron]: https://github.com/kylebarron
