@@ -45,7 +45,7 @@
 | [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               |                                                  |
 | [`RawBits`]                   | `r*`                         |               | `[u8; N]` / `&[u8; N]`                           |
 | [`String`]                    | `string`                     | `\|O`         | [`String`] / [`&str`]                            |
-| [`Bytes`]                     | `bytes`<br>🚧`binary`        | `\|VX`        | [`Vec<u8>`] / `&[u8]`                            |
+| [`Bytes`]                     | `bytes`<br>🚧`binary`<br>🚧`variable_length_bytes` | `\|VX`        | [`Vec<u8>`] / `&[u8]`                            |
 | [`NumpyDateTime64`]           | `numpy.datetime64`           |               | [`i64`]<br>[`chrono::DateTime<Utc>`] (`chrono`)<br>[`jiff::Timestamp`] (`jiff`)  |
 | [`NumpyTimeDelta64`]          | `numpy.timedelta64`          |               | [`i64`]<br>[`chrono::TimeDelta`] (`chrono`)<br>[`jiff::SignedDuration`] (`jiff`) |
 
