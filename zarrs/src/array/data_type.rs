@@ -775,8 +775,13 @@ impl DataType {
                 }
             }
             Self::Bytes => {
-                let bytes = fill_value.as_bytes().ok_or_else(err0)?;
-                Ok(FV::from(bytes))
+                if let Some(bytes) = fill_value.as_bytes() {
+                    return Ok(FV::from(bytes));
+                } else if let Some(string) = fill_value.as_str() {
+                    // NOTE: zarr-python allows string fill values for the `bytes` data type
+                    return Ok(FV::from(string.as_bytes()));
+                }
+                Err(err0())?
             }
             Self::String => Ok(FV::from(fill_value.as_str().ok_or_else(err0)?)),
             Self::NumpyDateTime64 {
