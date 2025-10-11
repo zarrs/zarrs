@@ -435,6 +435,13 @@ impl DataType {
         }
 
         let identifier = data_type_aliases.identifier(metadata.name());
+        if metadata.name() != identifier {
+            log::info!(
+                "Using data type alias `{}` for `{}`",
+                metadata.name(),
+                identifier
+            );
+        }
 
         if let Some(configuration) = metadata.configuration() {
             #[allow(clippy::single_match)]

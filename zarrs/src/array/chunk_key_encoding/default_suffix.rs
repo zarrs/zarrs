@@ -48,6 +48,7 @@ fn is_name_default_suffix(name: &str) -> bool {
 pub(crate) fn create_chunk_key_encoding_default_suffix(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
+    log::warn!("The `default_suffix` chunk key encoding is experimental and may be incompatible with other Zarr V3 implementations.");
     let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(

@@ -61,6 +61,7 @@ fn is_name_rectangular(name: &str) -> bool {
 pub(crate) fn create_chunk_grid_rectangular(
     metadata_and_array_shape: &(MetadataV3, ArrayShape),
 ) -> Result<ChunkGrid, PluginCreateError> {
+    log::warn!("The `rectangular` chunk grid is experimental and may be incompatible with other Zarr V3 implementations.");
     let (metadata, array_shape) = metadata_and_array_shape;
     let configuration: RectangularChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {

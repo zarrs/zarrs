@@ -80,6 +80,7 @@ fn is_identifier_vlen_utf8(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    log::warn!("The `vlen_v2` codec is experimental and may be incompatible with other Zarr V3 implementations.");
     if metadata.configuration_is_none_or_empty() {
         let codec = Arc::new(VlenV2Codec::new());
         Ok(Codec::ArrayToBytes(codec))
