@@ -290,7 +290,6 @@ impl NamedDataType {
                 } else if let Some(string) = fill_value.as_str() {
                     if name == "variable_length_bytes" {
                         // NOTE: zarr-python uses base64 encoded strings fill values for the `variable_length_bytes` data type.
-                        // TODO: `zarrs` needs a NamedDataType API similar to NamedCodec to preserve names and handle this case specifically
                         return Ok(FV::from(
                             BASE64_STANDARD.decode(string).map_err(|_| err0())?,
                         ));
