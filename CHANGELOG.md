@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Log warnings when using experimental or deprecated extensions
+- Add `NamedDataType`
+- Implement `From<MetadataV3>` for `Option<Configuration>`
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.2.1
+- Document that the `binary` data type alias is deprecated
+
+### Fixed
+- Preserve aliased data type names in array metadata
+- Interpret string fill values as base64 encoded for the `variable_length_bytes` data type
+
 ## [0.22.3] - 2025-10-11
 
 ### Added

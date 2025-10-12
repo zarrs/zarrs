@@ -127,7 +127,7 @@ use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 /// > default: [`false`]
 ///
 /// If true, then aliased extension names will be replaced by the standard name if metadata is resaved.
-/// This sets the default for [`crate::array::codec::CodecMetadataOptions`] (part of [`crate::array::ArrayMetadataOptions`])
+/// This sets the default for the association option of [`crate::array::ArrayMetadataOptions`].
 #[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Config {

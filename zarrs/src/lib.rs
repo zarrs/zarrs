@@ -42,6 +42,9 @@
 //!   - Experimental extensions are either pending registration or have no formal specification outside of the `zarrs` docs.
 //!   - Experimental extensions may be unrecognised or incompatible with other Zarr implementations.
 //!   - Experimental extensions may change in future releases without maintaining backwards compatibility.
+//! - *Deprecated*: indicated by ~~strikethrough~~ in the tables below
+//!   - Deprecated aliases will not be removed, but are not recommended for use in new arrays.
+//!   - Deprecated extensions may be removed in future releases.
 //!
 //! Extension names and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and similar methods for data types and Zarr V2.
 //! `zarrs` will persist extension names if opening an existing array of creating an array from metadata.
@@ -248,6 +251,37 @@ fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
             spare_capacity.as_mut_ptr().cast::<T>(),
             spare_capacity.len(),
         )
+    }
+}
+
+/// Log a warning that an extension is experimental and may be incompatible with other Zarr V3 implementations.
+///
+/// # Arguments
+/// * `name` - The name of the extension (e.g., `vlen`, `regular_bounded`)
+/// * `extension_type` - The type of extension (e.g., `codec`, `chunk grid`, `chunk key encoding`)
+pub(crate) fn warn_experimental_extension(name: &str, extension_type: &str) {
+    log::warn!(
+        "The `{name}` {extension_type} is experimental and may be incompatible with other Zarr V3 implementations.",
+    );
+}
+
+/// Log a warning that a deprecated extension name is being used.
+///
+/// # Arguments
+/// * `deprecated_name` - The deprecated name being used (e.g., `binary`)
+/// * `extension_type` - The type of extension (e.g., `codec`, `chunk grid`, `chunk key encoding`)
+/// * `current_name` - The current/preferred name (e.g., `bytes`)
+pub(crate) fn warn_deprecated_extension(
+    deprecated_name: &str,
+    extension_type: &str,
+    current_name: Option<&str>,
+) {
+    if let Some(current_name) = current_name {
+        log::warn!(
+            "The `{deprecated_name}` {extension_type} alias is deprecated, use `{current_name}` instead.",
+        );
+    } else {
+        log::warn!("The `{deprecated_name}` {extension_type} is deprecated.",);
     }
 }
 

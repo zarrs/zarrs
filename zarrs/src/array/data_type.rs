@@ -9,6 +9,9 @@
 //!
 #![doc = include_str!("../../doc/status/data_types.md")]
 
+mod named_data_type;
+pub use named_data_type::NamedDataType;
+
 use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
 
 pub use zarrs_data_type::{
@@ -258,6 +261,7 @@ impl DataType {
     }
 
     /// Returns the metadata.
+    // TODO: Remove for configuration
     #[must_use]
     pub fn metadata(&self) -> MetadataV3 {
         match self {
@@ -435,6 +439,13 @@ impl DataType {
         }
 
         let identifier = data_type_aliases.identifier(metadata.name());
+        if metadata.name() != identifier {
+            log::info!(
+                "Using data type alias `{}` for `{}`",
+                metadata.name(),
+                identifier
+            );
+        }
 
         if let Some(configuration) = metadata.configuration() {
             #[allow(clippy::single_match)]
@@ -555,253 +566,7 @@ impl DataType {
         &self,
         fill_value: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        use FillValue as FV;
-        let err0 = || DataTypeFillValueMetadataError::new(self.name(), fill_value.clone());
-        let err = |_| DataTypeFillValueMetadataError::new(self.name(), fill_value.clone());
-        match self {
-            Self::Bool => Ok(FV::from(fill_value.as_bool().ok_or_else(err0)?)),
-            Self::Int2 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                if (-2..2).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            Self::Int4 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                if (-8..8).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            Self::Int8 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::Int16 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i16::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::Int32 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i32::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::Int64 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                Ok(FV::from(int))
-            }
-            Self::UInt2 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                if (0..4).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            Self::UInt4 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                if (0..16).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            Self::UInt8 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::UInt16 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u16::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::UInt32 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u32::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            Self::UInt64 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                Ok(FV::from(int))
-            }
-            Self::Float8E4M3 => {
-                #[cfg(feature = "float8")]
-                {
-                    subfloat_hex_string_to_fill_value(fill_value)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(fill_value.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)
-                }
-                #[cfg(not(feature = "float8"))]
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::Float8E5M2 => {
-                #[cfg(feature = "float8")]
-                {
-                    subfloat_hex_string_to_fill_value(fill_value)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(fill_value.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)
-                }
-                #[cfg(not(feature = "float8"))]
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::Float4E2M1FN
-            | Self::Float6E2M3FN
-            | Self::Float6E3M2FN
-            | Self::Float8E3M4
-            | Self::Float8E4M3B11FNUZ
-            | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::BFloat16 => Ok(FV::from(fill_value.as_bf16().ok_or_else(err0)?)),
-            Self::Float16 => Ok(FV::from(fill_value.as_f16().ok_or_else(err0)?)),
-            Self::Float32 => Ok(FV::from(fill_value.as_f32().ok_or_else(err0)?)),
-            Self::Float64 => Ok(FV::from(fill_value.as_f64().ok_or_else(err0)?)),
-            Self::ComplexBFloat16 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_bf16().ok_or_else(err0)?;
-                    let im = im.as_bf16().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::<half::bf16>::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::ComplexFloat16 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f16().ok_or_else(err0)?;
-                    let im = im.as_f16().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::<half::f16>::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::Complex64 | Self::ComplexFloat32 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f32().ok_or_else(err0)?;
-                    let im = im.as_f32().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex32::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::Complex128 | Self::ComplexFloat64 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f64().ok_or_else(err0)?;
-                    let im = im.as_f64().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex64::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::ComplexFloat8E4M3 => {
-                #[cfg(feature = "float8")]
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = subfloat_hex_string_to_fill_value(re)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(re.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    let im = subfloat_hex_string_to_fill_value(im)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(im.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-                #[cfg(not(feature = "float8"))]
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::ComplexFloat8E5M2 => {
-                #[cfg(feature = "float8")]
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = subfloat_hex_string_to_fill_value(re)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(re.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    let im = subfloat_hex_string_to_fill_value(im)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(im.as_f64()?);
-                            Some(FV::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-                #[cfg(not(feature = "float8"))]
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::ComplexFloat4E2M1FN
-            | Self::ComplexFloat6E2M3FN
-            | Self::ComplexFloat6E3M2FN
-            | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3B11FNUZ
-            | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2FNUZ
-            | Self::ComplexFloat8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            Self::RawBits(size) => {
-                let bytes = fill_value.as_bytes().ok_or_else(err0)?;
-                if bytes.len() == *size {
-                    Ok(FV::from(bytes))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::Bytes => {
-                if let Some(bytes) = fill_value.as_bytes() {
-                    return Ok(FV::from(bytes));
-                } else if let Some(string) = fill_value.as_str() {
-                    // NOTE: zarr-python allows string fill values for the `bytes` data type
-                    return Ok(FV::from(string.as_bytes()));
-                }
-                Err(err0())?
-            }
-            Self::String => Ok(FV::from(fill_value.as_str().ok_or_else(err0)?)),
-            Self::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | Self::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => {
-                if let Some("NaT") = fill_value.as_str() {
-                    Ok(FV::from(i64::MIN))
-                } else if let Some(i) = fill_value.as_i64() {
-                    Ok(FV::from(i))
-                } else {
-                    Err(err0())?
-                }
-            }
-            Self::Extension(ext) => ext.fill_value(fill_value),
-        }
+        NamedDataType::new(self.name(), self.clone()).fill_value_from_metadata(fill_value)
     }
 
     /// Create fill value metadata.

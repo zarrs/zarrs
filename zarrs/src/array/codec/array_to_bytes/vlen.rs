@@ -132,6 +132,7 @@ fn is_identifier_vlen(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: VlenCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;

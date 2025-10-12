@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Warn when mapping `null` fill values to a default value in Zarr V2 metadata
+- Warn when mapping a `0` fill value to `""` for the `string` data type in Zarr V2 metadata
+
 ## [0.2.0] - 2025-09-18
 
 ### Added
