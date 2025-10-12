@@ -257,22 +257,20 @@ fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
 /// Log a warning that an extension is experimental and may be incompatible with other Zarr V3 implementations.
 ///
 /// # Arguments
-/// * `name` - The name of the extension (e.g., "vlen", "regular_bounded")
-/// * `extension_type` - The type of extension (e.g., "codec", "chunk grid", "chunk key encoding")
+/// * `name` - The name of the extension (e.g., `vlen`, `regular_bounded`)
+/// * `extension_type` - The type of extension (e.g., `codec`, `chunk grid`, `chunk key encoding`)
 pub(crate) fn warn_experimental_extension(name: &str, extension_type: &str) {
     log::warn!(
-        "The `{}` {} is experimental and may be incompatible with other Zarr V3 implementations.",
-        name,
-        extension_type
+        "The `{name}` {extension_type} is experimental and may be incompatible with other Zarr V3 implementations.",
     );
 }
 
 /// Log a warning that a deprecated extension name is being used.
 ///
 /// # Arguments
-/// * `deprecated_name` - The deprecated name being used (e.g., "binary")
-/// * `extension_type` - The type of extension (e.g., "codec", "chunk grid", "chunk key encoding")
-/// * `current_name` - The current/preferred name (e.g., "bytes")
+/// * `deprecated_name` - The deprecated name being used (e.g., `binary`)
+/// * `extension_type` - The type of extension (e.g., `codec`, `chunk grid`, `chunk key encoding`)
+/// * `current_name` - The current/preferred name (e.g., `bytes`)
 pub(crate) fn warn_deprecated_extension(
     deprecated_name: &str,
     extension_type: &str,
