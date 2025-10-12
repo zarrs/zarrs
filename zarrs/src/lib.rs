@@ -90,6 +90,11 @@
 //!
 //! The [`AsyncToSyncStorageAdapter`](crate::storage::storage_adapter::async_to_sync::AsyncToSyncStorageAdapter) enables some async stores to be used in a sync context.
 //!
+//! ## Logging
+//! `zarrs` logs information and warnings using the [`log`] crate.
+//! A logging implementation must be enabled to capture logs.
+//! See the [`log`] crate documentation for more details.
+//!
 //! ## Examples
 //! ### Create and Read a Zarr Hierarchy
 #![cfg_attr(feature = "ndarray", doc = "```rust")]
