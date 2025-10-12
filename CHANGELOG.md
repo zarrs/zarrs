@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add warning when mapping string fill values to bytes for `bytes` equivalent data types
 - Add `NamedDataType`
-- Implement `Into<Option<Configuration>>` for `MetadataV3`
+- Implement `From<MetadataV3>` for `Option<Configuration>`
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.1

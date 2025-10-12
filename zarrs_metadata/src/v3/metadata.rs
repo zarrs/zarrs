@@ -54,9 +54,9 @@ pub struct MetadataV3 {
     must_understand: bool,
 }
 
-impl Into<Option<Configuration>> for MetadataV3 {
-    fn into(self) -> Option<Configuration> {
-        self.configuration
+impl From<MetadataV3> for Option<Configuration> {
+    fn from(metadata: MetadataV3) -> Self {
+        metadata.configuration
     }
 }
 

@@ -7,10 +7,10 @@ use zarrs_metadata::{
     Configuration,
 };
 
-use crate::array::{data_type::complex_subfloat_hex_string_to_fill_value, DataType};
-
-#[cfg(feature = "float8")]
-use crate::array::data_type::subfloat_hex_string_to_fill_value;
+use crate::array::{
+    data_type::{complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value},
+    DataType,
+};
 
 /// A named data type.
 #[derive(Debug)]
@@ -64,8 +64,8 @@ impl NamedDataType {
         &self,
         fill_value: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let name = self.name();
         use FillValue as FV;
+        let name = self.name();
         let err0 = || DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone());
         let err = |_| DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone());
         match self.data_type() {
@@ -294,9 +294,8 @@ impl NamedDataType {
                         return Ok(FV::from(
                             BASE64_STANDARD.decode(string).map_err(|_| err0())?,
                         ));
-                    } else {
-                        // Do not permit strings for the `bytes` data type
                     }
+                    // Do not permit strings for the `bytes` data type
                 }
                 Err(err0())?
             }

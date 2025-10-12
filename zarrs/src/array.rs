@@ -503,7 +503,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the data type.
     #[must_use]
     pub const fn data_type(&self) -> &DataType {
-        &self.data_type.data_type()
+        self.data_type.data_type()
     }
 
     /// Get the fill value.
