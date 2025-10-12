@@ -2,10 +2,7 @@ use std::ops::Deref;
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use zarrs_data_type::{DataTypeFillValueMetadataError, FillValue};
-use zarrs_metadata::{
-    v3::{FillValueMetadataV3, MetadataV3},
-    Configuration,
-};
+use zarrs_metadata::v3::FillValueMetadataV3;
 
 use crate::array::{
     data_type::{complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value},
@@ -30,23 +27,6 @@ impl NamedDataType {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Create the data type metadata.
-    #[must_use]
-    pub fn metadata(&self) -> MetadataV3 {
-        let configuration = self.configuration();
-        if let Some(configuration) = configuration {
-            MetadataV3::new_with_configuration(self.name(), configuration.clone())
-        } else {
-            MetadataV3::new(self.name())
-        }
-    }
-
-    /// Create the data type configuration.
-    #[must_use]
-    pub fn configuration(&self) -> Option<Configuration> {
-        self.data_type().metadata().into()
     }
 
     /// The underlying data type extension.
