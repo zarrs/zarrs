@@ -42,6 +42,7 @@
 //!   - Experimental extensions are either pending registration or have no formal specification outside of the `zarrs` docs.
 //!   - Experimental extensions may be unrecognised or incompatible with other Zarr implementations.
 //!   - Experimental extensions may change in future releases without maintaining backwards compatibility.
+//! - *Deprecated*: indicated by ~~strikethrough~~ in the tables below, and are not recommended for use in new arrays.
 //!
 //! Extension names and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and similar methods for data types and Zarr V2.
 //! `zarrs` will persist extension names if opening an existing array of creating an array from metadata.
