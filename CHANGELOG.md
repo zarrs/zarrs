@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add warning when mapping string fill values to bytes for `bytes` equivalent data types
+- Add `NamedDataType`
+- Implement `Into<Option<Configuration>>` for `MetadataV3`
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.1
+
+### Fixed
+- Preserve aliased data type names in array metadata
+- Interpret string fill values as base64 encoded for the `variable_length_bytes` data type
 
 ## [0.22.3] - 2025-10-11
 

@@ -73,7 +73,7 @@ pub use self::{
     element::{Element, ElementFixedLength, ElementOwned},
     storage_transformer::StorageTransformerChain,
 };
-pub use data_type::{DataType, FillValue}; // re-export for zarrs < 0.20 compat
+pub use data_type::{DataType, FillValue, NamedDataType};
 
 use crate::config::global_config;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
@@ -372,7 +372,7 @@ pub struct Array<TStorage: ?Sized> {
     /// The path of the array in a store.
     path: NodePath,
     /// The data type of the Zarr array.
-    data_type: DataType,
+    data_type: NamedDataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
@@ -441,6 +441,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             global_config().data_type_aliases_v3(),
         )
         .map_err(ArrayCreateError::DataTypeCreateError)?;
+        let data_type = NamedDataType::new(metadata_v3.data_type.name().to_string(), data_type);
         let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
@@ -502,7 +503,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the data type.
     #[must_use]
     pub const fn data_type(&self) -> &DataType {
-        &self.data_type
+        &self.data_type.data_type()
     }
 
     /// Get the fill value.
