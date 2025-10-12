@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Log warnings when using experimental extensions
+- Log warnings when using experimental or deprecated extensions
 - Add `NamedDataType`
 - Implement `From<MetadataV3>` for `Option<Configuration>`
 
