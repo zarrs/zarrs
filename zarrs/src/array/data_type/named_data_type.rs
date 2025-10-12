@@ -286,10 +286,10 @@ impl NamedDataType {
             }
             DataType::Bytes => {
                 if let Some(bytes) = fill_value.as_bytes() {
+                    // Permit bytes for any data type alias of `bytes`
                     return Ok(FV::from(bytes));
                 } else if let Some(string) = fill_value.as_str() {
                     if name == "variable_length_bytes" {
-                        // NOTE: zarr-python uses base64 encoded strings fill values for the `variable_length_bytes` data type.
                         return Ok(FV::from(
                             BASE64_STANDARD.decode(string).map_err(|_| err0())?,
                         ));
