@@ -96,6 +96,7 @@ mod tests {
 
     #[test]
     fn warning_get_child_nodes() {
+        testing_logger::setup();
         const JSON_GROUP: &str = r#"{
             "zarr_format": 3,
             "node_type": "group",
@@ -119,29 +120,8 @@ mod tests {
             .unwrap();
 
         let path: NodePath = "/root".try_into().unwrap();
-
-        // Capture logs
-        testing_logger::setup();
-
         let nodes = get_child_nodes(&store, &path, true).unwrap();
         assert_eq!(nodes.len(), 0); // Should have 0 valid child nodes (fakenode is invalid)
-
-        // Verify the warning was logged
-        testing_logger::validate(|captured_logs| {
-            let found = captured_logs.iter().any(|log| {
-                log.level == log::Level::Warn
-                    && log.body.contains("/root/fakenode")
-                    && log
-                        .body
-                        .contains("is not recognized as a component of a Zarr hierarchy")
-            });
-
-            assert!(
-                found,
-                "Expected warning about /root/fakenode not found. Captured {} logs.",
-                captured_logs.len()
-            );
-        });
 
         // Now make it a real node but corrupted
         store
@@ -154,9 +134,17 @@ mod tests {
         let path: NodePath = "/root/fakenode".try_into().unwrap();
         let res = get_child_nodes(&store, &path, true);
         assert!(res.is_err());
-        assert_eq!(
-            false,
-            matches!(res.unwrap_err(), NodeCreateError::MissingMetadata)
-        );
+        assert!(!matches!(
+            res.unwrap_err(),
+            NodeCreateError::MissingMetadata
+        ));
+
+        testing_logger::validate(|captured_logs| {
+            assert_eq!(captured_logs.len(), 1);
+            assert_eq!(
+                captured_logs.first().unwrap().body,
+                "Object at /root/fakenode is not recognized as a component of a Zarr hierarchy. Ignoring.",
+            );
+        });
     }
 }

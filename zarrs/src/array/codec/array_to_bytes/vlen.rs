@@ -132,7 +132,7 @@ fn is_identifier_vlen(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    log::warn!("The `vlen` codec is experimental and may be incompatible with other Zarr V3 implementations.");
+    log::warn!("The `{}` codec is experimental and may be incompatible with other Zarr V3 implementations.", metadata.name());
     let configuration: VlenCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;

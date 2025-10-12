@@ -354,7 +354,7 @@ pub fn fill_value_metadata_v2_to_v3(
         (zarrs_registry::data_type::STRING, Some(FillValueMetadataV3::Number(n)))
             if n.as_u64() == Some(0) =>
         {
-            log::warn!("Allowing non-conformant 0 fill value fill value for `string` data type (zarr-python compatibility).");
+            log::warn!("Permitting non-conformant `0` fill value for `string` data type (zarr-python compatibility).");
             FillValueMetadataV3::from("")
         }
         // Map a 0/1 scalar fill value to a bool

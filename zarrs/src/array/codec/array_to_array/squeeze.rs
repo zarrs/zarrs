@@ -60,7 +60,7 @@ fn is_identifier_squeeze(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    log::warn!("The `squeeze` codec is experimental and may be incompatible with other Zarr V3 implementations.");
+    log::warn!("The `{}` codec is experimental and may be incompatible with other Zarr V3 implementations.", metadata.name());
     let configuration: SqueezeCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(SQUEEZE, "codec", metadata.to_string()))?;
