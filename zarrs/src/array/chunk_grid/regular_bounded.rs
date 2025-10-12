@@ -62,7 +62,7 @@ fn is_name_regular_bounded(name: &str) -> bool {
 pub(crate) fn create_chunk_grid_regular_bounded(
     metadata_and_array_shape: &(MetadataV3, ArrayShape),
 ) -> Result<ChunkGrid, PluginCreateError> {
-    log::warn!("The `{}` chunk grid is experimental and may be incompatible with other Zarr V3 implementations.", metadata_and_array_shape.0.name());
+    crate::warn_experimental_extension(metadata_and_array_shape.0.name(), "chunk grid");
     let (metadata, array_shape) = metadata_and_array_shape;
     let configuration: RegularBoundedChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {

@@ -82,7 +82,7 @@ fn is_identifier_vlen_utf8(identifier: &str) -> bool {
 pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     match metadata.name() {
         zarrs_registry::codec::VLEN_V2 | zarrs_registry::codec::VLEN_ARRAY => {
-            log::warn!("The `{}` codec is experimental and may be incompatible with other Zarr V3 implementations.", metadata.name());
+            crate::warn_experimental_extension(metadata.name(), "codec");
         }
         _ => {}
     }
