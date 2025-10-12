@@ -8,12 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add warning when mapping string fill values to bytes for `bytes` equivalent data types
+- Log warnings when using experimental extensions
 - Add `NamedDataType`
 - Implement `From<MetadataV3>` for `Option<Configuration>`
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.1
+- Document that the `binary` data type alias is deprecated
 
 ### Fixed
 - Preserve aliased data type names in array metadata
