@@ -151,7 +151,7 @@ required-features = ["ndarray", "async"]
 doc-scrape-examples = true
 
 [[example]]
-name = "rectangular_array_write_read"
+name = "rectilinear_array_write_read"
 required-features = ["filesystem", "ndarray"]
 doc-scrape-examples = true
 

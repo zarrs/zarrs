@@ -1,15 +1,15 @@
 #![allow(missing_docs)]
 
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 use zarrs::{
-    array::chunk_grid::RectangularChunkGridConfiguration,
+    array::chunk_grid::RectilinearChunkGridConfiguration,
     storage::{
         storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
     },
 };
 use zarrs_metadata::v3::MetadataV3;
 
-fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
+fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
         array::{codec, DataType, ZARR_NAN_F32},
@@ -59,9 +59,19 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         MetadataV3::new_with_configuration(
-            "rectangular",
-            RectangularChunkGridConfiguration {
-                chunk_shape: vec![[1, 2, 3, 2].try_into()?, 4.try_into()?], // chunk sizes
+            "rectilinear",
+            RectilinearChunkGridConfiguration::Inline {
+                chunk_shapes: vec![
+                    vec![
+                        [NonZeroU64::new(1).unwrap(), NonZeroU64::new(3).unwrap()].into(),
+                        NonZeroU64::new(3).unwrap().into(),
+                        NonZeroU64::new(2).unwrap().into(),
+                    ],
+                    vec![
+                        NonZeroU64::new(4).unwrap().into(),
+                        NonZeroU64::new(4).unwrap().into(),
+                    ],
+                ],
             },
         ),
         DataType::Float32,
@@ -150,7 +160,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    if let Err(err) = rectangular_array_write_read() {
+    if let Err(err) = rectilinear_array_write_read() {
         println!("{:?}", err);
     }
 }
