@@ -534,13 +534,9 @@ mod tests {
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = &config;
         let elements = &chunk_shapes[0];
         assert_eq!(elements.len(), 4);
-        match &elements[0] {
-            RunLengthElement::Repeated([val, count]) => {
-                assert_eq!(val.get(), 5);
-                assert_eq!(count.get(), 3);
-            }
-            _ => panic!("Expected Repeated element"),
-        }
+        assert!(
+            matches!(&elements[0], RunLengthElement::Repeated([val, count]) if val.get() == 5 && count.get() == 3)
+        );
 
         // Verify it can be used to create a chunk grid
         let array_shape: ArrayShape = vec![100, 100];
@@ -591,16 +587,10 @@ mod tests {
                 assert_eq!(
                     explicit_grid.chunk_shape(&indices).unwrap(),
                     rle_grid.chunk_shape(&indices).unwrap(),
-                    "Mismatch at chunk [{}, {}]",
-                    i,
-                    j
                 );
                 assert_eq!(
                     explicit_grid.chunk_origin(&indices).unwrap(),
                     rle_grid.chunk_origin(&indices).unwrap(),
-                    "Mismatch at chunk [{}, {}]",
-                    i,
-                    j
                 );
             }
         }
@@ -626,41 +616,19 @@ mod tests {
 
         // First dimension should be compressed: [[5, 3], [15, 2], 20, 35]
         assert_eq!(chunk_shapes[0].len(), 4);
-        match &chunk_shapes[0][0] {
-            RunLengthElement::Repeated([val, count]) => {
-                assert_eq!(val.get(), 5);
-                assert_eq!(count.get(), 3);
-            }
-            _ => panic!("Expected Repeated element for first group"),
-        }
-        match &chunk_shapes[0][1] {
-            RunLengthElement::Repeated([val, count]) => {
-                assert_eq!(val.get(), 15);
-                assert_eq!(count.get(), 2);
-            }
-            _ => panic!("Expected Repeated element for second group"),
-        }
-        match &chunk_shapes[0][2] {
-            RunLengthElement::Single(val) => {
-                assert_eq!(val.get(), 20);
-            }
-            _ => panic!("Expected Single element for third group"),
-        }
-        match &chunk_shapes[0][3] {
-            RunLengthElement::Single(val) => {
-                assert_eq!(val.get(), 35);
-            }
-            _ => panic!("Expected Single element for fourth group"),
-        }
+        assert!(
+            matches!(&chunk_shapes[0][0], RunLengthElement::Repeated([val, count]) if val.get() == 5 && count.get() == 3)
+        );
+        assert!(
+            matches!(&chunk_shapes[0][1], RunLengthElement::Repeated([val, count]) if val.get() == 15 && count.get() == 2)
+        );
+        assert!(matches!(&chunk_shapes[0][2], RunLengthElement::Single(val) if val.get() == 20));
+        assert!(matches!(&chunk_shapes[0][3], RunLengthElement::Single(val) if val.get() == 35));
 
         // Second dimension should be a single value: [10]
         assert_eq!(chunk_shapes[1].len(), 1);
-        match &chunk_shapes[1][0] {
-            RunLengthElement::Repeated([val, count]) => {
-                assert_eq!(val.get(), 10);
-                assert_eq!(count.get(), 10);
-            }
-            _ => panic!("Expected Repeated element for second dimension"),
-        }
+        assert!(
+            matches!(&chunk_shapes[1][0], RunLengthElement::Repeated([val, count]) if val.get() == 10 && count.get() == 10)
+        );
     }
 }
