@@ -60,6 +60,7 @@ impl ElementFixedLength for num::complex::Complex<half::f16> {}
 impl ElementFixedLength for num::complex::Complex32 {}
 impl ElementFixedLength for num::complex::Complex64 {}
 impl<const N: usize> ElementFixedLength for [u8; N] {}
+impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
@@ -341,3 +342,135 @@ impl_element_pod!(num::Complex<float8::F8E4M3>, DataType::ComplexFloat8E4M3);
 
 #[cfg(feature = "float8")]
 impl_element_pod!(num::Complex<float8::F8E5M2>, DataType::ComplexFloat8E5M2);
+
+impl<T> Element for Option<T>
+where
+    T: Element,
+{
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if let DataType::Optional(inner_data_type) = data_type {
+            T::validate_data_type(inner_data_type)
+        } else {
+            Err(IET)
+        }
+    }
+
+    fn into_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        let DataType::Optional(inner_data_type) = data_type else {
+            return Err(IET);
+        };
+
+        // Create validity mask - one byte per element
+        let num_elements = elements.len();
+        let mut mask = Vec::with_capacity(num_elements);
+
+        // Collect only the valid elements for the data array
+        let mut valid_elements = Vec::new();
+
+        for element in elements {
+            if element.is_some() {
+                // Set mask byte to 1 for Some
+                mask.push(1u8);
+
+                // Add to valid elements (clone to avoid lifetime issues)
+                valid_elements.push(element.as_ref().unwrap().clone());
+            } else {
+                // Set mask byte to 0 for None
+                mask.push(0u8);
+            }
+        }
+
+        // Get inner data type size for legacy format
+        let inner_size = inner_data_type.fixed_size().ok_or_else(|| {
+            ArrayError::Other(
+                "Optional data type with variable-length inner type not yet supported".to_string(),
+            )
+        })?;
+
+        // Convert to legacy format: [data bytes][mask byte] for each element
+        let mut bytes = Vec::with_capacity(num_elements * (inner_size + 1));
+        let mut valid_idx = 0;
+
+        for &mask_byte in &mask {
+            if mask_byte != 0 {
+                // Valid element - get the data bytes
+                if valid_idx >= valid_elements.len() {
+                    return Err(ArrayError::Other("Mask/data mismatch".to_string()));
+                }
+                let value_slice = [valid_elements[valid_idx].clone()];
+                let inner_bytes = T::into_array_bytes(inner_data_type, &value_slice)?;
+                let inner_fixed = inner_bytes.into_fixed()?;
+                bytes.extend_from_slice(&inner_fixed);
+                valid_idx += 1;
+            } else {
+                // Invalid element - fill with zeros
+                bytes.extend(std::iter::repeat_n(0u8, inner_size));
+            }
+            // Add mask byte at the end
+            bytes.push(mask_byte);
+        }
+
+        Ok(bytes.into())
+    }
+}
+
+impl<T> ElementOwned for Option<T>
+where
+    T: ElementOwned + Clone,
+{
+    fn from_array_bytes(
+        data_type: &DataType,
+        bytes: ArrayBytes<'_>,
+    ) -> Result<Vec<Self>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        let DataType::Optional(inner_data_type) = data_type else {
+            return Err(IET);
+        };
+
+        let bytes = bytes.into_fixed()?;
+        let inner_size = inner_data_type.fixed_size().ok_or_else(|| {
+            ArrayError::Other(
+                "Optional data type with variable-length inner type not yet supported".to_string(),
+            )
+        })?;
+
+        let element_size = inner_size + 1; // inner data size + 1 validity byte
+
+        if bytes.len() % element_size != 0 {
+            return Err(ArrayError::InvalidElementValue);
+        }
+
+        let num_elements = bytes.len() / element_size;
+        let mut elements = Vec::with_capacity(num_elements);
+
+        for i in 0..num_elements {
+            let offset = i * element_size;
+            // Data comes first, then validity byte
+            let data_bytes = &bytes[offset..offset + inner_size];
+            let validity_byte = bytes[offset + inner_size];
+
+            if validity_byte == 0 {
+                // None value
+                elements.push(None);
+            } else if validity_byte != 0 {
+                // Some value - extract the inner data bytes
+                let inner_array_bytes = ArrayBytes::from(data_bytes.to_vec());
+                let inner_values = T::from_array_bytes(inner_data_type, inner_array_bytes)?;
+
+                if inner_values.len() != 1 {
+                    return Err(ArrayError::InvalidElementValue);
+                }
+
+                elements.push(Some(inner_values.into_iter().next().unwrap()));
+            }
+        }
+
+        Ok(elements)
+    }
+}

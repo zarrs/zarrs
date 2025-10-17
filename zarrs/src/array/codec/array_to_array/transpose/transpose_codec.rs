@@ -158,6 +158,9 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
+            ArrayBytes::Optional { .. } => Err(CodecError::Other(
+                "Optional array bytes are not supported by the transpose codec. Use the optional codec to handle optional data types.".to_string(),
+            )),
             ArrayBytes::Variable(bytes, offsets) => {
                 let order_encode = self.order.0.clone();
                 let shape = decoded_representation
@@ -205,6 +208,9 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
+            ArrayBytes::Optional { .. } => Err(CodecError::Other(
+                "Optional array bytes are not supported by the transpose codec. Use the optional codec to handle optional data types.".to_string(),
+            )),
             ArrayBytes::Variable(bytes, offsets) => {
                 let mut order_decode = vec![0; decoded_representation.shape().len()];
                 for (i, val) in self.order.0.iter().enumerate() {

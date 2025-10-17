@@ -536,6 +536,10 @@ impl ArrayBuilder {
                     scale_factor: _,
                 }
                 | DataType::RawBits(_) => unreachable!(),
+                DataType::Optional(inner) => {
+                    // TODO: special codec for optional
+                    Self::default_codec(inner)
+                }
             }
         }
     }

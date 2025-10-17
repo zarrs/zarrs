@@ -145,7 +145,7 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
             v.chunks_exact_mut(8).for_each(swap);
         }
         // Variable-sized data types and extensions are not supported and are rejected outside of this function
-        DataType::Extension(_) | DataType::String | DataType::Bytes => {
+        DataType::Extension(_) | DataType::String | DataType::Bytes | DataType::Optional(_) => {
             unreachable!()
         }
     }

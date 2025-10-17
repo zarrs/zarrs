@@ -270,6 +270,11 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                                 let fixed = match chunk_subset_bytes.as_ref() {
                                     ArrayBytes::Fixed(fixed) => fixed,
                                     ArrayBytes::Variable(_, _) => unreachable!(),
+                                    ArrayBytes::Optional { .. } => {
+                                        return Err(ArrayError::Other(
+                                            "Cannot cache optional array bytes. Use the optional codec.".to_string(),
+                                        ));
+                                    }
                                 };
 
                                 let mut output_view = unsafe {

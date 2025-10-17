@@ -42,6 +42,17 @@ pub enum ArrayBytes<'a> {
     /// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
     /// - The final offset must be less than or equal to the length of the bytes buffer.
     Variable(RawBytes<'a>, RawBytesOffsets<'a>),
+    /// Bytes for an optional data type with a validity mask and nested data.
+    ///
+    /// The mask contains one bit per element indicating whether the element is valid (Some) or invalid (None).
+    /// The data contains the packed bytes for all valid elements only.
+    /// This variant is only supported by the optional codec and will be rejected by all other codecs.
+    Optional {
+        /// Validity mask bytes - one bit per element
+        mask: RawBytes<'a>,
+        /// Packed data bytes for valid elements only
+        data: Box<ArrayBytes<'a>>,
+    },
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -100,6 +111,15 @@ impl<'a> ArrayBytes<'a> {
         Self::Variable(bytes, offsets)
     }
 
+    /// Create a new optional array bytes from a validity mask and nested data.
+    #[must_use]
+    pub fn new_optional(mask: impl Into<RawBytes<'a>>, data: ArrayBytes<'a>) -> Self {
+        Self::Optional {
+            mask: mask.into(),
+            data: Box::new(data),
+        }
+    }
+
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
     ///
     /// # Panics
@@ -135,40 +155,61 @@ impl<'a> ArrayBytes<'a> {
     /// Convert the array bytes into fixed size bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length.
+    /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length or optional.
     pub fn into_fixed(self) -> Result<RawBytes<'a>, CodecError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
             Self::Variable(_, _) => Err(CodecError::ExpectedFixedLengthBytes),
+            Self::Optional { .. } => Err(CodecError::Other(
+                "Optional array bytes are not supported by this codec. Use the optional codec to handle optional data types.".to_string(),
+            )),
         }
     }
 
     /// Convert the array bytes into variable sized bytes and element byte offsets.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
+    /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length or optional.
     pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
         match self {
             Self::Fixed(_) => Err(CodecError::ExpectedVariableLengthBytes),
             Self::Variable(bytes, offsets) => Ok((bytes, offsets)),
+            Self::Optional { .. } => Err(CodecError::Other(
+                "Optional array bytes are not supported by this codec. Use the optional codec to handle optional data types.".to_string(),
+            )),
+        }
+    }
+
+    /// Convert the array bytes into optional mask and data.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the bytes are not optional.
+    pub fn into_optional(self) -> Result<(RawBytes<'a>, ArrayBytes<'a>), CodecError> {
+        match self {
+            Self::Optional { mask, data } => Ok((mask, *data)),
+            Self::Fixed(_) | Self::Variable(_, _) => Err(CodecError::Other(
+                "Expected optional array bytes".to_string(),
+            )),
         }
     }
 
     /// Returns the size (in bytes) of the underlying element bytes.
     ///
     /// This only considers the size of the element bytes, and does not include the element offsets for a variable sized array.
+    /// For optional bytes, returns the size of the mask plus the size of the nested data.
     #[must_use]
     pub fn size(&self) -> usize {
         match self {
             Self::Fixed(bytes) | Self::Variable(bytes, _) => bytes.len(),
+            Self::Optional { mask, data } => mask.len() + data.size(),
         }
     }
 
-    /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size bytes.
+    /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size and optional bytes.
     #[must_use]
     pub fn offsets(&self) -> Option<&RawBytesOffsets<'a>> {
         match self {
-            Self::Fixed(_) => None,
+            Self::Fixed(_) | Self::Optional { .. } => None,
             Self::Variable(_, offsets) => Some(offsets),
         }
     }
@@ -181,6 +222,10 @@ impl<'a> ArrayBytes<'a> {
             Self::Variable(bytes, offsets) => {
                 ArrayBytes::Variable(bytes.into_owned().into(), offsets.into_owned())
             }
+            Self::Optional { mask, data } => ArrayBytes::Optional {
+                mask: mask.into_owned().into(),
+                data: Box::new(data.into_owned()),
+            },
         }
     }
 
@@ -205,6 +250,10 @@ impl<'a> ArrayBytes<'a> {
         match self {
             Self::Fixed(bytes) => fill_value.equals_all(bytes),
             Self::Variable(bytes, _offsets) => fill_value.equals_all(bytes),
+            Self::Optional { .. } => {
+                // Optional arrays cannot be a simple fill value since they have structure
+                false
+            }
         }
     }
 
@@ -259,6 +308,9 @@ impl<'a> ArrayBytes<'a> {
                 let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
+            ArrayBytes::Optional { .. } => Err(CodecError::Other(
+                "Cannot extract subset from optional array bytes. Use the optional codec to handle optional data types.".to_string(),
+            )),
         }
     }
 }
@@ -309,6 +361,10 @@ fn validate_bytes(
         )?),
         (ArrayBytes::Variable(bytes, offsets), DataTypeSize::Variable) => {
             validate_bytes_vlen(bytes, offsets, num_elements)
+        }
+        (ArrayBytes::Optional { .. }, _) => {
+            // Optional bytes validation is handled by the optional codec
+            Ok(())
         }
         (ArrayBytes::Fixed(_), DataTypeSize::Variable) => Err(CodecError::Other(
             "Used fixed length array bytes with a variable sized data type.".to_string(),
@@ -496,6 +552,11 @@ fn update_array_bytes_array_subset<'a>(
             output_view.copy_from_slice(update_bytes)?;
             Ok(ArrayBytes::new_flen(bytes))
         }
+        (ArrayBytes::Optional { .. }, _, _) | (_, ArrayBytes::Optional { .. }, _) => {
+            Err(CodecError::Other(
+                "Cannot update optional array bytes. Use the optional codec to handle optional data types.".to_string(),
+            ))
+        }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
     }
@@ -562,6 +623,11 @@ pub fn update_array_bytes<'a>(
             }
             Ok(ArrayBytes::new_flen(bytes))
         }
+        (ArrayBytes::Optional { .. }, _, _) | (_, ArrayBytes::Optional { .. }, _) => {
+            Err(CodecError::Other(
+                "Cannot update optional array bytes. Use the optional codec to handle optional data types.".to_string(),
+            ))
+        }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
     }
@@ -624,7 +690,15 @@ pub(crate) fn merge_chunks_vlen<'a>(
     // TODO: Go parallel
     let mut bytes = vec![0; offsets.last()];
     for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
-        let (chunk_bytes, chunk_offsets) = chunk_bytes.into_variable()?;
+        let (chunk_bytes, chunk_offsets) = match chunk_bytes {
+            ArrayBytes::Variable(bytes, offsets) => (bytes, offsets),
+            ArrayBytes::Optional { .. } => {
+                return Err(CodecError::Other(
+                    "Cannot merge optional array bytes. Use the optional codec to handle optional data types.".to_string(),
+                ));
+            }
+            ArrayBytes::Fixed(_) => return Err(CodecError::ExpectedVariableLengthBytes),
+        };
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
         for (subset_idx, (&chunk_curr, &chunk_next)) in
             indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())

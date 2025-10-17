@@ -112,7 +112,9 @@ where
         let fill_value = fill_value.into();
         match data_type.size() {
             DataTypeSize::Fixed(size) => {
-                if size == fill_value.size() {
+                // Allow null fill values ONLY for optional data types
+                let is_optional = matches!(data_type, DataType::Optional(_));
+                if (fill_value.is_null() && is_optional) || size == fill_value.size() {
                     Ok(Self {
                         array_shape,
                         data_type,
@@ -142,7 +144,14 @@ where
     ) -> Self {
         let fill_value = fill_value.into();
         if let Some(data_type_size) = data_type.fixed_size() {
-            debug_assert_eq!(data_type_size, fill_value.size());
+            // Allow null fill values ONLY for optional data types
+            let is_optional = matches!(data_type, DataType::Optional(_));
+            debug_assert!(
+                (fill_value.is_null() && is_optional) || data_type_size == fill_value.size(),
+                "data type size {} does not match fill value size {}",
+                data_type_size,
+                fill_value.size()
+            );
         }
         Self {
             array_shape,

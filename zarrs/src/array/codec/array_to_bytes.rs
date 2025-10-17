@@ -2,6 +2,7 @@
 
 pub mod bytes;
 pub mod codec_chain;
+pub mod optional;
 pub mod packbits;
 pub mod vlen;
 pub mod vlen_array;
