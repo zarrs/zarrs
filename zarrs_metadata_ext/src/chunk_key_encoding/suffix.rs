@@ -14,9 +14,8 @@ pub struct SuffixChunkKeyEncodingConfiguration {
     /// The suffix to append to chunk keys.
     pub suffix: String,
     /// The base chunk key encoding.
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "base-encoding")]
-    pub base_encoding: Option<MetadataV3>,
+    pub base_encoding: MetadataV3,
 }
 
 impl ConfigurationSerialize for SuffixChunkKeyEncodingConfiguration {}

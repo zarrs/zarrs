@@ -30,12 +30,8 @@ pub(crate) fn create_chunk_key_encoding_suffix(
             PluginMetadataInvalidError::new(SUFFIX, "chunk key encoding", metadata.to_string())
         })?;
 
-    // Create the base encoding (default to "default" chunk key encoding if not specified)
-    let base_encoding = if let Some(base_metadata) = &configuration.base_encoding {
-        ChunkKeyEncoding::from_metadata(base_metadata)?
-    } else {
-        ChunkKeyEncoding::new(super::default::DefaultChunkKeyEncoding::default())
-    };
+    // Create the base encoding from the required base-encoding field
+    let base_encoding = ChunkKeyEncoding::from_metadata(&configuration.base_encoding)?;
 
     let suffix = SuffixChunkKeyEncoding::new(base_encoding, configuration.suffix);
     Ok(ChunkKeyEncoding::new(suffix))
@@ -73,7 +69,7 @@ impl ChunkKeyEncodingTraits for SuffixChunkKeyEncoding {
     fn create_metadata(&self) -> MetadataV3 {
         let configuration = SuffixChunkKeyEncodingConfiguration {
             suffix: self.suffix.clone(),
-            base_encoding: Some(self.base_encoding.create_metadata()),
+            base_encoding: self.base_encoding.create_metadata(),
         };
         MetadataV3::new_with_serializable_configuration(SUFFIX.to_string(), &configuration).unwrap()
     }
