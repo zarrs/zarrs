@@ -2,7 +2,7 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 use zarrs::{
-    array::chunk_grid::RectilinearChunkGridConfiguration,
+    array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement},
     storage::{
         storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
     },
@@ -62,15 +62,18 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             "rectilinear",
             RectilinearChunkGridConfiguration::Inline {
                 chunk_shapes: vec![
-                    vec![
-                        [NonZeroU64::new(1).unwrap(), NonZeroU64::new(3).unwrap()].into(),
-                        NonZeroU64::new(3).unwrap().into(),
-                        NonZeroU64::new(2).unwrap().into(),
-                    ],
-                    vec![
-                        NonZeroU64::new(4).unwrap().into(),
-                        NonZeroU64::new(4).unwrap().into(),
-                    ],
+                    ChunkEdgeLengths::Varying(vec![
+                        RunLengthElement::Repeated([
+                            NonZeroU64::new(1).unwrap(),
+                            NonZeroU64::new(3).unwrap(),
+                        ]),
+                        RunLengthElement::Single(NonZeroU64::new(3).unwrap()),
+                        RunLengthElement::Single(NonZeroU64::new(2).unwrap()),
+                    ]),
+                    ChunkEdgeLengths::Varying(vec![
+                        RunLengthElement::Single(NonZeroU64::new(4).unwrap()),
+                        RunLengthElement::Single(NonZeroU64::new(4).unwrap()),
+                    ]),
                 ],
             },
         ),
