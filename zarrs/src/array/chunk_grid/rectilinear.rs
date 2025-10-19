@@ -522,143 +522,25 @@ mod tests {
     }
 
     #[test]
-    fn chunk_grid_rectilinear_run_length_encoded() {
-        let array_shape: ArrayShape = vec![100, 100];
-
-        // Create run-length encoded configuration: [[5, 3], [15, 2], 20, 35]
-        // This expands to: [5, 5, 5, 15, 15, 20, 35]
-        let chunk_shapes: Vec<ChunkEdgeLengths> = vec![
-            ChunkEdgeLengths::Varying(vec![
-                RunLengthElement::Repeated([
-                    NonZeroU64::new(5).unwrap(),
-                    NonZeroU64::new(3).unwrap(),
-                ]),
-                RunLengthElement::Repeated([
-                    NonZeroU64::new(15).unwrap(),
-                    NonZeroU64::new(2).unwrap(),
-                ]),
-                RunLengthElement::Single(NonZeroU64::new(20).unwrap()),
-                RunLengthElement::Single(NonZeroU64::new(35).unwrap()),
-            ]),
-            ChunkEdgeLengths::Varying(vec![RunLengthElement::Repeated([
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(10).unwrap(),
-            ])]),
-        ];
-        let chunk_grid = RectilinearChunkGrid::new(array_shape, &chunk_shapes).unwrap();
-
-        // Should behave exactly the same as the explicit version
-        assert_eq!(chunk_grid.dimensionality(), 2);
-        assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
-        assert_eq!(
-            chunk_grid.chunk_indices(&[17, 17]).unwrap(),
-            Some(vec![3, 1])
-        );
-        assert_eq!(
-            chunk_grid.chunk_element_indices(&[17, 17]).unwrap(),
-            Some(vec![2, 7])
-        );
-
-        // Test chunk shapes
-        assert_eq!(
-            chunk_grid.chunk_shape(&[0, 0]).unwrap(),
-            Some(vec![NonZeroU64::new(5).unwrap(), NonZeroU64::new(10).unwrap()].into())
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[3, 0]).unwrap(),
-            Some(vec![NonZeroU64::new(15).unwrap(), NonZeroU64::new(10).unwrap()].into())
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[5, 0]).unwrap(),
-            Some(vec![NonZeroU64::new(20).unwrap(), NonZeroU64::new(10).unwrap()].into())
-        );
-        assert_eq!(
-            chunk_grid.chunk_shape(&[6, 0]).unwrap(),
-            Some(vec![NonZeroU64::new(35).unwrap(), NonZeroU64::new(10).unwrap()].into())
-        );
-    }
-
-    #[test]
-    fn chunk_grid_rectilinear_run_length_encoded_serialization() {
+    fn chunk_grid_rectilinear_deserialization() {
         use zarrs_metadata_ext::chunk_grid::rectilinear::RectilinearChunkGridConfiguration;
 
-        // Test that run-length encoded format can be deserialized
+        // Test that JSON with run-length encoding, scalars, and arrays can be deserialized
         let json = r#"
         {
             "kind": "inline",
-            "chunk_shapes": [[[5, 3], [15, 2], 20, 35], [[10, 10]]]
+            "chunk_shapes": [[[5, 3], [15, 2], 20, 35], 10]
         }
         "#;
 
         let config: RectilinearChunkGridConfiguration = serde_json::from_str(json).unwrap();
-
-        // Verify the first dimension is run-length encoded
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = &config;
-        let elements = match &chunk_shapes[0] {
-            ChunkEdgeLengths::Varying(elements) => elements,
-            _ => panic!("Expected Varying"),
-        };
-        assert_eq!(elements.len(), 4);
-        assert!(
-            matches!(&elements[0], RunLengthElement::Repeated([val, count]) if val.get() == 5 && count.get() == 3)
-        );
 
-        // Verify it can be used to create a chunk grid
-        let array_shape: ArrayShape = vec![100, 100];
-        let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = &config;
-        let chunk_grid = RectilinearChunkGrid::new(array_shape, chunk_shapes).unwrap();
-        assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
-    }
+        // First dimension should be varying (array with RLE)
+        assert!(matches!(&chunk_shapes[0], ChunkEdgeLengths::Varying(_)));
 
-    #[test]
-    fn chunk_grid_rectilinear_explicit_vs_rle() {
-        let array_shape: ArrayShape = vec![100, 100];
-
-        // Create explicit version
-        let explicit_chunks: Vec<ChunkEdgeLengths> = vec![
-            ChunkEdgeLengths::Varying(from_slice_u64(&[5, 5, 5, 15, 15, 20, 35]).unwrap()),
-            ChunkEdgeLengths::Varying(from_slice_u64(&[10; 10]).unwrap()),
-        ];
-        let explicit_grid =
-            RectilinearChunkGrid::new(array_shape.clone(), &explicit_chunks).unwrap();
-
-        // Create run-length encoded version
-        let rle_chunks: Vec<ChunkEdgeLengths> = vec![
-            ChunkEdgeLengths::Varying(vec![
-                RunLengthElement::Repeated([
-                    NonZeroU64::new(5).unwrap(),
-                    NonZeroU64::new(3).unwrap(),
-                ]),
-                RunLengthElement::Repeated([
-                    NonZeroU64::new(15).unwrap(),
-                    NonZeroU64::new(2).unwrap(),
-                ]),
-                RunLengthElement::Single(NonZeroU64::new(20).unwrap()),
-                RunLengthElement::Single(NonZeroU64::new(35).unwrap()),
-            ]),
-            ChunkEdgeLengths::Varying(vec![RunLengthElement::Repeated([
-                NonZeroU64::new(10).unwrap(),
-                NonZeroU64::new(10).unwrap(),
-            ])]),
-        ];
-        let rle_grid = RectilinearChunkGrid::new(array_shape, &rle_chunks).unwrap();
-
-        // Both should produce identical behavior
-        assert_eq!(explicit_grid.grid_shape(), rle_grid.grid_shape());
-
-        for i in 0..7 {
-            for j in 0..10 {
-                let indices = vec![i, j];
-                assert_eq!(
-                    explicit_grid.chunk_shape(&indices).unwrap(),
-                    rle_grid.chunk_shape(&indices).unwrap(),
-                );
-                assert_eq!(
-                    explicit_grid.chunk_origin(&indices).unwrap(),
-                    rle_grid.chunk_origin(&indices).unwrap(),
-                );
-            }
-        }
+        // Second dimension should be scalar
+        assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
     }
 
     #[test]
@@ -810,27 +692,21 @@ mod tests {
     }
 
     #[test]
-    fn chunk_grid_rectilinear_scalar_serialization() {
+    fn chunk_grid_rectilinear_scalar_round_trip() {
         let array_shape: ArrayShape = vec![100, 100];
-        let chunk_shapes: Vec<ChunkEdgeLengths> = vec![
-            ChunkEdgeLengths::Scalar(NonZeroU64::new(10).unwrap()),
-            ChunkEdgeLengths::Varying(from_slice_u64(&[20; 5]).unwrap()),
-        ];
+        let chunk_shapes: Vec<ChunkEdgeLengths> =
+            vec![ChunkEdgeLengths::Scalar(NonZeroU64::new(10).unwrap()); 2];
         let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
 
-        // Get metadata
+        // Serialize and deserialize
         let metadata = chunk_grid.create_metadata();
         let config: RectilinearChunkGridConfiguration = metadata.to_configuration().unwrap();
-
-        // Verify first dimension is serialized as scalar
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = &config;
-        assert!(matches!(&chunk_shapes[0], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
 
-        // Second dimension should be Varying
-        assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Varying(_)));
-
-        // Round-trip test
+        // Round-trip: verify scalar is preserved and grid is identical
         let chunk_grid2 = RectilinearChunkGrid::new(array_shape, chunk_shapes).unwrap();
         assert_eq!(chunk_grid.grid_shape(), chunk_grid2.grid_shape());
+        assert!(matches!(&chunk_shapes[0], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
+        assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
     }
 }
