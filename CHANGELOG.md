@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `Array::set_shape_and_chunk_grid`
 
+### Changed
+- Bump `zarrs_metadata_ext` to 0.2.2
+
 ## [0.22.4] - 2025-10-13
 
 ### Added
