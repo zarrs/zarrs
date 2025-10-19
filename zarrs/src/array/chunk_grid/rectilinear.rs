@@ -709,4 +709,142 @@ mod tests {
         assert!(matches!(&chunk_shapes[0], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
         assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
     }
+
+    #[test]
+    fn chunk_grid_rectilinear_comprehensive() {
+        // Test from_metadata, array_shape, chunk_shape_u64, array_indices_inbounds,
+        // and error paths for chunk_indices, chunk_origin, chunk_shape, chunk_shape_u64
+
+        // Setup a mixed scalar/varying chunk grid
+        let array_shape: ArrayShape = vec![100, 100, 50];
+        let chunk_shapes: Vec<ChunkEdgeLengths> = vec![
+            ChunkEdgeLengths::Varying(from_slice_u64(&[10, 20, 30, 40]).unwrap()),
+            ChunkEdgeLengths::Scalar(NonZeroU64::new(25).unwrap()),
+            ChunkEdgeLengths::Varying(from_slice_u64(&[5, 15, 30]).unwrap()),
+        ];
+        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+
+        // Test from_metadata
+        let metadata = chunk_grid.create_metadata();
+        let reconstructed_grid = create_chunk_grid_rectilinear(&(metadata, array_shape.clone()))
+            .expect("Failed to create chunk grid from metadata");
+
+        // Verify the reconstructed grid has the same properties
+        assert_eq!(reconstructed_grid.dimensionality(), 3);
+        assert_eq!(reconstructed_grid.array_shape(), &array_shape);
+        assert_eq!(reconstructed_grid.grid_shape(), &[4, 4, 3]);
+
+        // Test array_shape
+        assert_eq!(chunk_grid.array_shape(), &array_shape);
+        assert_eq!(chunk_grid.array_shape(), &vec![100, 100, 50]);
+
+        // Test chunk_shape_u64 with valid indices
+        assert_eq!(
+            chunk_grid.chunk_shape_u64(&[0, 0, 0]).unwrap(),
+            Some(vec![10, 25, 5])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape_u64(&[1, 2, 1]).unwrap(),
+            Some(vec![20, 25, 15])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape_u64(&[3, 3, 2]).unwrap(),
+            Some(vec![40, 25, 30])
+        );
+
+        // Test chunk_shape_u64 with out-of-bounds chunk indices (returns None)
+        assert_eq!(chunk_grid.chunk_shape_u64(&[4, 0, 0]).unwrap(), None); // First dim out of bounds
+        assert_eq!(chunk_grid.chunk_shape_u64(&[0, 0, 3]).unwrap(), None); // Third dim out of bounds
+
+        // Test array_indices_inbounds with valid indices
+        assert!(chunk_grid.array_indices_inbounds(&[0, 0, 0]));
+        assert!(chunk_grid.array_indices_inbounds(&[50, 50, 25]));
+        assert!(chunk_grid.array_indices_inbounds(&[99, 99, 49]));
+
+        // Test array_indices_inbounds with out-of-bounds indices
+        assert!(!chunk_grid.array_indices_inbounds(&[100, 50, 25])); // First dim out
+        assert!(!chunk_grid.array_indices_inbounds(&[50, 100, 25])); // Second dim out
+        assert!(!chunk_grid.array_indices_inbounds(&[50, 50, 50])); // Third dim out
+
+        // Test array_indices_inbounds with wrong dimensionality
+        assert!(!chunk_grid.array_indices_inbounds(&[50, 50])); // Too few dimensions
+        assert!(!chunk_grid.array_indices_inbounds(&[50, 50, 25, 0])); // Too many dimensions
+
+        // Error paths: Test chunk_indices with incompatible dimensionality
+        let result = chunk_grid.chunk_indices(&[50, 50]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        let result = chunk_grid.chunk_indices(&[50, 50, 25, 0]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        // Error paths: Test chunk_origin with incompatible dimensionality
+        let result = chunk_grid.chunk_origin(&[1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        let result = chunk_grid.chunk_origin(&[1, 1, 1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        // Error paths: Test chunk_shape with incompatible dimensionality
+        let result = chunk_grid.chunk_shape(&[1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        let result = chunk_grid.chunk_shape(&[1, 1, 1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        // Error paths: Test chunk_shape_u64 with incompatible dimensionality
+        let result = chunk_grid.chunk_shape_u64(&[1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        let result = chunk_grid.chunk_shape_u64(&[1, 1, 1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        // Verify correct dimensionality returns Ok (even if indices are out of bounds)
+        let result = chunk_grid.chunk_indices(&[150, 150, 150]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None); // Out of bounds returns None
+
+        let result = chunk_grid.chunk_origin(&[10, 10, 10]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
+
+        let result = chunk_grid.chunk_shape(&[10, 10, 10]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
+
+        let result = chunk_grid.chunk_shape_u64(&[10, 10, 10]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), None); // Out of bounds chunk indices return None
+    }
 }
