@@ -65,7 +65,7 @@ lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = ">=0.15.4,<17", optional = true }
 num.workspace = true
-pco = { version = "0.4.0", optional = true }
+pco = { version = ">=0.4.0,<0.4.7", optional = true }
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
