@@ -530,6 +530,24 @@ mod tests {
 
         // Second dimension should be scalar
         assert!(matches!(&chunk_shapes[1], ChunkEdgeLengths::Scalar(v) if v.get() == 10));
+
+        // Verify that expand_varying_chunks correctly expands RunLengthElement::Repeated
+        // The RLE [[5, 3], [15, 2], 20, 35] should expand to [5, 5, 5, 15, 15, 20, 35]
+        // Total = 5+5+5+15+15+20+35 = 100
+        let array_shape: ArrayShape = vec![100, 100];
+        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+
+        assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
+
+        // Verify chunk origins to ensure expansion worked correctly
+        assert_eq!(chunk_grid.chunk_origin(&[0, 0]).unwrap(), Some(vec![0, 0]));
+        assert_eq!(chunk_grid.chunk_origin(&[1, 0]).unwrap(), Some(vec![5, 0]));
+        assert_eq!(chunk_grid.chunk_origin(&[2, 0]).unwrap(), Some(vec![10, 0]));
+        assert_eq!(chunk_grid.chunk_origin(&[3, 0]).unwrap(), Some(vec![15, 0])); // After 3 chunks of 5
+        assert_eq!(chunk_grid.chunk_origin(&[4, 0]).unwrap(), Some(vec![30, 0])); // After 3×5 + 15
+        assert_eq!(chunk_grid.chunk_origin(&[5, 0]).unwrap(), Some(vec![45, 0])); // After 3×5 + 2×15
+        assert_eq!(chunk_grid.chunk_origin(&[6, 0]).unwrap(), Some(vec![65, 0]));
+        // After 3×5 + 2×15 + 20
     }
 
     #[test]
@@ -813,6 +831,21 @@ mod tests {
         ));
 
         let result = chunk_grid.chunk_shape_u64(&[1, 1, 1, 1]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        // Error paths: Test chunk_element_indices with incompatible dimensionality
+        let result = chunk_grid.chunk_element_indices(&[50, 50]);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            IncompatibleDimensionalityError { .. }
+        ));
+
+        let result = chunk_grid.chunk_element_indices(&[50, 50, 25, 0]);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
