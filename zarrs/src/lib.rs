@@ -237,6 +237,7 @@ pub mod group;
 pub mod indexer;
 pub mod node;
 pub mod version;
+pub mod hierarchy;
 
 pub use zarrs_metadata as metadata;
 pub use zarrs_metadata_ext as metadata_ext;

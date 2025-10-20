@@ -12,7 +12,7 @@ pub use node_name::{NodeName, NodeNameError};
 mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
-mod node_sync;
+pub mod node_sync;
 pub use node_sync::{get_child_nodes, node_exists, node_exists_listable};
 
 mod key;
@@ -126,7 +126,7 @@ impl From<NodeCreateError> for GroupCreateError {
 }
 
 impl Node {
-    fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &NodePath,
         version: &MetadataRetrieveVersion,
