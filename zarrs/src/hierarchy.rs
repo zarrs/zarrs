@@ -8,12 +8,9 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use zarrs_storage::discover_children;
 
-use crate::node;
 pub use crate::node::{
-    Node,
-    node_sync::get_child_nodes,
+    Node,get_all_nodes_of,
     NodeCreateError,
     NodePath,
     NodePathError,
@@ -22,14 +19,10 @@ pub use crate::node::{
 pub use crate::metadata::NodeMetadata;
 
 use crate::{
-    array::{ArrayMetadata},
+    array::{Array,ArrayMetadata},
     config::MetadataRetrieveVersion,
-    // group::GroupCreateError,
-    metadata::{
-        v2::{ArrayMetadataV2, GroupMetadataV2},
-        GroupMetadata,
-    },
-    storage::{StorePrefix,ListableStorageTraits, ReadableStorageTraits, StorageError},
+    group::Group,
+    storage::{ListableStorageTraits, ReadableStorageTraits},
 };
 
 /// Zarr hierarchy.
@@ -45,12 +38,12 @@ impl Hierarchy {
         Hierarchy(BTreeMap::new())
     }
 
-    fn insert(&mut self, path: NodePath, metadata: NodeMetadata) {
-        self.0.insert(path, metadata);
+    fn insert(&mut self, path: &NodePath, metadata: &NodeMetadata) {
+        self.0.insert(path.clone(), metadata.clone());
     }
 
     fn insert_node(&mut self, node: &Node) {
-        self.insert(node.path().clone(), node.metadata().clone());
+        self.insert(node.path(), node.metadata());
     }
 
     fn insert_nodes<'a>(&mut self, nodes: impl Iterator<Item=&'a Node>) {
@@ -58,12 +51,14 @@ impl Hierarchy {
             self.insert_node(node);
         }
     }
-
+    
+    /// Create a string representation of the hierarchy 
     pub fn tree(&self) -> String {
-        self.tree_of(None)
+        self.tree_of(&NodePath::root())
     }
-    /// Create a string representation of the hierarchy.
-    pub fn tree_of(&self, parent_path: Option<NodePath>) -> String {
+
+    /// Create a string representation of the hierarchy for a NodePath
+    pub fn tree_of(&self, parent_path: &NodePath) -> String {
         fn print_metadata(name: &str, string: &mut String, metadata: &NodeMetadata) {
             match metadata {
                 NodeMetadata::Array(array_metadata) => {
@@ -88,41 +83,34 @@ impl Hierarchy {
             string.push('\n');
         }
         
-        let mut s = String::new();
-        let prefix = match &parent_path {
-            Some(n) => n.as_str(),
-            None => "",
-        };
-        for (name, metadata) in self.0.iter().filter(|(path,_)| path.as_str().starts_with(prefix)){
-            if let Ok(name) = NodePath::try_from(name.as_str().strip_prefix(prefix).unwrap()) {
-                print_metadata(&name.as_str(), &mut s, metadata);
-            }
+        let mut s = String::from(parent_path.as_str());
+        s.push('\n');
+
+        // let prefix = if parent_path.as_str.is_dir() {
+        //     parent_path.
+
+        // }
+        let prefix = parent_path.as_str();
+        
+        for node in self.0.iter()
+                .filter(|(path,_)| path.as_str().starts_with(prefix) && !path.as_str().eq(prefix))
+                .map(|(p, md)|{
+                    Node::new_with_metadata(p.clone(),md.clone(),vec![])
+                }){
+            
+            let depth = node.path()
+                .as_path()
+                .strip_prefix(prefix)
+                .unwrap()
+                .ancestors()
+                .count()
+                .checked_sub(1)
+                .unwrap_or(0);
+
+            s.push_str(&" ".repeat(depth* 2));
+            print_metadata(node.name().as_str(), &mut s, node.metadata());
         }
         s
-    }
-
-    /// Recursively get all nodes in the hierarchy under root '/'.
-    pub fn get_all_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>) -> Result<Vec<Node>,HierarchyCreateError> {
-            Self::get_all_nodes_of(&storage, Some(NodePath::root()))
-    }
-    
-    /// Recursively get all nodes under a given path.
-    pub fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        parent_path: Option<NodePath>,
-    ) -> Result<Vec<Node>,HierarchyCreateError> {
-        let path = match &parent_path {
-            Some(n) => n,
-            None => &NodePath::root(),
-        };
-
-        let mut nodes: Vec<Node> = Vec::new();
-        for child in get_child_nodes(storage, path, false)? {
-            nodes.extend(get_child_nodes(storage, child.path(), false)?);
-            nodes.push(child);
-        }
-        Ok(nodes)
     }
     
 
@@ -138,111 +126,169 @@ impl Hierarchy {
         //Ok(Self::new())
     }
 
-    /// Open a node at `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
     pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        _version: &MetadataRetrieveVersion,
     ) -> Result<Self, HierarchyCreateError> {
-        let path: NodePath = path.try_into()?;
-        let metadata = Node::get_metadata(storage, &path, version)?;
-        
+       
+        let node = Node::open(storage, path).unwrap();
         let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(path.clone(), metadata.clone());
+        hierarchy.insert_node(&node);
         
         
-        let nodes = match metadata {
+        let nodes = match node.metadata() {
             NodeMetadata::Array(_) => Vec::default(),
             // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => Self::get_all_nodes_of(storage, Some(path))?,
+            NodeMetadata::Group(_) => get_all_nodes_of(storage, &node.path())?,
         };
         
         hierarchy.insert_nodes(nodes.iter());
 
         Ok(hierarchy)
     }
-   
 }
 
 
+impl<TStorage: ?Sized> TryFrom<&Group<TStorage>> for Hierarchy
+where
+    TStorage: ReadableStorageTraits + ListableStorageTraits,
+{
+    type Error = HierarchyCreateError;
+    fn try_from(value: &Group<TStorage>) -> Result<Self,Self::Error> {
+        let mut hierarchy = Hierarchy::new();
+        let root_node = Node::from(value);
+        hierarchy.insert_node(&root_node);
+        hierarchy.insert_nodes(value.traverse().unwrap().iter());
+        Ok(hierarchy)
+    }
+}
+
+impl<TStorage: ?Sized> TryFrom<&Array<TStorage>> for Hierarchy
+where
+    TStorage: ReadableStorageTraits + ListableStorageTraits,
+
+{
+    type Error = HierarchyCreateError;
+    fn try_from(value: &Array<TStorage>) -> Result<Self,Self::Error> {
+        let mut hierarchy = Hierarchy::new();
+        let node = Node::from(value);
+        hierarchy.insert_node(&node);
+        Ok(hierarchy)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::{
-        array::ArrayBuilder,
-        group::GroupBuilder,
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits}
+        array::{ArrayBuilder}, group::GroupBuilder, storage::{store::MemoryStore, StoreKey, WritableStorageTraits}
     };
 
-    const JSON_GROUP : &str= r#"{
-        "zarr_format": 3,
-        "node_type": "group",
-        "attributes": {}
-    }"#;
+    const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
+
+    fn helper_create_dataset(store: &Arc<MemoryStore>) -> Group<MemoryStore> {
+        let group_builder = GroupBuilder::default();
+
+        let root = group_builder.build(store.clone(), &NodePath::root().as_str()).unwrap();
+        let group = group_builder.build(store.clone(), "/group").unwrap();
+        let array_builder = ArrayBuilder::new(
+            vec![10,10],
+            vec![5,5],
+            crate::array::DataType::Float32,
+            0.0f32,
+        );
+
+        let array = array_builder.build(store.clone(), "/array").unwrap();
+        let group_array = array_builder.build(store.clone(), "/group/array").unwrap();
+        let subgroup = group_builder.build(
+            store.clone(),
+            "/group/subgroup"
+        ).unwrap();
+        let subgroup_array = array_builder.build(store.clone(), "/group/subgroup/mysubarray").unwrap();
+
+        root.store_metadata().unwrap();
+        array.store_metadata().unwrap();
+        group.store_metadata().unwrap();
+        group_array.store_metadata().unwrap();
+        subgroup.store_metadata().unwrap();
+        subgroup_array.store_metadata().unwrap();
+
+        root
+    }
 
     #[test]
     fn hierarchy_tree_empty() {
         let hierarchy = Hierarchy::new();
         let tree_str = hierarchy.tree();
-        assert_eq!(tree_str, "0");
+        assert_eq!(tree_str, "/\n");
     }
 
     #[test]
-    fn hierarchy_open() {
-        let root_md = serde_json::from_str::<NodeMetadata>(JSON_GROUP).unwrap();
-
-        let json = serde_json::to_vec_pretty(&root_md).unwrap();
-
-        let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
-        store
-            .set(&StoreKey::new("root/zarr.json").unwrap(), json.into())
-            .unwrap();
-
-
-
-        let array_path = "/root/array";
-
+    fn hierarchy_try_from_array() {
+        let store = Arc::new(MemoryStore::new());
         let array_builder = ArrayBuilder::new(
-                vec![1, 2, 3],
-                vec![1, 1, 1],
-                crate::array::DataType::Float32,
-                0.0f32,
-            );
+            vec![1],
+            vec![1],
+            crate::array::DataType::Float32,
+            0.0f32,
+        );
 
-        let array = array_builder
-            .build(store.clone(), array_path)
-            .unwrap();
-        array.store_metadata().unwrap();
-
+        let array = array_builder.build(store, "/store/of/data.zarr/path/to/an/array").expect("Faulty test array");
         
-        for i in 0..3 {
-            let group_path = format!("/root/group{}",i);
+        let hierarchy = Hierarchy::try_from(&array).unwrap();
+        println!("{}",hierarchy.tree());
+        assert_eq!(hierarchy.0.len(),1);
+    }
 
-            let group = GroupBuilder::new().build(store.clone(), &group_path).unwrap();
-            group.store_metadata().unwrap();
+    #[test]
+    fn hierarchy_try_from_group() {
+        let store = Arc::new(MemoryStore::new());
+        let group = helper_create_dataset(&store);
+        let hierarchy = Hierarchy::try_from(&group).unwrap();
 
-            let array_path: NodePath = format!("{}/array{}", &group_path, i).as_str().try_into().unwrap();
-            let array = array_builder
-                .build(store.clone(), &array_path.as_str())
-                .unwrap();
-            
-            array.store_metadata().unwrap();
-        }
+        println!("tree:\n{}",hierarchy.tree());
+        assert_eq!(hierarchy.0.len(),6);
+    }  
 
+    #[test]
+    fn hierarchy_tree_of() {
+        let store = Arc::new(MemoryStore::new());
+      
+        let group = helper_create_dataset(&store);
 
-        
-        let hierarchy = Hierarchy::open(&store, "/root").unwrap();
-        let tree_str = hierarchy.tree();
-        println!("{}", tree_str);
-        assert_eq!(hierarchy.tree(), "/root\n/root/array [1, 2, 3] float32\n/root/group0\n/root/group0/array0 [1, 2, 3] float32\n/root/group1\n/root/group1/array1 [1, 2, 3] float32\n/root/group2\n/root/group2/array2 [1, 2, 3] float32\n");
+        let hierarchy = Hierarchy::try_from(&group).unwrap();
 
-        // println!("Node hierarchy tree:\n{}", Node::open(&store, "/root").unwrap().hierarchy_tree());
+        assert_eq!("/group/subgroup\n  mysubarray [10, 10] float32\n",
+            hierarchy.tree_of(&NodePath::try_from("/group/subgroup").unwrap()));
+    }
 
-        let subgroup_path: NodePath = "/root/group1".try_into().unwrap();
-        //println!("Hierarchy tree of node {}: {}", subgroup_path,
-        assert_eq!(hierarchy.tree_of(Some(subgroup_path.clone())),"/array1 [1, 2, 3] float32\n");
+    #[test]
+    fn hierarchy_tree() {
+        let store = Arc::new(MemoryStore::new());
+      
+        let group = helper_create_dataset(&store);
+
+        let hierarchy = Hierarchy::try_from(&group).unwrap();
+
+        assert_eq!("/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n"
+                    ,hierarchy.tree());
+    }
+    #[test]
+    fn hierarchy_open() {
+        let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
+
+        let group = helper_create_dataset(&store);
+
+        let h = Hierarchy::open(&store, "/").unwrap();
+
+        println!("{}",h.tree());
+        assert_eq!(EXPECTED_TREE, h.tree())
+
     }
 }

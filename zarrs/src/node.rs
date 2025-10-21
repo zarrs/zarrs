@@ -12,8 +12,8 @@ pub use node_name::{NodeName, NodeNameError};
 mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
-pub mod node_sync;
-pub use node_sync::{get_child_nodes, node_exists, node_exists_listable};
+mod node_sync;
+pub use node_sync::{get_child_nodes, get_all_nodes_of, node_exists, node_exists_listable};
 
 mod key;
 pub use key::{
@@ -33,9 +33,9 @@ pub use crate::metadata::NodeMetadata;
 use thiserror::Error;
 
 use crate::{
-    array::{ArrayCreateError, ArrayMetadata},
+    array::{Array,ArrayCreateError, ArrayMetadata},
     config::MetadataRetrieveVersion,
-    group::GroupCreateError,
+    group::{Group,GroupCreateError},
     metadata::{
         v2::{ArrayMetadataV2, GroupMetadataV2},
         GroupMetadata,
@@ -70,6 +70,24 @@ impl From<Node> for NodeMetadata {
 impl From<Node> for NodePath {
     fn from(value: Node) -> Self {
         value.path
+    }
+}
+
+impl<TStorage: ?Sized> From<&Group<TStorage>> for Node {
+    fn from(value: &Group<TStorage>) -> Self {
+        Node::new_with_metadata(
+            value.path().clone(),
+            NodeMetadata::Group(value.metadata().clone()),
+            vec![])
+    }
+}
+
+impl<TStorage: ?Sized> From<&Array<TStorage>> for Node {
+    fn from(value: &Array<TStorage>) -> Self {
+        Node::new_with_metadata(
+            value.path().clone(),
+            NodeMetadata::Array(value.metadata().clone()),
+            vec![])
     }
 }
 
@@ -126,7 +144,7 @@ impl From<NodeCreateError> for GroupCreateError {
 }
 
 impl Node {
-    pub fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &NodePath,
         version: &MetadataRetrieveVersion,

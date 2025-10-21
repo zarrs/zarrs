@@ -41,8 +41,8 @@ use crate::{
         global_config, MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion,
     },
     node::{
-        get_child_nodes, meta_key_v2_attributes, meta_key_v2_group, meta_key_v3, Node,
-        NodeCreateError, NodePath, NodePathError,
+        get_child_nodes, get_all_nodes_of, meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
+        Node, NodeCreateError, NodePath, NodePathError,
     },
     storage::{ReadableStorageTraits, StorageError, StorageHandle, WritableStorageTraits},
 };
@@ -320,6 +320,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     pub fn children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
         get_child_nodes(&self.storage, &self.path, recursive)
     }
+    
+    /// Return all the Nodes under the group, recursively
+    ///
+    /// # Errors
+    /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
+    pub fn traverse(&self) -> Result<Vec<Node>, NodeCreateError> {
+        get_all_nodes_of(&self.storage, &self.path)
+    }
+
 
     /// Return the children of the group that are [`Group`]s
     ///
@@ -969,5 +978,34 @@ mod tests {
         let store = std::sync::Arc::new(MemoryStore::new());
         let group_path = "/group";
         assert!(Group::open(store, group_path).is_err());
+    }
+
+    #[test]
+    fn group_traverse() {
+        let store = Arc::new(MemoryStore::new());
+
+        let builder = GroupBuilder::default();
+        let root = builder
+            .build(store.clone(), NodePath::root().as_str())
+            .unwrap();
+
+        assert!(root.store_metadata().is_ok());
+
+        assert!(builder.build(store.clone(),"/group").unwrap().store_metadata().is_ok());
+        assert!(builder.build(store.clone(),"/group/subgroup").unwrap().store_metadata().is_ok());
+        assert!(builder.build(store.clone(),"/group/subgroup/leafgroup").unwrap().store_metadata().is_ok());
+
+        println!("{:?}",root.traverse().unwrap());
+        
+        let nodes = root.traverse();
+        assert!(nodes.is_ok());
+        
+        let nodes = nodes.unwrap();
+        
+        assert!(nodes.len() == 3);
+        assert_eq!(
+            nodes.iter().map(|n|n.path().as_str()).collect::<Vec<&str>>().sort(),
+            vec!["/group","/group/subgroup","/group/subgroup/leafgroup"].sort()
+        );
     }
 }
