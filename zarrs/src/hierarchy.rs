@@ -153,7 +153,7 @@ where
         let mut hierarchy = Hierarchy::new();
         let root_node = Node::from(value);
         hierarchy.insert_node(&root_node);
-        hierarchy.insert_nodes(value.traverse().unwrap().iter());
+        hierarchy.insert_nodes(value.traverse()?.iter());
         Ok(hierarchy)
     }
 }
@@ -173,6 +173,8 @@ where
 
 #[cfg(test)]
 mod tests {
+
+    use zarrs_metadata::{v3::GroupMetadataV3, GroupMetadata};
 
     use super::*;
     use crate::{
@@ -246,6 +248,30 @@ mod tests {
 
         println!("tree:\n{}", hierarchy.tree());
         assert_eq!(hierarchy.0.len(), 6);
+    }
+
+    #[test]
+    fn hierarchy_try_from_invalid_group() {
+        let store = Arc::new(MemoryStore::new());
+
+        let root = Group::new_with_metadata(
+            store.clone(),
+            "/",
+            GroupMetadata::V3(GroupMetadataV3::default()),
+        )
+        .unwrap();
+
+        assert!(Hierarchy::try_from(&root).is_ok());
+
+        // Inject fauly subgroup
+        store
+            .set(
+                &StoreKey::new("subgroup/zarr.json").unwrap(),
+                vec![0].into(),
+            )
+            .unwrap();
+
+        assert!(Hierarchy::try_from(&root).is_err());
     }
 
     #[test]
