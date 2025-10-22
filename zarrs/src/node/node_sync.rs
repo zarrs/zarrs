@@ -64,8 +64,9 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
 /// Returns a [`StorageError`] if there is an underlying error with the store.
 #[allow(dead_code)]
 fn get_all_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-    storage: &Arc<TStorage>) -> Result<Vec<Node>,NodeCreateError> {
-        get_all_nodes_of(&storage, &NodePath::root())
+    storage: &Arc<TStorage>,
+) -> Result<Vec<Node>, NodeCreateError> {
+    get_all_nodes_of(storage, &NodePath::root())
 }
 
 /// Recursively get all nodes under a given path.
@@ -75,7 +76,7 @@ fn get_all_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTrait
 pub fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
     storage: &Arc<TStorage>,
     path: &NodePath,
-) -> Result<Vec<Node>,NodeCreateError> {
+) -> Result<Vec<Node>, NodeCreateError> {
     let mut nodes: Vec<Node> = Vec::new();
     for child in get_child_nodes(storage, path, false)? {
         if let NodeMetadata::Group(_) = child.metadata() {

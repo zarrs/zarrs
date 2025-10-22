@@ -234,10 +234,10 @@ pub mod array;
 pub mod array_subset;
 pub mod config;
 pub mod group;
+pub mod hierarchy;
 pub mod indexer;
 pub mod node;
 pub mod version;
-pub mod hierarchy;
 
 pub use zarrs_metadata as metadata;
 pub use zarrs_metadata_ext as metadata_ext;
