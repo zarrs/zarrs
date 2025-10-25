@@ -141,3 +141,6 @@ pub const NUMPY_DATETIME64: &str = "numpy.datetime64";
 
 /// Unique identifier for the `numpy.timedelta64` data type (registered)
 pub const NUMPY_TIMEDELTA64: &str = "numpy.timedelta64";
+
+/// Unique identifier for the `optional` data type (registered)
+pub const OPTIONAL: &str = "optional";
