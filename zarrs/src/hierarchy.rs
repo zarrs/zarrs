@@ -8,7 +8,8 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-pub use crate::node::{get_all_nodes_of, Node, NodeCreateError, NodePath, NodePathError};
+use crate::node::get_all_nodes_of;
+pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
 
 pub use crate::metadata::NodeMetadata;
 
@@ -32,18 +33,8 @@ impl Hierarchy {
         Hierarchy(BTreeMap::new())
     }
 
-    fn insert(&mut self, path: &NodePath, metadata: &NodeMetadata) {
-        self.0.insert(path.clone(), metadata.clone());
-    }
-
-    fn insert_node(&mut self, node: &Node) {
-        self.insert(node.path(), node.metadata());
-    }
-
-    fn insert_nodes<'a>(&mut self, nodes: impl Iterator<Item = &'a Node>) {
-        for node in nodes {
-            self.insert_node(node);
-        }
+    fn insert(&mut self, path: NodePath, metadata: NodeMetadata) {
+        self.0.insert(path, metadata);
     }
 
     /// Create a string representation of the hierarchy
@@ -124,21 +115,30 @@ impl Hierarchy {
     pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
-        _version: &MetadataRetrieveVersion,
+        version: &MetadataRetrieveVersion,
     ) -> Result<Self, HierarchyCreateError> {
-        let node = Node::open(storage, path)?;
+        let node_path = NodePath::try_from(path)?;
+        let node_metadata = Node::get_metadata(storage, &node_path, version)?;
         let mut hierarchy = Hierarchy::new();
-        hierarchy.insert_node(&node);
 
-        let nodes = match node.metadata() {
+        let nodes = match node_metadata {
             NodeMetadata::Array(_) => Vec::default(),
             // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => get_all_nodes_of(storage, node.path())?,
+            NodeMetadata::Group(_) => get_all_nodes_of(storage, &node_path, version)?,
         };
 
-        hierarchy.insert_nodes(nodes.iter());
+        hierarchy.insert(node_path, node_metadata);
+        hierarchy.extend(nodes);
 
         Ok(hierarchy)
+    }
+}
+
+impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
+    fn extend<T: IntoIterator<Item = (NodePath, NodeMetadata)>>(&mut self, iter: T) {
+        for (path, metadata) in iter {
+            self.insert(path, metadata);
+        }
     }
 }
 
@@ -147,12 +147,28 @@ where
     TStorage: ReadableStorageTraits + ListableStorageTraits,
 {
     type Error = HierarchyCreateError;
-    fn try_from(value: &Group<TStorage>) -> Result<Self, Self::Error> {
+    fn try_from(group: &Group<TStorage>) -> Result<Self, Self::Error> {
         let mut hierarchy = Hierarchy::new();
-        let root_node = Node::from(value);
-        hierarchy.insert_node(&root_node);
-        hierarchy.insert_nodes(value.traverse()?.iter());
+        hierarchy.insert(
+            group.path().clone(),
+            NodeMetadata::Group(group.metadata().clone()),
+        );
+        hierarchy.extend(get_all_nodes_of(
+            &group.storage(),
+            group.path(),
+            &MetadataRetrieveVersion::Default,
+        )?);
         Ok(hierarchy)
+    }
+}
+
+impl<TStorage: ?Sized> TryFrom<Group<TStorage>> for Hierarchy
+where
+    TStorage: ReadableStorageTraits + ListableStorageTraits,
+{
+    type Error = HierarchyCreateError;
+    fn try_from(group: Group<TStorage>) -> Result<Self, Self::Error> {
+        (&group).try_into()
     }
 }
 
@@ -161,11 +177,23 @@ where
     TStorage: ReadableStorageTraits + ListableStorageTraits,
 {
     type Error = HierarchyCreateError;
-    fn try_from(value: &Array<TStorage>) -> Result<Self, Self::Error> {
+    fn try_from(array: &Array<TStorage>) -> Result<Self, Self::Error> {
         let mut hierarchy = Hierarchy::new();
-        let node = Node::from(value);
-        hierarchy.insert_node(&node);
+        hierarchy.insert(
+            array.path().clone(),
+            NodeMetadata::Array(array.metadata().clone()),
+        );
         Ok(hierarchy)
+    }
+}
+
+impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy
+where
+    TStorage: ReadableStorageTraits + ListableStorageTraits,
+{
+    type Error = HierarchyCreateError;
+    fn try_from(array: Array<TStorage>) -> Result<Self, Self::Error> {
+        (&array).try_into()
     }
 }
 

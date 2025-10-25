@@ -331,8 +331,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
-    pub fn traverse(&self) -> Result<Vec<Node>, NodeCreateError> {
-        get_all_nodes_of(&self.storage, &self.path)
+    pub fn traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
     }
 
     /// Return the children of the group that are [`Group`]s
@@ -1023,7 +1023,7 @@ mod tests {
         assert_eq!(
             nodes
                 .iter()
-                .map(|n| n.path().as_str())
+                .map(|(path, _metadata)| path.as_str())
                 .collect::<Vec<&str>>()
                 .sort(),
             vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()

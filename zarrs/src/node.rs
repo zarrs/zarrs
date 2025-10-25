@@ -13,9 +13,8 @@ mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
 mod node_sync;
-pub use node_sync::{
-    get_all_nodes_of, get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable,
-};
+pub(crate) use node_sync::get_all_nodes_of;
+pub use node_sync::{get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable};
 
 mod key;
 pub use key::{
