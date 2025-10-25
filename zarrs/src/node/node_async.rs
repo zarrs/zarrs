@@ -25,6 +25,22 @@ pub async fn async_get_child_nodes<TStorage>(
 where
     TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
 {
+    async_get_child_nodes_opt(storage, path, recursive, &MetadataRetrieveVersion::Default).await
+}
+
+/// Asynchronously get the child nodes.
+///
+/// # Errors
+/// Returns a [`StorageError`] if there is an underlying error with the store.
+pub async fn async_get_child_nodes_opt<TStorage>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    recursive: bool,
+    version: &MetadataRetrieveVersion,
+) -> Result<Vec<Node>, NodeCreateError>
+where
+    TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+{
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = async_discover_children(storage, &prefix).await?;
     let mut nodes: Vec<Node> = Vec::new();
@@ -33,14 +49,13 @@ where
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata =
-            Node::async_get_metadata(storage, &path, &MetadataRetrieveVersion::Default).await?;
+        let child_metadata = Node::async_get_metadata(storage, &path, version).await?;
 
         let children = if recursive {
             match child_metadata {
                 NodeMetadata::Array(_) => Vec::default(),
                 NodeMetadata::Group(_) => {
-                    Box::pin(async_get_child_nodes(storage, &path, true)).await?
+                    Box::pin(async_get_child_nodes_opt(storage, &path, true, version)).await?
                 }
             }
         } else {

@@ -9,9 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `Array::set_shape_and_chunk_grid`
+- Add `node::[async_]get_child_nodes_opt`
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.2
+
+### Fixed
+- Respect `version` argument for children in `Node::[async_]open_opt`
 
 ## [0.22.4] - 2025-10-13
 

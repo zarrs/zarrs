@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add support for `null` fill values: `FillValue::new_null()` and `is_null()`
+
 ## [0.4.0] - 2025-09-19
 
 ### Added
