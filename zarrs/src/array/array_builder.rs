@@ -3,7 +3,10 @@ use std::sync::Arc;
 use derive_more::From;
 use zarrs_metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
 
-use crate::{array::ChunkGrid, node::NodePath};
+use crate::{
+    array::{codec::array_to_bytes::optional::OptionalCodec, ChunkGrid},
+    node::NodePath,
+};
 
 use super::{
     chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
@@ -536,6 +539,23 @@ impl ArrayBuilder {
                     scale_factor: _,
                 }
                 | DataType::RawBits(_) => unreachable!(),
+                DataType::Optional(inner) => {
+                    let mask_codec_chain = Arc::new(CodecChain::new_named(
+                        vec![],
+                        Arc::new(crate::array::codec::PackBitsCodec::default()).into(),
+                        // Self::default_codec(&DataType::Bool),
+                        vec![],
+                    ));
+                    let data_codec_chain = Arc::new(CodecChain::new_named(
+                        vec![],
+                        Self::default_codec(inner),
+                        vec![],
+                    ));
+                    NamedArrayToBytesCodec::new(
+                        zarrs_registry::codec::OPTIONAL.to_string(),
+                        Arc::new(OptionalCodec::new(mask_codec_chain, data_codec_chain)),
+                    )
+                }
             }
         }
     }

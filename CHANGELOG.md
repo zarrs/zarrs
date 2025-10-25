@@ -11,8 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Array::set_shape_and_chunk_grid`
 - Add `node::[async_]get_child_nodes_opt`
 - Add `Group::storage()`
+- Add `OptionalCodec`
+- Add `DataType::Optional`
+- Implement `Element` for `Option<T>` where `T: Element`
+- Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
+- Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
 
 ### Changed
+- **Breaking**: Refactor `ArrayBytes` to a struct
 - Bump `zarrs_metadata_ext` to 0.2.2
 
 ### Fixed

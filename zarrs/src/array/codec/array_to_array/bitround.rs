@@ -123,6 +123,7 @@ macro_rules! unsupported_dtypes {
             | DataType::RawBits(_)
             | DataType::String
             | DataType::Bytes
+            | DataType::Optional(_)
             | DataType::Extension(_)
     };
 }

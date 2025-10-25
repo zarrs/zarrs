@@ -210,33 +210,58 @@ fn do_transpose<'a>(
 
     let order_decode = calculate_order_decode(order, subset.dimensionality());
     encoded_value.validate(subset.num_elements(), data_type_size)?;
-    match (encoded_value, data_type_size) {
-        (ArrayBytes::Variable(bytes, offsets), DataTypeSize::Variable) => {
+
+    // Transpose mask if present (always fixed-length, 1 byte per element)
+    let transposed_mask = if let Some(mask) = &encoded_value.mask {
+        let transposed = transpose_array(
+            &order_decode,
+            &permute(subset.shape(), &order.0).expect("matching dimensionality"),
+            1, // mask is 1 byte per element
+            mask,
+        )
+        .map_err(|_| CodecError::Other("transpose_array (mask) error".to_string()))?;
+        Some(transposed.into())
+    } else {
+        None
+    };
+
+    // Transpose data based on whether it's fixed or variable length
+    let transposed_data = match (&encoded_value.offsets, data_type_size) {
+        (Some(offsets), DataTypeSize::Variable) => {
             let mut order_decode = vec![0; subset.dimensionality()];
             for (i, val) in order.0.iter().enumerate() {
                 order_decode[*val] = i;
             }
-            Ok(transpose_vlen(
-                bytes,
+            transpose_vlen(
+                &encoded_value.data,
                 offsets,
                 &subset.shape_usize(),
                 order_decode,
-            ))
+            )
         }
-        (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => {
-            let bytes = transpose_array(
+        (None, DataTypeSize::Fixed(data_type_size)) => {
+            let transposed = transpose_array(
                 &order_decode,
                 &permute(subset.shape(), &order.0).expect("matching dimensionality"),
                 data_type_size,
-                bytes,
+                &encoded_value.data,
             )
             .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
-            Ok(ArrayBytes::from(bytes))
+            ArrayBytes::from(transposed)
         }
-        (_, _) => Err(CodecError::Other(
-            "dev error: transpose data type mismatch".to_string(),
-        )),
-    }
+        (_, _) => {
+            return Err(CodecError::Other(
+                "dev error: transpose data type mismatch".to_string(),
+            ))
+        }
+    };
+
+    // Combine transposed data and mask
+    Ok(ArrayBytes {
+        data: transposed_data.data,
+        offsets: transposed_data.offsets,
+        mask: transposed_mask,
+    })
 }
 
 #[cfg(test)]
