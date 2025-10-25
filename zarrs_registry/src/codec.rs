@@ -10,6 +10,9 @@ pub const CRC32C: &str = "crc32c";
 /// Unique identifier for the `gzip` codec (registered, core).
 pub const GZIP: &str = "gzip";
 
+/// Unique identifier for the `optional` codec (registered).
+pub const OPTIONAL: &str = "optional";
+
 /// Unique identifier for the `packbits` codec (registered).
 pub const PACKBITS: &str = "packbits";
 
