@@ -8,8 +8,8 @@ use zarrs_storage::{
 
 use crate::{
     array::{
-        array_bytes::update_array_bytes, ArrayBytes, ArraySize, BytesRepresentation,
-        ChunkRepresentation, RawBytes, RawBytesOffsets,
+        array_bytes::update_array_bytes, ArrayBytes, BytesRepresentation, ChunkRepresentation,
+        RawBytes, RawBytesOffsets,
     },
     array_subset::ArraySubset,
 };
@@ -232,14 +232,12 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 indexer.len(),
-            );
-            Ok(ArrayBytes::new_fill_value(
-                array_size,
                 self.decoded_representation.fill_value(),
-            ))
+            )
+            .map_err(CodecError::from)
         }
     }
 
@@ -276,11 +274,11 @@ where
             self.codec
                 .decode(chunk_bytes, &self.decoded_representation, options)?
         } else {
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-            );
-            ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
+                self.decoded_representation.fill_value(),
+            )?
         };
 
         // Validate the bytes
@@ -610,14 +608,12 @@ where
                 )
                 .map(ArrayBytes::into_owned)
         } else {
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 indexer.len(),
-            );
-            Ok(ArrayBytes::new_fill_value(
-                array_size,
                 self.decoded_representation.fill_value(),
-            ))
+            )
+            .map_err(CodecError::from)
         }
     }
 
@@ -657,11 +653,11 @@ where
             self.codec
                 .decode(chunk_bytes, &self.decoded_representation, options)?
         } else {
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-            );
-            ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
+                self.decoded_representation.fill_value(),
+            )?
         };
 
         // Validate the bytes

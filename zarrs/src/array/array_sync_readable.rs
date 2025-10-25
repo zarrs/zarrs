@@ -17,12 +17,13 @@ use crate::{
 use super::{
     array_bytes::{copy_fill_value_into, merge_chunks_vlen},
     codec::{
-        ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialDecoder,
+        ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
+        StoragePartialDecoder,
     },
     concurrency::concurrency_chunks_and_codec,
     element::ElementOwned,
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV3, ArraySize, DataTypeSize,
+    ArrayMetadataV3, DataTypeSize,
 };
 
 #[cfg(feature = "ndarray")]
@@ -464,9 +465,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             Ok(chunk)
         } else {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            let array_size =
-                ArraySize::new(self.data_type().size(), chunk_shape.num_elements_u64());
-            Ok(ArrayBytes::new_fill_value(array_size, self.fill_value()))
+            ArrayBytes::new_fill_value(
+                self.data_type(),
+                chunk_shape.num_elements_u64(),
+                self.fill_value(),
+            )
+            .map_err(CodecError::from)
+            .map_err(ArrayError::from)
         }
     }
 
@@ -720,11 +725,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         // Retrieve chunk bytes
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
-            0 => {
-                let array_size =
-                    ArraySize::new(self.data_type().size(), array_subset.num_elements());
-                Ok(ArrayBytes::new_fill_value(array_size, self.fill_value()))
-            }
+            0 => ArrayBytes::new_fill_value(
+                self.data_type(),
+                array_subset.num_elements(),
+                self.fill_value(),
+            )
+            .map_err(CodecError::from)
+            .map_err(ArrayError::from),
             1 => {
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;

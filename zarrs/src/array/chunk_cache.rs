@@ -14,7 +14,7 @@ use crate::{
         array_bytes::merge_chunks_vlen,
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
-        Array, ArrayBytesFixedDisjointView, ArraySize, ElementOwned,
+        Array, ArrayBytesFixedDisjointView, ElementOwned,
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
@@ -182,11 +182,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
 
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
-            0 => {
-                let array_size =
-                    ArraySize::new(array.data_type().size(), array_subset.num_elements());
-                Ok(ArrayBytes::new_fill_value(array_size, array.fill_value()).into())
-            }
+            0 => Ok(ArrayBytes::new_fill_value(
+                array.data_type(),
+                array_subset.num_elements(),
+                array.fill_value(),
+            )
+            .map_err(CodecError::from)
+            .map_err(ArrayError::from)?
+            .into()),
             1 => {
                 let chunk_indices = chunks.start();
                 let chunk_subset = array.chunk_subset(chunk_indices)?;
