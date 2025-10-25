@@ -15,8 +15,8 @@ use crate::{
 use super::{
     array_bytes::{copy_fill_value_into, merge_chunks_vlen},
     codec::{
-        ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
-        CodecError, CodecOptions,
+        ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+        AsyncStoragePartialDecoder, CodecError, CodecOptions,
     },
     concurrency::concurrency_chunks_and_codec,
     element::ElementOwned,
@@ -356,7 +356,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         if chunk_indices.len() != self.dimensionality() {
@@ -380,12 +380,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .decode_into(
                     Cow::Owned(chunk_encoded),
                     &chunk_representation,
-                    output_view,
+                    output_target,
                     options,
                 )
                 .map_err(ArrayError::CodecError)
         } else {
-            copy_fill_value_into(self.data_type(), self.fill_value(), output_view)
+            copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
                 .map_err(ArrayError::CodecError)
         }
     }
@@ -623,7 +623,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     self.async_retrieve_chunk_subset_into(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        &mut output_view,
+                        ArrayBytesDecodeIntoTarget {
+                            data: &mut output_view,
+                        },
                         &options,
                     )
                     .await?;
@@ -809,7 +811,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let chunk_representation = self.chunk_array_representation(chunk_indices)?;
@@ -824,7 +826,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             && chunk_subset.shape() == chunk_representation.shape_u64()
         {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.async_retrieve_chunk_into(chunk_indices, output_view, options)
+            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
                 .await
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -841,7 +843,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .clone()
                 .async_partial_decoder(input_handle, &chunk_representation, options)
                 .await?
-                .partial_decode_into(chunk_subset, output_view, options)
+                .partial_decode_into(chunk_subset, output_target, options)
                 .await?;
             Ok(())
         }

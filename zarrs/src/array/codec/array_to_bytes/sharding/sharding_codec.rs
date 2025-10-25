@@ -11,10 +11,11 @@ use crate::{
         array_bytes::merge_chunks_vlen,
         chunk_shape_to_array_shape,
         codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-            CodecChain, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-            PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+            ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+            ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+            BytesPartialEncoderTraits, CodecChain, CodecError, CodecMetadataOptions, CodecOptions,
+            CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+            RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
         transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView,
@@ -348,9 +349,10 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         &self,
         encoded_shard: RawBytes<'_>,
         shard_representation: &ChunkRepresentation,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        let output_view = output_target.data;
         let chunk_representation = unsafe {
             ChunkRepresentation::new_unchecked(
                 self.chunk_shape.as_slice().to_vec(),
@@ -416,7 +418,9 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.inner_codecs.decode_into(
                     Cow::Borrowed(encoded_chunk),
                     &chunk_representation,
-                    &mut output_view_inner_chunk,
+                    ArrayBytesDecodeIntoTarget {
+                        data: &mut output_view_inner_chunk,
+                    },
                     &options,
                 )?;
             }
