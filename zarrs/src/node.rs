@@ -272,7 +272,7 @@ impl Node {
         let children = match metadata {
             NodeMetadata::Array(_) => Vec::default(),
             // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => get_child_nodes(storage, &path, true)?,
+            NodeMetadata::Group(_) => get_child_nodes_opt(storage, &path, true, version)?,
         };
         let node = Self {
             path,
@@ -313,7 +313,9 @@ impl Node {
         let children = match metadata {
             NodeMetadata::Array(_) => Vec::default(),
             // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => async_get_child_nodes(&storage, &path, true).await?,
+            NodeMetadata::Group(_) => {
+                async_get_child_nodes_opt(&storage, &path, true, version).await?
+            }
         };
         let node = Self {
             path,

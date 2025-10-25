@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.2
 
+### Fixed
+- Respect `version` argument for children in `Node::[async_]open_opt`
+
 ## [0.22.4] - 2025-10-13
 
 ### Added
