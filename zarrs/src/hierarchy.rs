@@ -1,4 +1,4 @@
-//! Zarr hierarchy  .
+//! Zarr hierarchy.
 //!
 //! A Zarr hierarchy is a tree structure, where each node in the tree is either a [`Group`] or an [`Array`].
 //!
@@ -53,7 +53,6 @@ impl Hierarchy {
     }
 
     /// Create a string representation of the hierarchy for a `NodePath`
-    ///
     #[must_use]
     pub fn tree_of(&self, parent_path: &NodePath) -> String {
         fn print_metadata(name: &str, string: &mut String, metadata: &NodeMetadata) {
@@ -116,7 +115,6 @@ impl Hierarchy {
         path: &str,
     ) -> Result<Self, HierarchyCreateError> {
         Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
-        //Ok(Self::new())
     }
 
     /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
@@ -303,7 +301,7 @@ mod tests {
     fn hierarchy_open() {
         let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
 
-        let group = helper_create_dataset(&store);
+        let _group = helper_create_dataset(&store);
 
         let h = Hierarchy::open(&store, "/").unwrap();
 
