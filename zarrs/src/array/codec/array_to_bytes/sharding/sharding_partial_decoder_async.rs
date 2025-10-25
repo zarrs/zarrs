@@ -18,8 +18,8 @@ use crate::{
             AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
             CodecError, CodecOptions,
         },
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ArraySize,
-        ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ChunkRepresentation,
+        ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -197,10 +197,10 @@ async fn partial_decode_fixed_array_subset(
     data_type_size: usize,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let Some(shard_index) = &partial_decoder.shard_index else {
-        return Ok(super::partial_decode_empty_shard(
+        return super::partial_decode_empty_shard(
             &partial_decoder.shard_representation,
             array_subset,
-        ));
+        );
     };
     let chunks_per_shard = calculate_chunks_per_shard(
         partial_decoder.shard_representation.shape(),
@@ -368,10 +368,10 @@ async fn partial_decode_variable_array_subset(
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let Some(shard_index) = &partial_decoder.shard_index else {
-        return Ok(super::partial_decode_empty_shard(
+        return super::partial_decode_empty_shard(
             &partial_decoder.shard_representation,
             array_subset,
-        ));
+        );
     };
     let chunks_per_shard = calculate_chunks_per_shard(
         partial_decoder.shard_representation.shape(),
@@ -398,11 +398,11 @@ async fn partial_decode_variable_array_subset(
             let chunk_subset_overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
 
             let chunk_subset_bytes = if offset == u64::MAX && size == u64::MAX {
-                let array_size = ArraySize::new(
-                    chunk_representation.data_type().size(),
+                ArrayBytes::new_fill_value(
+                    chunk_representation.data_type(),
                     chunk_subset_overlap.num_elements(),
-                );
-                ArrayBytes::new_fill_value(array_size, chunk_representation.fill_value())
+                    chunk_representation.fill_value(),
+                )?
             } else {
                 // Partially decode the inner chunk
                 let inner_partial_decoder =
@@ -449,10 +449,7 @@ async fn partial_decode_fixed_indexer(
     data_type_size: usize,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let Some(shard_index) = &partial_decoder.shard_index else {
-        return Ok(super::partial_decode_empty_shard(
-            &partial_decoder.shard_representation,
-            indexer,
-        ));
+        return super::partial_decode_empty_shard(&partial_decoder.shard_representation, indexer);
     };
     let chunks_per_shard = calculate_chunks_per_shard(
         partial_decoder.shard_representation.shape(),
@@ -545,10 +542,7 @@ async fn partial_decode_variable_indexer(
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let Some(shard_index) = &partial_decoder.shard_index else {
-        return Ok(super::partial_decode_empty_shard(
-            &partial_decoder.shard_representation,
-            indexer,
-        ));
+        return super::partial_decode_empty_shard(&partial_decoder.shard_representation, indexer);
     };
     let chunks_per_shard = calculate_chunks_per_shard(
         partial_decoder.shard_representation.shape(),

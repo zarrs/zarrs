@@ -12,7 +12,7 @@ use crate::array::{
         array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
         ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
     },
-    ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+    ArrayBytes, ChunkRepresentation, DataType,
 };
 
 #[cfg(feature = "async")]
@@ -144,9 +144,10 @@ fn partial_decode<'a>(
         ArrayBytes::new_flen(bytes_dec)
     } else {
         ArrayBytes::new_fill_value(
-            ArraySize::new(decoded_representation.data_type().size(), indexer.len()),
+            decoded_representation.data_type(),
+            indexer.len(),
             decoded_representation.fill_value(),
-        )
+        )?
     };
     Ok(decoded_bytes)
 }

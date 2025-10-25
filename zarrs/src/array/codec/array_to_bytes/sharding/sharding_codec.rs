@@ -17,7 +17,7 @@ use crate::{
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
-        transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView, ArraySize,
+        transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView,
         BytesRepresentation, ChunkRepresentation, ChunkShape, DataTypeSize, RawBytes,
     },
     array_subset::ArraySubset,
@@ -242,11 +242,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                     let offset = shard_index[chunk_index * 2];
                     let size = shard_index[chunk_index * 2 + 1];
                     let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
-                        let array_size = ArraySize::new(
-                            chunk_representation.data_type().size(),
+                        ArrayBytes::new_fill_value(
+                            chunk_representation.data_type(),
                             chunk_representation.num_elements(),
-                        );
-                        ArrayBytes::new_fill_value(array_size, chunk_representation.fill_value())
+                            chunk_representation.fill_value(),
+                        )?
                     } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
                         return Err(CodecError::Other(
                             "The shard index references out-of-bounds bytes. The chunk may be corrupted."

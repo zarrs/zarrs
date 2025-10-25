@@ -9,7 +9,7 @@ use crate::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
-        update_array_bytes, ArrayBytes, ArraySize, ChunkRepresentation, DataType,
+        update_array_bytes, ArrayBytes, ChunkRepresentation, DataType,
     },
     indexer::IncompatibleIndexerError,
 };
@@ -89,28 +89,23 @@ where
         // Decode
         let decoded = self
             .input_output_handle
-            .partial_decode_many(Box::new(byte_ranges), options)?
-            .map_or_else(
-                || {
-                    let array_size = ArraySize::new(
-                        self.decoded_representation.data_type().size(),
-                        indexer.len(),
-                    );
-                    ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
-                },
-                |decoded| {
-                    let mut decoded = decoded.concat();
-                    if let Some(endian) = &self.endian {
-                        if !endian.is_native() {
-                            reverse_endianness(
-                                &mut decoded,
-                                self.decoded_representation.data_type(),
-                            );
-                        }
-                    }
-                    ArrayBytes::from(decoded)
-                },
-            );
+            .partial_decode_many(Box::new(byte_ranges), options)?;
+
+        let decoded = if let Some(decoded) = decoded {
+            let mut decoded = decoded.concat();
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(&mut decoded, self.decoded_representation.data_type());
+                }
+            }
+            ArrayBytes::from(decoded)
+        } else {
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
+                indexer.len(),
+                self.decoded_representation.fill_value(),
+            )?
+        };
 
         Ok(decoded)
     }
@@ -170,28 +165,23 @@ where
         let decoded = self
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges), options)
-            .await?
-            .map_or_else(
-                || {
-                    let array_size = ArraySize::new(
-                        self.decoded_representation.data_type().size(),
-                        indexer.len(),
-                    );
-                    ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value())
-                },
-                |decoded| {
-                    let mut decoded = decoded.concat();
-                    if let Some(endian) = &self.endian {
-                        if !endian.is_native() {
-                            reverse_endianness(
-                                &mut decoded,
-                                self.decoded_representation.data_type(),
-                            );
-                        }
-                    }
-                    ArrayBytes::from(decoded)
-                },
-            );
+            .await?;
+
+        let decoded = if let Some(decoded) = decoded {
+            let mut decoded = decoded.concat();
+            if let Some(endian) = &self.endian {
+                if !endian.is_native() {
+                    reverse_endianness(&mut decoded, self.decoded_representation.data_type());
+                }
+            }
+            ArrayBytes::from(decoded)
+        } else {
+            ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
+                indexer.len(),
+                self.decoded_representation.fill_value(),
+            )?
+        };
 
         Ok(decoded)
     }
@@ -265,12 +255,11 @@ where
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
             // Create a chunk filled with the fill value
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            let chunk_bytes = ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-            );
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
+                self.decoded_representation.fill_value(),
+            )?;
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
                 &self.decoded_representation.shape_u64(),
@@ -367,12 +356,11 @@ where
                 .await
         } else {
             // Create a chunk filled with the fill value
-            let array_size = ArraySize::new(
-                self.decoded_representation.data_type().size(),
+            let chunk_bytes = ArrayBytes::new_fill_value(
+                self.decoded_representation.data_type(),
                 self.decoded_representation.num_elements(),
-            );
-            let chunk_bytes =
-                ArrayBytes::new_fill_value(array_size, self.decoded_representation.fill_value());
+                self.decoded_representation.fill_value(),
+            )?;
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
                 &self.decoded_representation.shape_u64(),

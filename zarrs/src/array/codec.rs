@@ -114,7 +114,6 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use super::ArraySize;
 use super::{
     array_bytes::RawBytesOffsetsCreateError, concurrency::RecommendedConcurrency, ArrayBytes,
     ArrayBytesFixedDisjointView, BytesRepresentation, ChunkRepresentation, ChunkShape, DataType,
@@ -1074,10 +1073,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         // Calculate the changed fill value
         let fill_value = self
             .encode(
-                ArrayBytes::new_fill_value(
-                    ArraySize::new(decoded_data_type.size(), 1),
-                    decoded_fill_value,
-                ),
+                ArrayBytes::new_fill_value(decoded_data_type, 1, decoded_fill_value)?,
                 &element_representation,
                 &CodecOptions::default(),
             )?
