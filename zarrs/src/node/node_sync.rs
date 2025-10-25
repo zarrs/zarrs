@@ -67,6 +67,25 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
     Ok(nodes)
 }
 
+/// Recursively get all nodes under a given path.
+///
+/// # Errors
+/// Returns a [`StorageError`] if there is an underlying error with the store.
+pub(crate) fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    version: &MetadataRetrieveVersion,
+) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+    let mut nodes: Vec<(NodePath, NodeMetadata)> = Vec::new();
+    for child in get_child_nodes_opt(storage, path, false, version)? {
+        if let NodeMetadata::Group(_) = child.metadata() {
+            nodes.extend(get_all_nodes_of(storage, child.path(), version)?);
+        }
+        nodes.push((child.path, child.metadata));
+    }
+    Ok(nodes)
+}
+
 /// Check if a node exists.
 ///
 /// # Errors

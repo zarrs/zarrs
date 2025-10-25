@@ -1,6 +1,6 @@
 //! Zarr nodes.
 //!
-//! A node in a Zarr hierarchy represents either an [`Array`](crate::array::Array) or a [`Group`](crate::group::Group).
+//! A node in a Zarr hierarchy represents either an [`Array`] or a [`Group`].
 //!
 //! A [`Node`] has an associated [`NodePath`], [`NodeMetadata`], and children.
 //!
@@ -13,6 +13,7 @@ mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
 mod node_sync;
+pub(crate) use node_sync::get_all_nodes_of;
 pub use node_sync::{get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable};
 
 mod key;
@@ -35,9 +36,9 @@ pub use crate::metadata::NodeMetadata;
 use thiserror::Error;
 
 use crate::{
-    array::{ArrayCreateError, ArrayMetadata},
+    array::{Array, ArrayCreateError, ArrayMetadata},
     config::MetadataRetrieveVersion,
-    group::GroupCreateError,
+    group::{Group, GroupCreateError},
     metadata::{
         v2::{ArrayMetadataV2, GroupMetadataV2},
         GroupMetadata,
@@ -72,6 +73,26 @@ impl From<Node> for NodeMetadata {
 impl From<Node> for NodePath {
     fn from(value: Node) -> Self {
         value.path
+    }
+}
+
+impl<TStorage: ?Sized> From<&Group<TStorage>> for Node {
+    fn from(value: &Group<TStorage>) -> Self {
+        Node::new_with_metadata(
+            value.path().clone(),
+            NodeMetadata::Group(value.metadata().clone()),
+            vec![],
+        )
+    }
+}
+
+impl<TStorage: ?Sized> From<&Array<TStorage>> for Node {
+    fn from(value: &Array<TStorage>) -> Self {
+        Node::new_with_metadata(
+            value.path().clone(),
+            NodeMetadata::Array(value.metadata().clone()),
+            vec![],
+        )
     }
 }
 
@@ -128,7 +149,7 @@ impl From<NodeCreateError> for GroupCreateError {
 }
 
 impl Node {
-    fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub(crate) fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &NodePath,
         version: &MetadataRetrieveVersion,
@@ -188,7 +209,7 @@ impl Node {
     #[cfg(feature = "async")]
     // Identical to get_metadata.. with awaits
     // "maybe async" one day?
-    async fn async_get_metadata<
+    pub(crate) async fn async_get_metadata<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
         storage: &Arc<TStorage>,
