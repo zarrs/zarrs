@@ -150,7 +150,7 @@ impl From<NodeCreateError> for GroupCreateError {
 }
 
 impl Node {
-    fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    pub(crate) fn get_metadata<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &NodePath,
         version: &MetadataRetrieveVersion,
@@ -210,7 +210,7 @@ impl Node {
     #[cfg(feature = "async")]
     // Identical to get_metadata.. with awaits
     // "maybe async" one day?
-    async fn async_get_metadata<
+    pub(crate) async fn async_get_metadata<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
         storage: &Arc<TStorage>,
