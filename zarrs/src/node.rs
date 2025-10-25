@@ -13,7 +13,7 @@ mod node_path;
 pub use node_path::{NodePath, NodePathError};
 
 mod node_sync;
-pub use node_sync::{get_child_nodes, node_exists, node_exists_listable};
+pub use node_sync::{get_child_nodes, get_child_nodes_opt, node_exists, node_exists_listable};
 
 mod key;
 pub use key::{
@@ -23,7 +23,9 @@ pub use key::{
 #[cfg(feature = "async")]
 mod node_async;
 #[cfg(feature = "async")]
-pub use node_async::{async_get_child_nodes, async_node_exists, async_node_exists_listable};
+pub use node_async::{
+    async_get_child_nodes, async_get_child_nodes_opt, async_node_exists, async_node_exists_listable,
+};
 use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
 use zarrs_storage::StorePrefixError;
 
