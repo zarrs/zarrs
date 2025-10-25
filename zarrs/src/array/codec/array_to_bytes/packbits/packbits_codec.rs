@@ -3,7 +3,7 @@
 // FIXME: This codec was really hacked together.
 // It can probably be written much cleaner and with simpler logic.
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use num::Integer;
 use zarrs_metadata::{Configuration, Endianness};
@@ -349,7 +349,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             }
         }
 
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes_dec)))
+        Ok(ArrayBytes::new_flen(bytes_dec))
     }
 
     fn partial_decoder(

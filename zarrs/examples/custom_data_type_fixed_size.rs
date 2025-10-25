@@ -115,7 +115,7 @@ impl Element for CustomDataTypeFixedSizeElement {
         for element in elements {
             bytes.extend_from_slice(&element.to_ne_bytes());
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::new_flen(bytes))
     }
 }
 
