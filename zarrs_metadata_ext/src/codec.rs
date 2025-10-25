@@ -15,6 +15,8 @@ mod registered {
     pub mod crc32c;
     /// `gzip` codec metadata (registered, core).
     pub mod gzip;
+    /// `optional` codec metadata (registered).
+    pub mod optional;
     /// `packbits` codec metadata (registered).
     pub mod packbits;
     /// `reshape` codec metadata (draft).

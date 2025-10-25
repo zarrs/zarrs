@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `optional` data type
+- Add `optional` codec
+
 ### Changed
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
 
