@@ -4,6 +4,7 @@
 
 pub mod numpy_datetime64;
 pub mod numpy_timedelta64;
+pub mod optional;
 
 mod numpy_time_unit;
 pub use numpy_time_unit::NumpyTimeUnit;

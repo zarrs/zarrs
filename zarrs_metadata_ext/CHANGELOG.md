@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `optional` data type
+- Add `optional` codec
+
 ## [0.2.2] - 2025-10-26
 
 ### Fixed
