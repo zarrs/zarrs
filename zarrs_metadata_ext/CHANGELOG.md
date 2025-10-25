@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `optional` data type
+- Add `optional` codec
+
 ### Fixed
 - `packbits` codec: skip serialising `padding_encoding` if `"none"`
 
