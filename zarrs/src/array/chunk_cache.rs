@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::array::ArraySize;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};

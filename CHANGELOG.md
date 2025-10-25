@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
 
+### Removed
+
+- **Breaking**: Remove `ArraySize`
+- **Breaking**: Remove `{Array,Chunk}Representation::size()`
+  - Use `num_elements()` and `element_size()` instead
+
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
 ## [0.22.9] - 2025-11-27

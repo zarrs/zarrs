@@ -61,9 +61,7 @@ pub use self::{
     },
     array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError},
     array_metadata_options::ArrayMetadataOptions,
-    array_representation::{
-        ArrayRepresentation, ArrayRepresentationBase, ArraySize, ChunkRepresentation,
-    },
+    array_representation::{ArrayRepresentation, ArrayRepresentationBase, ChunkRepresentation},
     bytes_representation::BytesRepresentation,
     chunk_grid::ChunkGrid,
     chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator},

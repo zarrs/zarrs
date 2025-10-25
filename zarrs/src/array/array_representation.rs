@@ -25,76 +25,6 @@ pub type ArrayRepresentation = ArrayRepresentationBase<u64>;
 /// The array representation of a chunk, which must have nonzero dimensions.
 pub type ChunkRepresentation = ArrayRepresentationBase<NonZeroU64>;
 
-/// The size of an array/chunk.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ArraySize {
-    /// Fixed size.
-    Fixed {
-        /// The number of elements.
-        num_elements: u64,
-        /// The data type size (in bytes).
-        data_type_size: usize,
-    },
-    /// Variable sized.
-    Variable {
-        /// The number of elements.
-        num_elements: u64,
-    },
-}
-
-impl ArraySize {
-    /// Create a new [`ArraySize`] from a data type size and number of elements.
-    #[must_use]
-    pub fn new(data_type_size: DataTypeSize, num_elements: u64) -> Self {
-        match data_type_size {
-            DataTypeSize::Fixed(data_type_size) => Self::Fixed {
-                num_elements,
-                data_type_size,
-            },
-            DataTypeSize::Variable => Self::Variable { num_elements },
-        }
-    }
-
-    /// Return the number of elements.
-    #[must_use]
-    pub fn num_elements(&self) -> u64 {
-        match self {
-            Self::Variable { num_elements }
-            | Self::Fixed {
-                num_elements,
-                data_type_size: _,
-            } => *num_elements,
-        }
-    }
-
-    /// Return the data type size in bytes for fixed size arrays. Returns [`None`] for variable length data.
-    #[must_use]
-    pub fn fixed_data_type_size(&self) -> Option<usize> {
-        match self {
-            Self::Fixed {
-                num_elements: _,
-                data_type_size,
-            } => Some(*data_type_size),
-            Self::Variable { num_elements: _ } => None,
-        }
-    }
-
-    /// Return the total size in bytes for fixed size arrays. Returns [`None`] for variable length data.
-    ///
-    /// # Panics
-    /// Panics if the size exceeds [`usize::MAX`].
-    #[must_use]
-    pub fn fixed_size(&self) -> Option<usize> {
-        match self {
-            Self::Fixed {
-                num_elements,
-                data_type_size,
-            } => Some(usize::try_from(*data_type_size as u64 * num_elements).unwrap()),
-            Self::Variable { num_elements: _ } => None,
-        }
-    }
-}
-
 impl<TDim> ArrayRepresentationBase<TDim>
 where
     TDim: Into<u64> + core::fmt::Debug + Copy,
@@ -212,19 +142,6 @@ where
     #[must_use]
     pub fn fixed_element_size(&self) -> Option<usize> {
         self.data_type().fixed_size()
-    }
-
-    /// Return the array size.
-    #[must_use]
-    pub fn size(&self) -> ArraySize {
-        let num_elements = self.num_elements();
-        match self.element_size() {
-            DataTypeSize::Fixed(data_type_size) => ArraySize::Fixed {
-                num_elements,
-                data_type_size,
-            },
-            DataTypeSize::Variable => ArraySize::Variable { num_elements },
-        }
     }
 
     /// Return the array size in bytes with a fixed-size data type, otherwise returns [`None`].
