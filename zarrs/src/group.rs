@@ -96,6 +96,12 @@ impl<TStorage: ?Sized> Group<TStorage> {
         })
     }
 
+    /// Get the underlying storage backing the group.
+    #[must_use]
+    pub fn storage(&self) -> Arc<TStorage> {
+        self.storage.clone()
+    }
+
     /// Get path.
     #[must_use]
     pub const fn path(&self) -> &NodePath {
