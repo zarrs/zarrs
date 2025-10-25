@@ -21,8 +21,8 @@ use crate::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
-        ravel_indices, transmute_to_bytes, ArrayBytes, ArraySize, ChunkRepresentation, ChunkShape,
-        CodecChain, DataType, RawBytes,
+        ravel_indices, transmute_to_bytes, ArrayBytes, ChunkRepresentation, ChunkShape, CodecChain,
+        DataType, RawBytes,
     },
     indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,
@@ -171,11 +171,11 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let get_inner_chunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
         let inner_chunk_fill_value = || {
-            let array_size = ArraySize::new(
-                self.inner_chunk_representation.data_type().size(),
+            ArrayBytes::new_fill_value(
+                self.inner_chunk_representation.data_type(),
                 self.inner_chunk_representation.num_elements(),
-            );
-            ArrayBytes::new_fill_value(array_size, self.inner_chunk_representation.fill_value())
+                self.inner_chunk_representation.fill_value(),
+            )
         };
 
         // Get all the inner chunks that need to be retrieved
@@ -333,7 +333,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             {
                 inner_chunk_decoded.into_owned()
             } else {
-                inner_chunk_fill_value()
+                inner_chunk_fill_value()?
             };
 
             // Update the inner chunk

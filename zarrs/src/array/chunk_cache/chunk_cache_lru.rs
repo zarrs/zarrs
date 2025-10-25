@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use std::sync::{atomic, Arc};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
 
-use crate::array::codec::ArrayToBytesCodecTraits;
+use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySize, ChunkCache, ChunkCacheTypeDecoded,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ChunkCache, ChunkCacheTypeDecoded,
     ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
 };
 use crate::array_subset::ArraySubset;
@@ -149,14 +149,15 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 Ok(Arc::new(bytes.into_owned()))
             } else {
                 let chunk_shape = self.array.chunk_shape(chunk_indices)?;
-                let array_size = ArraySize::new(
-                    self.array.data_type().size(),
-                    chunk_shape.num_elements_u64(),
-                );
-                Ok(Arc::new(ArrayBytes::new_fill_value(
-                    array_size,
-                    self.array.fill_value(),
-                )))
+                Ok(Arc::new(
+                    ArrayBytes::new_fill_value(
+                        self.array.data_type(),
+                        chunk_shape.num_elements_u64(),
+                        self.array.fill_value(),
+                    )
+                    .map_err(CodecError::from)
+                    .map_err(ArrayError::from)?,
+                ))
             }
         }
 
@@ -191,12 +192,15 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     .into_owned()
                     .into())
             } else {
-                let array_size =
-                    ArraySize::new(self.array.data_type().size(), chunk_subset.num_elements());
-                Ok(Arc::new(ArrayBytes::new_fill_value(
-                    array_size,
-                    self.array.fill_value(),
-                )))
+                Ok(Arc::new(
+                    ArrayBytes::new_fill_value(
+                        self.array.data_type(),
+                        chunk_subset.num_elements(),
+                        self.array.fill_value(),
+                    )
+                    .map_err(CodecError::from)
+                    .map_err(ArrayError::from)?,
+                ))
             }
         }
     };

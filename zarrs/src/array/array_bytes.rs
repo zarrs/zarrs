@@ -4,6 +4,7 @@ use derive_more::derive::Display;
 use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_data_type::DataTypeFillValueError;
 
 use crate::{
     array_subset::ArraySubset,
@@ -14,7 +15,7 @@ use crate::{
 
 use super::{
     codec::{CodecError, InvalidBytesLengthError},
-    ravel_indices, ArrayBytesFixedDisjointView, ArraySize, DataType, FillValue,
+    ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
 };
 
 mod raw_bytes_offsets;
@@ -102,19 +103,31 @@ impl<'a> ArrayBytes<'a> {
 
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
     ///
+    /// # Errors
+    /// Returns [`DataTypeFillValueError`] if the fill value is incompatible with the data type.
+    ///
     /// # Panics
-    /// Panics if the number of elements in `array_size` exceeds [`usize::MAX`].
-    #[must_use]
-    pub fn new_fill_value(array_size: ArraySize, fill_value: &FillValue) -> Self {
-        match array_size {
-            ArraySize::Fixed {
-                num_elements,
-                data_type_size: _,
-            } => {
+    /// Panics if `num_elements` exceeds [`usize::MAX`].
+    pub fn new_fill_value(
+        data_type: &DataType,
+        num_elements: u64,
+        fill_value: &FillValue,
+    ) -> Result<Self, DataTypeFillValueError> {
+        match data_type.size() {
+            DataTypeSize::Fixed(data_type_size) => {
                 let num_elements = usize::try_from(num_elements).unwrap();
-                Self::new_flen(fill_value.as_ne_bytes().repeat(num_elements))
+                if fill_value.size() == data_type_size {
+                    Ok(Self::new_flen(
+                        fill_value.as_ne_bytes().repeat(num_elements),
+                    ))
+                } else {
+                    Err(DataTypeFillValueError::new(
+                        data_type.name(),
+                        fill_value.clone(),
+                    ))
+                }
             }
-            ArraySize::Variable { num_elements } => {
+            DataTypeSize::Variable => {
                 let num_elements = usize::try_from(num_elements).unwrap();
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
@@ -124,10 +137,10 @@ impl<'a> ArrayBytes<'a> {
                             .collect::<Vec<_>>(),
                     )
                 };
-                unsafe {
+                Ok(unsafe {
                     // SAFETY: The last offset is equal to the length of the bytes
                     Self::new_vlen_unchecked(fill_value.as_ne_bytes().repeat(num_elements), offsets)
-                }
+                })
             }
         }
     }
@@ -699,8 +712,8 @@ pub fn copy_fill_value_into(
     fill_value: &FillValue,
     output_view: &mut ArrayBytesFixedDisjointView,
 ) -> Result<(), CodecError> {
-    let array_size = ArraySize::new(data_type.size(), output_view.num_elements());
-    if let ArrayBytes::Fixed(fill_value_bytes) = ArrayBytes::new_fill_value(array_size, fill_value)
+    if let ArrayBytes::Fixed(fill_value_bytes) =
+        ArrayBytes::new_fill_value(data_type, output_view.num_elements(), fill_value)?
     {
         output_view.copy_from_slice(&fill_value_bytes)?;
         Ok(())

@@ -79,8 +79,8 @@ use crate::{
             CodecPlugin,
         },
         concurrency::calc_concurrency_outer_inner,
-        ravel_indices, ArrayBytes, ArrayCodecTraits, ArraySize, BytesRepresentation,
-        ChunkRepresentation, ChunkShape, CodecChain, DataType, RecommendedConcurrency,
+        ravel_indices, ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
+        ChunkShape, CodecChain, DataType, RecommendedConcurrency,
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -225,9 +225,13 @@ fn inner_chunk_byte_range(
 fn partial_decode_empty_shard<'a>(
     shard_representation: &ChunkRepresentation,
     indexer: &dyn crate::indexer::Indexer,
-) -> ArrayBytes<'a> {
-    let array_size = ArraySize::new(shard_representation.data_type().size(), indexer.len());
-    ArrayBytes::new_fill_value(array_size, shard_representation.fill_value())
+) -> Result<ArrayBytes<'a>, CodecError> {
+    ArrayBytes::new_fill_value(
+        shard_representation.data_type(),
+        indexer.len(),
+        shard_representation.fill_value(),
+    )
+    .map_err(CodecError::from)
 }
 
 fn get_concurrent_target_and_codec_options(

@@ -16,7 +16,7 @@ use super::{
     codec::CodecOptions, concurrency::concurrency_chunks_and_codec, Array, ArrayError,
     ArrayShardedExt, ChunkGrid,
 };
-use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArraySize, DataTypeSize};
+use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::AsyncStoragePartialDecoder;
 use crate::storage::AsyncReadableStorageTraits;
 use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
@@ -575,9 +575,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
             // Retrieve chunk bytes
             let num_shards = shards.num_elements_usize();
             if num_shards == 0 {
-                let array_size =
-                    ArraySize::new(self.data_type().size(), array_subset.num_elements());
-                Ok(ArrayBytes::new_fill_value(array_size, self.fill_value()))
+                ArrayBytes::new_fill_value(
+                    self.data_type(),
+                    array_subset.num_elements(),
+                    self.fill_value(),
+                )
+                .map_err(CodecError::from)
+                .map_err(ArrayError::from)
             } else {
                 // Calculate chunk/codec concurrency
                 let chunk_representation =

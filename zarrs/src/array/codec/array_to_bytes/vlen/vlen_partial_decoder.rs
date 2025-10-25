@@ -5,7 +5,7 @@ use std::{num::NonZeroU64, sync::Arc};
 use crate::array::{
     array_bytes::extract_decoded_regions_vlen,
     codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-    ArrayBytes, ArraySize, ChunkRepresentation, CodecChain, DataType, FillValue, RawBytes,
+    ArrayBytes, ChunkRepresentation, CodecChain, DataType, FillValue, RawBytes,
 };
 use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use zarrs_storage::StorageError;
@@ -52,6 +52,7 @@ fn decode_vlen_bytes<'a>(
     index_location: VlenIndexLocation,
     bytes: Option<RawBytes>,
     indexer: &dyn crate::indexer::Indexer,
+    data_type: &DataType,
     fill_value: &FillValue,
     shape: &[u64],
     options: &CodecOptions,
@@ -85,10 +86,7 @@ fn decode_vlen_bytes<'a>(
         extract_decoded_regions_vlen(&data, &index, indexer, shape)
     } else {
         // Chunk is empty, all decoded regions are empty
-        let array_size = ArraySize::Variable {
-            num_elements: indexer.len(),
-        };
-        Ok(ArrayBytes::new_fill_value(array_size, fill_value))
+        ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
     }
 }
 
@@ -119,6 +117,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
             self.index_location,
             bytes,
             indexer,
+            self.decoded_representation.data_type(),
             self.decoded_representation.fill_value(),
             &self.decoded_representation.shape_u64(),
             options,
@@ -193,6 +192,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
             self.index_location,
             bytes,
             indexer,
+            self.decoded_representation.data_type(),
             self.decoded_representation.fill_value(),
             &self.decoded_representation.shape_u64(),
             options,
