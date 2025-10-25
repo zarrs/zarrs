@@ -611,9 +611,91 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         elements_to_ndarray(array_subset.shape(), elements)
     }
 
+    /// Helper method to retrieve multiple chunks with variable-length data types.
+    fn retrieve_multi_chunk_variable(
+        &self,
+        array_subset: &ArraySubset,
+        chunks: &ArraySubset,
+        chunk_concurrent_limit: usize,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Retrieve all the chunks
+        let retrieve_chunk =
+            |chunk_indices: Vec<u64>| -> Result<(ArrayBytes<'_>, ArraySubset), ArrayError> {
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                Ok((
+                    self.retrieve_chunk_subset_opt(
+                        &chunk_indices,
+                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        options,
+                    )?,
+                    chunk_subset_overlap.relative_to(array_subset.start())?,
+                ))
+            };
+        let chunk_indices = chunks.indices();
+        let chunk_bytes_and_subsets =
+            iter_concurrent_limit!(chunk_concurrent_limit, chunk_indices, map, retrieve_chunk)
+                .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(merge_chunks_vlen(
+            chunk_bytes_and_subsets,
+            array_subset.shape(),
+        )?)
+    }
+
+    /// Helper method to retrieve multiple chunks with fixed-length data types.
+    fn retrieve_multi_chunk_fixed(
+        &self,
+        array_subset: &ArraySubset,
+        chunks: &ArraySubset,
+        data_type_size: usize,
+        chunk_concurrent_limit: usize,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Allocate the output
+        let size_output = array_subset.num_elements_usize() * data_type_size;
+        if size_output == 0 {
+            return Ok(ArrayBytes::new_flen(vec![]));
+        }
+        let mut output = Vec::with_capacity(size_output);
+
+        {
+            let output = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
+            let retrieve_chunk = |chunk_indices: Vec<u64>| {
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                let mut output_view = unsafe {
+                    // SAFETY: chunks represent disjoint array subsets
+                    ArrayBytesFixedDisjointView::new(
+                        output,
+                        data_type_size,
+                        array_subset.shape(),
+                        chunk_subset_overlap.relative_to(array_subset.start())?,
+                    )?
+                };
+                self.retrieve_chunk_subset_into(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    &mut output_view,
+                    options,
+                )?;
+                Ok::<_, ArrayError>(())
+            };
+            let indices = chunks.indices();
+            iter_concurrent_limit!(
+                chunk_concurrent_limit,
+                indices,
+                try_for_each,
+                retrieve_chunk
+            )?;
+        }
+        unsafe { output.set_len(size_output) };
+        Ok(ArrayBytes::from(output))
+    }
+
     /// Explicit options version of [`retrieve_array_subset`](Array::retrieve_array_subset).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    #[allow(clippy::too_many_lines)]
     pub fn retrieve_array_subset_opt(
         &self,
         array_subset: &ArraySubset,
@@ -673,92 +755,21 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
+                // Delegate to appropriate helper based on data type
                 match chunk_representation.data_type().size() {
-                    DataTypeSize::Variable => {
-                        // Retrieve all the chunks
-                        let retrieve_chunk = |chunk_indices: Vec<u64>| -> Result<
-                            (ArrayBytes<'_>, ArraySubset),
-                            ArrayError,
-                        > {
-                            let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                            Ok((
-                                self.retrieve_chunk_subset_opt(
-                                    &chunk_indices,
-                                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                    &options,
-                                )?,
-                                chunk_subset_overlap.relative_to(array_subset.start())?,
-                            ))
-                        };
-                        let chunk_indices = chunks.indices();
-                        let chunk_bytes_and_subsets = iter_concurrent_limit!(
-                            chunk_concurrent_limit,
-                            chunk_indices,
-                            map,
-                            retrieve_chunk
-                        )
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                        Ok(merge_chunks_vlen(
-                            chunk_bytes_and_subsets,
-                            array_subset.shape(),
-                        )?)
-                    }
-                    DataTypeSize::Fixed(data_type_size) => {
-                        // Allocate the output
-                        let size_output = array_subset.num_elements_usize() * data_type_size;
-                        if size_output == 0 {
-                            return Ok(ArrayBytes::new_flen(vec![]));
-                        }
-                        let mut output = Vec::with_capacity(size_output);
-
-                        {
-                            let output =
-                                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                            let retrieve_chunk = |chunk_indices: Vec<u64>| {
-                                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                                let mut output_view = unsafe {
-                                    // SAFETY: chunks represent disjoint array subsets
-                                    ArrayBytesFixedDisjointView::new(
-                                        output,
-                                        data_type_size,
-                                        array_subset.shape(),
-                                        chunk_subset_overlap.relative_to(array_subset.start())?,
-                                    )?
-                                };
-                                self.retrieve_chunk_subset_into(
-                                    &chunk_indices,
-                                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                    &mut output_view,
-                                    &options,
-                                )?;
-                                // let chunk_subset_bytes = self.retrieve_chunk_subset_opt(
-                                //     &chunk_indices,
-                                //     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                //     &options,
-                                // )?;
-                                // update_bytes_flen(
-                                //     &output,
-                                //     array_subset.shape(),
-                                //     &chunk_subset_bytes.into_fixed()?,
-                                //     &chunk_subset_overlap.relative_to(array_subset.start())?,
-                                //     data_type_size,
-                                // );
-                                Ok::<_, ArrayError>(())
-                            };
-                            let indices = chunks.indices();
-                            iter_concurrent_limit!(
-                                chunk_concurrent_limit,
-                                indices,
-                                try_for_each,
-                                retrieve_chunk
-                            )?;
-                        }
-                        unsafe { output.set_len(size_output) };
-                        Ok(ArrayBytes::from(output))
-                    }
+                    DataTypeSize::Variable => self.retrieve_multi_chunk_variable(
+                        array_subset,
+                        &chunks,
+                        chunk_concurrent_limit,
+                        &options,
+                    ),
+                    DataTypeSize::Fixed(data_type_size) => self.retrieve_multi_chunk_fixed(
+                        array_subset,
+                        &chunks,
+                        data_type_size,
+                        chunk_concurrent_limit,
+                        &options,
+                    ),
                 }
             }
         }
