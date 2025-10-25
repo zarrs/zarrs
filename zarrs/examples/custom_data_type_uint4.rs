@@ -2,7 +2,7 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use serde::Deserialize;
 use zarrs::{
@@ -179,7 +179,7 @@ impl Element for CustomDataTypeUInt4Element {
         for element in elements {
             bytes.push(element.0);
         }
-        Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+        Ok(ArrayBytes::new_flen(bytes))
     }
 }
 
