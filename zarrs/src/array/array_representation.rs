@@ -26,6 +26,10 @@ pub type ArrayRepresentation = ArrayRepresentationBase<u64>;
 pub type ChunkRepresentation = ArrayRepresentationBase<NonZeroU64>;
 
 /// The size of an array/chunk.
+#[deprecated(
+    since = "0.23.0",
+    note = "Use `ArrayRepresentationBase::num_elements()` and `ArrayRepresentationBase::element_size()` instead"
+)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ArraySize {
     /// Fixed size.
@@ -42,6 +46,7 @@ pub enum ArraySize {
     },
 }
 
+#[allow(deprecated)]
 impl ArraySize {
     /// Create a new [`ArraySize`] from a data type size and number of elements.
     #[must_use]
@@ -215,7 +220,12 @@ where
     }
 
     /// Return the array size.
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use `num_elements()` and `element_size()` instead"
+    )]
     #[must_use]
+    #[allow(deprecated)]
     pub fn size(&self) -> ArraySize {
         let num_elements = self.num_elements();
         match self.element_size() {
