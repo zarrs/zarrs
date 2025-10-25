@@ -1,6 +1,6 @@
 //! Zarr nodes.
 //!
-//! A node in a Zarr hierarchy represents either an [`Array`](crate::array::Array) or a [`Group`](crate::group::Group).
+//! A node in a Zarr hierarchy represents either an [`Array`] or a [`Group`].
 //!
 //! A [`Node`] has an associated [`NodePath`], [`NodeMetadata`], and children.
 //!

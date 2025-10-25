@@ -1,8 +1,8 @@
 //! Zarr hierarchy  .
 //!
-//! A hierarchy in a Zarr hierarchy represents the relation of [`Node`](crate::node::Node) which can either be  of types [`Array`](crate::array::Array) or [`Group`](crate::group::Group).
+//! A Zarr hierarchy is a tree structure, where each node in the tree is either a [`Group`] or an [`Array`].
 //!
-//! A [`Hierarchy`] holds the [`NodeMetadata`] for the respective [`NodePath`].
+//! A [`Hierarchy`] holds a mapping of [`NodePath`]s to [`NodeMetadata`].
 //!
 //! The [`Hierarchy::tree`] function can be used to create a string representation of the hierarchy.
 
