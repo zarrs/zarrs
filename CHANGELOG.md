@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Array::set_shape_and_chunk_grid`
 - Add `node::[async_]get_child_nodes_opt`
 - Add `Group::storage()`
+- Add `DataType::is_fixed()` and `is_variable()`
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.2.2
