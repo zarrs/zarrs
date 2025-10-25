@@ -17,7 +17,7 @@ use super::{
     ArrayShardedExt, ChunkGrid,
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
-use crate::array::codec::AsyncStoragePartialDecoder;
+use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
 use crate::storage::AsyncReadableStorageTraits;
 use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
 
@@ -45,18 +45,18 @@ impl MaybeShardingPartialDecoder {
     async fn partial_decode_into(
         &self,
         indexer: &dyn crate::indexer::Indexer,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         match self {
             Self::Sharding(partial_decoder) => {
                 partial_decoder
-                    .partial_decode_into(indexer, output_view, options)
+                    .partial_decode_into(indexer, output_target, options)
                     .await
             }
             Self::Other(partial_decoder) => {
                 partial_decoder
-                    .partial_decode_into(indexer, output_view, options)
+                    .partial_decode_into(indexer, output_target, options)
                     .await
             }
         }
@@ -666,7 +666,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                         .partial_decode_into(
                                             &shard_subset_overlap
                                                 .relative_to(shard_subset.start())?,
-                                            &mut output_view,
+                                            (&mut output_view).into(),
                                             &options,
                                         )
                                         .await?;
