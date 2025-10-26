@@ -106,7 +106,7 @@ impl Hierarchy {
     /// Open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
     ///
     /// # Errors
-    /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
     pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
@@ -117,7 +117,7 @@ impl Hierarchy {
     /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
     ///
     /// # Errors
-    /// Returns [`NodeCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
     pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
@@ -164,7 +164,7 @@ impl Hierarchy {
         storage: &Arc<TStorage>,
         path: &str,
         version: &MetadataRetrieveVersion,
-    ) -> Result<Self,HierarchyCreateError>{
+    ) -> Result<Self, HierarchyCreateError> {
         let node_path = NodePath::try_from(path)?;
         let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
         let mut hierarchy = Hierarchy::new();
@@ -178,7 +178,7 @@ impl Hierarchy {
         hierarchy.insert(node_path, node_metadata);
         hierarchy.extend(nodes);
 
-        Ok(hierarchy) 
+        Ok(hierarchy)
     }
 }
 
