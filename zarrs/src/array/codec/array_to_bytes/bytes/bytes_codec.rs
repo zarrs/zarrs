@@ -177,6 +177,14 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<RawBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                BYTES.to_string(),
+            ));
+        }
+
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
@@ -198,6 +206,14 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                BYTES.to_string(),
+            ));
+        }
+
         let bytes_decoded = if let DataType::Extension(ext) = decoded_representation.data_type() {
             ext.codec_bytes()?
                 .decode(bytes, self.endian)
@@ -266,6 +282,14 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         &self,
         decoded_representation: &ChunkRepresentation,
     ) -> Result<BytesRepresentation, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                BYTES.to_string(),
+            ));
+        }
+
         match decoded_representation.data_type().size() {
             DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
                 decoded_representation.data_type().clone(),

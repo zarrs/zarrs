@@ -135,6 +135,13 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
             .into());
         }
 
+        if self.shard_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                self.shard_representation.data_type().clone(),
+                zarrs_registry::codec::SHARDING.to_string(),
+            ));
+        }
+
         match self.shard_representation.element_size() {
             DataTypeSize::Fixed(data_type_size) => {
                 if let Some(subset) = indexer.as_array_subset() {

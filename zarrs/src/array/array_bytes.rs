@@ -34,6 +34,8 @@ pub type RawBytes<'a> = Cow<'a, [u8]>;
 /// This struct can represent:
 /// - Fixed-length arrays: `offsets: None, mask: None`
 /// - Variable-length arrays: `offsets: Some(...), mask: None`
+/// - Optional fixed-length arrays: `offsets: None, mask: Some(...)`
+/// - Optional variable-length arrays: `offsets: Some(...), mask: Some(...)`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayBytes<'a> {
     /// The element bytes in C-contiguous order (row-major order) where the last dimension varies the fastest.
@@ -50,6 +52,15 @@ pub struct ArrayBytes<'a> {
     ///
     /// This is `None` for fixed-length arrays and `Some` for variable-length arrays.
     pub offsets: Option<RawBytesOffsets<'a>>,
+
+    /// Validity mask bytes for optional data types.
+    ///
+    /// The mask contains one byte per element indicating whether the element is valid (Some) or invalid (None).
+    /// - 0 = invalid/None
+    /// - non-zero = valid/Some
+    ///
+    /// This is `None` for non-optional data types and `Some` for optional data types.
+    pub mask: Option<RawBytes<'a>>,
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -69,13 +80,28 @@ pub enum ArrayBytesError {
 }
 
 impl<'a> ArrayBytes<'a> {
+    /// Create a new `ArrayBytes` from raw parts.
+    pub fn new(
+        data: impl Into<RawBytes<'a>>,
+        offsets: Option<RawBytesOffsets<'a>>,
+        mask: Option<RawBytes<'a>>,
+    ) -> Self {
+        Self {
+            data: data.into(),
+            offsets,
+            mask,
+        }
+    }
+
     /// Create a new fixed length array bytes from `bytes`.
     ///
     /// `bytes` must be C-contiguous.
+    #[must_use]
     pub fn new_flen(bytes: impl Into<RawBytes<'a>>) -> Self {
         Self {
             data: bytes.into(),
             offsets: None,
+            mask: None,
         }
     }
 
@@ -92,6 +118,7 @@ impl<'a> ArrayBytes<'a> {
             Ok(Self {
                 data: bytes,
                 offsets: Some(offsets),
+                mask: None,
             })
         } else {
             Err(RawBytesOffsetsOutOfBoundsError {
@@ -114,6 +141,59 @@ impl<'a> ArrayBytes<'a> {
         Self {
             data: bytes,
             offsets: Some(offsets),
+            mask: None,
+        }
+    }
+
+    /// Create a new optional fixed length array bytes from a validity mask and data.
+    #[must_use]
+    pub fn new_flen_optional(mask: impl Into<RawBytes<'a>>, data: impl Into<RawBytes<'a>>) -> Self {
+        Self {
+            data: data.into(),
+            offsets: None,
+            mask: Some(mask.into()),
+        }
+    }
+
+    /// Create a new optional variable length array bytes from a validity mask, data bytes, and offsets.
+    ///
+    /// # Errors
+    /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
+    pub fn new_vlen_optional(
+        mask: impl Into<RawBytes<'a>>,
+        bytes: impl Into<RawBytes<'a>>,
+        offsets: RawBytesOffsets<'a>,
+    ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
+        let bytes = bytes.into();
+        if offsets.last() <= bytes.len() {
+            Ok(Self {
+                data: bytes,
+                offsets: Some(offsets),
+                mask: Some(mask.into()),
+            })
+        } else {
+            Err(RawBytesOffsetsOutOfBoundsError {
+                offset: offsets.last(),
+                len: bytes.len(),
+            })
+        }
+    }
+
+    /// Create a new optional variable length array bytes without checking the offsets.
+    ///
+    /// # Safety
+    /// The last offset must be less than or equal to the length of the bytes.
+    pub unsafe fn new_vlen_optional_unchecked(
+        mask: impl Into<RawBytes<'a>>,
+        bytes: impl Into<RawBytes<'a>>,
+        offsets: RawBytesOffsets<'a>,
+    ) -> Self {
+        let bytes = bytes.into();
+        debug_assert!(offsets.last() <= bytes.len());
+        Self {
+            data: bytes,
+            offsets: Some(offsets),
+            mask: Some(mask.into()),
         }
     }
 
@@ -129,22 +209,28 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
+        let optional = data_type.is_optional();
+        let num_elements = usize::try_from(num_elements).unwrap();
         match data_type.size() {
             DataTypeSize::Fixed(data_type_size) => {
-                let num_elements = usize::try_from(num_elements).unwrap();
-                if fill_value.size() == data_type_size {
-                    Ok(Self::new_flen(
-                        fill_value.as_ne_bytes().repeat(num_elements),
-                    ))
-                } else {
-                    Err(DataTypeFillValueError::new(
+                if fill_value.size() != data_type_size {
+                    return Err(DataTypeFillValueError::new(
                         data_type.name(),
                         fill_value.clone(),
-                    ))
+                    ));
+                }
+
+                let data = fill_value.as_ne_bytes().repeat(num_elements);
+                if optional {
+                    // For optional types, mask is all 0s if fill_value is null, otherwise all 1s
+                    let mask_value = u8::from(!fill_value.is_null());
+                    let mask = vec![mask_value; num_elements];
+                    Ok(Self::new_flen_optional(mask, data))
+                } else {
+                    Ok(Self::new_flen(data))
                 }
             }
             DataTypeSize::Variable => {
-                let num_elements = usize::try_from(num_elements).unwrap();
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
                     RawBytesOffsets::new_unchecked(
@@ -153,10 +239,21 @@ impl<'a> ArrayBytes<'a> {
                             .collect::<Vec<_>>(),
                     )
                 };
-                Ok(unsafe {
-                    // SAFETY: The last offset is equal to the length of the bytes
-                    Self::new_vlen_unchecked(fill_value.as_ne_bytes().repeat(num_elements), offsets)
-                })
+                let data = fill_value.as_ne_bytes().repeat(num_elements);
+                if optional {
+                    // For optional types, mask is all 0s if fill_value is null, otherwise all 1s
+                    let mask_value = u8::from(!fill_value.is_null());
+                    let mask = vec![mask_value; num_elements];
+                    Ok(unsafe {
+                        // SAFETY: The last offset is equal to the length of the bytes
+                        Self::new_vlen_optional_unchecked(mask, data, offsets)
+                    })
+                } else {
+                    Ok(unsafe {
+                        // SAFETY: The last offset is equal to the length of the bytes
+                        Self::new_vlen_unchecked(data, offsets)
+                    })
+                }
             }
         }
     }
@@ -165,7 +262,13 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length.
+    /// Returns a [`CodecError`] if the bytes are optional.
     pub fn into_fixed(self) -> Result<RawBytes<'a>, CodecError> {
+        if self.mask.is_some() {
+            return Err(CodecError::Other(
+                "Optional array bytes are not supported by this codec. Use the optional codec to handle optional data types.".to_string(),
+            ));
+        }
         if self.offsets.is_none() {
             Ok(self.data)
         } else {
@@ -177,7 +280,13 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
+    /// Returns a [`CodecError`] if the bytes are optional.
     pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
+        if self.mask.is_some() {
+            return Err(CodecError::Other(
+                "Optional array bytes are not supported by this codec. Use the optional codec to handle optional data types.".to_string(),
+            ));
+        }
         if let Some(offsets) = self.offsets {
             Ok((self.data, offsets))
         } else {
@@ -187,7 +296,7 @@ impl<'a> ArrayBytes<'a> {
 
     /// Returns the size (in bytes) of the underlying element bytes.
     ///
-    /// This only considers the size of the element bytes, and does not include the element offsets for a variable sized array.
+    /// This only considers the size of the data bytes.
     #[must_use]
     pub fn size(&self) -> usize {
         self.data.len()
@@ -199,12 +308,31 @@ impl<'a> ArrayBytes<'a> {
         self.offsets.as_ref()
     }
 
+    /// Returns `true` if this is a fixed-length array.
+    #[must_use]
+    pub fn is_fixed(&self) -> bool {
+        self.offsets.is_none()
+    }
+
+    /// Returns `true` if this is a variable-length array.
+    #[must_use]
+    pub fn is_variable(&self) -> bool {
+        self.offsets.is_some()
+    }
+
+    /// Returns `true` if this is an optional array (has a mask).
+    #[must_use]
+    pub fn is_optional(&self) -> bool {
+        self.mask.is_some()
+    }
+
     /// Convert into owned [`ArrayBytes<'static>`].
     #[must_use]
     pub fn into_owned(self) -> ArrayBytes<'static> {
         ArrayBytes {
             data: self.data.into_owned().into(),
             offsets: self.offsets.map(RawBytesOffsets::into_owned),
+            mask: self.mask.map(|m| m.into_owned().into()),
         }
     }
 
@@ -222,7 +350,17 @@ impl<'a> ArrayBytes<'a> {
     /// Returns [`true`] if the array is empty for the given fill value.
     #[must_use]
     pub fn is_fill_value(&self, fill_value: &FillValue) -> bool {
-        fill_value.equals_all(&self.data)
+        if let Some(mask) = &self.mask {
+            // For optional arrays with null fill value, check if mask is all zeros
+            if fill_value.is_null() {
+                mask.iter().all(|&b| b == 0)
+            } else {
+                // TODO: For non-null fill values, need to check mask is all 1s and data matches fill value
+                false
+            }
+        } else {
+            fill_value.equals_all(&self.data)
+        }
     }
 
     /// Extract a subset of the array bytes.
@@ -232,47 +370,117 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Panics
     /// Panics if indices in the subset exceed [`usize::MAX`].
+    #[allow(clippy::too_many_lines)]
     pub fn extract_array_subset(
         &self,
         indexer: &dyn crate::indexer::Indexer,
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        if let Some(offsets) = &self.offsets {
-            let num_elements = indexer.len();
-            let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
-            let mut bytes_length = 0;
-            for index in &indices {
-                let index = usize::try_from(*index).unwrap();
-                let curr = offsets[index];
-                let next = offsets[index + 1];
-                debug_assert!(next >= curr);
-                bytes_length += next - curr;
-            }
-            let mut ss_bytes = Vec::with_capacity(bytes_length);
-            let mut ss_offsets = Vec::with_capacity(usize::try_from(1 + num_elements).unwrap());
-            for index in &indices {
-                let index = usize::try_from(*index).unwrap();
-                let curr = offsets[index];
-                let next = offsets[index + 1];
+        match (&self.offsets, &self.mask) {
+            // Variable-length, non-optional
+            (Some(offsets), None) => {
+                let num_elements = indexer.len();
+                let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
+                let mut bytes_length = 0;
+                for index in &indices {
+                    let index = usize::try_from(*index).unwrap();
+                    let curr = offsets[index];
+                    let next = offsets[index + 1];
+                    debug_assert!(next >= curr);
+                    bytes_length += next - curr;
+                }
+                let mut ss_bytes = Vec::with_capacity(bytes_length);
+                let mut ss_offsets = Vec::with_capacity(usize::try_from(1 + num_elements).unwrap());
+                for index in &indices {
+                    let index = usize::try_from(*index).unwrap();
+                    let curr = offsets[index];
+                    let next = offsets[index + 1];
+                    ss_offsets.push(ss_bytes.len());
+                    ss_bytes.extend_from_slice(&self.data[curr..next]);
+                }
                 ss_offsets.push(ss_bytes.len());
-                ss_bytes.extend_from_slice(&self.data[curr..next]);
+                let ss_offsets = unsafe {
+                    // SAFETY: The offsets are monotonically increasing.
+                    RawBytesOffsets::new_unchecked(ss_offsets)
+                };
+                let array_bytes = unsafe {
+                    // SAFETY: The last offset is equal to the length of the bytes
+                    ArrayBytes::new_vlen_unchecked(ss_bytes, ss_offsets)
+                };
+                Ok(array_bytes)
             }
-            ss_offsets.push(ss_bytes.len());
-            let ss_offsets = unsafe {
-                // SAFETY: The offsets are monotonically increasing.
-                RawBytesOffsets::new_unchecked(ss_offsets)
-            };
-            let array_bytes = unsafe {
-                // SAFETY: The last offset is equal to the length of the bytes
-                ArrayBytes::new_vlen_unchecked(ss_bytes, ss_offsets)
-            };
-            Ok(array_bytes)
-        } else {
-            let byte_ranges = indexer
-                .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-            let bytes = extract_byte_ranges_concat(&self.data, byte_ranges)?;
-            Ok(ArrayBytes::new_flen(bytes))
+            // Fixed-length, non-optional
+            (None, None) => {
+                let byte_ranges = indexer
+                    .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
+                let subset_bytes = extract_byte_ranges_concat(&self.data, byte_ranges)?;
+                Ok(ArrayBytes::new_flen(subset_bytes))
+            }
+            // Optional (mask present) - can be fixed or variable length
+            (offsets_opt, Some(mask)) => {
+                let num_elements = indexer.len();
+                let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
+
+                // Extract subset of mask (one byte per element)
+                let mut subset_mask = Vec::with_capacity(usize::try_from(num_elements).unwrap());
+                for index in &indices {
+                    let index = usize::try_from(*index).unwrap();
+                    subset_mask.push(mask[index]);
+                }
+
+                // Extract subset of data (dense format - same indices as mask)
+                match offsets_opt {
+                    // Optional fixed-length
+                    None => {
+                        let inner_data_type = if let DataType::Optional(inner) = data_type {
+                            inner.as_ref()
+                        } else {
+                            data_type
+                        };
+                        let element_size = inner_data_type.fixed_size().ok_or_else(|| {
+                            CodecError::Other(
+                                "Cannot extract subset from optional array with variable-length inner type"
+                                    .to_string(),
+                            )
+                        })?;
+
+                        let mut subset_bytes = Vec::with_capacity(indices.len() * element_size);
+                        for index in &indices {
+                            let index = usize::try_from(*index).unwrap();
+                            let start = index * element_size;
+                            let end = start + element_size;
+                            subset_bytes.extend_from_slice(&self.data[start..end]);
+                        }
+                        Ok(ArrayBytes::new_flen_optional(subset_mask, subset_bytes))
+                    }
+                    // Optional variable-length
+                    Some(offsets) => {
+                        let mut subset_bytes = Vec::new();
+                        let mut subset_offsets = Vec::with_capacity(indices.len() + 1);
+                        subset_offsets.push(0);
+
+                        for index in &indices {
+                            let index = usize::try_from(*index).unwrap();
+                            let start = offsets[index];
+                            let end = offsets[index + 1];
+                            subset_bytes.extend_from_slice(&self.data[start..end]);
+                            subset_offsets.push(subset_bytes.len());
+                        }
+
+                        let subset_offsets =
+                            unsafe { RawBytesOffsets::new_unchecked(subset_offsets) };
+                        unsafe {
+                            // SAFETY: The last offset is equal to the length of the bytes
+                            Ok(ArrayBytes::new_vlen_optional_unchecked(
+                                subset_mask,
+                                subset_bytes,
+                                subset_offsets,
+                            ))
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -316,6 +524,23 @@ fn validate_bytes(
     num_elements: u64,
     data_type: &DataType,
 ) -> Result<(), CodecError> {
+    // Ensure mask is present for optional data types
+    if data_type.is_optional() && bytes.mask.is_none() {
+        return Err(CodecError::Other(
+            "ArrayBytes is missing mask for optional data type".to_string(),
+        ));
+    }
+
+    // Validate mask if present
+    if let Some(mask) = &bytes.mask {
+        if mask.len() != usize::try_from(num_elements).unwrap() {
+            return Err(CodecError::Other(
+                "Mask length does not match number of elements".to_string(),
+            ));
+        }
+    }
+
+    // Validate data based on type
     match (&bytes.offsets, data_type.size()) {
         (None, DataTypeSize::Fixed(data_type_size)) => Ok(validate_bytes_flen(
             &bytes.data,
@@ -471,6 +696,7 @@ fn update_bytes_vlen_indexer<'a>(
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
 /// - `output_subset_bytes` are not compatible with the `output_subset` and `data_type_size`,
 /// - `output_subset` is not within the bounds of `shape`
+#[allow(clippy::similar_names)]
 fn update_array_bytes_array_subset<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -478,8 +704,13 @@ fn update_array_bytes_array_subset<'a>(
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    match (&bytes.offsets, &update_bytes.offsets, data_type_size) {
-        (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+    match (
+        (&bytes.offsets, &bytes.mask),
+        (&update_bytes.offsets, &update_bytes.mask),
+        data_type_size,
+    ) {
+        // Variable-length, non-optional
+        ((Some(offsets), None), (Some(update_offsets), None), DataTypeSize::Variable) => {
             Ok(update_bytes_vlen_array_subset(
                 &bytes.data,
                 offsets,
@@ -489,12 +720,13 @@ fn update_array_bytes_array_subset<'a>(
                 update_subset,
             )?)
         }
-        (None, None, DataTypeSize::Fixed(data_type_size)) => {
-            let mut bytes = bytes.data.into_owned();
+        // Fixed-length, non-optional
+        ((None, None), (None, None), DataTypeSize::Fixed(data_type_size)) => {
+            let mut data = bytes.data.into_owned();
             let mut output_view: ArrayBytesFixedDisjointView<'_> = unsafe {
                 // SAFETY: Only one view is created, so it is disjoint
                 ArrayBytesFixedDisjointView::new(
-                    UnsafeCellSlice::new(&mut bytes),
+                    UnsafeCellSlice::new(&mut data),
                     data_type_size,
                     shape,
                     update_subset.clone(),
@@ -502,8 +734,69 @@ fn update_array_bytes_array_subset<'a>(
             }
             .map_err(CodecError::from)?;
             output_view.copy_from_slice(&update_bytes.data)?;
-            Ok(ArrayBytes::new_flen(bytes))
+            Ok(ArrayBytes::new_flen(data))
         }
+        // Optional (both have masks)
+        ((offsets_opt, Some(mask)), (update_offsets_opt, Some(update_mask)), data_type_size) => {
+            // Update both mask and data
+            let mut mask = mask.clone().into_owned();
+            let update_mask = update_mask.as_ref();
+
+            // Update mask
+            let subset_indices = update_subset.indices();
+            for (update_mask_idx, indices) in subset_indices.iter().enumerate() {
+                let linear_idx = crate::array::ravel_indices(&indices, shape)
+                    .ok_or_else(|| CodecError::Other("Invalid indices".to_string()))?;
+                let linear_idx = usize::try_from(linear_idx).unwrap();
+                mask[linear_idx] = update_mask[update_mask_idx];
+            }
+
+            // Update data based on whether it's fixed or variable length
+            let updated_data = match (offsets_opt, update_offsets_opt, data_type_size) {
+                (None, None, DataTypeSize::Fixed(data_type_size)) => {
+                    let mut data = bytes.data.into_owned();
+                    let mut output_view: ArrayBytesFixedDisjointView<'_> = unsafe {
+                        // SAFETY: Only one view is created, so it is disjoint
+                        ArrayBytesFixedDisjointView::new(
+                            UnsafeCellSlice::new(&mut data),
+                            data_type_size,
+                            shape,
+                            update_subset.clone(),
+                        )
+                    }
+                    .map_err(CodecError::from)?;
+                    output_view.copy_from_slice(&update_bytes.data)?;
+                    ArrayBytes::new_flen_optional(mask, data)
+                }
+                (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+                    let updated = update_bytes_vlen_array_subset(
+                        &bytes.data,
+                        offsets,
+                        shape,
+                        &update_bytes.data,
+                        update_offsets,
+                        update_subset,
+                    )?;
+                    // Add mask to the updated data
+                    ArrayBytes {
+                        data: updated.data,
+                        offsets: updated.offsets,
+                        mask: Some(mask.into()),
+                    }
+                }
+                _ => {
+                    return Err(CodecError::Other(
+                        "Mismatched optional data types in update".to_string(),
+                    ))
+                }
+            };
+
+            Ok(updated_data)
+        }
+        // Mismatched types
+        ((_, Some(_)), (_, None), _) | ((_, None), (_, Some(_)), _) => Err(CodecError::Other(
+            "Cannot update optional array bytes with non-optional bytes or vice versa".to_string(),
+        )),
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
     }
@@ -521,6 +814,7 @@ fn update_array_bytes_array_subset<'a>(
 ///
 /// # Panics
 /// Panics if the indexer references bytes beyond [`usize::MAX`].
+#[allow(clippy::similar_names)]
 pub fn update_array_bytes<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -538,8 +832,13 @@ pub fn update_array_bytes<'a>(
         );
     }
 
-    match (&bytes.offsets, &update_bytes.offsets, data_type_size) {
-        (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+    match (
+        (&bytes.offsets, &bytes.mask),
+        (&update_bytes.offsets, &update_bytes.mask),
+        data_type_size,
+    ) {
+        // Variable-length, non-optional
+        ((Some(offsets), None), (Some(update_offsets), None), DataTypeSize::Variable) => {
             Ok(update_bytes_vlen_indexer(
                 &bytes.data,
                 offsets,
@@ -549,21 +848,80 @@ pub fn update_array_bytes<'a>(
                 update_indexer,
             )?)
         }
-        (None, None, DataTypeSize::Fixed(data_type_size)) => {
-            let mut bytes = bytes.data.into_owned();
+        // Fixed-length, non-optional
+        ((None, None), (None, None), DataTypeSize::Fixed(data_type_size)) => {
+            let mut data = bytes.data.into_owned();
             let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, data_type_size)?;
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
                 let start = usize::try_from(byte_range.start).unwrap();
                 let end = usize::try_from(byte_range.end).unwrap();
                 let byte_range_len = end.saturating_sub(start);
-                bytes
-                    .index_mut(start..end)
+                data.index_mut(start..end)
                     .copy_from_slice(&update_bytes.data[offset..offset + byte_range_len]);
                 offset += byte_range_len;
             }
-            Ok(ArrayBytes::new_flen(bytes))
+            Ok(ArrayBytes::new_flen(data))
         }
+        // Optional (both have masks)
+        ((offsets_opt, Some(mask)), (update_offsets_opt, Some(update_mask)), data_type_size) => {
+            // Update both mask and data
+            let mut mask = mask.clone().into_owned();
+            let update_mask = update_mask.as_ref();
+
+            // Update mask based on indexer
+            let indices = update_indexer.iter_linearised_indices(shape)?;
+            for (update_mask_idx, linear_idx) in indices.enumerate() {
+                let linear_idx = usize::try_from(linear_idx).unwrap();
+                mask[linear_idx] = update_mask[update_mask_idx];
+            }
+
+            // Update data based on whether it's fixed or variable length
+            let updated_data = match (offsets_opt, update_offsets_opt, data_type_size) {
+                (None, None, DataTypeSize::Fixed(data_type_size)) => {
+                    let mut data = bytes.data.into_owned();
+                    let byte_ranges =
+                        update_indexer.iter_contiguous_byte_ranges(shape, data_type_size)?;
+                    let mut offset: usize = 0;
+                    for byte_range in byte_ranges {
+                        let start = usize::try_from(byte_range.start).unwrap();
+                        let end = usize::try_from(byte_range.end).unwrap();
+                        let byte_range_len = end.saturating_sub(start);
+                        data.index_mut(start..end)
+                            .copy_from_slice(&update_bytes.data[offset..offset + byte_range_len]);
+                        offset += byte_range_len;
+                    }
+                    ArrayBytes::new_flen_optional(mask, data)
+                }
+                (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+                    let updated = update_bytes_vlen_indexer(
+                        &bytes.data,
+                        offsets,
+                        shape,
+                        &update_bytes.data,
+                        update_offsets,
+                        update_indexer,
+                    )?;
+                    // Add mask to the updated data
+                    ArrayBytes {
+                        data: updated.data,
+                        offsets: updated.offsets,
+                        mask: Some(mask.into()),
+                    }
+                }
+                _ => {
+                    return Err(CodecError::Other(
+                        "Mismatched optional data types in update".to_string(),
+                    ))
+                }
+            };
+
+            Ok(updated_data)
+        }
+        // Mismatched types
+        ((_, Some(_)), (_, None), _) | ((_, None), (_, Some(_)), _) => Err(CodecError::Other(
+            "Cannot update optional array bytes with non-optional bytes or vice versa".to_string(),
+        )),
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
     }
@@ -572,6 +930,9 @@ pub fn update_array_bytes<'a>(
 /// Merge a set of chunks into an array subset.
 ///
 /// This function is used internally by [`retrieve_array_subset_opt`] and [`async_retrieve_array_subset_opt`].
+///
+/// # Panics
+/// Panics if the chunk bytes are not variable length.
 pub(crate) fn merge_chunks_vlen<'a>(
     chunk_bytes_and_subsets: Vec<(ArrayBytes<'_>, ArraySubset)>,
     array_shape: &[u64],
@@ -626,7 +987,17 @@ pub(crate) fn merge_chunks_vlen<'a>(
     // TODO: Go parallel
     let mut bytes = vec![0; offsets.last()];
     for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
-        let (chunk_bytes, chunk_offsets) = chunk_bytes.into_variable()?;
+        // Check that this is variable-length, non-optional
+        if chunk_bytes.mask.is_some() {
+            return Err(CodecError::Other(
+                "Cannot merge optional array bytes. Use the optional codec to handle optional data types.".to_string(),
+            ));
+        }
+        let chunk_offsets = chunk_bytes
+            .offsets
+            .as_ref()
+            .ok_or(CodecError::ExpectedVariableLengthBytes)?;
+
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
         for (subset_idx, (&chunk_curr, &chunk_next)) in
             indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())
@@ -634,7 +1005,8 @@ pub(crate) fn merge_chunks_vlen<'a>(
             let subset_idx = usize::try_from(subset_idx).unwrap();
             let subset_curr = offsets[subset_idx];
             let subset_next = offsets[subset_idx + 1];
-            bytes[subset_curr..subset_next].copy_from_slice(&chunk_bytes[chunk_curr..chunk_next]);
+            bytes[subset_curr..subset_next]
+                .copy_from_slice(&chunk_bytes.data[chunk_curr..chunk_next]);
         }
     }
 
@@ -703,11 +1075,11 @@ pub fn copy_fill_value_into(
 ) -> Result<(), CodecError> {
     let fill_value_bytes =
         ArrayBytes::new_fill_value(data_type, output_view.num_elements(), fill_value)?;
-    if fill_value_bytes.offsets.is_none() {
+    if fill_value_bytes.offsets.is_none() && fill_value_bytes.mask.is_none() {
         output_view.copy_from_slice(&fill_value_bytes.data)?;
         Ok(())
     } else {
-        // TODO: Variable length data type support?
+        // TODO: Variable length and optional data type support?
         Err(CodecError::ExpectedFixedLengthBytes)
     }
 }
@@ -716,11 +1088,34 @@ pub fn copy_fill_value_into(
 ///
 /// This function handles the common pattern of decoding `ArrayBytes` into an `ArrayBytesDecodeIntoTarget`,
 /// properly handling optional data types.
-#[expect(clippy::needless_pass_by_value)]
 pub(crate) fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
-    target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
+    mut target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
+    // Handle mask separately (always fixed-length, 1 byte per element)
+    match (&bytes.mask, &mut target.mask) {
+        // Bytes have mask, output expects mask
+        (Some(mask), Some(mask_view)) => {
+            mask_view.copy_from_slice(mask.as_ref())?;
+        }
+        // Bytes have mask, but output doesn't expect mask
+        (Some(_), None) => {
+            return Err(CodecError::Other(
+                "Cannot decode optional data into a fixed view. Provide separate mask and data views.".to_string(),
+            ));
+        }
+        // Bytes don't have mask, but output expects mask - fill mask with all 1s (all valid)
+        (None, Some(mask_view)) => {
+            let mask_len = usize::try_from(mask_view.num_elements()).unwrap();
+            let all_valid = vec![1u8; mask_len];
+            mask_view.copy_from_slice(&all_valid)?;
+        }
+        // Neither bytes nor output have mask
+        (None, None) => {
+            // Nothing to do for mask
+        }
+    }
+
     // Handle data based on whether it's fixed or variable length
     if bytes.offsets.is_none() {
         Ok(target.data.copy_from_slice(&bytes.data)?)
@@ -734,31 +1129,6 @@ impl<'a> From<RawBytes<'a>> for ArrayBytes<'a> {
         Self::new_flen(bytes)
     }
 }
-
-// impl<'a, 'b> From<&ArrayBytes<'a>> for ArrayBytes<'b> {
-//     fn from(bytes: &ArrayBytes<'a>) -> Self {
-//         match bytes {
-//             Self::Fixed(bytes) => {
-//                 let bytes = bytes.to_vec();
-//                 ArrayBytes::<'b>::new_flen(bytes)
-//             },
-//             Self::Variable(bytes, offsets) => {
-//                 let bytes: RawBytes<'b> = bytes.to_vec().into();
-//                 let offsets: RawBytesOffsets<'b> = offsets.to_vec().into();
-//                 ArrayBytes::new_vlen(bytes, offsets)
-//             }
-//         }
-//     }
-// }
-
-// impl<'a> From<ArrayBytes<'_>> for ArrayBytes<'a> {
-//     fn from(bytes: ArrayBytes<'_>) -> Self {
-//         match bytes {
-//             ArrayBytes::Fixed(bytes) => ArrayBytes::new_flen(bytes)
-//             ArrayBytes::Variable(bytes, offsets) => ArrayBytes::new_vlen(bytes, offsets)
-//         }
-//     }
-// }
 
 impl<'a> From<&'a [u8]> for ArrayBytes<'a> {
     fn from(bytes: &'a [u8]) -> Self {
@@ -791,6 +1161,7 @@ mod tests {
         let data = [0u32, 1, 2, 3, 4];
         let bytes = Element::into_array_bytes(&DataType::UInt32, &data)?;
         assert!(bytes.offsets.is_none());
+        assert!(bytes.mask.is_none());
         assert_eq!(bytes.data.len(), size_of::<u32>() * data.len());
 
         Ok(())
@@ -812,6 +1183,7 @@ mod tests {
         let data = ["a", "bb", "ccc"];
         let bytes = Element::into_array_bytes(&DataType::String, &data)?;
         assert!(bytes.offsets.is_some());
+        assert!(bytes.mask.is_none());
         assert_eq!(bytes.data.as_ref(), "abbccc".as_bytes());
         assert_eq!(*bytes.offsets.unwrap(), [0, 1, 3, 6]);
 

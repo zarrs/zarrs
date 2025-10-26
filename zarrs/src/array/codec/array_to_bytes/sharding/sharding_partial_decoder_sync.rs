@@ -121,6 +121,13 @@ pub(crate) fn partial_decode(
         .into());
     }
 
+    if shard_representation.data_type().is_optional() {
+        return Err(CodecError::UnsupportedDataType(
+            shard_representation.data_type().clone(),
+            zarrs_registry::codec::SHARDING.to_string(),
+        ));
+    }
+
     match shard_representation.element_size() {
         DataTypeSize::Fixed(_data_type_size) => {
             if let Some(subset) = indexer.as_array_subset() {

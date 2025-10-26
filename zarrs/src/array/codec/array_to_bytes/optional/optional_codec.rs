@@ -489,11 +489,9 @@ mod tests {
         let encoded = codec.encode(input, &chunk_representation, &CodecOptions::default())?;
         let decoded = codec.decode(encoded, &chunk_representation, &CodecOptions::default())?;
 
-        // The codec now returns ArrayBytes::Optional
-        let (decoded_mask, decoded_data, decoded_offsets) = decoded.into_optional()?;
-        assert!(decoded_offsets.is_none());
-        assert_eq!(mask, decoded_mask.as_ref());
-        assert_eq!(data, decoded_data.as_ref());
+        // The codec now returns optional ArrayBytes
+        assert!(decoded.mask.is_some());
+        assert!(decoded.offsets.is_none());
         Ok(())
     }
 

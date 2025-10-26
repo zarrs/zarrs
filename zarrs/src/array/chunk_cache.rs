@@ -229,6 +229,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                     .collect::<Result<Vec<_>, ArrayError>>()?;
 
                 // Merge
+                if array.data_type().is_optional() {
+                    // FIXME: Add support
+                    return Err(CodecError::Other(
+                        "Optional data types are not supported in chunk cache".to_string(),
+                    )
+                    .into());
+                }
+
                 match array.data_type().size() {
                     DataTypeSize::Variable => {
                         // Arc<ArrayBytes> -> ArrayBytes (not copied, but a bit wasteful, change merge_chunks_vlen?)
@@ -272,6 +280,17 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
 
                                 let fixed = &chunk_subset_bytes.data;
                                 debug_assert!(chunk_subset_bytes.offsets.is_none());
+
+                                if chunk_subset_bytes.mask.is_some() {
+                                    return Err(ArrayError::Other(
+                                        "Cannot cache optional array bytes. Use the optional codec.".to_string(),
+                                    ));
+                                }
+                                if chunk_subset_bytes.offsets.is_some() {
+                                    unreachable!(
+                                        "Variable-length arrays should not be cached this way"
+                                    );
+                                }
 
                                 let mut output_view = unsafe {
                                     // SAFETY: chunks represent disjoint array subsets

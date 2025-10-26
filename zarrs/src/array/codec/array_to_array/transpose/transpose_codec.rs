@@ -101,6 +101,12 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
+        if decoded_data_type.is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_data_type.clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         Ok(decoded_data_type.clone())
     }
 
@@ -147,6 +153,13 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
@@ -191,6 +204,13 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
