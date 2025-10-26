@@ -49,10 +49,9 @@ use crate::{
 use zarrs_metadata_ext::v2_to_v3::group_metadata_v2_to_v3;
 
 #[cfg(feature = "async")]
-use crate::node::async_get_child_nodes;
-#[cfg(feature = "async")]
-use crate::storage::{
-    AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits,
+use crate::{
+    node::{async_get_all_nodes_of, async_get_child_nodes},
+    storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits},
 };
 
 pub use self::group_builder::GroupBuilder;
@@ -491,6 +490,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
         async_get_child_nodes(&self.storage, &self.path, recursive).await
+    }
+
+    /// Return all the Nodes under the group, recursively
+    ///
+    /// # Errors
+    /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
+    pub async fn async_traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        async_get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default).await
     }
 
     /// Return the children of the group that are [`Group`]s
@@ -1011,8 +1018,6 @@ mod tests {
             .unwrap()
             .store_metadata()
             .is_ok());
-
-        println!("{:?}", root.traverse().unwrap());
 
         let nodes = root.traverse();
         assert!(nodes.is_ok());
