@@ -20,6 +20,12 @@ use crate::{
     storage::{ListableStorageTraits, ReadableStorageTraits},
 };
 
+#[cfg(feature = "async")]
+use crate::{
+    node::async_get_all_nodes_of,
+    storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits},
+};
+
 /// Zarr hierarchy.
 ///
 /// See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
@@ -131,6 +137,48 @@ impl Hierarchy {
         hierarchy.extend(nodes);
 
         Ok(hierarchy)
+    }
+
+    #[cfg(feature = "async")]
+    /// Asynchronously open a hierarcht at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub async fn async_open<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
+        storage: &Arc<TStorage>,
+        path: &str,
+    ) -> Result<Self, HierarchyCreateError> {
+        Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
+    }
+
+    #[cfg(feature = "async")]
+    /// Asynchronously open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub async fn async_open_opt<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
+        storage: &Arc<TStorage>,
+        path: &str,
+        version: &MetadataRetrieveVersion,
+    ) -> Result<Self,HierarchyCreateError>{
+        let node_path = NodePath::try_from(path)?;
+        let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
+        let mut hierarchy = Hierarchy::new();
+
+        let nodes = match node_metadata {
+            NodeMetadata::Array(_) => Vec::default(),
+            // TODO: Add consolidated metadata support
+            NodeMetadata::Group(_) => async_get_all_nodes_of(storage, &node_path, version).await?,
+        };
+
+        hierarchy.insert(node_path, node_metadata);
+        hierarchy.extend(nodes);
+
+        Ok(hierarchy) 
     }
 }
 
