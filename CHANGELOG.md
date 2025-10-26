@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.5] - 2025-10-26
+
 ### Added
 - Add `Array::set_shape_and_chunk_grid`
 - Add `node::[async_]get_child_nodes_opt`
@@ -14,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `DataType::is_fixed()` and `is_variable()`
 
 ### Changed
+- Bump `zarrs_data_type` to 0.4.1
+- Bump `zarrs_metadata` to 0.6.2
 - Bump `zarrs_metadata_ext` to 0.2.2
 
 ### Fixed
@@ -1632,7 +1636,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.4...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.5...HEAD
+[0.22.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.5
 [0.22.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.4
 [0.22.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.3
 [0.22.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.2
