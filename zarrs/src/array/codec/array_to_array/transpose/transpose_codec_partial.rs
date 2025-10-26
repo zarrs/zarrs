@@ -67,7 +67,7 @@ where
                 &encoded_value,
                 array_subset,
                 &self.order,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
@@ -104,7 +104,7 @@ where
                 bytes,
                 array_subset,
                 &self.order,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?;
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             self.input_output_handle.partial_encode(
@@ -158,7 +158,7 @@ where
                 &encoded_value,
                 array_subset,
                 &self.order,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
@@ -199,7 +199,7 @@ where
                 bytes,
                 array_subset,
                 &self.order,
-                self.decoded_representation.data_type().size(),
+                self.decoded_representation.data_type(),
             )?;
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             self.input_output_handle

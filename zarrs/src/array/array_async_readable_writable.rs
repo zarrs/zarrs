@@ -156,7 +156,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 .await
         } else {
             let chunk_subset_bytes = chunk_subset_bytes.into();
-            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
+            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
 
             // Lock the chunk
             // let key = self.chunk_key(chunk_indices);
@@ -289,7 +289,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             }
         } else {
             let subset_bytes = subset_bytes.into();
-            subset_bytes.validate(array_subset.num_elements(), self.data_type().size())?;
+            subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
             // Calculate chunk/codec concurrency
             let chunk_representation =

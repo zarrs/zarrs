@@ -149,7 +149,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
         if self.order.0.len() != decoded_representation.dimensionality() {
             return Err(CodecError::Other(
@@ -193,7 +193,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
         if self.order.0.len() != decoded_representation.dimensionality() {
             return Err(CodecError::Other(

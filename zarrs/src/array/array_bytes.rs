@@ -215,12 +215,8 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns an error if the array is not valid.
-    pub fn validate(
-        &self,
-        num_elements: u64,
-        data_type_size: DataTypeSize,
-    ) -> Result<(), CodecError> {
-        validate_bytes(self, num_elements, data_type_size)
+    pub fn validate(&self, num_elements: u64, data_type: &DataType) -> Result<(), CodecError> {
+        validate_bytes(self, num_elements, data_type)
     }
 
     /// Returns [`true`] if the array is empty for the given fill value.
@@ -318,9 +314,9 @@ fn validate_bytes_vlen(
 fn validate_bytes(
     bytes: &ArrayBytes<'_>,
     num_elements: u64,
-    data_type_size: DataTypeSize,
+    data_type: &DataType,
 ) -> Result<(), CodecError> {
-    match (&bytes.offsets, data_type_size) {
+    match (&bytes.offsets, data_type.size()) {
         (None, DataTypeSize::Fixed(data_type_size)) => Ok(validate_bytes_flen(
             &bytes.data,
             usize::try_from(num_elements * data_type_size as u64).unwrap(),

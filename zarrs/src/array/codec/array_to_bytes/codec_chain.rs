@@ -355,7 +355,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
     ) -> Result<RawBytes<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
 
         let mut decoded_representation = decoded_representation.clone();
@@ -421,7 +421,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
 
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
         Ok(bytes)
     }
@@ -482,7 +482,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
 
         crate::array::array_bytes::decode_into_array_bytes_target(&bytes, output_target)
