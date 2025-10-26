@@ -389,11 +389,7 @@ where
         let data = T::into_array_bytes(inner_data_type, &dense_elements)?.into_owned();
 
         // Create optional ArrayBytes by adding mask to the data
-        Ok(ArrayBytes {
-            data: data.data,
-            offsets: data.offsets,
-            mask: Some(mask.into()),
-        })
+        Ok(data.with_optional_mask(mask))
     }
 }
 
@@ -412,16 +408,11 @@ where
         };
 
         // Extract mask and dense data from optional ArrayBytes
-        let mask = bytes.mask.ok_or_else(|| {
-            ArrayError::Other(
-                "Expected optional ArrayBytes (with mask) for optional data type".to_string(),
-            )
+        let (data, mask) = bytes.into_optional().map_err(|e| {
+            ArrayError::Other(format!(
+                "Expected optional ArrayBytes (with mask) for optional data type: {e}"
+            ))
         })?;
-        let data = ArrayBytes {
-            data: bytes.data,
-            offsets: bytes.offsets,
-            mask: None,
-        };
 
         // Get the mask bytes (one byte per element)
         let mask_bytes = mask.as_ref();
@@ -429,11 +420,6 @@ where
 
         // Convert the dense inner data to a Vec<T>
         let dense_values = T::from_array_bytes(inner_data_type, data)?;
-
-        // Verify we have the same number of elements in mask and data
-        if dense_values.len() != num_elements {
-            return Err(ArrayError::Other("Mask/data length mismatch".to_string()));
-        }
 
         // Build the result vector using mask to determine Some vs None
         let mut elements = Vec::with_capacity(num_elements);
@@ -444,6 +430,12 @@ where
                 elements.push(None);
             } else {
                 // Some value - take from dense data
+                if i >= dense_values.len() {
+                    return Err(ArrayError::Other(format!(
+                        "Not enough dense values for mask at index {}",
+                        i
+                    )));
+                }
                 elements.push(Some(dense_values[i].clone()));
             }
         }

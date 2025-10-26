@@ -1,5 +1,9 @@
 ## TODO
 
+- Add optional tests with string data type
+- Switch to a dense representation in-memory, don't default initialise missing elements
+- Fix optional fill value handling
+
 ### Features
 - Add array methods supporting advanced indexing <https://github.com/zarrs/zarrs/issues/52>
 - Stabilise the async `Array` API <https://github.com/zarrs/zarrs/issues/127>

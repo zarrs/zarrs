@@ -691,11 +691,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             unsafe { mask.set_len(num_elements) };
         }
 
-        Ok(ArrayBytes::new(
-            data_output,
-            None,
-            mask_output.map(Into::into),
-        ))
+        let array_bytes = ArrayBytes::new_flen(data_output);
+        Ok(if let Some(mask) = mask_output {
+            array_bytes.with_optional_mask(mask)
+        } else {
+            array_bytes
+        })
     }
 
     /// Async variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).

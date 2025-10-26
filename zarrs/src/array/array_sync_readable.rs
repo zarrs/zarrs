@@ -753,11 +753,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             unsafe { mask.set_len(num_elements) };
         }
 
-        Ok(ArrayBytes::new(
-            data_output,
-            None,
-            mask_output.map(Into::into),
-        ))
+        let array_bytes = ArrayBytes::new_flen(data_output);
+        Ok(if let Some(mask) = mask_output {
+            array_bytes.with_optional_mask(mask)
+        } else {
+            array_bytes
+        })
     }
 
     /// Explicit options version of [`retrieve_array_subset`](Array::retrieve_array_subset).

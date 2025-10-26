@@ -278,19 +278,21 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                                     )?)
                                 };
 
-                                let fixed = &chunk_subset_bytes.data;
-                                debug_assert!(chunk_subset_bytes.offsets.is_none());
-
-                                if chunk_subset_bytes.mask.is_some() {
-                                    return Err(ArrayError::Other(
-                                        "Cannot cache optional array bytes. Use the optional codec.".to_string(),
-                                    ));
-                                }
-                                if chunk_subset_bytes.offsets.is_some() {
-                                    unreachable!(
-                                        "Variable-length arrays should not be cached this way"
-                                    );
-                                }
+                                let fixed = match chunk_subset_bytes.as_ref() {
+                                    ArrayBytes::Fixed(bytes) => bytes,
+                                    ArrayBytes::Optional(_, _) => {
+                                        todo!("Do this properly, mirror Array::retrieve_array_subset");
+                                        return Err(ArrayError::Other(
+                                            "Cannot cache optional array bytes. Use the optional codec.".to_string(),
+                                        ));
+                                    }
+                                    ArrayBytes::Variable(_, _) => {
+                                        todo!("Do this properly, mirror Array::retrieve_array_subset");
+                                        unreachable!(
+                                            "Variable-length arrays should not be cached this way"
+                                        );
+                                    }
+                                };
 
                                 let mut output_view = unsafe {
                                     // SAFETY: chunks represent disjoint array subsets

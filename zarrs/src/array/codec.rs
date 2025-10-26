@@ -1782,6 +1782,9 @@ pub enum CodecError {
     /// Expected variable length bytes.
     #[error("Expected variable length array bytes")]
     ExpectedVariableLengthBytes,
+    /// Expected non-optional bytes.
+    #[error("Expected non-optional array bytes")]
+    ExpectedNonOptionalBytes,
     /// Invalid array shape.
     #[error(transparent)]
     InvalidArrayShape(#[from] InvalidArrayShapeError),
