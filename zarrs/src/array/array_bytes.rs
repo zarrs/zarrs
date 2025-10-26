@@ -24,25 +24,32 @@ pub use raw_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
 /// Array element bytes.
 ///
 /// These can represent:
-/// - [`ArrayBytes::Fixed`]: fixed length elements of an array in C-contiguous order,
-/// - [`ArrayBytes::Variable`]: variable length elements of an array in C-contiguous order with padding permitted,
+/// - Fixed length elements of an array in C-contiguous order,
+/// - Variable length elements of an array in C-contiguous order with padding permitted,
 /// - Encoded array bytes after an array to bytes or bytes to bytes codecs.
 pub type RawBytes<'a> = Cow<'a, [u8]>;
 
 /// Fixed or variable length array bytes.
+///
+/// This struct can represent:
+/// - Fixed-length arrays: `offsets: None, mask: None`
+/// - Variable-length arrays: `offsets: Some(...), mask: None`
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ArrayBytes<'a> {
-    /// Bytes for a fixed length array.
+pub struct ArrayBytes<'a> {
+    /// The element bytes in C-contiguous order (row-major order) where the last dimension varies the fastest.
     ///
-    /// These represent elements in C-contiguous order (i.e. row-major order) where the last dimension varies the fastest.
-    Fixed(RawBytes<'a>),
-    /// Bytes and element byte offsets for a variable length array.
+    /// For optional data types, these bytes contain ALL elements in dense format (both valid and invalid).
+    pub data: RawBytes<'a>,
+
+    /// Element byte offsets for variable length arrays.
     ///
-    /// The bytes and offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
+    /// The offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
     /// - The offsets buffer contains length + 1 ~~signed integers (either 32-bit or 64-bit, depending on the data type)~~ usize integers.
     /// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
-    /// - The final offset must be less than or equal to the length of the bytes buffer.
-    Variable(RawBytes<'a>, RawBytesOffsets<'a>),
+    /// - The final offset must be less than or equal to the length of the data buffer.
+    ///
+    /// This is `None` for fixed-length arrays and `Some` for variable-length arrays.
+    pub offsets: Option<RawBytesOffsets<'a>>,
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -66,7 +73,10 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// `bytes` must be C-contiguous.
     pub fn new_flen(bytes: impl Into<RawBytes<'a>>) -> Self {
-        Self::Fixed(bytes.into())
+        Self {
+            data: bytes.into(),
+            offsets: None,
+        }
     }
 
     /// Create a new variable length array bytes from `bytes` and `offsets`.
@@ -79,7 +89,10 @@ impl<'a> ArrayBytes<'a> {
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
         let bytes = bytes.into();
         if offsets.last() <= bytes.len() {
-            Ok(Self::Variable(bytes, offsets))
+            Ok(Self {
+                data: bytes,
+                offsets: Some(offsets),
+            })
         } else {
             Err(RawBytesOffsetsOutOfBoundsError {
                 offset: offsets.last(),
@@ -98,7 +111,10 @@ impl<'a> ArrayBytes<'a> {
     ) -> Self {
         let bytes = bytes.into();
         debug_assert!(offsets.last() <= bytes.len());
-        Self::Variable(bytes, offsets)
+        Self {
+            data: bytes,
+            offsets: Some(offsets),
+        }
     }
 
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
@@ -150,9 +166,10 @@ impl<'a> ArrayBytes<'a> {
     /// # Errors
     /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length.
     pub fn into_fixed(self) -> Result<RawBytes<'a>, CodecError> {
-        match self {
-            Self::Fixed(bytes) => Ok(bytes),
-            Self::Variable(_, _) => Err(CodecError::ExpectedFixedLengthBytes),
+        if self.offsets.is_none() {
+            Ok(self.data)
+        } else {
+            Err(CodecError::ExpectedFixedLengthBytes)
         }
     }
 
@@ -161,9 +178,10 @@ impl<'a> ArrayBytes<'a> {
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
     pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
-        match self {
-            Self::Fixed(_) => Err(CodecError::ExpectedVariableLengthBytes),
-            Self::Variable(bytes, offsets) => Ok((bytes, offsets)),
+        if let Some(offsets) = self.offsets {
+            Ok((self.data, offsets))
+        } else {
+            Err(CodecError::ExpectedVariableLengthBytes)
         }
     }
 
@@ -172,28 +190,21 @@ impl<'a> ArrayBytes<'a> {
     /// This only considers the size of the element bytes, and does not include the element offsets for a variable sized array.
     #[must_use]
     pub fn size(&self) -> usize {
-        match self {
-            Self::Fixed(bytes) | Self::Variable(bytes, _) => bytes.len(),
-        }
+        self.data.len()
     }
 
     /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size bytes.
     #[must_use]
     pub fn offsets(&self) -> Option<&RawBytesOffsets<'a>> {
-        match self {
-            Self::Fixed(_) => None,
-            Self::Variable(_, offsets) => Some(offsets),
-        }
+        self.offsets.as_ref()
     }
 
     /// Convert into owned [`ArrayBytes<'static>`].
     #[must_use]
     pub fn into_owned(self) -> ArrayBytes<'static> {
-        match self {
-            Self::Fixed(bytes) => ArrayBytes::Fixed(bytes.into_owned().into()),
-            Self::Variable(bytes, offsets) => {
-                ArrayBytes::Variable(bytes.into_owned().into(), offsets.into_owned())
-            }
+        ArrayBytes {
+            data: self.data.into_owned().into(),
+            offsets: self.offsets.map(RawBytesOffsets::into_owned),
         }
     }
 
@@ -215,10 +226,7 @@ impl<'a> ArrayBytes<'a> {
     /// Returns [`true`] if the array is empty for the given fill value.
     #[must_use]
     pub fn is_fill_value(&self, fill_value: &FillValue) -> bool {
-        match self {
-            Self::Fixed(bytes) => fill_value.equals_all(bytes),
-            Self::Variable(bytes, _offsets) => fill_value.equals_all(bytes),
-        }
+        fill_value.equals_all(&self.data)
     }
 
     /// Extract a subset of the array bytes.
@@ -234,44 +242,41 @@ impl<'a> ArrayBytes<'a> {
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        match self {
-            ArrayBytes::Variable(bytes, offsets) => {
-                let num_elements = indexer.len();
-                let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
-                let mut bytes_length = 0;
-                for index in &indices {
-                    let index = usize::try_from(*index).unwrap();
-                    let curr = offsets[index];
-                    let next = offsets[index + 1];
-                    debug_assert!(next >= curr);
-                    bytes_length += next - curr;
-                }
-                let mut ss_bytes = Vec::with_capacity(bytes_length);
-                let mut ss_offsets = Vec::with_capacity(usize::try_from(1 + num_elements).unwrap());
-                for index in &indices {
-                    let index = usize::try_from(*index).unwrap();
-                    let curr = offsets[index];
-                    let next = offsets[index + 1];
-                    ss_offsets.push(ss_bytes.len());
-                    ss_bytes.extend_from_slice(&bytes[curr..next]);
-                }
+        if let Some(offsets) = &self.offsets {
+            let num_elements = indexer.len();
+            let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
+            let mut bytes_length = 0;
+            for index in &indices {
+                let index = usize::try_from(*index).unwrap();
+                let curr = offsets[index];
+                let next = offsets[index + 1];
+                debug_assert!(next >= curr);
+                bytes_length += next - curr;
+            }
+            let mut ss_bytes = Vec::with_capacity(bytes_length);
+            let mut ss_offsets = Vec::with_capacity(usize::try_from(1 + num_elements).unwrap());
+            for index in &indices {
+                let index = usize::try_from(*index).unwrap();
+                let curr = offsets[index];
+                let next = offsets[index + 1];
                 ss_offsets.push(ss_bytes.len());
-                let ss_offsets = unsafe {
-                    // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(ss_offsets)
-                };
-                let array_bytes = unsafe {
-                    // SAFETY: The last offset is equal to the length of the bytes
-                    ArrayBytes::new_vlen_unchecked(ss_bytes, ss_offsets)
-                };
-                Ok(array_bytes)
+                ss_bytes.extend_from_slice(&self.data[curr..next]);
             }
-            ArrayBytes::Fixed(bytes) => {
-                let byte_ranges = indexer
-                    .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
-                let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
-                Ok(ArrayBytes::new_flen(bytes))
-            }
+            ss_offsets.push(ss_bytes.len());
+            let ss_offsets = unsafe {
+                // SAFETY: The offsets are monotonically increasing.
+                RawBytesOffsets::new_unchecked(ss_offsets)
+            };
+            let array_bytes = unsafe {
+                // SAFETY: The last offset is equal to the length of the bytes
+                ArrayBytes::new_vlen_unchecked(ss_bytes, ss_offsets)
+            };
+            Ok(array_bytes)
+        } else {
+            let byte_ranges = indexer
+                .iter_contiguous_byte_ranges(array_shape, data_type.fixed_size().unwrap())?;
+            let bytes = extract_byte_ranges_concat(&self.data, byte_ranges)?;
+            Ok(ArrayBytes::new_flen(bytes))
         }
     }
 }
@@ -315,18 +320,18 @@ fn validate_bytes(
     num_elements: u64,
     data_type_size: DataTypeSize,
 ) -> Result<(), CodecError> {
-    match (bytes, data_type_size) {
-        (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => Ok(validate_bytes_flen(
-            bytes,
+    match (&bytes.offsets, data_type_size) {
+        (None, DataTypeSize::Fixed(data_type_size)) => Ok(validate_bytes_flen(
+            &bytes.data,
             usize::try_from(num_elements * data_type_size as u64).unwrap(),
         )?),
-        (ArrayBytes::Variable(bytes, offsets), DataTypeSize::Variable) => {
-            validate_bytes_vlen(bytes, offsets, num_elements)
+        (Some(offsets), DataTypeSize::Variable) => {
+            validate_bytes_vlen(&bytes.data, offsets, num_elements)
         }
-        (ArrayBytes::Fixed(_), DataTypeSize::Variable) => Err(CodecError::Other(
+        (None, DataTypeSize::Variable) => Err(CodecError::Other(
             "Used fixed length array bytes with a variable sized data type.".to_string(),
         )),
-        (ArrayBytes::Variable(_, _), DataTypeSize::Fixed(_)) => Err(CodecError::Other(
+        (Some(_), DataTypeSize::Fixed(_)) => Err(CodecError::Other(
             "Used variable length array bytes with a fixed length data type.".to_string(),
         )),
     }
@@ -477,25 +482,19 @@ fn update_array_bytes_array_subset<'a>(
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    match (bytes, update_bytes, data_type_size) {
-        (
-            ArrayBytes::Variable(bytes, offsets),
-            ArrayBytes::Variable(update_bytes, update_offsets),
-            DataTypeSize::Variable,
-        ) => Ok(update_bytes_vlen_array_subset(
-            &bytes,
-            &offsets,
-            shape,
-            update_bytes,
-            update_offsets,
-            update_subset,
-        )?),
-        (
-            ArrayBytes::Fixed(bytes),
-            ArrayBytes::Fixed(update_bytes),
-            DataTypeSize::Fixed(data_type_size),
-        ) => {
-            let mut bytes = bytes.into_owned();
+    match (&bytes.offsets, &update_bytes.offsets, data_type_size) {
+        (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+            Ok(update_bytes_vlen_array_subset(
+                &bytes.data,
+                offsets,
+                shape,
+                &update_bytes.data,
+                update_offsets,
+                update_subset,
+            )?)
+        }
+        (None, None, DataTypeSize::Fixed(data_type_size)) => {
+            let mut bytes = bytes.data.into_owned();
             let mut output_view: ArrayBytesFixedDisjointView<'_> = unsafe {
                 // SAFETY: Only one view is created, so it is disjoint
                 ArrayBytesFixedDisjointView::new(
@@ -506,7 +505,7 @@ fn update_array_bytes_array_subset<'a>(
                 )
             }
             .map_err(CodecError::from)?;
-            output_view.copy_from_slice(update_bytes)?;
+            output_view.copy_from_slice(&update_bytes.data)?;
             Ok(ArrayBytes::new_flen(bytes))
         }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
@@ -543,25 +542,19 @@ pub fn update_array_bytes<'a>(
         );
     }
 
-    match (bytes, update_bytes, data_type_size) {
-        (
-            ArrayBytes::Variable(bytes, offsets),
-            ArrayBytes::Variable(update_bytes, update_offsets),
-            DataTypeSize::Variable,
-        ) => Ok(update_bytes_vlen_indexer(
-            &bytes,
-            &offsets,
-            shape,
-            update_bytes,
-            update_offsets,
-            update_indexer,
-        )?),
-        (
-            ArrayBytes::Fixed(bytes),
-            ArrayBytes::Fixed(update_bytes),
-            DataTypeSize::Fixed(data_type_size),
-        ) => {
-            let mut bytes = bytes.into_owned();
+    match (&bytes.offsets, &update_bytes.offsets, data_type_size) {
+        (Some(offsets), Some(update_offsets), DataTypeSize::Variable) => {
+            Ok(update_bytes_vlen_indexer(
+                &bytes.data,
+                offsets,
+                shape,
+                &update_bytes.data,
+                update_offsets,
+                update_indexer,
+            )?)
+        }
+        (None, None, DataTypeSize::Fixed(data_type_size)) => {
+            let mut bytes = bytes.data.into_owned();
             let byte_ranges = update_indexer.iter_contiguous_byte_ranges(shape, data_type_size)?;
             let mut offset: usize = 0;
             for byte_range in byte_ranges {
@@ -570,7 +563,7 @@ pub fn update_array_bytes<'a>(
                 let byte_range_len = end.saturating_sub(start);
                 bytes
                     .index_mut(start..end)
-                    .copy_from_slice(&update_bytes[offset..offset + byte_range_len]);
+                    .copy_from_slice(&update_bytes.data[offset..offset + byte_range_len]);
                 offset += byte_range_len;
             }
             Ok(ArrayBytes::new_flen(bytes))
@@ -712,10 +705,10 @@ pub fn copy_fill_value_into(
     fill_value: &FillValue,
     output_view: &mut ArrayBytesFixedDisjointView,
 ) -> Result<(), CodecError> {
-    if let ArrayBytes::Fixed(fill_value_bytes) =
-        ArrayBytes::new_fill_value(data_type, output_view.num_elements(), fill_value)?
-    {
-        output_view.copy_from_slice(&fill_value_bytes)?;
+    let fill_value_bytes =
+        ArrayBytes::new_fill_value(data_type, output_view.num_elements(), fill_value)?;
+    if fill_value_bytes.offsets.is_none() {
+        output_view.copy_from_slice(&fill_value_bytes.data)?;
         Ok(())
     } else {
         // TODO: Variable length data type support?
@@ -733,9 +726,10 @@ pub(crate) fn decode_into_array_bytes_target(
     target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
     // Handle data based on whether it's fixed or variable length
-    match &bytes {
-        ArrayBytes::Fixed(data_bytes) => Ok(target.data.copy_from_slice(data_bytes)?),
-        ArrayBytes::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
+    if bytes.offsets.is_none() {
+        Ok(target.data.copy_from_slice(&bytes.data)?)
+    } else {
+        Err(CodecError::ExpectedFixedLengthBytes)
     }
 }
 
@@ -800,10 +794,8 @@ mod tests {
     fn array_bytes_flen() -> Result<(), Box<dyn Error>> {
         let data = [0u32, 1, 2, 3, 4];
         let bytes = Element::into_array_bytes(&DataType::UInt32, &data)?;
-        let ArrayBytes::Fixed(bytes) = bytes else {
-            panic!()
-        };
-        assert_eq!(bytes.len(), size_of::<u32>() * data.len());
+        assert!(bytes.offsets.is_none());
+        assert_eq!(bytes.data.len(), size_of::<u32>() * data.len());
 
         Ok(())
     }
@@ -823,11 +815,9 @@ mod tests {
     fn array_bytes_str() -> Result<(), Box<dyn Error>> {
         let data = ["a", "bb", "ccc"];
         let bytes = Element::into_array_bytes(&DataType::String, &data)?;
-        let ArrayBytes::Variable(bytes, offsets) = bytes else {
-            panic!()
-        };
-        assert_eq!(bytes, "abbccc".as_bytes());
-        assert_eq!(*offsets, [0, 1, 3, 6]);
+        assert!(bytes.offsets.is_some());
+        assert_eq!(bytes.data.as_ref(), "abbccc".as_bytes());
+        assert_eq!(*bytes.offsets.unwrap(), [0, 1, 3, 6]);
 
         Ok(())
     }

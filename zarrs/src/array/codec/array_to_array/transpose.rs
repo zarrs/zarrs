@@ -210,25 +210,25 @@ fn do_transpose<'a>(
 
     let order_decode = calculate_order_decode(order, subset.dimensionality());
     encoded_value.validate(subset.num_elements(), data_type_size)?;
-    match (encoded_value, data_type_size) {
-        (ArrayBytes::Variable(bytes, offsets), DataTypeSize::Variable) => {
+    match (&encoded_value.offsets, data_type_size) {
+        (Some(offsets), DataTypeSize::Variable) => {
             let mut order_decode = vec![0; subset.dimensionality()];
             for (i, val) in order.0.iter().enumerate() {
                 order_decode[*val] = i;
             }
             Ok(transpose_vlen(
-                bytes,
+                &encoded_value.data,
                 offsets,
                 &subset.shape_usize(),
                 order_decode,
             ))
         }
-        (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => {
+        (None, DataTypeSize::Fixed(data_type_size)) => {
             let bytes = transpose_array(
                 &order_decode,
                 &permute(subset.shape(), &order.0).expect("matching dimensionality"),
                 data_type_size,
-                bytes,
+                &encoded_value.data,
             )
             .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
             Ok(ArrayBytes::from(bytes))

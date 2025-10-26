@@ -157,34 +157,31 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             ));
         }
 
-        match bytes {
-            ArrayBytes::Variable(bytes, offsets) => {
-                let order_encode = self.order.0.clone();
-                let shape = decoded_representation
-                    .shape()
-                    .iter()
-                    .map(|s| usize::try_from(s.get()).unwrap())
-                    .collect::<Vec<_>>();
-                Ok(super::transpose_vlen(
-                    &bytes,
-                    &offsets,
-                    &shape,
-                    order_encode,
-                ))
-            }
-            ArrayBytes::Fixed(bytes) => {
-                let order_encode =
-                    calculate_order_encode(&self.order, decoded_representation.shape().len());
-                let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
-                let bytes = transpose_array(
-                    &order_encode,
-                    &decoded_representation.shape_u64(),
-                    data_type_size,
-                    &bytes,
-                )
-                .map_err(|_| CodecError::Other("transpose_array invalid arguments?".to_string()))?;
-                Ok(ArrayBytes::from(bytes))
-            }
+        if let Some(offsets) = &bytes.offsets {
+            let order_encode = self.order.0.clone();
+            let shape = decoded_representation
+                .shape()
+                .iter()
+                .map(|s| usize::try_from(s.get()).unwrap())
+                .collect::<Vec<_>>();
+            Ok(super::transpose_vlen(
+                &bytes.data,
+                offsets,
+                &shape,
+                order_encode,
+            ))
+        } else {
+            let order_encode =
+                calculate_order_encode(&self.order, decoded_representation.shape().len());
+            let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
+            let bytes_transposed = transpose_array(
+                &order_encode,
+                &decoded_representation.shape_u64(),
+                data_type_size,
+                &bytes.data,
+            )
+            .map_err(|_| CodecError::Other("transpose_array invalid arguments?".to_string()))?;
+            Ok(ArrayBytes::from(bytes_transposed))
         }
     }
 
@@ -204,35 +201,36 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
             ));
         }
 
-        match bytes {
-            ArrayBytes::Variable(bytes, offsets) => {
-                let mut order_decode = vec![0; decoded_representation.shape().len()];
-                for (i, val) in self.order.0.iter().enumerate() {
-                    order_decode[*val] = i;
-                }
-                let shape = decoded_representation
-                    .shape()
-                    .iter()
-                    .map(|s| usize::try_from(s.get()).unwrap())
-                    .collect::<Vec<_>>();
-                Ok(super::transpose_vlen(
-                    &bytes,
-                    &offsets,
-                    &shape,
-                    order_decode,
-                ))
+        if let Some(offsets) = &bytes.offsets {
+            let mut order_decode = vec![0; decoded_representation.shape().len()];
+            for (i, val) in self.order.0.iter().enumerate() {
+                order_decode[*val] = i;
             }
-            ArrayBytes::Fixed(bytes) => {
-                let order_decode =
-                    calculate_order_decode(&self.order, decoded_representation.shape().len());
-                let transposed_shape = permute(&decoded_representation.shape_u64(), &self.order.0)
-                    .expect("matching dimensionality");
-                let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
-                let bytes =
-                    transpose_array(&order_decode, &transposed_shape, data_type_size, &bytes)
-                        .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
-                Ok(ArrayBytes::from(bytes))
-            }
+            let shape = decoded_representation
+                .shape()
+                .iter()
+                .map(|s| usize::try_from(s.get()).unwrap())
+                .collect::<Vec<_>>();
+            Ok(super::transpose_vlen(
+                &bytes.data,
+                offsets,
+                &shape,
+                order_decode,
+            ))
+        } else {
+            let order_decode =
+                calculate_order_decode(&self.order, decoded_representation.shape().len());
+            let transposed_shape = permute(&decoded_representation.shape_u64(), &self.order.0)
+                .expect("matching dimensionality");
+            let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
+            let bytes_decoded = transpose_array(
+                &order_decode,
+                &transposed_shape,
+                data_type_size,
+                &bytes.data,
+            )
+            .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
+            Ok(ArrayBytes::from(bytes_decoded))
         }
     }
 

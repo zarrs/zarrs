@@ -270,10 +270,8 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                                     )?)
                                 };
 
-                                let fixed = match chunk_subset_bytes.as_ref() {
-                                    ArrayBytes::Fixed(fixed) => fixed,
-                                    ArrayBytes::Variable(_, _) => unreachable!(),
-                                };
+                                let fixed = &chunk_subset_bytes.data;
+                                debug_assert!(chunk_subset_bytes.offsets.is_none());
 
                                 let mut output_view = unsafe {
                                     // SAFETY: chunks represent disjoint array subsets
