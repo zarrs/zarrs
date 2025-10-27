@@ -310,7 +310,6 @@ mod tests {
             .expect("Faulty test array");
 
         let hierarchy = Hierarchy::try_from(&array).unwrap();
-        println!("{}", hierarchy.tree());
         assert_eq!(hierarchy.0.len(), 1);
     }
 
@@ -320,7 +319,6 @@ mod tests {
         let group = helper_create_dataset(&store);
         let hierarchy = Hierarchy::try_from(&group).unwrap();
 
-        println!("tree:\n{}", hierarchy.tree());
         assert_eq!(hierarchy.0.len(), 6);
     }
 
@@ -381,7 +379,6 @@ mod tests {
 
         let h = Hierarchy::open(&store, "/").unwrap();
 
-        println!("{}", h.tree());
         assert_eq!(EXPECTED_TREE, h.tree())
     }
 }
