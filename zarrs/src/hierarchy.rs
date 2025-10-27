@@ -190,12 +190,20 @@ impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
     }
 }
 
-impl<TStorage: ?Sized> TryFrom<&Group<TStorage>> for Hierarchy
+/// Trait to convert Group with sync store to Hierarchy
+pub trait TryFromGroup<TStorage> {
+    /// Try to convert `Group` to `Hierarchy` failing in a controlled way.
+    ///
+    /// # Errors
+    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
+    fn try_from_group(group: &Group<TStorage>) -> Result<Hierarchy, HierarchyCreateError>;
+}
+
+impl<TStorage> TryFromGroup<TStorage> for Hierarchy
 where
-    TStorage: ReadableStorageTraits + ListableStorageTraits,
+    TStorage: Sized + ReadableStorageTraits + ListableStorageTraits,
 {
-    type Error = HierarchyCreateError;
-    fn try_from(group: &Group<TStorage>) -> Result<Self, Self::Error> {
+    fn try_from_group(group: &Group<TStorage>) -> Result<Self, HierarchyCreateError> {
         let mut hierarchy = Hierarchy::new();
         hierarchy.insert(
             group.path().clone(),
@@ -210,20 +218,48 @@ where
     }
 }
 
-impl<TStorage: ?Sized> TryFrom<Group<TStorage>> for Hierarchy
+#[cfg(feature = "async")]
+/// Trait to convert Group with async store to Hierarchy
+pub trait TryFromAsyncGroup<TStorage> {
+    /// Try to convert `Group` with async storage to `Hierarchy` failing in a controlled way.
+    ///
+    /// # Errors
+    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
+    fn try_from_async_group(
+        group: &Group<TStorage>,
+    ) -> impl std::future::Future<Output = Result<Hierarchy, HierarchyCreateError>> + Send;
+}
+
+#[cfg(feature = "async")]
+impl<TStorage> TryFromAsyncGroup<TStorage> for Hierarchy
 where
-    TStorage: ReadableStorageTraits + ListableStorageTraits,
+    TStorage: Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
 {
-    type Error = HierarchyCreateError;
-    fn try_from(group: Group<TStorage>) -> Result<Self, Self::Error> {
-        (&group).try_into()
+    /// Try to convert `Group` to `Hierarchy` failing in a controlled way.
+    ///
+    /// # Errors
+    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
+    async fn try_from_async_group(
+        group: &Group<TStorage>,
+    ) -> Result<Hierarchy, HierarchyCreateError> {
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.insert(
+            group.path().clone(),
+            NodeMetadata::Group(group.metadata().clone()),
+        );
+        hierarchy.extend(
+            async_get_all_nodes_of(
+                &group.storage(),
+                group.path(),
+                &MetadataRetrieveVersion::Default,
+            )
+            .await?,
+        );
+        Ok(hierarchy)
     }
 }
 
-impl<TStorage: ?Sized> TryFrom<&Array<TStorage>> for Hierarchy
-where
-    TStorage: ReadableStorageTraits + ListableStorageTraits,
-{
+impl<TStorage: ?Sized> TryFrom<&Array<TStorage>> for Hierarchy {
     type Error = HierarchyCreateError;
     fn try_from(array: &Array<TStorage>) -> Result<Self, Self::Error> {
         let mut hierarchy = Hierarchy::new();
@@ -235,10 +271,7 @@ where
     }
 }
 
-impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy
-where
-    TStorage: ReadableStorageTraits + ListableStorageTraits,
-{
+impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
     type Error = HierarchyCreateError;
     fn try_from(array: Array<TStorage>) -> Result<Self, Self::Error> {
         (&array).try_into()
@@ -317,9 +350,71 @@ mod tests {
     fn hierarchy_try_from_group() {
         let store = Arc::new(MemoryStore::new());
         let group = helper_create_dataset(&store);
-        let hierarchy = Hierarchy::try_from(&group).unwrap();
+        let hierarchy = Hierarchy::try_from_group(&group).unwrap();
 
         assert_eq!(hierarchy.0.len(), 6);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn hierarchy_async_try_from_group() {
+        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
+            object_store::memory::InMemory::new(),
+        ));
+        let group_path = "/group";
+        let group_builder = GroupBuilder::new();
+        let group = group_builder.build(store.clone(), group_path).unwrap();
+
+        let subgroup = group_builder
+            .build(store.clone(), "/group/subgroup")
+            .unwrap();
+
+        let array = ArrayBuilder::new(
+            vec![10, 10],
+            vec![5, 5],
+            crate::array::DataType::Float32,
+            0.0f32,
+        )
+        .build(store.clone(), "/group/subgroup/array")
+        .unwrap();
+
+        group.async_store_metadata().await.unwrap();
+        subgroup.async_store_metadata().await.unwrap();
+        array.async_store_metadata().await.unwrap();
+
+        let hierarchy = Hierarchy::try_from_async_group(&group).await;
+        assert!(hierarchy.is_ok());
+        let hierarchy = hierarchy.unwrap();
+        assert!("/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.tree())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn hierarchy_async_try_from_invalid_async_group() {
+        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
+            object_store::memory::InMemory::new(),
+        ));
+
+        let root = Group::new_with_metadata(
+            store.clone(),
+            "/",
+            GroupMetadata::V3(GroupMetadataV3::default()),
+        )
+        .unwrap();
+
+        assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
+
+        use zarrs_storage::AsyncWritableStorageTraits;
+        // Inject fauly subgroup
+        store
+            .set(
+                &StoreKey::new("subgroup/zarr.json").unwrap(),
+                vec![0].into(),
+            )
+            .await
+            .unwrap();
+
+        assert!(Hierarchy::try_from_async_group(&root).await.is_err());
     }
 
     #[test]
@@ -333,7 +428,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(Hierarchy::try_from(&root).is_ok());
+        assert!(Hierarchy::try_from_group(&root).is_ok());
 
         // Inject fauly subgroup
         store
@@ -343,7 +438,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(Hierarchy::try_from(&root).is_err());
+        assert!(Hierarchy::try_from_group(&root).is_err());
     }
 
     #[test]
@@ -352,7 +447,7 @@ mod tests {
 
         let group = helper_create_dataset(&store);
 
-        let hierarchy = Hierarchy::try_from(&group).unwrap();
+        let hierarchy = Hierarchy::try_from_group(&group).unwrap();
 
         assert_eq!(
             "/group/subgroup\n  mysubarray [10, 10] float32\n",
@@ -366,7 +461,7 @@ mod tests {
 
         let group = helper_create_dataset(&store);
 
-        let hierarchy = Hierarchy::try_from(&group).unwrap();
+        let hierarchy = Hierarchy::try_from_group(&group).unwrap();
 
         assert_eq!("/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n"
                     ,hierarchy.tree());
