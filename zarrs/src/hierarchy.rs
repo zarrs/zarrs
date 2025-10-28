@@ -321,6 +321,27 @@ mod tests {
 
         let hierarchy = Hierarchy::try_from(&array).unwrap();
         assert_eq!(hierarchy.0.len(), 1);
+        let hierarchy = Hierarchy::try_from(array).unwrap();
+        assert_eq!(hierarchy.0.len(), 1);
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn hierarchy_try_from_async_array() {
+        let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
+            object_store::memory::InMemory::new(),
+        ));
+        let array_builder =
+            ArrayBuilder::new(vec![1], vec![1], crate::array::DataType::Float32, 0.0f32);
+
+        let array = array_builder
+            .build(store, "/store/of/data.zarr/path/to/an/array")
+            .expect("Faulty test array");
+
+        let hierarchy = Hierarchy::try_from(&array).unwrap();
+        assert_eq!(hierarchy.0.len(), 1);
+        let hierarchy = Hierarchy::try_from(array).unwrap();
+        assert_eq!(hierarchy.0.len(), 1);
     }
 
     #[test]
