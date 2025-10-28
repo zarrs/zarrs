@@ -257,9 +257,13 @@ impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
 #[cfg(test)]
 mod tests {
 
-    use zarrs_metadata::{v3::GroupMetadataV3, GroupMetadata};
-    #[cfg(feature = "async")]
-    use zarrs_object_store::AsyncObjectStore;
+    use std::num::NonZeroU64;
+
+    use zarrs_metadata::{
+        v2::{ArrayMetadataV2, GroupMetadataV2},
+        v3::GroupMetadataV3,
+        GroupMetadata,
+    };
     #[cfg(feature = "async")]
     use zarrs_storage::AsyncReadableWritableListableStorageTraits;
 
@@ -303,13 +307,6 @@ mod tests {
         subgroup_array.store_metadata().unwrap();
 
         root
-    }
-
-    #[test]
-    fn hierarchy_tree_empty() {
-        let hierarchy = Hierarchy::new();
-        let tree_str = hierarchy.tree();
-        assert_eq!(tree_str, "/\n");
     }
 
     #[test]
@@ -445,7 +442,44 @@ mod tests {
 
         assert_eq!("/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n"
                     ,hierarchy.tree());
+
+        let store = Arc::new(MemoryStore::new());
+        let groupv2 = Group::new_with_metadata(
+            store.clone(),
+            "/groupv2",
+            GroupMetadata::V2(GroupMetadataV2::new()),
+        )
+        .expect("Unexpected issue when greating a Group for testing.");
+
+        let arrayv2 = Array::new_with_metadata(
+            store.clone(),
+            "/groupv2/arrayv2",
+            ArrayMetadata::V2(ArrayMetadataV2::new(
+                vec![1].into(),
+                zarrs_metadata::ChunkShape::from(vec![NonZeroU64::new(1).unwrap()]),
+                zarrs_metadata::v2::DataTypeMetadataV2::Simple("<f8".into()),
+                zarrs_metadata::v2::FillValueMetadataV2::NaN,
+                None,
+                None,
+            )),
+        )
+        .expect("Unexpected issue when creating a v2 Array for testing.");
+
+        let _ = groupv2.store_metadata();
+        let _ = arrayv2.store_metadata();
+
+        let h = Hierarchy::try_from_group(&groupv2);
+        assert!(h.is_ok());
+        assert!("/\n  groupv2\n    arrayv2 [1] Simple(\"<f8\")\n" == h.unwrap().tree());
     }
+
+    #[test]
+    fn hierarchy_tree_empty() {
+        let hierarchy = Hierarchy::new();
+        let tree_str = hierarchy.tree();
+        assert_eq!(tree_str, "/\n");
+    }
+
     #[test]
     fn hierarchy_open() {
         let store: std::sync::Arc<MemoryStore> = std::sync::Arc::new(MemoryStore::new());
