@@ -422,6 +422,18 @@ impl DataType {
         }
     }
 
+    /// Returns `true` if the data type has a fixed size.
+    #[must_use]
+    pub fn is_fixed(&self) -> bool {
+        matches!(self.size(), DataTypeSize::Fixed(_))
+    }
+
+    /// Returns `true` if the data type has a variable size.
+    #[must_use]
+    pub fn is_variable(&self) -> bool {
+        matches!(self.size(), DataTypeSize::Variable)
+    }
+
     /// Create a data type from metadata.
     ///
     /// # Errors
