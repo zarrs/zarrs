@@ -139,6 +139,25 @@ impl Hierarchy {
         Ok(hierarchy)
     }
 
+    /// Convenience method to create a `Hierarchy` from a `Group` with synchronous storage.
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes
+    pub fn try_from_group<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+        group: &Group<TStorage>,
+    ) -> Result<Self, HierarchyCreateError> {
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.insert(
+            group.path().clone(),
+            NodeMetadata::Group(group.metadata().clone()),
+        );
+        hierarchy.extend(get_all_nodes_of(
+            &group.storage(),
+            group.path(),
+            &MetadataRetrieveVersion::Default,
+        )?);
+        Ok(hierarchy)
+    }
     #[cfg(feature = "async")]
     /// Asynchronously open a hierarcht at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
     ///
@@ -180,66 +199,15 @@ impl Hierarchy {
 
         Ok(hierarchy)
     }
-}
 
-impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
-    fn extend<T: IntoIterator<Item = (NodePath, NodeMetadata)>>(&mut self, iter: T) {
-        for (path, metadata) in iter {
-            self.insert(path, metadata);
-        }
-    }
-}
-
-/// Trait to convert Group with sync store to Hierarchy
-pub trait TryFromGroup<TStorage> {
-    /// Try to convert `Group` to `Hierarchy` failing in a controlled way.
+    #[cfg(feature = "async")]
+    /// Convenience method to create a `Hierarchy` from a Group with asynchronous storage.
     ///
     /// # Errors
-    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
-    fn try_from_group(group: &Group<TStorage>) -> Result<Hierarchy, HierarchyCreateError>;
-}
-
-impl<TStorage> TryFromGroup<TStorage> for Hierarchy
-where
-    TStorage: Sized + ReadableStorageTraits + ListableStorageTraits,
-{
-    fn try_from_group(group: &Group<TStorage>) -> Result<Self, HierarchyCreateError> {
-        let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
-            group.path().clone(),
-            NodeMetadata::Group(group.metadata().clone()),
-        );
-        hierarchy.extend(get_all_nodes_of(
-            &group.storage(),
-            group.path(),
-            &MetadataRetrieveVersion::Default,
-        )?);
-        Ok(hierarchy)
-    }
-}
-
-#[cfg(feature = "async")]
-/// Trait to convert Group with async store to Hierarchy
-pub trait TryFromAsyncGroup<TStorage> {
-    /// Try to convert `Group` with async storage to `Hierarchy` failing in a controlled way.
-    ///
-    /// # Errors
-    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
-    fn try_from_async_group(
-        group: &Group<TStorage>,
-    ) -> impl std::future::Future<Output = Result<Hierarchy, HierarchyCreateError>> + Send;
-}
-
-#[cfg(feature = "async")]
-impl<TStorage> TryFromAsyncGroup<TStorage> for Hierarchy
-where
-    TStorage: Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
-{
-    /// Try to convert `Group` to `Hierarchy` failing in a controlled way.
-    ///
-    /// # Errors
-    /// Return `HierarchyCreateError` if metadata is invalid or there is a failure to list child nodes.
-    async fn try_from_async_group(
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes
+    pub async fn try_from_async_group<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
         group: &Group<TStorage>,
     ) -> Result<Hierarchy, HierarchyCreateError> {
         let mut hierarchy = Hierarchy::new();
@@ -256,6 +224,14 @@ where
             .await?,
         );
         Ok(hierarchy)
+    }
+}
+
+impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
+    fn extend<T: IntoIterator<Item = (NodePath, NodeMetadata)>>(&mut self, iter: T) {
+        for (path, metadata) in iter {
+            self.insert(path, metadata);
+        }
     }
 }
 
