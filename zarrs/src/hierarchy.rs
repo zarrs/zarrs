@@ -507,9 +507,13 @@ mod tests {
 
         let _group = helper_create_dataset(&store);
 
+        // Open a group node
         let h = Hierarchy::open(&store, "/").unwrap();
+        assert_eq!(EXPECTED_TREE, h.tree());
 
-        assert_eq!(EXPECTED_TREE, h.tree())
+        // Open an array node
+        let h = Hierarchy::open(&store, "/array").unwrap();
+        assert_eq!("/\n  array [10, 10] float32\n", h.tree());
     }
 
     #[cfg(feature = "async")]
@@ -561,8 +565,14 @@ mod tests {
 
         let _group = async_helper_create_dataset(&store).await;
 
+        // Open a Group node
         let h = Hierarchy::async_open(&store, "/").await;
         assert!(h.is_ok());
         assert_eq!(EXPECTED_TREE, h.unwrap().tree());
+
+        // Open an Array node
+        let h = Hierarchy::async_open(&store, "/array").await;
+        assert!(h.is_ok());
+        assert_eq!("/\n  array [10, 10] float32\n", h.unwrap().tree());
     }
 }
