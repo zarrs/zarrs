@@ -38,9 +38,9 @@ pub use crate::metadata::NodeMetadata;
 use thiserror::Error;
 
 use crate::{
-    array::{Array, ArrayCreateError, ArrayMetadata},
+    array::{ArrayCreateError, ArrayMetadata},
     config::MetadataRetrieveVersion,
-    group::{Group, GroupCreateError},
+    group::GroupCreateError,
     metadata::{
         v2::{ArrayMetadataV2, GroupMetadataV2},
         GroupMetadata,
@@ -75,26 +75,6 @@ impl From<Node> for NodeMetadata {
 impl From<Node> for NodePath {
     fn from(value: Node) -> Self {
         value.path
-    }
-}
-
-impl<TStorage: ?Sized> From<&Group<TStorage>> for Node {
-    fn from(value: &Group<TStorage>) -> Self {
-        Node::new_with_metadata(
-            value.path().clone(),
-            NodeMetadata::Group(value.metadata().clone()),
-            vec![],
-        )
-    }
-}
-
-impl<TStorage: ?Sized> From<&Array<TStorage>> for Node {
-    fn from(value: &Array<TStorage>) -> Self {
-        Node::new_with_metadata(
-            value.path().clone(),
-            NodeMetadata::Array(value.metadata().clone()),
-            vec![],
-        )
     }
 }
 
