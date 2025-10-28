@@ -1034,4 +1034,55 @@ mod tests {
             vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
         );
     }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn group_async_traverse() {
+        use zarrs_storage::AsyncReadableWritableListableStorage;
+
+        let store: AsyncReadableWritableListableStorage = std::sync::Arc::new(
+            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
+        );
+
+        let builder = GroupBuilder::default();
+        let root = builder
+            .build(store.clone(), NodePath::root().as_str())
+            .unwrap();
+
+        assert!(root.async_store_metadata().await.is_ok());
+
+        assert!(builder
+            .build(store.clone(), "/group")
+            .unwrap()
+            .async_store_metadata()
+            .await
+            .is_ok());
+        assert!(builder
+            .build(store.clone(), "/group/subgroup")
+            .unwrap()
+            .async_store_metadata()
+            .await
+            .is_ok());
+        assert!(builder
+            .build(store.clone(), "/group/subgroup/leafgroup")
+            .unwrap()
+            .async_store_metadata()
+            .await
+            .is_ok());
+
+        let nodes = root.async_traverse().await;
+        assert!(nodes.is_ok());
+
+        let nodes = nodes.unwrap();
+
+        assert!(nodes.len() == 3);
+        assert_eq!(
+            nodes
+                .iter()
+                .map(|(path, _metadata)| path.as_str())
+                .collect::<Vec<&str>>()
+                .sort(),
+            vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
+        );
+    }
 }

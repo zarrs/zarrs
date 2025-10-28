@@ -258,6 +258,10 @@ impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
 mod tests {
 
     use zarrs_metadata::{v3::GroupMetadataV3, GroupMetadata};
+    #[cfg(feature = "async")]
+    use zarrs_object_store::AsyncObjectStore;
+    #[cfg(feature = "async")]
+    use zarrs_storage::AsyncReadableWritableListableStorageTraits;
 
     use super::*;
     use crate::{
@@ -451,5 +455,59 @@ mod tests {
         let h = Hierarchy::open(&store, "/").unwrap();
 
         assert_eq!(EXPECTED_TREE, h.tree())
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_helper_create_dataset<
+        AStore: ?Sized + AsyncReadableWritableListableStorageTraits + 'static,
+    >(
+        store: &Arc<AStore>,
+    ) -> Group<AStore> {
+        let group_builder = GroupBuilder::default();
+
+        let root = group_builder
+            .build(store.clone(), &NodePath::root().as_str())
+            .unwrap();
+        let group = group_builder.build(store.clone(), "/group").unwrap();
+        let array_builder = ArrayBuilder::new(
+            vec![10, 10],
+            vec![5, 5],
+            crate::array::DataType::Float32,
+            0.0f32,
+        );
+
+        let array = array_builder.build(store.clone(), "/array").unwrap();
+        let group_array = array_builder.build(store.clone(), "/group/array").unwrap();
+        let subgroup = group_builder
+            .build(store.clone(), "/group/subgroup")
+            .unwrap();
+        let subgroup_array = array_builder
+            .build(store.clone(), "/group/subgroup/mysubarray")
+            .unwrap();
+
+        root.async_store_metadata().await.unwrap();
+        array.async_store_metadata().await.unwrap();
+        group.async_store_metadata().await.unwrap();
+        group_array.async_store_metadata().await.unwrap();
+        subgroup.async_store_metadata().await.unwrap();
+        subgroup_array.async_store_metadata().await.unwrap();
+
+        root
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn hierarchy_async_open() {
+        use zarrs_storage::AsyncReadableWritableListableStorage;
+
+        let store: AsyncReadableWritableListableStorage = Arc::new(
+            zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
+        );
+
+        let _group = async_helper_create_dataset(&store).await;
+
+        let h = Hierarchy::async_open(&store, "/").await;
+        assert!(h.is_ok());
+        assert_eq!(EXPECTED_TREE, h.unwrap().tree());
     }
 }
