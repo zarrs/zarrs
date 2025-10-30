@@ -31,7 +31,8 @@ use crate::{
 /// See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
 pub struct Hierarchy(BTreeMap<NodePath, NodeMetadata>);
 
-type HierarchyCreateError = NodeCreateError;
+/// A hierarchy creation error.
+pub type HierarchyCreateError = NodeCreateError;
 
 impl Hierarchy {
     /// Create a new, empty hierarchy.
