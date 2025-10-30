@@ -115,7 +115,7 @@ jobs:
           submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: RUSTDOCFLAGS="--deny warnings" cargo doc --no-deps
+      - run: RUSTDOCFLAGS="--deny warnings" cargo doc --all-features --no-deps
   semver:
     runs-on: ubuntu-latest
     steps:
