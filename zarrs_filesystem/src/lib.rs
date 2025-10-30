@@ -88,7 +88,6 @@ impl FilesystemStoreOptions {
 pub struct FilesystemStore {
     base_path: PathBuf,
     sort: bool,
-    readonly: bool,
     options: FilesystemStoreOptions,
     files: Mutex<HashMap<StoreKey, Arc<RwLock<()>>>>,
 }
@@ -119,22 +118,10 @@ impl FilesystemStore {
             return Err(FilesystemStoreCreateError::InvalidBasePath(base_path));
         }
 
-        let readonly = if base_path.exists() {
-            // the path already exists, check if it is read only
-            let md = std::fs::metadata(&base_path).map_err(FilesystemStoreCreateError::IOError)?;
-            md.permissions().readonly()
-        } else {
-            // the path does not exist, so try and create it. If this succeeds, the filesystem is not read only
-            std::fs::create_dir_all(&base_path).map_err(FilesystemStoreCreateError::IOError)?;
-            std::fs::remove_dir(&base_path)?;
-            false
-        };
-
         Ok(Self {
             base_path,
             sort: false,
             options,
-            readonly,
             files: Mutex::default(),
         })
     }
@@ -420,11 +407,7 @@ impl ReadableStorageTraits for FilesystemStore {
 
 impl WritableStorageTraits for FilesystemStore {
     fn set(&self, key: &StoreKey, value: Bytes) -> Result<(), StorageError> {
-        if self.readonly {
-            Err(StorageError::ReadOnly)
-        } else {
-            Self::set_impl(self, key, &value, 0, true)
-        }
+        Self::set_impl(self, key, &value, 0, true)
     }
 
     fn set_partial_many(
@@ -432,18 +415,10 @@ impl WritableStorageTraits for FilesystemStore {
         key: &StoreKey,
         offset_values: OffsetBytesIterator,
     ) -> Result<(), StorageError> {
-        if self.readonly {
-            return Err(StorageError::ReadOnly);
-        }
-
         store_set_partial_many(self, key, offset_values)
     }
 
     fn erase(&self, key: &StoreKey) -> Result<(), StorageError> {
-        if self.readonly {
-            return Err(StorageError::ReadOnly);
-        }
-
         let file = self.get_file_mutex(key);
         let _lock = file.write();
 
@@ -460,10 +435,6 @@ impl WritableStorageTraits for FilesystemStore {
     }
 
     fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        if self.readonly {
-            return Err(StorageError::ReadOnly);
-        }
-
         let _lock = self.files.lock(); // lock all operations
 
         let prefix_path = self.prefix_to_fs_path(prefix);

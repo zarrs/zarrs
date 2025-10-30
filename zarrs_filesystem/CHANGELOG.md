@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Failed write operations on a read-only filesystem return a more specific `std::io::ErrorKind::PermissionDenied` or `ReadOnlyFilesystem` instead of `StorageError::ReadOnly`
+
+### Fixed
+- Avoid brittle read-only check on `FilesystemStore` initialisation
+  - This could fail when initialising from multiple threads/processes
+
 ## [0.3.2] - 2025-10-07
 
 ### Fixed
