@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Fixed
+- Fix unintended MSRV increase to 1.80 from 1.77
+
 ## [0.4.1] - 2025-10-26
 
 ### Added

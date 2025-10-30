@@ -156,7 +156,7 @@ where
     fn from(value: num::complex::Complex<T>) -> Self {
         let re = FillValue::from(value.re);
         let im = FillValue::from(value.im);
-        let mut bytes = Vec::with_capacity(size_of::<num::complex::Complex<T>>());
+        let mut bytes = Vec::with_capacity(std::mem::size_of::<num::complex::Complex<T>>());
         bytes.extend(re.as_ne_bytes());
         bytes.extend(im.as_ne_bytes());
         Self(Some(bytes))

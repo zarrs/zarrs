@@ -17,8 +17,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        toolchain: ["stable", "1.82", "beta", "nightly"]
-        features: ["--features \"\"", "--all-features", "--no-default-features"]
+        include:
+          - toolchain: "stable"
+            features: ""
+          - toolchain: "stable"
+            features: "--all-features"
+          - toolchain: "stable"
+            features: "--no-default-features"
+          - toolchain: "beta"
+            features: "--all-features"
+          - toolchain: "nightly"
+            features: "--all-features"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +107,15 @@ jobs:
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-features -- -D warnings
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: RUSTDOCFLAGS="--deny warnings" cargo doc --all-features --no-deps
   semver:
     runs-on: ubuntu-latest
     steps:
@@ -112,6 +130,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
       - run: cargo minimal-versions check --direct --all-features --workspace --exclude zarrs_object_store
+  msrv-1-82:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.82"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --direct --all-features -p zarrs -p zarrs_storage -p zarrs_filesystem
+  msrv-1-77:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.77"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --direct --all-features -p zarrs_data_type -p zarrs_metadata -p zarrs_metadata_ext -p zarrs_plugin -p zarrs_registry
   codecov:
     runs-on: ubuntu-latest
     steps:
