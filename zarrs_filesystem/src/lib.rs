@@ -220,7 +220,7 @@ impl FilesystemStore {
 
                 // Pad to page size
                 let pad_size = buf.len().next_multiple_of(page_size::get()) - buf.len();
-                buf.extend(std::iter::repeat(0).take(pad_size));
+                buf.extend(std::iter::repeat_n(0, pad_size));
 
                 file.write_all(&buf)?;
             } else {
