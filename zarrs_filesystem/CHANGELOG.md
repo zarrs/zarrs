@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Raise the MSRV from 1.77 to 1.82
+  - 1.82 has been the true MSRV since 0.3.0
+
 ## [0.3.3] - 2025-10-30
 
 ### Changed
