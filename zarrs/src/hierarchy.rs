@@ -1,10 +1,12 @@
-//! Zarr hierarchy.
+//! Zarr hierarchies.
 //!
 //! A Zarr hierarchy is a tree structure, where each node in the tree is either a [`Group`] or an [`Array`].
 //!
 //! A [`Hierarchy`] holds a mapping of [`NodePath`]s to [`NodeMetadata`].
 //!
 //! The [`Hierarchy::tree`] function can be used to create a string representation of the hierarchy.
+//!
+//! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -26,9 +28,7 @@ use crate::{
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits},
 };
 
-/// Zarr hierarchy.
-///
-/// See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
+/// A Zarr hierarchy.
 pub struct Hierarchy(BTreeMap<NodePath, NodeMetadata>);
 
 /// A hierarchy creation error.
@@ -44,15 +44,15 @@ impl Hierarchy {
         self.0.insert(path, metadata);
     }
 
-    /// Create a string representation of the hierarchy
+    /// Create a string representation of the hierarchy starting from the root.
     #[must_use]
     pub fn tree(&self) -> String {
         self.tree_of(&NodePath::root())
     }
 
-    /// Create a string representation of the hierarchy for a `NodePath`
+    /// Create a string representation of the hierarchy starting from `path`.
     #[must_use]
-    pub fn tree_of(&self, parent_path: &NodePath) -> String {
+    pub fn tree_of(&self, path: &NodePath) -> String {
         fn print_metadata(name: &str, string: &mut String, metadata: &NodeMetadata) {
             match metadata {
                 NodeMetadata::Array(array_metadata) => {
@@ -79,11 +79,11 @@ impl Hierarchy {
             string.push('\n');
         }
 
-        let mut s = String::from(parent_path.as_str());
+        let mut s = String::from(path.as_str());
         s.push('\n');
 
-        let prefix = parent_path.as_str();
-        let parent_depth = parent_path.as_path().components().count();
+        let prefix = path.as_str();
+        let depth = path.as_path().components().count();
 
         for node in self
             .0
@@ -96,7 +96,7 @@ impl Hierarchy {
                 .as_path()
                 .components()
                 .count()
-                .saturating_sub(parent_depth);
+                .saturating_sub(depth);
 
             s.push_str(&" ".repeat(depth * 2));
             print_metadata(node.name().as_str(), &mut s, node.metadata());
@@ -143,7 +143,7 @@ impl Hierarchy {
     /// Convenience method to create a `Hierarchy` from a `Group` with synchronous storage.
     ///
     /// # Errors
-    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
     pub fn try_from_group<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         group: &Group<TStorage>,
     ) -> Result<Self, HierarchyCreateError> {
@@ -205,7 +205,7 @@ impl Hierarchy {
     /// Convenience method to create a `Hierarchy` from a Group with asynchronous storage.
     ///
     /// # Errors
-    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
     pub async fn try_from_async_group<
         TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
     >(
