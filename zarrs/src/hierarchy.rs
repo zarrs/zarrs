@@ -392,7 +392,7 @@ mod tests {
         let hierarchy = Hierarchy::try_from_async_group(&group).await;
         assert!(hierarchy.is_ok());
         let hierarchy = hierarchy.unwrap();
-        assert!("/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.tree())
+        assert!("/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string())
     }
 
     #[cfg(feature = "async")]
