@@ -77,8 +77,8 @@ impl Hierarchy {
             NodeMetadata::Group(_) => get_all_nodes_of(storage, &node_path, version)?,
         };
 
-        hierarchy.insert(node_path, node_metadata);
-        hierarchy.extend(nodes);
+        hierarchy.0.insert(node_path, node_metadata);
+        hierarchy.0.extend(nodes);
 
         Ok(hierarchy)
     }
@@ -119,8 +119,8 @@ impl Hierarchy {
             NodeMetadata::Group(_) => async_get_all_nodes_of(storage, &node_path, version).await?,
         };
 
-        hierarchy.insert(node_path, node_metadata);
-        hierarchy.extend(nodes);
+        hierarchy.0.insert(node_path, node_metadata);
+        hierarchy.0.extend(nodes);
 
         Ok(hierarchy)
     }
@@ -133,11 +133,11 @@ impl Hierarchy {
         group: &Group<TStorage>,
     ) -> Result<Self, HierarchyCreateError> {
         let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
+        hierarchy.0.insert(
             group.path().clone(),
             NodeMetadata::Group(group.metadata().clone()),
         );
-        hierarchy.extend(get_all_nodes_of(
+        hierarchy.0.extend(get_all_nodes_of(
             &group.storage(),
             group.path(),
             &MetadataRetrieveVersion::Default,
@@ -156,11 +156,11 @@ impl Hierarchy {
         group: &Group<TStorage>,
     ) -> Result<Hierarchy, HierarchyCreateError> {
         let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
+        hierarchy.0.insert(
             group.path().clone(),
             NodeMetadata::Group(group.metadata().clone()),
         );
-        hierarchy.extend(
+        hierarchy.0.extend(
             async_get_all_nodes_of(
                 &group.storage(),
                 group.path(),
@@ -171,10 +171,10 @@ impl Hierarchy {
         Ok(hierarchy)
     }
 
-    /// Insert a node into the hierarchy.
-    fn insert(&mut self, path: NodePath, metadata: NodeMetadata) -> Option<NodeMetadata> {
-        self.0.insert(path, metadata)
-    }
+    // /// Insert a node into the hierarchy.
+    // pub fn insert(&mut self, path: NodePath, metadata: NodeMetadata) -> Option<NodeMetadata> {
+    //     self.0.insert(path, metadata)
+    // }
 
     /// Create a string representation of the hierarchy starting from the root.
     #[must_use]
@@ -237,19 +237,19 @@ impl Hierarchy {
     }
 }
 
-impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
-    fn extend<T: IntoIterator<Item = (NodePath, NodeMetadata)>>(&mut self, iter: T) {
-        for (path, metadata) in iter {
-            self.insert(path, metadata);
-        }
-    }
-}
+// impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
+//     fn extend<T: IntoIterator<Item = (NodePath, NodeMetadata)>>(&mut self, iter: T) {
+//         for (path, metadata) in iter {
+//             self.insert(path, metadata);
+//         }
+//     }
+// }
 
 impl<TStorage: ?Sized> TryFrom<&Array<TStorage>> for Hierarchy {
     type Error = HierarchyCreateError;
     fn try_from(array: &Array<TStorage>) -> Result<Self, Self::Error> {
         let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
+        hierarchy.0.insert(
             array.path().clone(),
             NodeMetadata::Array(array.metadata().clone()),
         );
