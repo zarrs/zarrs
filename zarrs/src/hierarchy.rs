@@ -29,7 +29,14 @@ use crate::{
 };
 
 /// A Zarr hierarchy.
+#[derive(Debug, Clone)]
 pub struct Hierarchy(BTreeMap<NodePath, NodeMetadata>);
+
+impl std::fmt::Display for Hierarchy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.tree())
+    }
+}
 
 /// A hierarchy creation error.
 pub type HierarchyCreateError = NodeCreateError;
