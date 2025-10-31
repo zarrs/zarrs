@@ -66,6 +66,27 @@ where
     Ok(nodes)
 }
 
+/// Asynchronously get all nodes under a given path, recursively.
+///
+/// # Errors
+/// Returns a [`StorageError`] if there is an underlying error with the store.
+pub(crate) async fn async_get_all_nodes_of<
+    TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    version: &MetadataRetrieveVersion,
+) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+    let mut nodes: Vec<(NodePath, NodeMetadata)> = Vec::new();
+    for child in async_get_child_nodes_opt(storage, path, false, version).await? {
+        if let NodeMetadata::Group(_) = child.metadata() {
+            nodes.extend(Box::pin(async_get_all_nodes_of(storage, child.path(), version)).await?);
+        }
+        nodes.push((child.path, child.metadata));
+    }
+    Ok(nodes)
+}
+
 /// Asynchronously check if a node exists.
 ///
 /// # Errors
