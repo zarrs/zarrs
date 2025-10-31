@@ -40,8 +40,133 @@ impl Hierarchy {
         Hierarchy(BTreeMap::new())
     }
 
-    fn insert(&mut self, path: NodePath, metadata: NodeMetadata) {
-        self.0.insert(path, metadata);
+    /// Open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+        storage: &Arc<TStorage>,
+        path: &str,
+    ) -> Result<Self, HierarchyCreateError> {
+        Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
+    }
+
+    /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+        storage: &Arc<TStorage>,
+        path: &str,
+        version: &MetadataRetrieveVersion,
+    ) -> Result<Self, HierarchyCreateError> {
+        let node_path = NodePath::try_from(path)?;
+        let node_metadata = Node::get_metadata(storage, &node_path, version)?;
+        let mut hierarchy = Hierarchy::new();
+
+        let nodes = match node_metadata {
+            NodeMetadata::Array(_) => Vec::default(),
+            // TODO: Add consolidated metadata support
+            NodeMetadata::Group(_) => get_all_nodes_of(storage, &node_path, version)?,
+        };
+
+        hierarchy.insert(node_path, node_metadata);
+        hierarchy.extend(nodes);
+
+        Ok(hierarchy)
+    }
+
+    #[cfg(feature = "async")]
+    /// Asynchronously open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub async fn async_open<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
+        storage: &Arc<TStorage>,
+        path: &str,
+    ) -> Result<Self, HierarchyCreateError> {
+        Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
+    }
+
+    #[cfg(feature = "async")]
+    /// Asynchronously open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
+    pub async fn async_open_opt<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
+        storage: &Arc<TStorage>,
+        path: &str,
+        version: &MetadataRetrieveVersion,
+    ) -> Result<Self, HierarchyCreateError> {
+        let node_path = NodePath::try_from(path)?;
+        let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
+        let mut hierarchy = Hierarchy::new();
+
+        let nodes = match node_metadata {
+            NodeMetadata::Array(_) => Vec::default(),
+            // TODO: Add consolidated metadata support
+            NodeMetadata::Group(_) => async_get_all_nodes_of(storage, &node_path, version).await?,
+        };
+
+        hierarchy.insert(node_path, node_metadata);
+        hierarchy.extend(nodes);
+
+        Ok(hierarchy)
+    }
+
+    /// Convenience method to create a `Hierarchy` from a `Group` with synchronous storage.
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
+    pub fn try_from_group<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+        group: &Group<TStorage>,
+    ) -> Result<Self, HierarchyCreateError> {
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.insert(
+            group.path().clone(),
+            NodeMetadata::Group(group.metadata().clone()),
+        );
+        hierarchy.extend(get_all_nodes_of(
+            &group.storage(),
+            group.path(),
+            &MetadataRetrieveVersion::Default,
+        )?);
+        Ok(hierarchy)
+    }
+
+    #[cfg(feature = "async")]
+    /// Convenience method to create a `Hierarchy` from a Group with asynchronous storage.
+    ///
+    /// # Errors
+    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
+    pub async fn try_from_async_group<
+        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
+    >(
+        group: &Group<TStorage>,
+    ) -> Result<Hierarchy, HierarchyCreateError> {
+        let mut hierarchy = Hierarchy::new();
+        hierarchy.insert(
+            group.path().clone(),
+            NodeMetadata::Group(group.metadata().clone()),
+        );
+        hierarchy.extend(
+            async_get_all_nodes_of(
+                &group.storage(),
+                group.path(),
+                &MetadataRetrieveVersion::Default,
+            )
+            .await?,
+        );
+        Ok(hierarchy)
+    }
+
+    /// Insert a node into the hierarchy.
+    fn insert(&mut self, path: NodePath, metadata: NodeMetadata) -> Option<NodeMetadata> {
+        self.0.insert(path, metadata)
     }
 
     /// Create a string representation of the hierarchy starting from the root.
@@ -103,129 +228,6 @@ impl Hierarchy {
         }
         s
     }
-
-    /// Open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        path: &str,
-    ) -> Result<Self, HierarchyCreateError> {
-        Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
-    }
-
-    /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        storage: &Arc<TStorage>,
-        path: &str,
-        version: &MetadataRetrieveVersion,
-    ) -> Result<Self, HierarchyCreateError> {
-        let node_path = NodePath::try_from(path)?;
-        let node_metadata = Node::get_metadata(storage, &node_path, version)?;
-        let mut hierarchy = Hierarchy::new();
-
-        let nodes = match node_metadata {
-            NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => get_all_nodes_of(storage, &node_path, version)?,
-        };
-
-        hierarchy.insert(node_path, node_metadata);
-        hierarchy.extend(nodes);
-
-        Ok(hierarchy)
-    }
-
-    /// Convenience method to create a `Hierarchy` from a `Group` with synchronous storage.
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
-    pub fn try_from_group<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
-        group: &Group<TStorage>,
-    ) -> Result<Self, HierarchyCreateError> {
-        let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
-            group.path().clone(),
-            NodeMetadata::Group(group.metadata().clone()),
-        );
-        hierarchy.extend(get_all_nodes_of(
-            &group.storage(),
-            group.path(),
-            &MetadataRetrieveVersion::Default,
-        )?);
-        Ok(hierarchy)
-    }
-    #[cfg(feature = "async")]
-    /// Asynchronously open a hierarcht at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub async fn async_open<
-        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
-    >(
-        storage: &Arc<TStorage>,
-        path: &str,
-    ) -> Result<Self, HierarchyCreateError> {
-        Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
-    }
-
-    #[cfg(feature = "async")]
-    /// Asynchronously open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
-    pub async fn async_open_opt<
-        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
-    >(
-        storage: &Arc<TStorage>,
-        path: &str,
-        version: &MetadataRetrieveVersion,
-    ) -> Result<Self, HierarchyCreateError> {
-        let node_path = NodePath::try_from(path)?;
-        let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
-        let mut hierarchy = Hierarchy::new();
-
-        let nodes = match node_metadata {
-            NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => async_get_all_nodes_of(storage, &node_path, version).await?,
-        };
-
-        hierarchy.insert(node_path, node_metadata);
-        hierarchy.extend(nodes);
-
-        Ok(hierarchy)
-    }
-
-    #[cfg(feature = "async")]
-    /// Convenience method to create a `Hierarchy` from a Group with asynchronous storage.
-    ///
-    /// # Errors
-    /// Returns [`HierarchyCreateError`] if group metadata is invalid or there is a failure to list child nodes.
-    pub async fn try_from_async_group<
-        TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits,
-    >(
-        group: &Group<TStorage>,
-    ) -> Result<Hierarchy, HierarchyCreateError> {
-        let mut hierarchy = Hierarchy::new();
-        hierarchy.insert(
-            group.path().clone(),
-            NodeMetadata::Group(group.metadata().clone()),
-        );
-        hierarchy.extend(
-            async_get_all_nodes_of(
-                &group.storage(),
-                group.path(),
-                &MetadataRetrieveVersion::Default,
-            )
-            .await?,
-        );
-        Ok(hierarchy)
-    }
 }
 
 impl Extend<(NodePath, NodeMetadata)> for Hierarchy {
@@ -257,7 +259,6 @@ impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
 
 #[cfg(test)]
 mod tests {
-
     use std::num::NonZeroU64;
 
     use zarrs_metadata::{
