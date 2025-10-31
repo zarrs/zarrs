@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.6] - 2025-10-31
+
 ### Added
 - Add `hierarchy` module with `Hierarchy` and `HierarchyCreateError` ([#288] by [@mannreis])
 
@@ -1645,7 +1647,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.5...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.6...HEAD
+[0.22.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.6
 [0.22.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.5
 [0.22.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.4
 [0.22.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.3
