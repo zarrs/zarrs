@@ -750,4 +750,271 @@ mod tests {
             ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
         array_chunk_cache_impl(store, cache, true, true, true, false)
     }
+
+    fn create_store_array_string() -> (
+        Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        Arc<Array<dyn ReadableStorageTraits>>,
+    ) {
+        // Write the store with String data
+        let store: ReadableWritableStorage = Arc::new(MemoryStore::default());
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
+        let array = ArrayBuilder::new(
+            vec![12, 8], // array shape
+            vec![4, 4],  // regular chunk shape
+            DataType::String,
+            "",
+        )
+        // Note: Default codec for String is VlenUtf8Codec, no need to set explicitly
+        .build_arc(store.clone(), "/")
+        .unwrap();
+
+        // Create test data with variable-length strings
+        let data: Vec<String> = (0..8 * 8).map(|i| "x".repeat((i % 8) + 1)).collect();
+        array
+            .store_array_subset_elements::<String>(
+                &ArraySubset::new_with_shape(vec![8, 8]),
+                data.as_slice(),
+            )
+            .unwrap();
+        array.store_metadata().unwrap();
+
+        // Return a read only version
+        let array = Arc::new(array.readable());
+        (store, array)
+    }
+
+    fn array_chunk_cache_string_impl<TChunkCache: ChunkCache>(
+        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: TChunkCache,
+        thread_local: bool,
+        size_limit: bool,
+        partial_decoder: bool,
+        encoded: bool,
+    ) {
+        assert_eq!(store.reads(), 0);
+        assert!(cache.is_empty());
+
+        // Retrieve an array subset (within a single chunk to test basic functionality)
+        let result = cache
+            .retrieve_array_subset_elements::<String>(
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let expected: Vec<String> = vec![
+            "x".repeat((0 % 8) + 1), // i=0: row 0, col 0
+            "x".repeat((1 % 8) + 1), // i=1: row 0, col 1
+            "x".repeat((8 % 8) + 1), // i=8: row 1, col 0
+            "x".repeat((9 % 8) + 1), // i=9: row 1, col 1
+        ];
+        assert_eq!(result, expected);
+
+        assert_eq!(store.reads(), 1); // Single chunk read
+        if !thread_local {
+            assert!(!cache.is_empty());
+            assert_eq!(cache.len(), 1);
+        }
+
+        // Retrieve a chunk in cache
+        let result = cache
+            .retrieve_chunk_elements::<String>(&[0, 0], &CodecOptions::default())
+            .unwrap();
+        let expected: Vec<String> = vec![
+            "x".repeat((0 % 8) + 1),  // i=0
+            "x".repeat((1 % 8) + 1),  // i=1
+            "x".repeat((2 % 8) + 1),  // i=2
+            "x".repeat((3 % 8) + 1),  // i=3
+            "x".repeat((8 % 8) + 1),  // i=8
+            "x".repeat((9 % 8) + 1),  // i=9
+            "x".repeat((10 % 8) + 1), // i=10
+            "x".repeat((11 % 8) + 1), // i=11
+            "x".repeat((16 % 8) + 1), // i=16
+            "x".repeat((17 % 8) + 1), // i=17
+            "x".repeat((18 % 8) + 1), // i=18
+            "x".repeat((19 % 8) + 1), // i=19
+            "x".repeat((24 % 8) + 1), // i=24
+            "x".repeat((25 % 8) + 1), // i=25
+            "x".repeat((26 % 8) + 1), // i=26
+            "x".repeat((27 % 8) + 1), // i=27
+        ];
+        assert_eq!(result, expected);
+
+        assert_eq!(store.reads(), 1); // Still cached
+        if !thread_local {
+            assert_eq!(cache.len(), 1);
+        }
+
+        // Retrieve a chunk subset
+        let result = cache
+            .retrieve_chunk_subset_elements::<String>(
+                &[0, 0],
+                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let expected: Vec<String> = vec![
+            "x".repeat((9 % 8) + 1),  // i=9
+            "x".repeat((10 % 8) + 1), // i=10
+            "x".repeat((17 % 8) + 1), // i=17
+            "x".repeat((18 % 8) + 1), // i=18
+        ];
+        assert_eq!(result, expected);
+
+        assert_eq!(store.reads(), 1); // Still cached
+        if !thread_local {
+            assert_eq!(cache.len(), 1);
+        }
+
+        // Retrieve chunks in the cache
+        let result = cache
+            .retrieve_chunks_elements::<String>(
+                &ArraySubset::new_with_ranges(&[0..2, 0..1]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        // Chunks [0,0] and [1,0]: rows 0-7, cols 0-3 -> indices: 0,1,2,3,8,9,10,11,...,56,57,58,59
+        let expected: Vec<String> = vec![
+            0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 32, 33, 34, 35, 40, 41, 42,
+            43, 48, 49, 50, 51, 56, 57, 58, 59,
+        ]
+        .iter()
+        .map(|&i| "x".repeat((i % 8) + 1))
+        .collect();
+        assert_eq!(result, expected);
+
+        if !thread_local {
+            assert_eq!(store.reads(), 2); // Two chunks
+            assert_eq!(cache.len(), 2);
+        } else {
+            assert_eq!(store.reads(), 3);
+        }
+
+        // Retrieve a chunk not in cache
+        let result = cache
+            .retrieve_chunk_elements::<String>(&[0, 1], &CodecOptions::default())
+            .unwrap();
+        let expected: Vec<String> = vec![
+            "x".repeat((4 % 8) + 1),  // i=4
+            "x".repeat((5 % 8) + 1),  // i=5
+            "x".repeat((6 % 8) + 1),  // i=6
+            "x".repeat((7 % 8) + 1),  // i=7
+            "x".repeat((12 % 8) + 1), // i=12
+            "x".repeat((13 % 8) + 1), // i=13
+            "x".repeat((14 % 8) + 1), // i=14
+            "x".repeat((15 % 8) + 1), // i=15
+            "x".repeat((20 % 8) + 1), // i=20
+            "x".repeat((21 % 8) + 1), // i=21
+            "x".repeat((22 % 8) + 1), // i=22
+            "x".repeat((23 % 8) + 1), // i=23
+            "x".repeat((28 % 8) + 1), // i=28
+            "x".repeat((29 % 8) + 1), // i=29
+            "x".repeat((30 % 8) + 1), // i=30
+            "x".repeat((31 % 8) + 1), // i=31
+        ];
+        assert_eq!(result, expected);
+
+        if !thread_local {
+            assert_eq!(store.reads(), 3); // One more chunk
+            assert_eq!(cache.len(), 2);
+        } else {
+            assert_eq!(store.reads(), 4);
+        }
+
+        // Partially retrieve from a cached chunk
+        cache
+            .retrieve_chunk_subset(
+                &[0, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            assert_eq!(store.reads(), 3); // Still cached
+            assert_eq!(cache.len(), 2);
+        } else {
+            assert_eq!(store.reads(), 4);
+        }
+
+        // Partially retrieve from an uncached chunk
+        cache
+            .retrieve_chunk_subset(
+                &[1, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            if partial_decoder {
+                assert_eq!(store.reads(), 4); // One more chunk
+            } else {
+                assert_eq!(store.reads(), 4);
+            }
+            assert_eq!(cache.len(), 2);
+        }
+
+        // Partially retrieve from an empty chunk
+        cache
+            .retrieve_chunk_subset(
+                &[2, 1],
+                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        if !thread_local {
+            assert_eq!(store.reads(), 5); // One more empty chunk
+            if size_limit && encoded {
+                assert_eq!(cache.len(), 2 + 1); // empty chunk is not included in size limit
+            }
+        } else {
+            assert_eq!(store.reads(), 6);
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_encoded_chunks() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, false, false, false, true)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_encoded_chunks_thread_local() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, true, false, false, true)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_decoded_chunks() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, false, false, false, false)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_decoded_chunks_thread_local() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, true, false, false, false)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_partial_decoder_chunks() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, false, false, true, false)
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_string_partial_decoder_chunks_thread_local() {
+        let (store, array) = create_store_array_string();
+        let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(array, 2);
+        array_chunk_cache_string_impl(store, cache, true, false, true, false)
+    }
 }
