@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Bump `zarrs_registry` to 0.1.7
+
 ### Fixed
 - Avoid needlessly decoding entire chunks with `ChunkCache::retrieve_array_subset` on first read with a partial decoder cache
 
