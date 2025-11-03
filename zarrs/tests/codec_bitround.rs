@@ -66,7 +66,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create array with bitround codec
     let store = Arc::new(FilesystemStore::new(&test_dir)?);
-    let array_path = "/bitround_f32";
+    let array_path = "/bitround_float32.zarr";
 
     let mut builder = ArrayBuilder::new(
         vec![test_data.len() as u64],
@@ -144,7 +144,7 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&test_dir)?;
 
     let store = Arc::new(FilesystemStore::new(&test_dir)?);
-    let array_path = "/bitround_uint8";
+    let array_path = "/bitround_uint8.zarr";
 
     let mut builder = ArrayBuilder::new(
         vec![test_data_u8.len() as u64],
