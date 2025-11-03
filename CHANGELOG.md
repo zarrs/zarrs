@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Avoid needlessly decoding entire chunks with `ChunkCache::retrieve_array_subset` on first read with a partial decoder cache
+
 ## [0.22.6] - 2025-10-31
 
 ### Added

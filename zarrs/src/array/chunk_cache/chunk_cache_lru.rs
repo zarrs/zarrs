@@ -481,7 +481,7 @@ mod tests {
             assert!(!cache.is_empty());
         }
         if partial_decoder {
-            assert_eq!(store.reads(), 2 + 8); // 2 index + 8 inner chunks
+            assert_eq!(store.reads(), 2 + 4); // 2 index + 4 inner chunks
         } else {
             assert_eq!(store.reads(), 2);
         }
@@ -504,7 +504,7 @@ mod tests {
         );
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4); // + 4 inner chunks
+                assert_eq!(store.reads(), 2 + 4 + 4); // + 4 inner chunks
             } else {
                 assert_eq!(store.reads(), 2);
             }
@@ -525,7 +525,7 @@ mod tests {
         );
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4); // 4 inner chunks
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4); // 4 inner chunks
             } else {
                 assert_eq!(store.reads(), 2);
             }
@@ -556,7 +556,7 @@ mod tests {
         );
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8); // + 8 inner chunks
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4 + 8); // + 8 inner chunks
             } else {
                 assert_eq!(store.reads(), 2);
             }
@@ -574,7 +574,7 @@ mod tests {
         );
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4); // 1 index + 4 inner chunks
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4 + 8 + 1 + 4); // 1 index + 4 inner chunks
             } else {
                 assert_eq!(store.reads(), 3);
             }
@@ -593,7 +593,7 @@ mod tests {
             .unwrap();
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1); // 1 inner chunks
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4 + 8 + 1 + 4 + 1); // 1 inner chunks
             } else {
                 assert_eq!(store.reads(), 3);
             }
@@ -610,7 +610,7 @@ mod tests {
             .unwrap();
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1);
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1);
             // 1 index + 1 inner chunk
             } else {
                 assert_eq!(store.reads(), 4);
@@ -628,7 +628,7 @@ mod tests {
             .unwrap();
         if !thread_local {
             if partial_decoder {
-                assert_eq!(store.reads(), 2 + 8 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1 + 1);
+                assert_eq!(store.reads(), 2 + 4 + 4 + 4 + 8 + 1 + 4 + 1 + 1 + 1 + 1);
             // 1 index (empty)
             } else {
                 assert_eq!(store.reads(), 5);
