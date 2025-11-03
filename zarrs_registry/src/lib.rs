@@ -21,7 +21,7 @@
 //! ### Extension Name Conventions
 //! Prior to [`ZEP0009`], a Zarr V3 extension point `name` was encouraged to be a unique URI pointing to a specification of the extension.
 //! [`ZEP0009`] revises conventions for extension point naming:
-//! - private or experimental extensions must use a *namespaced name* (e.g. `numcodecs.bitround`, `zarrs.vlen`, etc.), and
+//! - private or experimental extensions must use a *namespaced name* (e.g. `numcodecs.adler32`, `zarrs.vlen`, etc.), and
 //! - extensions registered  at [`zarr-extensions`] can use a *raw name*, such as `bfloat16`, or a *namespaced name*.
 //!
 //! ### Alias Maps
