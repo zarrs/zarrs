@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use crate::array::ArraySize;
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_metadata::DataTypeSize;
 use zarrs_storage::ReadableStorageTraits;
 use zarrs_storage::{MaybeSend, MaybeSync};
 
@@ -14,7 +14,7 @@ use crate::{
         array_bytes::merge_chunks_vlen,
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
-        Array, ArrayBytesFixedDisjointView, ArraySize, ElementOwned,
+        Array, ArrayBytesFixedDisjointView, ElementOwned,
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
@@ -215,87 +215,25 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                     &codec_concurrency,
                 );
 
-                // Retrieve chunks
-                let indices = chunks.indices();
-                let chunk_bytes_and_subsets =
-                    iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
-                        let chunk_subset = array.chunk_subset(&chunk_indices)?;
-                        self.retrieve_chunk(&chunk_indices, &options)
-                            .map(|bytes| (bytes, chunk_subset))
-                    })
-                    .collect::<Result<Vec<_>, ArrayError>>()?;
-
-                // Merge
-                match array.data_type().size() {
-                    DataTypeSize::Variable => {
-                        // Arc<ArrayBytes> -> ArrayBytes (not copied, but a bit wasteful, change merge_chunks_vlen?)
-                        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
-                            .iter()
-                            .map(|(chunk_bytes, chunk_subset)| {
-                                (ArrayBytes::clone(chunk_bytes), chunk_subset.clone())
-                            })
-                            .collect();
-                        Ok(
-                            merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?
-                                .into(),
-                        )
-                    }
-                    DataTypeSize::Fixed(data_type_size) => {
-                        // Allocate the output
-                        let size_output = array_subset.num_elements_usize() * data_type_size;
-                        if size_output == 0 {
-                            return Ok(ArrayBytes::new_flen(vec![]).into());
-                        }
-                        let mut output = Vec::with_capacity(size_output);
-
-                        {
-                            let output =
-                                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                            let update_output = |(chunk_subset_bytes, chunk_subset): (
-                                Arc<ArrayBytes>,
-                                ArraySubset,
-                            )| {
-                                // Extract the overlapping bytes
-                                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                                let chunk_subset_bytes = if chunk_subset_overlap == chunk_subset {
-                                    chunk_subset_bytes
-                                } else {
-                                    Arc::new(chunk_subset_bytes.extract_array_subset(
-                                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                        chunk_subset.shape(),
-                                        array.data_type(),
-                                    )?)
-                                };
-
-                                let fixed = match chunk_subset_bytes.as_ref() {
-                                    ArrayBytes::Fixed(fixed) => fixed,
-                                    ArrayBytes::Variable(_, _) => unreachable!(),
-                                };
-
-                                let mut output_view = unsafe {
-                                    // SAFETY: chunks represent disjoint array subsets
-                                    ArrayBytesFixedDisjointView::new(
-                                        output,
-                                        data_type_size,
-                                        array_subset.shape(),
-                                        chunk_subset_overlap.relative_to(array_subset.start())?,
-                                    )?
-                                };
-                                output_view
-                                    .copy_from_slice(fixed)
-                                    .map_err(CodecError::from)?;
-                                Ok::<_, ArrayError>(())
-                            };
-                            iter_concurrent_limit!(
-                                chunk_concurrent_limit,
-                                chunk_bytes_and_subsets,
-                                try_for_each,
-                                update_output
-                            )?;
-                        }
-                        unsafe { output.set_len(size_output) };
-                        Ok(ArrayBytes::from(output).into())
-                    }
+                // Delegate to appropriate helper based on data type size
+                if array.data_type().is_fixed() {
+                    retrieve_multi_chunk_fixed_impl(
+                        self,
+                        &array,
+                        array_subset,
+                        &chunks,
+                        chunk_concurrent_limit,
+                        &options,
+                    )
+                } else {
+                    retrieve_multi_chunk_variable_impl(
+                        self,
+                        &array,
+                        array_subset,
+                        &chunks,
+                        chunk_concurrent_limit,
+                        &options,
+                    )
                 }
             }
         }
@@ -392,6 +330,111 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+/// Helper function to retrieve multiple chunks with variable-length data.
+/// Also handles optional data types with variable-length inner types (will error).
+fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
+    cache: &CC,
+    array: &Array<dyn ReadableStorageTraits>,
+    array_subset: &ArraySubset,
+    chunks: &ArraySubset,
+    chunk_concurrent_limit: usize,
+    options: &CodecOptions,
+) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+    // Retrieve chunks for variable-length data
+    let indices = chunks.indices();
+    let chunk_bytes_and_subsets =
+        iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
+            let chunk_subset = array.chunk_subset(&chunk_indices)?;
+            cache
+                .retrieve_chunk(&chunk_indices, options)
+                .map(|bytes| (bytes, chunk_subset))
+        })
+        .collect::<Result<Vec<_>, ArrayError>>()?;
+
+    // Arc<ArrayBytes> -> ArrayBytes (not copied, but a bit wasteful, change merge_chunks_vlen?)
+    let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+        .iter()
+        .map(|(chunk_bytes, chunk_subset)| (ArrayBytes::clone(chunk_bytes), chunk_subset.clone()))
+        .collect();
+    Ok(merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?.into())
+}
+
+/// Helper method to retrieve multiple chunks with fixed-length data types.
+/// Also handles optional data types with fixed-length inner types.
+fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
+    cache: &CC,
+    array: &Array<dyn ReadableStorageTraits>,
+    array_subset: &ArraySubset,
+    chunks: &ArraySubset,
+    chunk_concurrent_limit: usize,
+    options: &CodecOptions,
+) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+    // Allocate data buffer and optional mask buffer
+    let data_type_size = array
+        .data_type()
+        .fixed_size()
+        .expect("data_type must have fixed size");
+    let num_elements = array_subset.num_elements_usize();
+    let size_output = num_elements * data_type_size;
+    if size_output == 0 {
+        return Ok(ArrayBytes::new_flen(vec![]).into());
+    }
+    let mut data_output = Vec::with_capacity(size_output);
+
+    {
+        let data_output_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+
+        let retrieve_chunk = |chunk_indices: Vec<u64>| {
+            let chunk_subset = array.chunk_subset(&chunk_indices)?;
+            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+            let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset.start())?;
+
+            // Retrieve the chunk subset bytes
+            let chunk_subset_bytes = cache.retrieve_chunk_subset(
+                &chunk_indices,
+                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                options,
+            )?;
+
+            // Create views for output
+            let mut data_view = unsafe {
+                // SAFETY: chunks represent disjoint array subsets
+                ArrayBytesFixedDisjointView::new(
+                    data_output_slice,
+                    data_type_size,
+                    array_subset.shape(),
+                    chunk_subset_in_array.clone(),
+                )?
+            };
+
+            // Copy data from chunk_subset_bytes into the views
+            match chunk_subset_bytes.as_ref() {
+                ArrayBytes::Fixed(data) => {
+                    data_view.copy_from_slice(data).map_err(CodecError::from)?;
+                }
+                ArrayBytes::Variable(_, _) => {
+                    unreachable!("Variable-length data should not reach this code path");
+                }
+            }
+
+            Ok::<_, ArrayError>(())
+        };
+
+        let indices = chunks.indices();
+        iter_concurrent_limit!(
+            chunk_concurrent_limit,
+            indices,
+            try_for_each,
+            retrieve_chunk
+        )?;
+    }
+
+    unsafe { data_output.set_len(size_output) };
+
+    let array_bytes = ArrayBytes::from(data_output);
+    Ok(array_bytes.into())
 }
 
 // TODO: AsyncChunkCache
