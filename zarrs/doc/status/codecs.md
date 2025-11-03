@@ -3,7 +3,7 @@
 | Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
 |                | 🚧[`reshape`]                      | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
-|                | 🚧[`numcodecs.bitround`]†          | `bitround`                          | bitround      |
+|                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
 | Array to Bytes | [`bytes`]                          | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   | **sharding**  |
@@ -28,7 +28,6 @@
 |                | 🚧[`zarrs.gdeflate`]               | -                                   | gdeflate      |
 
 <sup>\* Bolded feature flags are part of the default set of features.</sup>
-<sup>† `numcodecs.bitround` supports additional data types not supported by `zarr-python`/`numcodecs`</sup>
 
 [Zarr V3.0 Blosc]: https://zarr-specs.readthedocs.io/en/latest/v3/codecs/blosc/index.html
 [Zarr V3.0 Bytes]: https://zarr-specs.readthedocs.io/en/latest/v3/codecs/bytes/index.html
@@ -45,7 +44,7 @@
 
 [`transpose`]: crate::array::codec::array_to_array::transpose
 [`reshape`]: crate::array::codec::array_to_array::reshape
-[`numcodecs.bitround`]: crate::array::codec::array_to_array::bitround
+[`bitround`]: crate::array::codec::array_to_array::bitround
 [`numcodecs.fixedscaleoffset`]: crate::array::codec::array_to_array::fixedscaleoffset
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze
 
