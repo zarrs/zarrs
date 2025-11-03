@@ -117,8 +117,6 @@ tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 walkdir = "2.3.2"
 zarrs_object_store.workspace = true
 zarrs_filesystem.workspace = true
-zarrs_zip.workspace = true
-zip.workspace = true
 
 [[example]]
 name = "array_write_read"
@@ -158,11 +156,6 @@ doc-scrape-examples = true
 [[example]]
 name = "sharded_array_write_read"
 required-features = ["filesystem", "ndarray", "sharding"]
-
-[[example]]
-name = "zip_array_write_read"
-required-features = ["filesystem", "ndarray"]
-doc-scrape-examples = false
 
 [[bench]]
 name = "array_subset"

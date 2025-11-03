@@ -60,7 +60,3 @@ component_management:
       name: zarrs_storage
       paths:
         - zarrs_storage/**
-    - component_id: zarrs_zip
-      name: zarrs_zip
-      paths:
-        - zarrs_zip/**
