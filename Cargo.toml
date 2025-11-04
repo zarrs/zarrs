@@ -63,9 +63,6 @@ path = "zarrs_object_store"
 [workspace.dependencies.object_store]
 version = "0.12"
 
-[workspace.dependencies.opendal]
-version = "0.54.0"
-
 [workspace.dependencies.half]
 version = "2.4.1"
 features = ["bytemuck"]
