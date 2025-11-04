@@ -11,7 +11,6 @@ members = [
     "zarrs_registry",
     "zarrs_storage",
     "zarrs_filesystem",
-    "zarrs_http",
     "zarrs_object_store",
 ]
 
@@ -56,10 +55,6 @@ path = "zarrs_storage"
 [workspace.dependencies.zarrs_filesystem]
 version = "0.3.4"
 path = "zarrs_filesystem"
-
-[workspace.dependencies.zarrs_http]
-version = "0.3.0"
-path = "zarrs_http"
 
 [workspace.dependencies.zarrs_object_store]
 version = "0.5.0"
