@@ -32,10 +32,6 @@ component_management:
       name: zarrs_filesystem
       paths:
         - zarrs_filesystem/**
-    - component_id: zarrs_http
-      name: zarrs_http
-      paths:
-        - zarrs_http/**
     - component_id: zarrs_metadata
       name: zarrs_metadata
       paths:
@@ -60,7 +56,3 @@ component_management:
       name: zarrs_storage
       paths:
         - zarrs_storage/**
-    - component_id: zarrs_zip
-      name: zarrs_zip
-      paths:
-        - zarrs_zip/**

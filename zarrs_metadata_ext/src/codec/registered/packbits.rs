@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use zarrs_metadata::ConfigurationSerialize;
 
+/// Helper function to determine if `padding_encoding` should be skipped during serialization.
+#[allow(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
+fn skip_padding_encoding(padding_encoding: &Option<PackBitsPaddingEncoding>) -> bool {
+    matches!(padding_encoding, None | Some(PackBitsPaddingEncoding::None))
+}
+
 /// A wrapper to handle various versions of `packbits` codec configuration parameters.
 ///
 /// ### Specification
@@ -33,6 +39,7 @@ impl ConfigurationSerialize for PackBitsCodecConfiguration {}
 #[display("{}", serde_json::to_string(self).unwrap_or_default())]
 pub struct PackBitsCodecConfigurationV1 {
     /// Specifies how the number of padding bits is encoded, such that the number of decoded elements may be determined from the encoded representation alone.
+    #[serde(skip_serializing_if = "skip_padding_encoding")]
     pub padding_encoding: Option<PackBitsPaddingEncoding>,
     /// Specifies the index (starting from the least-significant bit) of the first bit to be encoded.
     ///
@@ -121,5 +128,53 @@ mod tests {
             configuration.padding_encoding,
             Some(PackBitsPaddingEncoding::LastByte)
         );
+    }
+
+    #[test]
+    fn packbits_serialize_skip_none() {
+        // Test that Option::None is skipped during serialization
+        let configuration = PackBitsCodecConfigurationV1 {
+            padding_encoding: None,
+            first_bit: None,
+            last_bit: None,
+        };
+        let json = serde_json::to_string(&configuration).unwrap();
+        assert_eq!(json, "{}");
+    }
+
+    #[test]
+    fn packbits_serialize_skip_padding_none() {
+        // Test that Some(PackBitsPaddingEncoding::None) is skipped during serialization
+        let configuration = PackBitsCodecConfigurationV1 {
+            padding_encoding: Some(PackBitsPaddingEncoding::None),
+            first_bit: None,
+            last_bit: None,
+        };
+        let json = serde_json::to_string(&configuration).unwrap();
+        assert_eq!(json, "{}");
+    }
+
+    #[test]
+    fn packbits_serialize_first_byte() {
+        // Test that Some(PackBitsPaddingEncoding::FirstByte) is included during serialization
+        let configuration = PackBitsCodecConfigurationV1 {
+            padding_encoding: Some(PackBitsPaddingEncoding::FirstByte),
+            first_bit: None,
+            last_bit: None,
+        };
+        let json = serde_json::to_string(&configuration).unwrap();
+        assert_eq!(json, r#"{"padding_encoding":"first_byte"}"#);
+    }
+
+    #[test]
+    fn packbits_serialize_last_byte() {
+        // Test that Some(PackBitsPaddingEncoding::LastByte) is included during serialization
+        let configuration = PackBitsCodecConfigurationV1 {
+            padding_encoding: Some(PackBitsPaddingEncoding::LastByte),
+            first_bit: None,
+            last_bit: None,
+        };
+        let json = serde_json::to_string(&configuration).unwrap();
+        assert_eq!(json, r#"{"padding_encoding":"last_byte"}"#);
     }
 }

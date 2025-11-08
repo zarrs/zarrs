@@ -21,6 +21,19 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
     path: &NodePath,
     recursive: bool,
 ) -> Result<Vec<Node>, NodeCreateError> {
+    get_child_nodes_opt(storage, path, recursive, &MetadataRetrieveVersion::Default)
+}
+
+/// Get the child nodes.
+///
+/// # Errors
+/// Returns a [`StorageError`] if there is an underlying error with the store.
+pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    recursive: bool,
+    version: &MetadataRetrieveVersion,
+) -> Result<Vec<Node>, NodeCreateError> {
     let prefix: StorePrefix = path.try_into()?;
     let prefixes = discover_children(storage, &prefix)?;
     let mut nodes: Vec<Node> = Vec::new();
@@ -28,11 +41,7 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
         let path: NodePath = prefix
             .try_into()
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
-        let child_metadata = match Node::get_metadata(
-            storage,
-            &path,
-            &MetadataRetrieveVersion::Default,
-        ) {
+        let child_metadata = match Node::get_metadata(storage, &path, version) {
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata) => {
                 log::warn!(
@@ -48,12 +57,31 @@ pub fn get_child_nodes<TStorage: ?Sized + ReadableStorageTraits + ListableStorag
         let children = if recursive {
             match child_metadata {
                 NodeMetadata::Array(_) => Vec::default(),
-                NodeMetadata::Group(_) => get_child_nodes(storage, &path, true)?,
+                NodeMetadata::Group(_) => get_child_nodes_opt(storage, &path, true, version)?,
             }
         } else {
             vec![]
         };
         nodes.push(Node::new_with_metadata(path, child_metadata, children));
+    }
+    Ok(nodes)
+}
+
+/// Recursively get all nodes under a given path.
+///
+/// # Errors
+/// Returns a [`StorageError`] if there is an underlying error with the store.
+pub(crate) fn get_all_nodes_of<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
+    storage: &Arc<TStorage>,
+    path: &NodePath,
+    version: &MetadataRetrieveVersion,
+) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+    let mut nodes: Vec<(NodePath, NodeMetadata)> = Vec::new();
+    for child in get_child_nodes_opt(storage, path, false, version)? {
+        if let NodeMetadata::Group(_) = child.metadata() {
+            nodes.extend(get_all_nodes_of(storage, child.path(), version)?);
+        }
+        nodes.push((child.path, child.metadata));
     }
     Ok(nodes)
 }
