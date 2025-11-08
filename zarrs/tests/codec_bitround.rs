@@ -4,7 +4,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use zarrs::{
-    array::{codec::BitroundCodec, ArrayBuilder, DataType},
+    array::{codec::BitroundCodec, ArrayBuilder, ArrayMetadataOptions, DataType},
     array_subset::ArraySubset,
 };
 use zarrs_filesystem::FilesystemStore;
@@ -84,7 +84,8 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     let array = builder.build(store, array_path)?;
 
     // Write metadata to store
-    array.store_metadata()?;
+    array
+        .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
 
     // Store the test data
     let subset = ArraySubset::new_with_ranges(&[0..test_data.len() as u64]);
@@ -161,7 +162,8 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     let array = builder.build(store, array_path)?;
 
     // Write metadata to store
-    array.store_metadata()?;
+    array
+        .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
 
     // Store and retrieve
     let subset = ArraySubset::new_with_ranges(&[0..test_data_u8.len() as u64]);

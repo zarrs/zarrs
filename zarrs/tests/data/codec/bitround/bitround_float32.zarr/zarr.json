@@ -33,12 +33,5 @@
         "endian": "little"
       }
     }
-  ],
-  "attributes": {
-    "_zarrs": {
-      "description": "This array was created with zarrs",
-      "repository": "https://github.com/zarrs/zarrs",
-      "version": "0.22.6"
-    }
-  }
+  ]
 }
