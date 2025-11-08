@@ -98,22 +98,6 @@ fn get_encoded_shape(
     Ok(encoded_shape.into())
 }
 
-// fn get_reshaped_array_subset(
-//     decoded_region: &ArraySubset,
-//     decoded_shape: &[NonZeroU64],
-//     reshape_shape: &ReshapeShape,
-// ) -> Result<ArraySubset, CodecError> {
-//     todo!()
-// }
-
-// fn get_reshaped_indexer(
-//     indexer: &dyn Indexer,
-//     decoded_shape: &[NonZeroU64],
-//     reshape_shape: &ReshapeShape,
-// ) -> Result<impl Indexer, CodecError> {
-//     todo!()
-// }
-
 // Register the codec.
 inventory::submit! {
     CodecPlugin::new(RESHAPE, is_identifier_reshape, create_codec_reshape)

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2025-10-31
+
+### Fixed
+- Raise the MSRV from 1.77 to 1.82
+  - 1.82 has been the true MSRV since 0.3.0
+
+## [0.3.3] - 2025-10-30
+
+### Changed
+- Failed write operations on a read-only filesystem return a more specific `std::io::ErrorKind::PermissionDenied` or `ReadOnlyFilesystem` instead of `StorageError::ReadOnly`
+
+### Fixed
+- Avoid brittle read-only check on `FilesystemStore` initialisation
+  - This could fail when initialising from multiple threads/processes
+
 ## [0.3.2] - 2025-10-07
 
 ### Fixed
@@ -59,7 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.4...HEAD
+[0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.4
+[0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.3
 [0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.2
 [0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.1
 [0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.0

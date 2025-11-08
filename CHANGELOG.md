@@ -7,8 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.7] - 2025-11-05
+
+### Changed
+- Bump `zarrs_registry` to 0.1.7
+
+### Fixed
+- Avoid needlessly decoding entire chunks with `ChunkCache::retrieve_array_subset` on first read with a partial decoder cache
+- Upper bound `ndarray` to `<0.17` instead of `<17`
+
+## [0.22.6] - 2025-10-31
+
+### Added
+- Add `hierarchy` module with `Hierarchy` and `HierarchyCreateError` ([#288] by [@mannreis])
+
+### Changed
+- Bump `zarrs_data_type` to 0.4.2
+- Bump `zarrs_filesystem` to 0.3.4
+
+[#288]: https://github.com/zarrs/zarrs/pull/288
+
+## [0.22.5] - 2025-10-26
+
 ### Added
 - Add `Array::set_shape_and_chunk_grid`
+- Add `node::[async_]get_child_nodes_opt`
+- Add `Group::storage()`
+- Add `DataType::is_fixed()` and `is_variable()`
+
+### Changed
+- Bump `zarrs_data_type` to 0.4.1
+- Bump `zarrs_metadata` to 0.6.2
+- Bump `zarrs_metadata_ext` to 0.2.2
+
+### Fixed
+- Respect `version` argument for children in `Node::[async_]open_opt`
 
 ## [0.22.4] - 2025-10-13
 
@@ -1623,7 +1656,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.4...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.7...HEAD
+[0.22.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.7
+[0.22.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.6
+[0.22.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.5
 [0.22.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.4
 [0.22.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.3
 [0.22.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.2
@@ -1708,3 +1744,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [@keller-mark]: https://github.com/keller-mark
 [@mannreis]: https://github.com/mannreis
 [@kylebarron]: https://github.com/kylebarron
+[@mannreis]: https://github.com/mannreis
