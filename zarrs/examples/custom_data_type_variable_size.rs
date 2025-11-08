@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use derive_more::Deref;
 use itertools::Itertools;
@@ -52,7 +52,7 @@ impl Element for CustomDataTypeVariableSizeElement {
             // SAFETY: Constructed correctly above
             RawBytesOffsets::new_unchecked(offsets)
         };
-        Ok(ArrayBytes::Variable(Cow::Owned(bytes), offsets))
+        unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
     }
 }
 

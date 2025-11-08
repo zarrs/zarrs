@@ -29,6 +29,64 @@ pub use raw_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
 /// - Encoded array bytes after an array to bytes or bytes to bytes codecs.
 pub type RawBytes<'a> = Cow<'a, [u8]>;
 
+/// Variable length array bytes composed of bytes and element bytes offsets.
+///
+/// The bytes and offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
+/// - The offsets buffer contains length + 1 ~~signed integers (either 32-bit or 64-bit, depending on the data type)~~ usize integers.
+/// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
+/// - The final offset must be less than or equal to the length of the bytes buffer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VariableLengthBytes<'a> {
+    pub(crate) bytes: RawBytes<'a>,
+    pub(crate) offsets: RawBytesOffsets<'a>,
+}
+
+impl<'a> VariableLengthBytes<'a> {
+    /// Create a new variable length bytes from `bytes` and `offsets`.
+    ///
+    /// # Errors
+    /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
+    pub fn new(
+        bytes: impl Into<RawBytes<'a>>,
+        offsets: RawBytesOffsets<'a>,
+    ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
+        let bytes = bytes.into();
+        if offsets.last() <= bytes.len() {
+            Ok(VariableLengthBytes { bytes, offsets })
+        } else {
+            Err(RawBytesOffsetsOutOfBoundsError {
+                offset: offsets.last(),
+                len: bytes.len(),
+            })
+        }
+    }
+
+    /// Create a new variable length bytes from `bytes` and `offsets`.
+    ///
+    /// # Safety
+    /// The last offset must be less than or equal to the length of the bytes.
+    pub unsafe fn new_unchecked(
+        bytes: impl Into<RawBytes<'a>>,
+        offsets: RawBytesOffsets<'a>,
+    ) -> Self {
+        let bytes = bytes.into();
+        debug_assert!(offsets.last() <= bytes.len());
+        Self { bytes, offsets }
+    }
+
+    /// Get the underlying bytes.
+    #[must_use]
+    pub fn bytes(&self) -> &RawBytes<'_> {
+        &self.bytes
+    }
+
+    /// Get the underlying offsets.
+    #[must_use]
+    pub fn offsets(&self) -> &RawBytesOffsets<'_> {
+        &self.offsets
+    }
+}
+
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArrayBytes<'a> {
@@ -37,12 +95,7 @@ pub enum ArrayBytes<'a> {
     /// These represent elements in C-contiguous order (i.e. row-major order) where the last dimension varies the fastest.
     Fixed(RawBytes<'a>),
     /// Bytes and element byte offsets for a variable length array.
-    ///
-    /// The bytes and offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
-    /// - The offsets buffer contains length + 1 ~~signed integers (either 32-bit or 64-bit, depending on the data type)~~ usize integers.
-    /// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
-    /// - The final offset must be less than or equal to the length of the bytes buffer.
-    Variable(RawBytes<'a>, RawBytesOffsets<'a>),
+    Variable(VariableLengthBytes<'a>),
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -77,15 +130,7 @@ impl<'a> ArrayBytes<'a> {
         bytes: impl Into<RawBytes<'a>>,
         offsets: RawBytesOffsets<'a>,
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
-        let bytes = bytes.into();
-        if offsets.last() <= bytes.len() {
-            Ok(Self::Variable(bytes, offsets))
-        } else {
-            Err(RawBytesOffsetsOutOfBoundsError {
-                offset: offsets.last(),
-                len: bytes.len(),
-            })
-        }
+        VariableLengthBytes::new(bytes, offsets).map(Self::Variable)
     }
 
     /// Create a new variable length array bytes from `bytes` and `offsets` without checking the offsets.
@@ -96,9 +141,7 @@ impl<'a> ArrayBytes<'a> {
         bytes: impl Into<RawBytes<'a>>,
         offsets: RawBytesOffsets<'a>,
     ) -> Self {
-        let bytes = bytes.into();
-        debug_assert!(offsets.last() <= bytes.len());
-        Self::Variable(bytes, offsets)
+        Self::Variable(unsafe { VariableLengthBytes::new_unchecked(bytes, offsets) })
     }
 
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
@@ -152,7 +195,7 @@ impl<'a> ArrayBytes<'a> {
     pub fn into_fixed(self) -> Result<RawBytes<'a>, CodecError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
-            Self::Variable(_, _) => Err(CodecError::ExpectedFixedLengthBytes),
+            Self::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
         }
     }
 
@@ -162,8 +205,8 @@ impl<'a> ArrayBytes<'a> {
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
     pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
         match self {
-            Self::Fixed(_) => Err(CodecError::ExpectedVariableLengthBytes),
-            Self::Variable(bytes, offsets) => Ok((bytes, offsets)),
+            Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
+            Self::Variable(VariableLengthBytes { bytes, offsets }) => Ok((bytes, offsets)),
         }
     }
 
@@ -173,7 +216,9 @@ impl<'a> ArrayBytes<'a> {
     #[must_use]
     pub fn size(&self) -> usize {
         match self {
-            Self::Fixed(bytes) | Self::Variable(bytes, _) => bytes.len(),
+            Self::Fixed(bytes) | Self::Variable(VariableLengthBytes { bytes, offsets: _ }) => {
+                bytes.len()
+            }
         }
     }
 
@@ -181,8 +226,8 @@ impl<'a> ArrayBytes<'a> {
     #[must_use]
     pub fn offsets(&self) -> Option<&RawBytesOffsets<'a>> {
         match self {
-            Self::Fixed(_) => None,
-            Self::Variable(_, offsets) => Some(offsets),
+            Self::Fixed(..) => None,
+            Self::Variable(VariableLengthBytes { offsets, .. }) => Some(offsets),
         }
     }
 
@@ -191,8 +236,11 @@ impl<'a> ArrayBytes<'a> {
     pub fn into_owned(self) -> ArrayBytes<'static> {
         match self {
             Self::Fixed(bytes) => ArrayBytes::Fixed(bytes.into_owned().into()),
-            Self::Variable(bytes, offsets) => {
-                ArrayBytes::Variable(bytes.into_owned().into(), offsets.into_owned())
+            Self::Variable(VariableLengthBytes { bytes, offsets }) => {
+                ArrayBytes::Variable(VariableLengthBytes {
+                    bytes: bytes.into_owned().into(),
+                    offsets: offsets.into_owned(),
+                })
             }
         }
     }
@@ -217,7 +265,9 @@ impl<'a> ArrayBytes<'a> {
     pub fn is_fill_value(&self, fill_value: &FillValue) -> bool {
         match self {
             Self::Fixed(bytes) => fill_value.equals_all(bytes),
-            Self::Variable(bytes, _offsets) => fill_value.equals_all(bytes),
+            Self::Variable(VariableLengthBytes { bytes, offsets: _ }) => {
+                fill_value.equals_all(bytes)
+            }
         }
     }
 
@@ -235,7 +285,7 @@ impl<'a> ArrayBytes<'a> {
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
-            ArrayBytes::Variable(bytes, offsets) => {
+            ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }) => {
                 let num_elements = indexer.len();
                 let indices: Vec<_> = indexer.iter_linearised_indices(array_shape)?.collect();
                 let mut bytes_length = 0;
@@ -315,20 +365,22 @@ fn validate_bytes(
     num_elements: u64,
     data_type_size: DataTypeSize,
 ) -> Result<(), CodecError> {
-    match (bytes, data_type_size) {
-        (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => Ok(validate_bytes_flen(
-            bytes,
-            usize::try_from(num_elements * data_type_size as u64).unwrap(),
-        )?),
-        (ArrayBytes::Variable(bytes, offsets), DataTypeSize::Variable) => {
-            validate_bytes_vlen(bytes, offsets, num_elements)
-        }
-        (ArrayBytes::Fixed(_), DataTypeSize::Variable) => Err(CodecError::Other(
-            "Used fixed length array bytes with a variable sized data type.".to_string(),
-        )),
-        (ArrayBytes::Variable(_, _), DataTypeSize::Fixed(_)) => Err(CodecError::Other(
-            "Used variable length array bytes with a fixed length data type.".to_string(),
-        )),
+    match bytes {
+        ArrayBytes::Fixed(bytes) => match data_type_size {
+            DataTypeSize::Fixed(data_type_size) => Ok(validate_bytes_flen(
+                bytes,
+                usize::try_from(num_elements * data_type_size as u64).unwrap(),
+            )?),
+            DataTypeSize::Variable => Err(CodecError::Other(
+                "Used fixed length array bytes with a variable sized data type.".to_string(),
+            )),
+        },
+        ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }) => match data_type_size {
+            DataTypeSize::Variable => validate_bytes_vlen(bytes, offsets, num_elements),
+            DataTypeSize::Fixed(_) => Err(CodecError::Other(
+                "Used variable length array bytes with a fixed length data type.".to_string(),
+            )),
+        },
     }
 }
 
@@ -479,8 +531,11 @@ fn update_array_bytes_array_subset<'a>(
 ) -> Result<ArrayBytes<'a>, CodecError> {
     match (bytes, update_bytes, data_type_size) {
         (
-            ArrayBytes::Variable(bytes, offsets),
-            ArrayBytes::Variable(update_bytes, update_offsets),
+            ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }),
+            ArrayBytes::Variable(VariableLengthBytes {
+                bytes: update_bytes,
+                offsets: update_offsets,
+            }),
             DataTypeSize::Variable,
         ) => Ok(update_bytes_vlen_array_subset(
             &bytes,
@@ -545,8 +600,11 @@ pub fn update_array_bytes<'a>(
 
     match (bytes, update_bytes, data_type_size) {
         (
-            ArrayBytes::Variable(bytes, offsets),
-            ArrayBytes::Variable(update_bytes, update_offsets),
+            ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }),
+            ArrayBytes::Variable(VariableLengthBytes {
+                bytes: update_bytes,
+                offsets: update_offsets,
+            }),
             DataTypeSize::Variable,
         ) => Ok(update_bytes_vlen_indexer(
             &bytes,
@@ -807,7 +865,7 @@ mod tests {
     fn array_bytes_str() -> Result<(), Box<dyn Error>> {
         let data = ["a", "bb", "ccc"];
         let bytes = Element::into_array_bytes(&DataType::String, &data)?;
-        let ArrayBytes::Variable(bytes, offsets) = bytes else {
+        let ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }) = bytes else {
             panic!()
         };
         assert_eq!(bytes, "abbccc".as_bytes());

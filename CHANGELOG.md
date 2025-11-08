@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `VariableLengthBytes`
+
 ### Changed
 
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
+- **Breaking**: The `ArrayBytes::Variable` variant now holds `VariableLengthBytes` rather than bytes and offsets
 
 ### Removed
 
