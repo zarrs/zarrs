@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Config`: implement `Clone`, `Serialize`, and `Deserialize`
+- `Metadata{Convert,Erase}Version`: Implement `Serialize` and `Deserialize`
+
 ### Changed
 - Bump `zarrs_filesystem` to 0.3.5
+- Bump `zarrs_registry` to 0.1.8
 
 ## [0.22.7] - 2025-11-05
 
