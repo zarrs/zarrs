@@ -204,7 +204,7 @@ impl FilesystemStore {
 
         #[cfg(target_os = "linux")]
         if enable_direct {
-            flags.custom_flags(direct_io::O_DIRECT);
+            flags.custom_flags(O_DIRECT);
         }
 
         let mut file = flags.open(key_path)?;
@@ -248,7 +248,7 @@ impl FilesystemStore {
         let _lock = file.read();
         let mut flags = OpenOptions::new();
         flags.read(true);
-        flags.custom_flags(direct_io::O_DIRECT);
+        flags.custom_flags(O_DIRECT);
         let file = match flags.open(self.key_to_fspath(key)) {
             Ok(file) => file,
             Err(err) => {
