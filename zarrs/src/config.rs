@@ -406,8 +406,10 @@ pub enum MetadataEraseVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn config_validate_checksums() {
         assert!(global_config().validate_checksums());
         global_config_mut().set_validate_checksums(false);
@@ -416,6 +418,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn config_serialize_deserialize_update() {
         global_config_mut().set_validate_checksums(false);
         let serialized = serde_json::to_string(&*global_config()).unwrap();
