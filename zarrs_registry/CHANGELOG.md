@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implement `Copy` and `Clone` for `ZarrVersion{3,2}`
+- Implement `Copy` and `Clone` for `ExtensionType{DataType,ChunkGrid,ChunkKeyEncoding,Codec,StorageTransformer}`
+- Implement `Clone` for `ExtensionAliases`
+
 ## [0.1.7] - 2025-11-05
 
 ### Changed

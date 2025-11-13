@@ -4,6 +4,7 @@
 
 use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use serde::{Deserialize, Serialize};
 use zarrs_registry::{
     ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
     ExtensionAliasesDataTypeV3,
@@ -13,6 +14,11 @@ use zarrs_registry::{
 use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 
 /// Global configuration options for the `zarrs` crate.
+///
+/// <div class="warning">
+/// Serialisation/deserialisation of the config does NOT currently include the extension alias maps.
+/// This will be addressed in a future breaking release.
+/// </div>
 ///
 /// Retrieve the global [`Config`] with [`global_config`] and modify it with [`global_config_mut`].
 ///
@@ -128,7 +134,7 @@ use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 ///
 /// If true, then aliased extension names will be replaced by the standard name if metadata is resaved.
 /// This sets the default for the association option of [`crate::array::ArrayMetadataOptions`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     validate_checksums: bool,
@@ -139,9 +145,13 @@ pub struct Config {
     metadata_convert_version: MetadataConvertVersion,
     metadata_erase_version: MetadataEraseVersion,
     include_zarrs_metadata: bool,
+    #[serde(skip)]
     codec_aliases_v3: ExtensionAliasesCodecV3,
+    #[serde(skip)]
     codec_aliases_v2: ExtensionAliasesCodecV2,
+    #[serde(skip)]
     data_type_aliases_v3: ExtensionAliasesDataTypeV3,
+    #[serde(skip)]
     data_type_aliases_v2: ExtensionAliasesDataTypeV2,
     experimental_partial_encoding: bool,
     convert_aliased_extension_names: bool,
@@ -372,7 +382,7 @@ pub enum MetadataRetrieveVersion {
 }
 
 /// Version options for [`Array::store_metadata`](crate::array::Array::store_metadata) and [`Group::store_metadata`](crate::group::Group::store_metadata), and their async variants.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum MetadataConvertVersion {
     /// Write the same version as the input metadata.
     Default,
@@ -381,7 +391,7 @@ pub enum MetadataConvertVersion {
 }
 
 /// Version options for [`Array::erase_metadata`](crate::array::Array::erase_metadata) and [`Group::erase_metadata`](crate::group::Group::erase_metadata), and their async variants.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum MetadataEraseVersion {
     /// Erase the same version as the input metadata.
     Default,
@@ -403,5 +413,20 @@ mod tests {
         global_config_mut().set_validate_checksums(false);
         assert!(!global_config().validate_checksums());
         global_config_mut().set_validate_checksums(true);
+    }
+
+    #[test]
+    fn config_serialize_deserialize_update() {
+        global_config_mut().set_validate_checksums(false);
+        let serialized = serde_json::to_string(&*global_config()).unwrap();
+
+        global_config_mut().set_validate_checksums(true);
+        assert!(global_config().validate_checksums());
+
+        let restored_config: Config = serde_json::from_str(&serialized).unwrap();
+        assert!(!restored_config.validate_checksums());
+
+        *global_config_mut() = restored_config;
+        assert!(!global_config().validate_checksums());
     }
 }
