@@ -53,12 +53,11 @@ pub(super) fn coalesce_byte_ranges_with_page_size(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use zarrs_storage::byte_range::ByteRange;
 
     #[test]
     fn test_coalesce_byte_ranges_with_page_size() {
-        use super::direct_io::*;
-        use zarrs_storage::byte_range::ByteRange;
-
         let ps = 4;
         let file_size = 64;
         let byte_ranges = vec![
