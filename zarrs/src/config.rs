@@ -415,6 +415,7 @@ mod tests {
         global_config_mut().set_validate_checksums(false);
         assert!(!global_config().validate_checksums());
         global_config_mut().set_validate_checksums(true);
+        *global_config_mut() = Config::default();
     }
 
     #[test]
@@ -431,5 +432,7 @@ mod tests {
 
         *global_config_mut() = restored_config;
         assert!(!global_config().validate_checksums());
+
+        *global_config_mut() = Config::default();
     }
 }
