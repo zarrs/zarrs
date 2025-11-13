@@ -1,4 +1,4 @@
-use libc::O_DIRECT;
+pub use libc::O_DIRECT;
 use std::os::{
     fd::AsRawFd,
     unix::fs::{MetadataExt, OpenOptionsExt},
