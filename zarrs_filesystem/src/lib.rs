@@ -21,6 +21,8 @@ use walkdir::WalkDir;
 
 #[cfg(target_os = "linux")]
 mod direct_io;
+#[cfg(target_os = "linux")]
+use direct_io::{O_DIRECT, OpenOptionsExt, AsRawFd, MetadataExt};
 
 use std::{
     collections::HashMap,
