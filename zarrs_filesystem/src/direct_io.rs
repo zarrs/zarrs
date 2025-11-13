@@ -1,5 +1,5 @@
-pub use libc::O_DIRECT;
-pub use std::os::{
+pub(super) use libc::O_DIRECT;
+pub(super) use std::os::{
     fd::AsRawFd,
     unix::fs::{MetadataExt, OpenOptionsExt},
 };
