@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2025-11-14
+
 ### Fixed
 - Fix test compilation on non-linux platforms since 0.22.2 ([#300] by [@clbarnes])
 
@@ -79,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.4...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.5...HEAD
+[0.3.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.5
 [0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.4
 [0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.3
 [0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.2
