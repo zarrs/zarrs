@@ -824,7 +824,15 @@ impl DataType {
             Self::String => Ok(FillValueMetadataV3::from(
                 String::from_utf8(fill_value.as_ne_bytes().to_vec()).map_err(|_| error())?,
             )),
+            // Array representation [0, 255, 13, 74].
+            // Replace with base64 implementation below when these land:
+            // - https://github.com/zarr-developers/zarr-extensions/pull/38
+            // - https://github.com/zarr-developers/zarr-python/pull/3559
             Self::Bytes => Ok(FillValueMetadataV3::from(fill_value.as_ne_bytes().to_vec())),
+            // Self::Bytes => {
+            //     let s = BASE64_STANDARD.encode(fill_value.as_ne_bytes());
+            //     Ok(FillValueMetadataV3::from(s))
+            // }
             Self::NumpyDateTime64 {
                 unit: _,
                 scale_factor: _,
@@ -2304,12 +2312,31 @@ mod tests {
         assert_eq!(data_type.name(), "bytes");
         assert_eq!(data_type.size(), DataTypeSize::Variable);
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"[0, 1, 2, 3]"#).unwrap();
-        let fill_value = data_type.fill_value_from_metadata(&metadata).unwrap();
-        assert_eq!(fill_value.as_ne_bytes(), [0, 1, 2, 3],);
+        let expected_bytes = [0u8, 1, 2, 3];
+        let metadata_from_arr: FillValueMetadataV3 =
+            serde_json::from_str(r#"[0, 1, 2, 3]"#).unwrap();
+        let fill_value_from_arr = data_type
+            .fill_value_from_metadata(&metadata_from_arr)
+            .unwrap();
+        assert_eq!(fill_value_from_arr.as_ne_bytes(), expected_bytes,);
+
+        let metadata_from_str: FillValueMetadataV3 = serde_json::from_str(r#""AAECAw==""#).unwrap();
+        let fill_value_from_str = data_type
+            .fill_value_from_metadata(&metadata_from_str)
+            .unwrap();
+        assert_eq!(fill_value_from_str.as_ne_bytes(), expected_bytes,);
+
+        // change to `metadata_from_str` when these land:
+        // - https://github.com/zarr-developers/zarr-extensions/pull/38
+        // - https://github.com/zarr-developers/zarr-python/pull/3559
+        let expected_ser = metadata_from_arr;
         assert_eq!(
-            metadata,
-            data_type.metadata_fill_value(&fill_value).unwrap()
+            expected_ser,
+            data_type.metadata_fill_value(&fill_value_from_arr).unwrap()
+        );
+        assert_eq!(
+            expected_ser,
+            data_type.metadata_fill_value(&fill_value_from_str).unwrap()
         );
     }
 }

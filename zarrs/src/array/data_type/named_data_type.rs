@@ -267,16 +267,14 @@ impl NamedDataType {
             DataType::Bytes => {
                 if let Some(bytes) = fill_value.as_bytes() {
                     // Permit bytes for any data type alias of `bytes`
-                    return Ok(FV::from(bytes));
+                    Ok(FV::from(bytes))
                 } else if let Some(string) = fill_value.as_str() {
-                    if name == "variable_length_bytes" {
-                        return Ok(FV::from(
-                            BASE64_STANDARD.decode(string).map_err(|_| err0())?,
-                        ));
-                    }
-                    // Do not permit strings for the `bytes` data type
+                    Ok(FV::from(
+                        BASE64_STANDARD.decode(string).map_err(|_| err0())?,
+                    ))
+                } else {
+                    Err(err0())?
                 }
-                Err(err0())?
             }
             DataType::String => Ok(FV::from(fill_value.as_str().ok_or_else(err0)?)),
             DataType::NumpyDateTime64 {
