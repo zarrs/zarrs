@@ -6,6 +6,7 @@
 
 pub mod default;
 pub mod default_suffix;
+pub mod suffix;
 pub mod v2;
 
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration}
 pub use default_suffix::{
     DefaultSuffixChunkKeyEncoding, DefaultSuffixChunkKeyEncodingConfiguration,
 };
+pub use suffix::{SuffixChunkKeyEncoding, SuffixChunkKeyEncodingConfiguration};
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::PluginUnsupportedError;
 use zarrs_storage::{MaybeSend, MaybeSync};
