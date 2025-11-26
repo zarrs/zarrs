@@ -18,7 +18,7 @@ pub type ExtensionAliasMapString = HashMap<Cow<'static, str>, &'static str>;
 pub type ExtensionAliasMapRegex = Vec<(regex::Regex, &'static str)>;
 
 /// Aliases for Zarr extensions.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExtensionAliases<Z: ZarrVersion, T: ExtensionType> {
     zarr_version: PhantomData<Z>,
     extension_type: PhantomData<T>,

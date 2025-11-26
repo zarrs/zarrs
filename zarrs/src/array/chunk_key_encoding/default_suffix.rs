@@ -48,6 +48,7 @@ fn is_name_default_suffix(name: &str) -> bool {
 pub(crate) fn create_chunk_key_encoding_default_suffix(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
+    crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
     let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(

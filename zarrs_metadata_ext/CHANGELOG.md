@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-10-26
+
+### Fixed
+- `packbits` codec: skip serialising `padding_encoding` if `"none"`
+
+## [0.2.1] - 2025-10-13
+
+### Added
+- Warn when mapping `null` fill values to a default value in Zarr V2 metadata
+- Warn when mapping a `0` fill value to `""` for the `string` data type in Zarr V2 metadata
+
 ## [0.2.0] - 2025-09-18
 
 ### Added
@@ -43,7 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - rename `InvalidPermutationError` to `TransposeOrderError`
 - change the suffix of experimental codec configurations from V1 to V0 (`gdeflate`, `squeeze`, `vlen`, `vlen_v2`)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.2.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.2.2...HEAD
+[0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.2
+[0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.1
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.0
 [0.1.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.1
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.0

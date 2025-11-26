@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.5] - 2025.06-19
+## [0.1.8] - 2025-11-14
+
+### Added
+- Implement `Copy` and `Clone` for `ZarrVersion{3,2}`
+- Implement `Copy` and `Clone` for `ExtensionType{DataType,ChunkGrid,ChunkKeyEncoding,Codec,StorageTransformer}`
+- Implement `Clone` for `ExtensionAliases`
+
+## [0.1.7] - 2025-11-05
+
+### Changed
+- Update `BitroundCodec` default name to `bitround` from `numcodecs.bitround`
+
+## [0.1.6] - 2025-10-11
+
+### Added
+- Add data type alias `variable_length_bytes` for `bytes` (zarr-python 3.1+ compatibility)
+
+## [0.1.5] - 2025-06-19
 
 ### Fixed
 - Add `zarrs.squeeze` alias
@@ -47,7 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release (split from `zarrs_metadata` 0.4.0 during development)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_registry-v0.1.5...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_registry-v0.1.8...HEAD
+[0.1.8]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.8
+[0.1.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.7
+[0.1.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.6
 [0.1.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.5
 [0.1.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.4
 [0.1.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.3

@@ -1,8 +1,4 @@
-//! The `bitround` array to array codec (Experimental).
-//!
-//! <div class="warning">
-//! This codec is experimental and may be incompatible with other Zarr V3 implementations.
-//! </div>
+//! The `bitround` array to array codec.
 //!
 //! Round the mantissa of floating point data types to the specified number of bits.
 //! Rounds integers from the most significant set bit.
@@ -15,15 +11,11 @@
 //! However, it supports additional data types not supported by that implementation.
 //!
 //! ### Specification
-//! - <https://github.com/zarr-developers/zarr-extensions/tree/numcodecs/codecs/numcodecs.bitround>
+//! - <https://github.com/zarr-developers/zarr-extensions/blob/main/codecs/bitround/README.md>
 //! - <https://codec.zarrs.dev/array_to_array/bitround>
-// TODO: Document how integer rounding works
-//!
-//! ### Specification Deviations
-//! The `bitround` codec in `numcodecs` exclusively supports floating point data types.
-//! The `bitround` codec in `zarrs` additionally supports integers by rounding from the most significant set bit.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
+//! - `bitround`
 //! - `numcodecs.bitround`
 //! - `https://codec.zarrs.dev/array_to_array/bitround`
 //!

@@ -49,7 +49,7 @@ pub const VLEN: &str = "vlen";
 /// Unique identifier for the `adler32` codec (`numcodecs`).
 pub const ADLER32: &str = "adler32";
 
-/// Unique identifier for the `bitround` codec (`numcodecs`).
+/// Unique identifier for the `bitround` codec (`registered`).
 pub const BITROUND: &str = "bitround";
 
 /// Unique identifier for the `bz2` codec (`numcodecs`).

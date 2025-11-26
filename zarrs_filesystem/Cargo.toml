@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_filesystem"
-version = "0.3.2"
+version = "0.3.5"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.82"
 description = "A filesystem store for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_filesystem"

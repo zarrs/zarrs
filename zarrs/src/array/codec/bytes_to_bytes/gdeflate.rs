@@ -71,6 +71,7 @@ fn is_identifier_gdeflate(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: GDeflateCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(GDEFLATE, "codec", metadata.to_string()))?;

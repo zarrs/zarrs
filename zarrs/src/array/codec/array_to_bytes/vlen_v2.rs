@@ -80,6 +80,12 @@ fn is_identifier_vlen_utf8(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    match metadata.name() {
+        zarrs_registry::codec::VLEN_V2 | zarrs_registry::codec::VLEN_ARRAY => {
+            crate::warn_experimental_extension(metadata.name(), "codec");
+        }
+        _ => {}
+    }
     if metadata.configuration_is_none_or_empty() {
         let codec = Arc::new(VlenV2Codec::new());
         Ok(Codec::ArrayToBytes(codec))

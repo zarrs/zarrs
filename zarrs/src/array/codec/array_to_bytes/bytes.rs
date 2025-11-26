@@ -61,6 +61,9 @@ fn is_identifier_bytes(identifier: &str) -> bool {
 }
 
 pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    if metadata.name() == "binary" {
+        crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
+    }
     let configuration: BytesCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(BYTES, "codec", metadata.to_string()))?;

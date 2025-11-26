@@ -1,0 +1,35 @@
+[package]
+name = "zarrs_conformance"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2021"
+rust-version = "1.82"
+description = "Zarr conformance test binary for the zarrs crate"
+homepage = "https://zarrs.dev"
+repository = "https://github.com/zarrs/zarrs"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+zarrs = { path = "../zarrs", features = [
+    "filesystem",
+    "adler32",
+    "bitround",
+    "blosc",
+    "bz2",
+    "crc32c",
+    "fletcher32",
+    "gdeflate",
+    "gzip",
+    "pcodec",
+    "sharding",
+    "transpose",
+    "zfp",
+    "zlib",
+    "zstd",
+] }
+clap = { version = "4.5.53", features = ["derive"] }
+anyhow = "1.0.100"

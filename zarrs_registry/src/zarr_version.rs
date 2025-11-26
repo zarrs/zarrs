@@ -9,11 +9,11 @@ use std::fmt::Debug;
 pub trait ZarrVersion: Debug + Default {}
 
 /// Zarr Version 3.
-#[derive(Debug, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct ZarrVersion3;
 
 /// Zarr Version 2.
-#[derive(Debug, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct ZarrVersion2;
 
 impl ZarrVersion for ZarrVersion3 {}

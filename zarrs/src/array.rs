@@ -73,15 +73,20 @@ pub use self::{
     element::{Element, ElementFixedLength, ElementOwned},
     storage_transformer::StorageTransformerChain,
 };
-pub use data_type::{DataType, FillValue}; // re-export for zarrs < 0.20 compat
+pub use data_type::{DataType, FillValue, NamedDataType};
+use zarrs_registry::chunk_grid::REGULAR;
 
-use crate::config::global_config;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
 pub use crate::metadata::{
     ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
+};
+use crate::plugin::PluginCreateError;
+use crate::{
+    array::chunk_grid::{RegularBoundedChunkGridConfiguration, RegularChunkGrid},
+    config::global_config,
 };
 use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 
@@ -157,7 +162,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ### Mutable Array Metadata
 /// Do not forget to store metadata after mutation.
-///  - [`shape`](Array::shape) / [`set_shape`](Array::set_shape)
+///  - [`shape`](Array::shape) / [`set_shape`](Array::set_shape) / [`set_shape_and_chunk_grid`](Array::set_shape_and_chunk_grid)
 ///  - [`attributes`](Array::attributes) / [`attributes_mut`](Array::attributes_mut)
 ///  - [`dimension_names`](Array::dimension_names) / [`set_dimension_names`](Array::set_dimension_names)
 ///
@@ -372,7 +377,7 @@ pub struct Array<TStorage: ?Sized> {
     /// The path of the array in a store.
     path: NodePath,
     /// The data type of the Zarr array.
-    data_type: DataType,
+    data_type: NamedDataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
@@ -441,6 +446,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             global_config().data_type_aliases_v3(),
         )
         .map_err(ArrayCreateError::DataTypeCreateError)?;
+        let data_type = NamedDataType::new(metadata_v3.data_type.name().to_string(), data_type);
         let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
@@ -502,7 +508,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the data type.
     #[must_use]
     pub const fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.data_type.data_type()
     }
 
     /// Get the fill value.
@@ -531,6 +537,69 @@ impl<TStorage: ?Sized> Array<TStorage> {
             }
             ArrayMetadata::V2(metadata) => {
                 metadata.shape = array_shape;
+            }
+        }
+        Ok(self)
+    }
+
+    /// Set the array shape and chunk grid from chunk grid metadata.
+    ///
+    /// This method allows setting both the array shape and chunk grid simultaneously.
+    /// Some chunk grids depend on the array shape (e.g. `rectilinear`), so this method ensures that the chunk grid is correctly configured for the new array shape.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayCreateError`] if:
+    ///  - the chunk grid is not compatible with `array_shape`, or
+    ///  - the chunk grid metadata is invalid.
+    ///
+    /// # Safety
+    /// This method does not validate that existing chunks in the store are compatible with the new chunk grid.
+    /// If the chunk grid is changed such that existing chunks are no longer valid, subsequent read or write operations may fail or produce incorrect results.
+    ///
+    /// It is the caller's responsibility to ensure that the new chunk grid is compatible with any existing data in the store.
+    /// This may involve deleting or rewriting existing chunks to match the new chunk grid.
+    /// Use with caution!
+    pub unsafe fn set_shape_and_chunk_grid(
+        &mut self,
+        array_shape: ArrayShape,
+        chunk_grid_metadata: impl Into<ArrayBuilderChunkGridMetadata>,
+    ) -> Result<&mut Self, ArrayCreateError> {
+        let chunk_grid_metadata: ArrayBuilderChunkGridMetadata = chunk_grid_metadata.into();
+        let chunk_grid_metadata = chunk_grid_metadata.to_metadata()?;
+
+        // Create the new chunk grid
+        self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
+            .map_err(ArrayCreateError::ChunkGridCreateError)?;
+
+        // Update metadata based on version
+        match &mut self.metadata {
+            ArrayMetadata::V3(metadata) => {
+                metadata.shape = array_shape;
+                metadata.chunk_grid = chunk_grid_metadata;
+            }
+            ArrayMetadata::V2(metadata) => {
+                let err = || {
+                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
+                        "Only regular chunk grids are supported in Zarr V2".to_string(),
+                    ))
+                };
+                if chunk_grid_metadata.name() != REGULAR {
+                    return Err(err());
+                }
+                let regular_chunk_grid_configuration = chunk_grid_metadata
+                    .to_configuration::<RegularBoundedChunkGridConfiguration>()
+                    .map_err(|_| err())?;
+                let regular_chunk_grid = RegularChunkGrid::new(
+                    array_shape.clone(),
+                    regular_chunk_grid_configuration.chunk_shape,
+                )
+                .map_err(|_| {
+                    ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(
+                        "Chunk grid is not compatible with array shape".to_string(),
+                    ))
+                })?;
+                metadata.shape = array_shape;
+                metadata.chunks = regular_chunk_grid.chunk_shape().to_vec().into();
             }
         }
         Ok(self)
@@ -1149,6 +1218,61 @@ mod tests {
                 &"test".to_string(),
                 &serde_json::Value::String("apple".to_string())
             ))
+        );
+    }
+
+    #[test]
+    fn array_set_shape_and_chunk_grid() {
+        use crate::array::chunk_grid::RectangularChunkGridConfiguration;
+        use zarrs_metadata::v3::MetadataV3;
+
+        let store = MemoryStore::new();
+        let array_path = "/group/array";
+        let mut array = ArrayBuilder::new(
+            vec![8, 8], // array shape
+            vec![4, 4], // chunk shape
+            DataType::UInt8,
+            0u8,
+        )
+        .build(store.into(), array_path)
+        .unwrap();
+
+        // Create chunk grid metadata for a rectangular chunk that is an acceptable expansion of the array
+        let chunk_grid_metadata = MetadataV3::new_with_configuration(
+            "rectangular",
+            RectangularChunkGridConfiguration {
+                chunk_shape: vec![
+                    [4, 4, 6].try_into().unwrap(),          // varying sizes for dimension 0
+                    [4, 4, 4, 3, 2, 1].try_into().unwrap(), // varying sizes for dimension 1
+                ],
+            },
+        );
+
+        // Set new array shape and chunk grid
+        unsafe {
+            // SAFETY: The new chunk grid does not change the shape of existing chunks, so existing data remains valid.
+            array
+                .set_shape_and_chunk_grid(vec![14, 18], chunk_grid_metadata)
+                .unwrap();
+        }
+
+        // Verify new state
+        assert_eq!(array.shape(), &[14, 18]);
+
+        // Verify chunk shapes for different chunks
+        assert_eq!(
+            array.chunk_shape(&[0, 0]).unwrap().as_slice(),
+            &[
+                std::num::NonZeroU64::new(4).unwrap(),
+                std::num::NonZeroU64::new(4).unwrap()
+            ]
+        );
+        assert_eq!(
+            array.chunk_shape(&[2, 3]).unwrap().as_slice(),
+            &[
+                std::num::NonZeroU64::new(6).unwrap(),
+                std::num::NonZeroU64::new(3).unwrap()
+            ]
         );
     }
 

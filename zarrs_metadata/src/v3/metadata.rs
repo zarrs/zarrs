@@ -54,6 +54,12 @@ pub struct MetadataV3 {
     must_understand: bool,
 }
 
+impl From<MetadataV3> for Option<Configuration> {
+    fn from(metadata: MetadataV3) -> Self {
+        metadata.configuration
+    }
+}
+
 impl TryFrom<&str> for MetadataV3 {
     type Error = serde_json::Error;
 
