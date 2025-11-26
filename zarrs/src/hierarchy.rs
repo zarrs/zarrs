@@ -488,7 +488,7 @@ mod tests {
                 vec![1].into(),
                 zarrs_metadata::ChunkShape::from(vec![NonZeroU64::new(1).unwrap()]),
                 zarrs_metadata::v2::DataTypeMetadataV2::Simple("<f8".into()),
-                zarrs_metadata::v2::FillValueMetadataV2::NaN,
+                zarrs_metadata::v2::FillValueMetadataV2::from(f64::NAN),
                 None,
                 None,
             )),

@@ -329,11 +329,7 @@ pub fn fill_value_metadata_v2_to_v3(
 ) -> Result<FillValueMetadataV3, ArrayMetadataV2ToV3Error> {
     let converted_value = match fill_value {
         FillValueMetadataV2::Null => None,
-        FillValueMetadataV2::NaN => Some(f32::NAN.into()),
-        FillValueMetadataV2::Infinity => Some(f32::INFINITY.into()),
-        FillValueMetadataV2::NegInfinity => Some(f32::NEG_INFINITY.into()),
-        FillValueMetadataV2::Number(number) => Some(number.clone().into()),
-        FillValueMetadataV2::String(string) => Some(string.clone().into()),
+        _ => Some(fill_value),
     };
 
     // We add some special cases which are supported in v2 but not v3
@@ -369,7 +365,7 @@ pub fn fill_value_metadata_v2_to_v3(
             FillValueMetadataV3::from(true)
         }
         // NB this passed-through fill value may be incompatible; we will get errors when creating DataType
-        (_, Some(value)) => value,
+        (_, Some(value)) => value.clone(),
     };
 
     Ok(converted_value)

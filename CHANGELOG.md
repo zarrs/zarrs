@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking**: bump `zarrs_metadata` to 0.7.0
+  - Fixes handling of Zarr V2 arrays with bool fill values
+
 ## [0.22.8] - 2025-11-14
 
 ### Added

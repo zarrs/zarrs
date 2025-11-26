@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: bump `zarrs_metadata` to 0.7.0
+
 ## [0.4.2] - 2025-10-31
 
 ## Fixed
@@ -23,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` for `Error` structs
 
 ### Changed
-- **Breaking**: bump `zarrs_metadata` to 0.4.0
+- **Breaking**: bump `zarrs_metadata` to 0.6.0
 
 ## [0.3.3] - 2025-09-18
 

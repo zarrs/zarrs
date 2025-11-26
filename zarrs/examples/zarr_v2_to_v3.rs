@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![10, 10],
         vec![5, 5].try_into()?,
         ">f4".into(), // big endian float32
-        FillValueMetadataV2::NaN,
+        FillValueMetadataV2::from(f32::NAN),
         None,
         None,
     )
