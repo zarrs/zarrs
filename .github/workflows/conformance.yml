@@ -1,0 +1,21 @@
+name: Zarr Conformance Tests
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 0'
+
+jobs:
+  conformance-tests:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "stable"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p zarrs_conformance --release
+      - uses: Bisaloo/zarr-conformance-tests@main
+        with:
+          zarr-cli: ./target/release/zarrs_conformance
