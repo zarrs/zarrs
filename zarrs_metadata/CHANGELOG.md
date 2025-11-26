@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implement `Eq` for `FillValueMetadataV3`
+
+### Changed
+- **Breaking**: Replace `FillValueMetadataV2` struct with `FillValueMetadataV3` alias
+
+### Fixed
+- Fix `FillValueMetadataV2` not supporting bool fill values
+
 ## [0.6.2] - 2025-10-26
 
 ### Fixed

@@ -16,7 +16,7 @@ use serde_json::Number;
 use super::nan_representations::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
 
 /// Zarr V3 fill value metadata.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, From)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, From)]
 #[serde(untagged)]
 pub enum FillValueMetadataV3 {
     /// Represents a JSON null value.

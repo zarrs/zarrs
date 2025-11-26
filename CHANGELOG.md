@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
+- **Breaking**: bump `zarrs_metadata` to 0.7.0
+  - Fixes handling of Zarr V2 arrays with bool fill values
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
