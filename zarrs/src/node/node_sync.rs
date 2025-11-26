@@ -43,7 +43,7 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
             .map_err(|err: NodePathError| StorageError::Other(err.to_string()))?;
         let child_metadata = match Node::get_metadata(storage, &path, version) {
             Ok(metadata) => metadata,
-            Err(NodeCreateError::MissingMetadata) => {
+            Err(NodeCreateError::MissingMetadata(_)) => {
                 log::warn!(
                         "Object at {path} is not recognized as a component of a Zarr hierarchy. Ignoring."
                     );
@@ -117,7 +117,6 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 
 #[cfg(test)]
 mod tests {
-
     use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
 
     use super::*;
@@ -164,7 +163,7 @@ mod tests {
         assert!(res.is_err());
         assert!(!matches!(
             res.unwrap_err(),
-            NodeCreateError::MissingMetadata
+            NodeCreateError::MissingMetadata(_)
         ));
 
         testing_logger::validate(|captured_logs| {
