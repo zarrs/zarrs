@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
+
+[#280]: https://github.com/zarrs/zarrs/pull/280
+
 ## [0.22.9] - 2025-11-27
 
 ### Added
