@@ -12,7 +12,7 @@ use zarrs::filesystem::FilesystemStore;
 #[command(about = "Read and print Zarr array elements in C order")]
 struct Args {
     /// Path to the Zarr array directory
-    #[arg(long = "array-path")]
+    #[arg(long = "array_path")]
     array_path: String,
 }
 
