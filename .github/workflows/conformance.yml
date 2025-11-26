@@ -15,7 +15,7 @@ jobs:
         with:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p zarrs_conformance --release
+      - run: cargo install --path zarrs_conformance
       - uses: Bisaloo/zarr-conformance-tests@main
         with:
-          zarr-cli: ./target/release/zarrs_conformance
+          zarr-cli: zarrs_conformance
