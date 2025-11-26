@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.9] - 2025-11-27
+
+### Added
+
+- `bytes` fill value can be deserialised from base64 string  ([#304] by [@clbarnes])
+
+[#304]: https://github.com/zarrs/zarrs/pull/304
+
 ## [0.22.8] - 2025-11-14
 
 ### Added
 
 - `Config`: implement `Clone`, `Serialize`, and `Deserialize`
 - `Metadata{Convert,Erase}Version`: Implement `Serialize` and `Deserialize`
-- `bytes` fill value can be deserialised from base64 string
 
 ### Changed
 
@@ -1840,7 +1847,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.8...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.9...HEAD
+[0.22.9]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.9
 [0.22.8]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.8
 [0.22.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.7
 [0.22.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.6
@@ -1928,3 +1936,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [@keller-mark]: https://github.com/keller-mark
 [@mannreis]: https://github.com/mannreis
 [@kylebarron]: https://github.com/kylebarron
+[@clbarnes]: https://github.com/clbarnes
