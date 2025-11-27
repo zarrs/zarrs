@@ -144,7 +144,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     .map_err(ArrayError::CodecError)?;
                 bytes.validate(
                     chunk_representation.num_elements(),
-                    chunk_representation.data_type().size(),
+                    chunk_representation.data_type(),
                 )?;
                 Ok(Arc::new(bytes.into_owned()))
             } else {

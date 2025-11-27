@@ -153,13 +153,10 @@ where
         // Validate the bytes
         decoded_value.validate(
             self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type().size(),
+            self.decoded_representation.data_type(),
         )?;
 
-        bytes.validate(
-            indexer.len(),
-            self.decoded_representation.data_type().size(),
-        )?;
+        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
         decoded_value = update_array_bytes(
             decoded_value,
@@ -284,14 +281,11 @@ where
         // Validate the bytes
         chunk_bytes.validate(
             self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type().size(),
+            self.decoded_representation.data_type(),
         )?;
 
         // Update the chunk
-        bytes.validate(
-            indexer.len(),
-            self.decoded_representation.data_type().size(),
-        )?;
+        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
         chunk_bytes = update_array_bytes(
             chunk_bytes,
@@ -525,13 +519,10 @@ where
         // Validate the bytes
         decoded_value.validate(
             self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type().size(),
+            self.decoded_representation.data_type(),
         )?;
 
-        bytes.validate(
-            indexer.len(),
-            self.decoded_representation.data_type().size(),
-        )?;
+        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
         decoded_value = update_array_bytes(
             decoded_value,
@@ -663,14 +654,11 @@ where
         // Validate the bytes
         chunk_bytes.validate(
             self.decoded_representation.num_elements(),
-            self.decoded_representation.data_type().size(),
+            self.decoded_representation.data_type(),
         )?;
 
         // Update the chunk
-        bytes.validate(
-            indexer.len(),
-            self.decoded_representation.data_type().size(),
-        )?;
+        bytes.validate(indexer.len(), self.decoded_representation.data_type())?;
 
         chunk_bytes = update_array_bytes(
             chunk_bytes,

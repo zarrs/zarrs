@@ -320,7 +320,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(
                 chunk_representation.num_elements(),
-                chunk_representation.data_type().size(),
+                chunk_representation.data_type(),
             )?;
             Ok(Some(bytes))
         } else {
@@ -803,7 +803,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .await?
                 .into_owned()
         };
-        bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
+        bytes.validate(chunk_subset.num_elements(), self.data_type())?;
         Ok(bytes)
     }
 

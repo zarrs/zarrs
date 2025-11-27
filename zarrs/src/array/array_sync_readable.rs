@@ -846,7 +846,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .partial_decode(chunk_subset, options)?
                 .into_owned()
         };
-        bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
+        bytes.validate(chunk_subset.num_elements(), self.data_type())?;
         Ok(bytes)
     }
 

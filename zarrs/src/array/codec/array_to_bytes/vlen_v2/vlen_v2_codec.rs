@@ -81,7 +81,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     ) -> Result<RawBytes<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
         let (bytes, offsets) = bytes.into_variable()?;
 

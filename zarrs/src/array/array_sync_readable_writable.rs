@@ -192,7 +192,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             self.store_chunk_opt(chunk_indices, chunk_subset_bytes, options)
         } else {
             let chunk_subset_bytes = chunk_subset_bytes.into();
-            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
+            chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
 
             // Lock the chunk
             // let key = self.chunk_key(chunk_indices);
@@ -212,7 +212,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             } else {
                 // Decode the entire chunk
                 let chunk_bytes_old = self.retrieve_chunk_opt(chunk_indices, options)?;
-                chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type().size())?;
+                chunk_bytes_old.validate(chunk_shape.iter().product(), self.data_type())?;
 
                 // Update the chunk
                 let chunk_bytes_new = update_array_bytes(
@@ -309,7 +309,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             }
         } else {
             let subset_bytes = subset_bytes.into();
-            subset_bytes.validate(array_subset.num_elements(), self.data_type().size())?;
+            subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
             let chunk_representation =
                 self.chunk_array_representation(&vec![0; self.dimensionality()])?;

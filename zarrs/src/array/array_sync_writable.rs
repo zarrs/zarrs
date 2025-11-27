@@ -275,7 +275,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let chunk_array_representation = self.chunk_array_representation(chunk_indices)?;
         chunk_bytes.validate(
             chunk_array_representation.num_elements(),
-            chunk_array_representation.data_type().size(),
+            chunk_array_representation.data_type(),
         )?;
 
         let is_fill_value =
@@ -361,7 +361,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         match num_chunks {
             0 => {
                 let chunks_bytes = chunks_bytes.into();
-                chunks_bytes.validate(0, self.data_type().size())?;
+                chunks_bytes.validate(0, self.data_type())?;
             }
             1 => {
                 let chunk_indices = chunks.start();
@@ -370,7 +370,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
             _ => {
                 let chunks_bytes = chunks_bytes.into();
                 let array_subset = self.chunks_subset(chunks)?;
-                chunks_bytes.validate(array_subset.num_elements(), self.data_type().size())?;
+                chunks_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
                 // Calculate chunk/codec concurrency
                 let chunk_representation =

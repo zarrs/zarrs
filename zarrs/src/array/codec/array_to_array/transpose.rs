@@ -42,7 +42,7 @@ use crate::{
     array::{
         array_bytes::{RawBytesOffsets, VariableLengthBytes},
         codec::{Codec, CodecError, CodecPlugin},
-        ArrayBytes, RawBytes,
+        ArrayBytes, DataType, RawBytes,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -198,7 +198,7 @@ fn do_transpose<'a>(
     encoded_value: &ArrayBytes<'a>,
     subset: &ArraySubset,
     order: &TransposeOrder,
-    data_type_size: DataTypeSize,
+    data_type: &DataType,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if subset.dimensionality() != order.0.len() {
         return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
@@ -209,8 +209,8 @@ fn do_transpose<'a>(
     }
 
     let order_decode = calculate_order_decode(order, subset.dimensionality());
-    encoded_value.validate(subset.num_elements(), data_type_size)?;
-    match (encoded_value, data_type_size) {
+    encoded_value.validate(subset.num_elements(), data_type)?;
+    match (encoded_value, data_type.size()) {
         (ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }), DataTypeSize::Variable) => {
             let mut order_decode = vec![0; subset.dimensionality()];
             for (i, val) in order.0.iter().enumerate() {

@@ -171,7 +171,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         shard_rep: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<RawBytes<'a>, CodecError> {
-        bytes.validate(shard_rep.num_elements(), shard_rep.data_type().size())?;
+        bytes.validate(shard_rep.num_elements(), shard_rep.data_type())?;
 
         // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
         let chunk_rep = unsafe {
@@ -582,7 +582,7 @@ impl ShardingCodec {
     ) -> Result<Vec<u8>, CodecError> {
         decoded_value.validate(
             shard_representation.num_elements(),
-            shard_representation.data_type().size(),
+            shard_representation.data_type(),
         )?;
 
         // Calculate maximum possible shard size
@@ -722,7 +722,7 @@ impl ShardingCodec {
     ) -> Result<Vec<u8>, CodecError> {
         decoded_value.validate(
             shard_representation.num_elements(),
-            shard_representation.data_type().size(),
+            shard_representation.data_type(),
         )?;
 
         let chunks_per_shard =

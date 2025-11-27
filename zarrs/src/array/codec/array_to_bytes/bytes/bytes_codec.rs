@@ -179,7 +179,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     ) -> Result<RawBytes<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
+            decoded_representation.data_type(),
         )?;
         let bytes = bytes.into_fixed()?;
         let bytes_encoded = if let DataType::Extension(ext) = decoded_representation.data_type() {
