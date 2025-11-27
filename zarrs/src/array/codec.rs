@@ -120,6 +120,29 @@ use super::{
     RawBytes, RawBytesOffsetsOutOfBoundsError,
 };
 
+/// A target for decoding array bytes into a preallocated output view.
+///
+/// This struct contains:
+/// - A data view (required) for the array elements
+pub struct ArrayBytesDecodeIntoTarget<'a> {
+    /// Data view for array elements.
+    pub data: &'a mut ArrayBytesFixedDisjointView<'a>,
+}
+
+impl ArrayBytesDecodeIntoTarget<'_> {
+    /// Return the number of elements in the target.
+    #[must_use]
+    pub fn num_elements(&self) -> u64 {
+        self.data.num_elements()
+    }
+}
+
+impl<'a> From<&'a mut ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
+    fn from(view: &'a mut ArrayBytesFixedDisjointView<'a>) -> Self {
+        Self { data: view }
+    }
+}
+
 /// Describes the partial decoding capabilities of a codec.
 ///
 /// The capability describes:
@@ -485,24 +508,19 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     fn partial_decode_into(
         &self,
         indexer: &dyn crate::indexer::Indexer,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if indexer.len() != output_view.num_elements() {
+        if indexer.len() != output_target.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
                 indexer.len(),
-                output_view.num_elements(),
+                output_target.num_elements(),
             )
             .into());
         }
 
         let decoded_value = self.partial_decode(indexer, options)?;
-        if let ArrayBytes::Fixed(decoded_value) = decoded_value {
-            output_view.copy_from_slice(&decoded_value)?;
-            Ok(())
-        } else {
-            Err(CodecError::ExpectedFixedLengthBytes)
-        }
+        crate::array::array_bytes::decode_into_array_bytes_target(&decoded_value, output_target)
     }
 
     /// Returns whether this decoder supports partial decoding.
@@ -701,23 +719,19 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     async fn partial_decode_into(
         &self,
         indexer: &dyn crate::indexer::Indexer,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if indexer.len() != output_view.num_elements() {
+        if indexer.len() != output_target.num_elements() {
             return Err(InvalidNumberOfElementsError::new(
-                output_view.num_elements(),
                 indexer.len(),
+                output_target.num_elements(),
             )
             .into());
         }
+
         let decoded_value = self.partial_decode(indexer, options).await?;
-        if let ArrayBytes::Fixed(decoded_value) = decoded_value {
-            output_view.copy_from_slice(&decoded_value)?;
-            Ok(())
-        } else {
-            Err(CodecError::ExpectedFixedLengthBytes)
-        }
+        crate::array::array_bytes::decode_into_array_bytes_target(&decoded_value, output_target)
     }
 
     /// Returns whether this decoder supports partial decoding.
@@ -1290,23 +1304,20 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         bytes: RawBytes<'_>,
         decoded_representation: &ChunkRepresentation,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        if decoded_representation.num_elements() != output_view.num_elements() {
+        let num_elements = output_target.num_elements();
+        if decoded_representation.num_elements() != num_elements {
             return Err(InvalidNumberOfElementsError::new(
-                output_view.num_elements(),
+                num_elements,
                 decoded_representation.num_elements(),
             )
             .into());
         }
+
         let decoded_value = self.decode(bytes, decoded_representation, options)?;
-        if let ArrayBytes::Fixed(decoded_value) = decoded_value {
-            output_view.copy_from_slice(&decoded_value)?;
-        } else {
-            return Err(CodecError::ExpectedFixedLengthBytes);
-        }
-        Ok(())
+        crate::array::array_bytes::decode_into_array_bytes_target(&decoded_value, output_target)
     }
 
     /// Initialise a partial decoder.

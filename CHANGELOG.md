@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `VariableLengthBytes`
+- Add `ArrayBytesDecodeIntoTarget`
 
 ### Changed
 
@@ -18,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
 - **Breaking**: The `ArrayBytes::Variable` variant now holds `VariableLengthBytes` rather than bytes and offsets
+- **Breaking**: Change various methods to take a `ArrayBytesDecodeIntoTarget` instead of a `ArrayBytesFixedDisjointView`
+  - `[Async]ArrayPartialDecoderTraits::partial_decode_into()`
+  - `ArrayToBytesCodecTraits::decode_into()`
+  - `[Async]Array::retrieve_chunk[_subset]_into()`
 
 ### Removed
 
