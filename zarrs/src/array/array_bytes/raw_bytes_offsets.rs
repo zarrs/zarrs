@@ -5,7 +5,7 @@ use thiserror::Error;
 
 /// Array element byte offsets.
 ///
-/// These must be monotonically increasing. See [`ArrayBytes::Variable`](crate::array::ArrayBytes::Variable).
+/// These must be monotonically increasing. See [`ArrayBytes`](crate::array::ArrayBytes).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RawBytesOffsets<'a>(Cow<'a, [usize]>);
 

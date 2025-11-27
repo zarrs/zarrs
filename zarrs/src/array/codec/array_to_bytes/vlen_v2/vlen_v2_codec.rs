@@ -151,6 +151,13 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         &self,
         decoded_representation: &ChunkRepresentation,
     ) -> Result<BytesRepresentation, CodecError> {
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                zarrs_registry::codec::VLEN_V2.to_string(),
+            ));
+        }
+
         match decoded_representation.data_type().size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(

@@ -165,8 +165,10 @@ pub enum DataType {
         /// The `NumPy` temporal scale factor.
         scale_factor: NonZeroU32,
     },
+    /// An optional data type.
+    Optional(Box<DataType>),
     /// An extension data type.
-    Extension(Arc<dyn DataTypeExtension>)
+    Extension(Arc<dyn DataTypeExtension>),
 }
 
 impl PartialEq for DataType {
@@ -256,12 +258,14 @@ impl DataType {
                 unit: _,
                 scale_factor: _,
             } => zarrs_registry::data_type::NUMPY_TIMEDELTA64.to_string(),
+            Self::Optional(_data_type) => zarrs_registry::data_type::OPTIONAL.to_string(),
             Self::Extension(extension) => extension.name(),
         }
     }
 
     /// Returns the metadata.
     // TODO: Remove for configuration
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn metadata(&self) -> MetadataV3 {
         match self {
@@ -347,6 +351,20 @@ impl DataType {
                     scale_factor: *scale_factor,
                 },
             ),
+            Self::Optional(data_type) => {
+                let configuration = data_type
+                    .metadata()
+                    .configuration()
+                    .cloned()
+                    .unwrap_or_default();
+                MetadataV3::new_with_configuration(
+                    "optional",
+                    zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1 {
+                        name: data_type.name(),
+                        configuration,
+                    },
+                )
+            }
             Self::Extension(ext) => {
                 MetadataV3::new_with_configuration(ext.name(), ext.configuration())
             }
@@ -409,8 +427,15 @@ impl DataType {
             Self::Complex128 | Self::ComplexFloat64 => DataTypeSize::Fixed(16),
             Self::RawBits(size) => DataTypeSize::Fixed(*size),
             Self::String | Self::Bytes => DataTypeSize::Variable,
+            Self::Optional(inner) => inner.size(),
             Self::Extension(extension) => extension.size(),
         }
+    }
+
+    /// Returns true if this is an optional data type.
+    #[must_use]
+    pub fn is_optional(&self) -> bool {
+        matches!(self, Self::Optional(_))
     }
 
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
@@ -460,7 +485,6 @@ impl DataType {
         }
 
         if let Some(configuration) = metadata.configuration() {
-            #[allow(clippy::single_match)]
             match identifier {
                 zarrs_registry::data_type::NUMPY_DATETIME64 => {
                     use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
@@ -491,6 +515,33 @@ impl DataType {
                             ))
                         })?;
                     return Ok(Self::NumpyTimeDelta64 { unit, scale_factor });
+                }
+                zarrs_registry::data_type::OPTIONAL => {
+                    use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
+                    let OptionalDataTypeConfigurationV1 {
+                        name,
+                        configuration,
+                    } = OptionalDataTypeConfigurationV1::try_from_configuration(
+                        configuration.clone(),
+                    )
+                    .map_err(|_| {
+                        PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                            zarrs_registry::data_type::OPTIONAL,
+                            "data_type",
+                            metadata.to_string(),
+                        ))
+                    })?;
+
+                    // Create metadata for the inner data type
+                    let inner_metadata = if configuration.is_empty() {
+                        MetadataV3::new(name)
+                    } else {
+                        MetadataV3::new_with_configuration(name, configuration)
+                    };
+
+                    // Recursively parse the inner data type
+                    let inner_data_type = Self::from_metadata(&inner_metadata, data_type_aliases)?;
+                    return Ok(Self::Optional(Box::new(inner_data_type)));
                 }
                 _ => {}
             }
@@ -847,6 +898,13 @@ impl DataType {
                     Ok(FillValueMetadataV3::from("NaT"))
                 } else {
                     Ok(FillValueMetadataV3::from(number))
+                }
+            }
+            Self::Optional(data_type) => {
+                if fill_value.size() == 0 {
+                    Ok(FillValueMetadataV3::Null)
+                } else {
+                    data_type.metadata_fill_value(fill_value)
                 }
             }
             Self::Extension(extension) => extension.metadata_fill_value(fill_value),
@@ -2338,5 +2396,82 @@ mod tests {
             expected_ser,
             data_type.metadata_fill_value(&fill_value_from_str).unwrap()
         );
+    }
+
+    #[test]
+    fn data_type_optional() {
+        // Test optional int32
+        let json = r#"{"name":"optional","configuration":{"name":"int32","configuration":{}}}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let data_type =
+            DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
+        assert_eq!(data_type.name(), "optional");
+        if let DataType::Optional(inner) = &data_type {
+            assert_eq!(inner.name(), "int32");
+            assert_eq!(inner.size(), DataTypeSize::Fixed(4));
+        } else {
+            panic!("Expected Optional data type");
+        }
+        assert_eq!(data_type.size(), DataTypeSize::Fixed(4)); // inner type size (mask stored separately)
+
+        // Test optional with complex configuration (numpy datetime64)
+        let json = r#"{"name":"optional","configuration":{"name":"numpy.datetime64","configuration":{"unit":"s","scale_factor":1}}}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let data_type =
+            DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
+        assert_eq!(data_type.name(), "optional");
+        if let DataType::Optional(inner) = &data_type {
+            assert_eq!(inner.name(), "numpy.datetime64");
+            if let DataType::NumpyDateTime64 { unit, scale_factor } = inner.as_ref() {
+                assert_eq!(*unit, NumpyTimeUnit::Second);
+                assert_eq!(scale_factor.get(), 1);
+            } else {
+                panic!("Expected NumpyDateTime64 inner type");
+            }
+        } else {
+            panic!("Expected Optional data type");
+        }
+
+        // Test optional string (variable size)
+        let json = r#"{"name":"optional","configuration":{"name":"string","configuration":{}}}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let data_type =
+            DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
+        if let DataType::Optional(inner) = &data_type {
+            assert_eq!(inner.name(), "string");
+            assert_eq!(inner.size(), DataTypeSize::Variable);
+        } else {
+            panic!("Expected Optional data type");
+        }
+        assert_eq!(data_type.size(), DataTypeSize::Variable);
+
+        // Test metadata roundtrip
+        let expected_metadata = data_type.metadata();
+        let roundtrip_data_type =
+            DataType::from_metadata(&expected_metadata, &ExtensionAliasesDataTypeV3::default())
+                .unwrap();
+        assert_eq!(data_type, roundtrip_data_type);
+    }
+
+    #[test]
+    fn data_type_optional_invalid_configuration() {
+        // Test missing configuration
+        let json = r#"{"name":"optional"}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let result = DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        assert!(result.is_err());
+
+        // Test empty configuration
+        let json = r#"{"name":"optional","configuration":{}}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let result = DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        assert!(result.is_err());
+
+        // Test invalid inner data type
+        let json =
+            r#"{"name":"optional","configuration":{"name":"unknown_type","configuration":{}}}"#;
+        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
+        let result = DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        assert!(result.is_err());
     }
 }

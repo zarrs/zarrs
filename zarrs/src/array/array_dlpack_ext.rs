@@ -72,6 +72,7 @@ macro_rules! unsupported_dtypes {
                 unit: _,
                 scale_factor: _,
             }
+            | DataType::Optional(_)
             | DataType::Extension(_)
     };
 }

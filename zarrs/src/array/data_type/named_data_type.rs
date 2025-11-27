@@ -293,6 +293,14 @@ impl NamedDataType {
                     Err(err0())?
                 }
             }
+            DataType::Optional(inner) => {
+                if fill_value.is_null() {
+                    Ok(FillValue::new_null())
+                } else {
+                    let inner_fill_value = inner.fill_value_from_metadata(fill_value)?;
+                    Ok(inner_fill_value)
+                }
+            }
             DataType::Extension(ext) => ext.fill_value(fill_value),
         }
     }

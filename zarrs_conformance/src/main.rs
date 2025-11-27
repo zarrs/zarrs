@@ -18,7 +18,6 @@ struct Args {
 
 type Result<T> = std::result::Result<T, anyhow::Error>;
 
-#[expect(clippy::unnecessary_wraps)]
 fn print_elements_as_fill_value_metadata(
     data_type: &DataType,
     element_bytes: ArrayBytes,
@@ -42,6 +41,12 @@ fn print_elements_as_fill_value_metadata(
                 println!("{fill_value_metadata}");
             }
             Ok(())
+        }
+        ArrayBytes::Optional(_bytes, _validity_bitmap) => {
+            anyhow::bail!("Optional data types are not yet supported in conformance testing");
+        }
+        _ => {
+            anyhow::bail!("Unsupported ArrayBytes variant in conformance testing");
         }
     }
 }

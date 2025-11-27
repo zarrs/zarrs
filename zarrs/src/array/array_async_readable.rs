@@ -21,7 +21,7 @@ use super::{
     concurrency::concurrency_chunks_and_codec,
     element::ElementOwned,
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV2, ArrayMetadataV3, DataTypeSize,
+    ArrayMetadataV2, ArrayMetadataV3, DataType,
 };
 
 #[cfg(feature = "ndarray")]
@@ -385,8 +385,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 )
                 .map_err(ArrayError::CodecError)
         } else {
-            copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
-                .map_err(ArrayError::CodecError)
+            // For fill value, we need to extract the fixed view from the target
+            if let Some(mask) = output_target.mask {
+                // For optional data with no chunk, fill with None (mask all zeros)
+                mask.fill(&[0])
+                    .map_err(|e| ArrayError::CodecError(e.into()))?;
+                // Data can be anything since mask is 0, but fill it anyway
+                copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
+                    .map_err(ArrayError::CodecError)
+            } else {
+                copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
+                    .map_err(ArrayError::CodecError)
+            }
         }
     }
 
@@ -550,13 +560,22 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with variable-length data types (async).
+    /// Also handles optional data types with variable-length inner types (will error).
     async fn async_retrieve_multi_chunk_variable(
         &self,
         array_subset: &ArraySubset,
         chunks: &ArraySubset,
+        data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        if data_type.is_optional() {
+            // Optional data type with variable-length inner type is not supported
+            return Err(ArrayError::CodecError(CodecError::Other(
+                "Optional data type with variable-length inner type is not supported in multi-chunk retrieval".to_string(),
+            )));
+        }
+
         let retrieve_chunk = |chunk_indices: Vec<u64>| {
             let options = options.clone();
             async move {
@@ -587,44 +606,72 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types (async).
+    /// Also handles optional data types with fixed-length inner types.
     async fn async_retrieve_multi_chunk_fixed(
         &self,
         array_subset: &ArraySubset,
         chunks: &ArraySubset,
-        data_type_size: usize,
+        data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let size_output =
-            usize::try_from(array_subset.num_elements() * data_type_size as u64).unwrap();
-        if size_output == 0 {
-            return Ok(ArrayBytes::new_flen(vec![]));
-        }
-        let mut output = Vec::with_capacity(size_output);
+        // Allocate data buffer and optional mask buffer
+        let data_type_size = data_type
+            .fixed_size()
+            .expect("data_type must have fixed size");
+        let num_elements = array_subset.num_elements_usize();
+        let size_output = num_elements * data_type_size;
+        let is_optional = data_type.is_optional();
+        let mut data_output = Vec::with_capacity(size_output);
+        let mut mask_output = if is_optional {
+            Some(Vec::with_capacity(num_elements))
+        } else {
+            None
+        };
+
         {
-            let output = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
+            let data_output_slice =
+                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+            let mask_output_slice = mask_output
+                .as_mut()
+                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
+
             let retrieve_chunk = |chunk_indices: Vec<u64>| {
                 let options = options.clone();
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                    let chunk_subset_in_array =
+                        chunk_subset_overlap.relative_to(array_subset.start())?;
 
-                    let mut output_view = unsafe {
+                    let mut data_view = unsafe {
                         // SAFETY: chunks represent disjoint array subsets
                         ArrayBytesFixedDisjointView::new(
-                            output,
+                            data_output_slice,
                             data_type_size,
                             array_subset.shape(),
-                            chunk_subset_overlap
-                                .relative_to(array_subset.start())
-                                .unwrap(),
-                        )
-                    }?;
+                            chunk_subset_in_array.clone(),
+                        )?
+                    };
+
+                    let mut mask_view = mask_output_slice
+                        .map(|mask_slice| unsafe {
+                            // SAFETY: chunks represent disjoint array subsets
+                            ArrayBytesFixedDisjointView::new(
+                                mask_slice,
+                                1, // 1 byte per element for mask
+                                array_subset.shape(),
+                                chunk_subset_in_array.clone(),
+                            )
+                        })
+                        .transpose()?;
+
                     self.async_retrieve_chunk_subset_into(
                         &chunk_indices,
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                         ArrayBytesDecodeIntoTarget {
-                            data: &mut output_view,
+                            data: &mut data_view,
+                            mask: mask_view.as_mut(),
                         },
                         &options,
                     )
@@ -638,8 +685,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
                 .await?;
         }
-        unsafe { output.set_len(size_output) };
-        Ok(ArrayBytes::from(output))
+
+        unsafe { data_output.set_len(size_output) };
+        if let Some(ref mut mask) = mask_output {
+            unsafe { mask.set_len(num_elements) };
+        }
+
+        let array_bytes = ArrayBytes::new_flen(data_output);
+        Ok(if let Some(mask) = mask_output {
+            array_bytes.with_optional_mask(mask)
+        } else {
+            array_bytes
+        })
     }
 
     /// Async variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).
@@ -705,27 +762,26 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
-                // Delegate to appropriate helper based on data type
-                match chunk_representation.data_type().size() {
-                    DataTypeSize::Variable => {
-                        self.async_retrieve_multi_chunk_variable(
-                            array_subset,
-                            &chunks,
-                            chunk_concurrent_limit,
-                            &options,
-                        )
-                        .await
-                    }
-                    DataTypeSize::Fixed(data_type_size) => {
-                        self.async_retrieve_multi_chunk_fixed(
-                            array_subset,
-                            &chunks,
-                            data_type_size,
-                            chunk_concurrent_limit,
-                            &options,
-                        )
-                        .await
-                    }
+                // Delegate to appropriate helper based on data type size
+                let data_type = chunk_representation.data_type();
+                if data_type.is_fixed() {
+                    self.async_retrieve_multi_chunk_fixed(
+                        array_subset,
+                        &chunks,
+                        data_type,
+                        chunk_concurrent_limit,
+                        &options,
+                    )
+                    .await
+                } else {
+                    self.async_retrieve_multi_chunk_variable(
+                        array_subset,
+                        &chunks,
+                        data_type,
+                        chunk_concurrent_limit,
+                        &options,
+                    )
+                    .await
                 }
             }
         }

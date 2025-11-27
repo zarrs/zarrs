@@ -232,6 +232,13 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             .concurrent_target(concurrency_limit_inner_chunks)
             .build();
 
+        if shard_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                shard_representation.data_type().clone(),
+                zarrs_registry::codec::SHARDING.to_string(),
+            ));
+        }
+
         match shard_representation.data_type().size() {
             DataTypeSize::Variable => {
                 let decode_inner_chunk = |chunk_index: usize| {
@@ -352,6 +359,12 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
+        // Sharding currently only supports non-optional data
+        if output_target.mask.is_some() {
+            return Err(CodecError::Other(
+                "Sharding codec does not support optional data types yet".to_string(),
+            ));
+        }
         let output_view = output_target.data;
         let chunk_representation = unsafe {
             ChunkRepresentation::new_unchecked(
@@ -420,6 +433,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                     &chunk_representation,
                     ArrayBytesDecodeIntoTarget {
                         data: &mut output_view_inner_chunk,
+                        mask: None,
                     },
                     &options,
                 )?;

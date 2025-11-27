@@ -3,7 +3,10 @@ use std::sync::Arc;
 use derive_more::From;
 use zarrs_metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
 
-use crate::{array::ChunkGrid, node::NodePath};
+use crate::{
+    array::{codec::array_to_bytes::optional::OptionalCodec, ChunkGrid},
+    node::NodePath,
+};
 
 use super::{
     chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
@@ -469,6 +472,28 @@ impl ArrayBuilder {
     }
 
     fn default_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
+        if let DataType::Optional(inner) = data_type {
+            // Create mask codec chain using PackBitsCodec
+            let mask_codec_chain = Arc::new(CodecChain::new_named(
+                vec![],
+                Arc::new(crate::array::codec::PackBitsCodec::default()).into(),
+                vec![],
+            ));
+
+            // For data codec chain, recursively handle nested data types
+            let data_codec_chain = Arc::new(CodecChain::new_named(
+                vec![],
+                Self::default_codec(inner), // Recursive call handles nested Optional types
+                vec![],
+            ));
+
+            return NamedArrayToBytesCodec::new(
+                zarrs_registry::codec::OPTIONAL.to_string(),
+                Arc::new(OptionalCodec::new(mask_codec_chain, data_codec_chain)),
+            );
+        }
+
+        // Handle non-optional types based on size
         if data_type.fixed_size().is_some() {
             Arc::<BytesCodec>::default().into()
         } else {
@@ -535,7 +560,10 @@ impl ArrayBuilder {
                     unit: _,
                     scale_factor: _,
                 }
-                | DataType::RawBits(_) => unreachable!(),
+                | DataType::RawBits(_) => unreachable!("fixed size data types handled above"),
+                DataType::Optional(_) => {
+                    unreachable!("optional data types handled above")
+                }
             }
         }
     }
