@@ -1,6 +1,7 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use crate::array::{
+    array_bytes::VariableLengthBytes,
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
 };
@@ -158,19 +159,17 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
-            ArrayBytes::Variable(bytes, offsets) => {
+            ArrayBytes::Variable(VariableLengthBytes {
+                ref bytes,
+                ref offsets,
+            }) => {
                 let order_encode = self.order.0.clone();
                 let shape = decoded_representation
                     .shape()
                     .iter()
                     .map(|s| usize::try_from(s.get()).unwrap())
                     .collect::<Vec<_>>();
-                Ok(super::transpose_vlen(
-                    &bytes,
-                    &offsets,
-                    &shape,
-                    order_encode,
-                ))
+                Ok(super::transpose_vlen(bytes, offsets, &shape, order_encode))
             }
             ArrayBytes::Fixed(bytes) => {
                 let order_encode =
@@ -205,7 +204,10 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
-            ArrayBytes::Variable(bytes, offsets) => {
+            ArrayBytes::Variable(VariableLengthBytes {
+                ref bytes,
+                ref offsets,
+            }) => {
                 let mut order_decode = vec![0; decoded_representation.shape().len()];
                 for (i, val) in self.order.0.iter().enumerate() {
                     order_decode[*val] = i;
@@ -215,12 +217,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                     .iter()
                     .map(|s| usize::try_from(s.get()).unwrap())
                     .collect::<Vec<_>>();
-                Ok(super::transpose_vlen(
-                    &bytes,
-                    &offsets,
-                    &shape,
-                    order_decode,
-                ))
+                Ok(super::transpose_vlen(bytes, offsets, &shape, order_decode))
             }
             ArrayBytes::Fixed(bytes) => {
                 let order_decode =

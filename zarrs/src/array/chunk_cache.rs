@@ -413,10 +413,10 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
 
             // Copy data from chunk_subset_bytes into the views
             match chunk_subset_bytes.as_ref() {
-                ArrayBytes::Fixed(data) => {
-                    data_view.copy_from_slice(data).map_err(CodecError::from)?;
+                ArrayBytes::Fixed(bytes) => {
+                    data_view.copy_from_slice(bytes).map_err(CodecError::from)?;
                 }
-                ArrayBytes::Variable(_, _) => {
+                ArrayBytes::Variable(..) => {
                     unreachable!("Variable-length data should not reach this code path");
                 }
             }

@@ -39,7 +39,9 @@ fn main() -> Result<()> {
                 println!("{fill_value_metadata}");
             }
         }
-        ArrayBytes::Variable(bytes, offsets) => {
+        ArrayBytes::Variable(bytes_and_offsets) => {
+            let bytes = bytes_and_offsets.bytes();
+            let offsets = bytes_and_offsets.offsets();
             for (start, end) in offsets.windows(2).map(|w| (w[0], w[1])) {
                 let byte_slice = &bytes[start..end];
                 let fill_value = FillValue::from(byte_slice);
