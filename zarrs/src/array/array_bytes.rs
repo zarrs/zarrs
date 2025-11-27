@@ -781,6 +781,21 @@ pub fn copy_fill_value_into(
     }
 }
 
+/// Helper function to decode `ArrayBytes` into a target, handling mask and data separately.
+///
+/// This function handles the common pattern of decoding `ArrayBytes` into an `ArrayBytesDecodeIntoTarget`.
+#[expect(clippy::needless_pass_by_value)]
+pub(crate) fn decode_into_array_bytes_target(
+    bytes: &ArrayBytes,
+    target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
+) -> Result<(), CodecError> {
+    // Handle data based on whether it's fixed or variable length
+    match &bytes {
+        ArrayBytes::Fixed(data_bytes) => Ok(target.data.copy_from_slice(data_bytes)?),
+        ArrayBytes::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
+    }
+}
+
 impl<'a> From<RawBytes<'a>> for ArrayBytes<'a> {
     fn from(bytes: RawBytes<'a>) -> Self {
         Self::new_flen(bytes)

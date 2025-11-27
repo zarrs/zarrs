@@ -5,16 +5,16 @@ use std::sync::Arc;
 use crate::{
     array::{
         codec::{
-            ArrayCodecTraits, ArrayPartialDecoderCache, ArrayPartialDecoderTraits,
-            ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-            BytesPartialDecoderCache, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-            BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
-            CodecTraits, NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
-            PartialDecoderCapability, PartialEncoderCapability,
+            ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
+            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+            ArrayToBytesCodecTraits, BytesPartialDecoderCache, BytesPartialDecoderTraits,
+            BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError,
+            CodecMetadataOptions, CodecOptions, CodecTraits, NamedArrayToArrayCodec,
+            NamedArrayToBytesCodec, NamedBytesToBytesCodec, PartialDecoderCapability,
+            PartialEncoderCapability,
         },
         concurrency::RecommendedConcurrency,
-        ArrayBytes, ArrayBytesFixedDisjointView, BytesRepresentation, ChunkRepresentation,
-        ChunkShape, RawBytes,
+        ArrayBytes, BytesRepresentation, ChunkRepresentation, ChunkShape, RawBytes,
     },
     config::global_config,
     metadata::{v3::MetadataV3, Configuration},
@@ -430,7 +430,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
         &self,
         mut bytes: RawBytes<'_>,
         decoded_representation: &ChunkRepresentation,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         let array_representations =
@@ -443,7 +443,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
             return self.array_to_bytes.codec().decode_into(
                 bytes,
                 array_representations.last().unwrap(),
-                output_view,
+                output_target,
                 options,
             );
         }
@@ -461,7 +461,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
             return self.array_to_bytes.codec().decode_into(
                 bytes,
                 array_representations.last().unwrap(),
-                output_view,
+                output_target,
                 options,
             );
         }
@@ -485,13 +485,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
             decoded_representation.data_type().size(),
         )?;
 
-        if let ArrayBytes::Fixed(decoded_value) = bytes {
-            output_view.copy_from_slice(&decoded_value)?;
-        } else {
-            // TODO: Variable length data type support?
-            return Err(CodecError::ExpectedFixedLengthBytes);
-        }
-        Ok(())
+        crate::array::array_bytes::decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn partial_decoder(
