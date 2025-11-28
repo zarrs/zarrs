@@ -7,12 +7,12 @@ use crate::array::{RawBytes, RawBytesOffsets, RawBytesOffsetsOutOfBoundsError};
 /// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
 /// - The final offset must be less than or equal to the length of the bytes buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VariableLengthBytes<'a> {
+pub struct ArrayBytesVariableLength<'a> {
     pub(crate) bytes: RawBytes<'a>,
     pub(crate) offsets: RawBytesOffsets<'a>,
 }
 
-impl<'a> VariableLengthBytes<'a> {
+impl<'a> ArrayBytesVariableLength<'a> {
     /// Create a new variable length bytes from `bytes` and `offsets`.
     ///
     /// # Errors
@@ -23,7 +23,7 @@ impl<'a> VariableLengthBytes<'a> {
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
         let bytes = bytes.into();
         if offsets.last() <= bytes.len() {
-            Ok(VariableLengthBytes { bytes, offsets })
+            Ok(ArrayBytesVariableLength { bytes, offsets })
         } else {
             Err(RawBytesOffsetsOutOfBoundsError {
                 offset: offsets.last(),

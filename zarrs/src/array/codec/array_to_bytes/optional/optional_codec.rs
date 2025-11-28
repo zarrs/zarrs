@@ -9,7 +9,7 @@ use zarrs_plugin::PluginCreateError;
 use zarrs_registry::codec::OPTIONAL;
 
 use crate::array::{
-    array_bytes::VariableLengthBytes,
+    array_bytes::ArrayBytesVariableLength,
     codec::{
         ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
@@ -77,7 +77,7 @@ impl OptionalCodec {
                 }
                 Ok(ArrayBytes::new_flen(sparse_bytes))
             }
-            ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }) => {
+            ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
                 // Variable-length: Extract only valid elements based on mask
                 let mut sparse_bytes = Vec::new();
                 let mut sparse_offsets = Vec::new();
@@ -157,7 +157,7 @@ impl OptionalCodec {
 
                 Ok(ArrayBytes::new_flen(dense_bytes))
             }
-            ArrayBytes::Variable(VariableLengthBytes {
+            ArrayBytes::Variable(ArrayBytesVariableLength {
                 bytes: sparse_bytes,
                 offsets: sparse_offsets,
             }) => {

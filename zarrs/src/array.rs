@@ -54,8 +54,8 @@ pub use self::{
     },
     array_bytes::{
         copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOptional,
-        RawBytes, RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
-        VariableLengthBytes,
+        ArrayBytesVariableLength, RawBytes, RawBytesOffsets, RawBytesOffsetsCreateError,
+        RawBytesOffsetsOutOfBoundsError,
     },
     array_bytes_fixed_disjoint_view::{
         ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError,

@@ -40,7 +40,7 @@ use zarrs_registry::codec::TRANSPOSE;
 
 use crate::{
     array::{
-        array_bytes::{RawBytesOffsets, VariableLengthBytes},
+        array_bytes::{ArrayBytesVariableLength, RawBytesOffsets},
         codec::{Codec, CodecError, CodecPlugin},
         ArrayBytes, DataType, RawBytes,
     },
@@ -211,7 +211,10 @@ fn do_transpose<'a>(
     let order_decode = calculate_order_decode(order, subset.dimensionality());
     encoded_value.validate(subset.num_elements(), data_type)?;
     match (encoded_value, data_type.size()) {
-        (ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }), DataTypeSize::Variable) => {
+        (
+            ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }),
+            DataTypeSize::Variable,
+        ) => {
             let mut order_decode = vec![0; subset.dimensionality()];
             for (i, val) in order.0.iter().enumerate() {
                 order_decode[*val] = i;
