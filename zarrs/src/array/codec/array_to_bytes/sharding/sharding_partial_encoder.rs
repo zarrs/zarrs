@@ -21,8 +21,8 @@ use crate::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
-        ravel_indices, transmute_to_bytes, ArrayBytes, ChunkRepresentation, ChunkShape, CodecChain,
-        DataType, RawBytes,
+        ravel_indices, transmute_to_bytes, ArrayBytes, ArrayBytesRaw, ChunkRepresentation,
+        ChunkShape, CodecChain, DataType,
     },
     indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,
@@ -426,7 +426,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             self.input_output_handle.erase()?;
         } else {
             // Encode the updated shard index
-            let shard_index_bytes: RawBytes = transmute_to_bytes(shard_index.as_slice()).into();
+            let shard_index_bytes: ArrayBytesRaw =
+                transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
                 .encode(

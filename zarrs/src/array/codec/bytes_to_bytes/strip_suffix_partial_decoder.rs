@@ -5,7 +5,7 @@ use zarrs_storage::StorageError;
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-        RawBytes,
+        ArrayBytesRaw,
     },
     storage::byte_range::{ByteRange, ByteRangeIterator},
 };
@@ -45,7 +45,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
                 let bytes = self.input_handle.partial_decode(decoded_region, options)?;
@@ -107,7 +107,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
         let futures = decoded_regions.map(|decoded_region| async move {

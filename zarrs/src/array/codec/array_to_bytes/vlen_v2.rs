@@ -38,7 +38,7 @@ pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
 
 use crate::array::{
     codec::{CodecError, InvalidBytesLengthError},
-    RawBytes,
+    ArrayBytesRaw,
 };
 
 pub use vlen_v2_codec::VlenV2Codec;
@@ -101,7 +101,7 @@ pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, Plugi
 
 fn get_interleaved_bytes_and_offsets(
     num_elements: usize,
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
     // Validate the bytes is long enough to contain header and element lengths
     let header_length = size_of::<u32>() * (1 + num_elements);

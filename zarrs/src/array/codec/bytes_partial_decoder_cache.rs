@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use zarrs_storage::StorageError;
 
 use crate::{
-    array::RawBytes,
+    array::ArrayBytesRaw,
     storage::byte_range::{extract_byte_ranges, ByteRange, ByteRangeIterator},
 };
 
@@ -63,7 +63,7 @@ impl BytesPartialDecoderTraits for BytesPartialDecoderCache {
         &self,
         decoded_regions: ByteRangeIterator,
         _options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         Ok(match &self.cache {
             Some(bytes) => Some(
                 extract_byte_ranges(bytes, decoded_regions)
@@ -97,7 +97,7 @@ impl AsyncBytesPartialDecoderTraits for BytesPartialDecoderCache {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         BytesPartialDecoderTraits::partial_decode_many(self, decoded_regions, options)
     }
 

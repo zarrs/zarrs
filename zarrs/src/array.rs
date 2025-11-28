@@ -47,6 +47,9 @@ mod array_sync_sharded_readable_ext;
 
 use std::sync::Arc;
 
+#[allow(deprecated)]
+pub use self::array_bytes::RawBytes;
+
 pub use self::{
     array_builder::{
         ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
@@ -54,7 +57,7 @@ pub use self::{
     },
     array_bytes::{
         copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOptional,
-        ArrayBytesVariableLength, RawBytes, RawBytesOffsets, RawBytesOffsetsCreateError,
+        ArrayBytesRaw, ArrayBytesVariableLength, RawBytesOffsets, RawBytesOffsetsCreateError,
         RawBytesOffsetsOutOfBoundsError,
     },
     array_bytes_fixed_disjoint_view::{

@@ -18,13 +18,13 @@ use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
 
-use super::{codec::CodecOptions, ArrayBytes, ArrayError, RawBytes};
+use super::{codec::CodecOptions, ArrayBytes, ArrayBytesRaw, ArrayError};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;
 
 /// The chunk type of an encoded chunk cache.
-pub type ChunkCacheTypeEncoded = Option<Arc<RawBytes<'static>>>;
+pub type ChunkCacheTypeEncoded = Option<Arc<ArrayBytesRaw<'static>>>;
 
 /// The chunk type of a decoded chunk cache.
 pub type ChunkCacheTypeDecoded = Arc<ArrayBytes<'static>>;

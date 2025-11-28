@@ -18,9 +18,9 @@ use zfp_sys::{
 
 use crate::array::{
     codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RawBytes,
-        RecommendedConcurrency,
+        ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+        CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+        PartialEncoderCapability, RecommendedConcurrency,
     },
     BytesRepresentation, ChunkRepresentation, DataType,
 };
@@ -203,7 +203,7 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
         let mut bytes_promoted = promote_before_zfp_encoding(&bytes, decoded_representation)?;
         let zfp_type = bytes_promoted.zfp_type();
@@ -267,7 +267,7 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

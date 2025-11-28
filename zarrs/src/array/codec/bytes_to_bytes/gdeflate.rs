@@ -53,7 +53,7 @@ use zarrs_registry::codec::GDEFLATE;
 use crate::{
     array::{
         codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError},
-        RawBytes,
+        ArrayBytesRaw,
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -82,7 +82,7 @@ pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, Plug
 const GDEFLATE_PAGE_SIZE_UNCOMPRESSED: usize = 65536;
 const GDEFLATE_STATIC_HEADER_LENGTH: usize = 2 * size_of::<u64>();
 
-fn gdeflate_decode(encoded_value: &RawBytes<'_>) -> Result<Vec<u8>, CodecError> {
+fn gdeflate_decode(encoded_value: &ArrayBytesRaw<'_>) -> Result<Vec<u8>, CodecError> {
     if encoded_value.len() < GDEFLATE_STATIC_HEADER_LENGTH {
         return Err(InvalidBytesLengthError::new(
             encoded_value.len(),

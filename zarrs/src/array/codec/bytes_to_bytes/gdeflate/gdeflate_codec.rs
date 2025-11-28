@@ -9,7 +9,7 @@ use crate::array::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability,
     },
-    BytesRepresentation, RawBytes, RecommendedConcurrency,
+    ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency,
 };
 
 use super::{
@@ -103,9 +103,9 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
         let (page_sizes, encoded_bytes) = compressor
@@ -135,10 +135,10 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(Cow::Owned(gdeflate_decode(&encoded_value)?))
     }
 

@@ -1,4 +1,4 @@
-use crate::array::{ArrayBytes, RawBytes};
+use crate::array::{ArrayBytes, ArrayBytesRaw};
 
 /// Optional array bytes composed of data and a validity mask.
 ///
@@ -7,12 +7,12 @@ use crate::array::{ArrayBytes, RawBytes};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayBytesOptional<'a> {
     data: Box<ArrayBytes<'a>>,
-    mask: RawBytes<'a>,
+    mask: ArrayBytesRaw<'a>,
 }
 
 impl<'a> ArrayBytesOptional<'a> {
     /// Create a new `ArrayBytesOptional` with validation.
-    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<RawBytes<'a>>) -> Self {
+    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();
 
@@ -27,7 +27,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Get the validity mask.
     #[must_use]
-    pub fn mask(&self) -> &RawBytes<'a> {
+    pub fn mask(&self) -> &ArrayBytesRaw<'a> {
         &self.mask
     }
 
@@ -39,7 +39,7 @@ impl<'a> ArrayBytesOptional<'a> {
 
     /// Consume self and return the data and mask.
     #[must_use]
-    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, RawBytes<'a>) {
+    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, ArrayBytesRaw<'a>) {
         (self.data, self.mask)
     }
 

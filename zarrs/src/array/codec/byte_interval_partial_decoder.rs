@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_storage::StorageError;
 
 use crate::{
-    array::RawBytes,
+    array::ArrayBytesRaw,
     storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator},
 };
 
@@ -49,7 +49,7 @@ impl BytesPartialDecoderTraits for ByteIntervalPartialDecoder {
         &self,
         byte_ranges: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))
@@ -112,7 +112,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncByteIntervalPartialDecoder {
         &'a self,
         byte_ranges: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let byte_ranges = byte_ranges.map(|byte_range| match byte_range {
             ByteRange::FromStart(offset, None) => {
                 ByteRange::FromStart(self.byte_offset + offset, Some(self.byte_length))

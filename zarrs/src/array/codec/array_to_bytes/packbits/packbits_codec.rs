@@ -19,7 +19,7 @@ use crate::array::{
         InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
     },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, RawBytes,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
 };
 
 #[cfg(feature = "async")]
@@ -160,7 +160,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let DataTypeExtensionPackBitsCodecComponents {
             component_size_bits,
             num_components,
@@ -238,12 +238,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             }
         }
 
-        Ok(RawBytes::from(bytes_enc))
+        Ok(ArrayBytesRaw::from(bytes_enc))
     }
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

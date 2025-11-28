@@ -49,7 +49,7 @@ macro_rules! vlen_v2_codec {
                 BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
                 CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
             },
-            ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation, RawBytes,
+            ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
             RecommendedConcurrency,
         };
 
@@ -124,13 +124,13 @@ macro_rules! vlen_v2_codec {
                 bytes: ArrayBytes<'a>,
                 decoded_representation: &ChunkRepresentation,
                 options: &CodecOptions,
-            ) -> Result<RawBytes<'a>, CodecError> {
+            ) -> Result<ArrayBytesRaw<'a>, CodecError> {
                 self.inner.encode(bytes, decoded_representation, options)
             }
 
             fn decode<'a>(
                 &self,
-                bytes: RawBytes<'a>,
+                bytes: ArrayBytesRaw<'a>,
                 decoded_representation: &ChunkRepresentation,
                 options: &CodecOptions,
             ) -> Result<ArrayBytes<'a>, CodecError> {

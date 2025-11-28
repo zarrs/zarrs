@@ -18,8 +18,8 @@ use crate::{
             ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
             CodecOptions,
         },
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ChunkRepresentation,
-        ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayIndices,
+        ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytesOffsets,
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -93,7 +93,7 @@ impl ShardingPartialDecoder {
     pub(crate) fn retrieve_inner_chunk_encoded(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
         let byte_range = self.inner_chunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle

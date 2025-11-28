@@ -8,7 +8,7 @@ use crate::{
             bytes_to_bytes::blosc::blosc_nbytes, BytesPartialDecoderTraits, CodecError,
             CodecOptions,
         },
-        RawBytes,
+        ArrayBytesRaw,
     },
     storage::byte_range::ByteRangeIterator,
 };
@@ -42,7 +42,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -101,7 +101,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);

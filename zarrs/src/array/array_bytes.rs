@@ -22,7 +22,11 @@ mod array_bytes_offsets;
 pub use array_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
 
 mod array_bytes_raw;
-pub use array_bytes_raw::RawBytes;
+pub use array_bytes_raw::ArrayBytesRaw;
+
+/// Deprecated alias for [`ArrayBytesRaw`].
+#[deprecated(since = "0.23.0", note = "Renamed to ArrayBytesRaw")]
+pub type RawBytes<'a> = ArrayBytesRaw<'a>;
 
 mod array_bytes_variable_length;
 pub use array_bytes_variable_length::ArrayBytesVariableLength;
@@ -37,7 +41,7 @@ pub enum ArrayBytes<'a> {
     /// Bytes for a fixed length array.
     ///
     /// These represent elements in C-contiguous order (i.e. row-major order) where the last dimension varies the fastest.
-    Fixed(RawBytes<'a>),
+    Fixed(ArrayBytesRaw<'a>),
     /// Bytes and element byte offsets for a variable length array.
     Variable(ArrayBytesVariableLength<'a>),
     /// Bytes for an optional array (data with a validity mask).
@@ -67,7 +71,7 @@ impl<'a> ArrayBytes<'a> {
     /// Create a new fixed length array bytes from `bytes`.
     ///
     /// `bytes` must be C-contiguous.
-    pub fn new_flen(bytes: impl Into<RawBytes<'a>>) -> Self {
+    pub fn new_flen(bytes: impl Into<ArrayBytesRaw<'a>>) -> Self {
         Self::Fixed(bytes.into())
     }
 
@@ -76,7 +80,7 @@ impl<'a> ArrayBytes<'a> {
     /// # Errors
     /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
     pub fn new_vlen(
-        bytes: impl Into<RawBytes<'a>>,
+        bytes: impl Into<ArrayBytesRaw<'a>>,
         offsets: RawBytesOffsets<'a>,
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
         ArrayBytesVariableLength::new(bytes, offsets).map(Self::Variable)
@@ -87,7 +91,7 @@ impl<'a> ArrayBytes<'a> {
     /// # Safety
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_vlen_unchecked(
-        bytes: impl Into<RawBytes<'a>>,
+        bytes: impl Into<ArrayBytesRaw<'a>>,
         offsets: RawBytesOffsets<'a>,
     ) -> Self {
         Self::Variable(unsafe { ArrayBytesVariableLength::new_unchecked(bytes, offsets) })
@@ -97,7 +101,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// This creates an `Optional` variant that contains the current array bytes and the provided mask.
     #[must_use]
-    pub fn with_optional_mask(self, mask: impl Into<RawBytes<'a>>) -> Self {
+    pub fn with_optional_mask(self, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
         Self::Optional(ArrayBytesOptional::new(self, mask))
     }
 
@@ -165,7 +169,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length.
-    pub fn into_fixed(self) -> Result<RawBytes<'a>, CodecError> {
+    pub fn into_fixed(self) -> Result<ArrayBytesRaw<'a>, CodecError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
             Self::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
@@ -177,8 +181,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
-    // FIXME: Return VariableLengthBytes
-    pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
+    pub fn into_variable(self) -> Result<(ArrayBytesRaw<'a>, RawBytesOffsets<'a>), CodecError> {
         match self {
             Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
             Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => Ok((bytes, offsets)),
@@ -360,7 +363,10 @@ impl<'a> ArrayBytes<'a> {
 }
 
 /// Validate fixed length array bytes for a given array size.
-fn validate_bytes_flen(bytes: &RawBytes, array_size: usize) -> Result<(), InvalidBytesLengthError> {
+fn validate_bytes_flen(
+    bytes: &ArrayBytesRaw,
+    array_size: usize,
+) -> Result<(), InvalidBytesLengthError> {
     if bytes.len() == array_size {
         Ok(())
     } else {
@@ -370,7 +376,7 @@ fn validate_bytes_flen(bytes: &RawBytes, array_size: usize) -> Result<(), Invali
 
 /// Validate variable length array bytes for an array with `num_elements`.
 fn validate_bytes_vlen(
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
     offsets: &RawBytesOffsets,
     num_elements: u64,
 ) -> Result<(), CodecError> {
@@ -442,10 +448,10 @@ fn validate_bytes(
 }
 
 fn update_bytes_vlen_array_subset<'a>(
-    input_bytes: &RawBytes,
+    input_bytes: &ArrayBytesRaw,
     input_offsets: &RawBytesOffsets,
     input_shape: &[u64],
-    update_bytes: &RawBytes,
+    update_bytes: &ArrayBytesRaw,
     update_offsets: &RawBytesOffsets,
     update_subset: &ArraySubset,
 ) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
@@ -513,10 +519,10 @@ fn update_bytes_vlen_array_subset<'a>(
 }
 
 fn update_bytes_vlen_indexer<'a>(
-    input_bytes: &RawBytes,
+    input_bytes: &ArrayBytesRaw,
     input_offsets: &RawBytesOffsets,
     input_shape: &[u64],
-    update_bytes: &RawBytes,
+    update_bytes: &ArrayBytesRaw,
     update_offsets: &RawBytesOffsets,
     update_indexer: &dyn Indexer,
 ) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
@@ -949,8 +955,8 @@ pub(crate) fn decode_into_array_bytes_target(
     }
 }
 
-impl<'a> From<RawBytes<'a>> for ArrayBytes<'a> {
-    fn from(bytes: RawBytes<'a>) -> Self {
+impl<'a> From<ArrayBytesRaw<'a>> for ArrayBytes<'a> {
+    fn from(bytes: ArrayBytesRaw<'a>) -> Self {
         Self::new_flen(bytes)
     }
 }
@@ -963,7 +969,7 @@ impl<'a> From<RawBytes<'a>> for ArrayBytes<'a> {
 //                 ArrayBytes::<'b>::new_flen(bytes)
 //             },
 //             Self::Variable(bytes, offsets) => {
-//                 let bytes: RawBytes<'b> = bytes.to_vec().into();
+//                 let bytes: ArrayBytesRaw<'b> = bytes.to_vec().into();
 //                 let offsets: RawBytesOffsets<'b> = offsets.to_vec().into();
 //                 ArrayBytes::new_vlen(bytes, offsets)
 //             }

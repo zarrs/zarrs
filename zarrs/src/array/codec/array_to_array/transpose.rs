@@ -42,7 +42,7 @@ use crate::{
     array::{
         array_bytes::{ArrayBytesVariableLength, RawBytesOffsets},
         codec::{Codec, CodecError, CodecPlugin},
-        ArrayBytes, DataType, RawBytes,
+        ArrayBytes, ArrayBytesRaw, DataType,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -125,7 +125,7 @@ fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
 }
 
 fn transpose_vlen<'a>(
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
     offsets: &RawBytesOffsets,
     shape: &[usize],
     order: Vec<usize>,

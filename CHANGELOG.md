@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `copy_fill_value_into()`
 - **Breaking**: `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
 - **Breaking**: Mark `ArrayBytes` as non-exhaustive
+- **Breaking**: Rename `RawBytes` to `ArrayBytesRaw` and add deprecated alias
 
 ### Removed
 

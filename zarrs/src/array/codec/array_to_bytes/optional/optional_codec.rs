@@ -15,7 +15,7 @@ use crate::array::{
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, DataType, RawBytes, RawBytesOffsets,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataType, RawBytesOffsets,
 };
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
@@ -302,7 +302,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if !decoded_representation.data_type().is_optional() {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
@@ -354,7 +354,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
                 options,
             )?
         } else {
-            RawBytes::from(vec![])
+            ArrayBytesRaw::from(vec![])
         };
 
         // Concatenate: [mask_len (u64) | data_len (u64) | mask | data]
@@ -364,12 +364,12 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         result.extend_from_slice(&encoded_mask);
         result.extend_from_slice(&encoded_data);
 
-        Ok(RawBytes::from(result))
+        Ok(ArrayBytesRaw::from(result))
     }
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
