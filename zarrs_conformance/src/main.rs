@@ -42,7 +42,7 @@ fn print_elements_as_fill_value_metadata(
             }
             Ok(())
         }
-        ArrayBytes::Optional(_bytes, _validity_bitmap) => {
+        ArrayBytes::Optional(..) => {
             anyhow::bail!("Optional data types are not yet supported in conformance testing");
         }
         _ => {

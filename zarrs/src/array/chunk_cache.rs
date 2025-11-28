@@ -445,9 +445,9 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
                 ArrayBytes::Fixed(bytes) => {
                     data_view.copy_from_slice(bytes).map_err(CodecError::from)?;
                 }
-                ArrayBytes::Optional(data, mask) => {
+                ArrayBytes::Optional(optional_bytes) => {
                     // Extract the data bytes from the boxed ArrayBytes
-                    let data_bytes = match data.as_ref() {
+                    let data_bytes = match optional_bytes.data() {
                         ArrayBytes::Fixed(bytes) => bytes.as_ref(),
                         ArrayBytes::Variable(..) | ArrayBytes::Optional(..) => {
                             unreachable!("Optional data should contain Fixed array bytes")
@@ -458,7 +458,7 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
                         .map_err(CodecError::from)?;
                     if let Some(ref mut mask_view) = mask_view {
                         mask_view
-                            .copy_from_slice(mask.as_ref())
+                            .copy_from_slice(optional_bytes.mask().as_ref())
                             .map_err(CodecError::from)?;
                     }
                 }

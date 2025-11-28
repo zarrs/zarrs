@@ -56,34 +56,6 @@ impl OptionalCodec {
         }
     }
 
-    fn extract_optional_array_bytes<'a>(
-        bytes: &'a ArrayBytes<'a>,
-        data_type: &DataType,
-        num_elements: usize,
-    ) -> Result<(&'a ArrayBytes<'a>, &'a [u8]), CodecError> {
-        let DataType::Optional(_inner_type) = data_type else {
-            return Err(CodecError::Other(
-                "optional codec requires an optional data type".to_string(),
-            ));
-        };
-
-        // Match on the ArrayBytes variant
-        if let ArrayBytes::Optional(data, mask) = bytes {
-            if mask.len() != num_elements {
-                return Err(CodecError::Other(
-                    "mask length does not match number of elements".to_string(),
-                ));
-            }
-
-            // Return references to the mask and data
-            Ok((data.as_ref(), mask.as_ref()))
-        } else {
-            Err(CodecError::Other(
-                "expected optional array bytes for optional codec".to_string(),
-            ))
-        }
-    }
-
     /// Recursively extract sparse data from dense data based on a validity mask.
     /// This supports arbitrarily nested optional types.
     fn extract_sparse_data<'a>(
@@ -123,7 +95,7 @@ impl OptionalCodec {
                 let sparse_offsets = unsafe { RawBytesOffsets::new_unchecked(sparse_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(sparse_bytes, sparse_offsets) })
             }
-            ArrayBytes::Optional(inner_data, inner_mask) => {
+            ArrayBytes::Optional(optional_bytes) => {
                 // Nested optional: Extract valid elements from both outer and inner masks
                 // Only elements where outer mask is valid should be included
                 // For those elements, preserve their inner mask values
@@ -132,7 +104,7 @@ impl OptionalCodec {
                 let mut sparse_inner_mask = Vec::new();
                 for (i, &mask_byte) in mask.iter().enumerate() {
                     if mask_byte != 0 {
-                        sparse_inner_mask.push(inner_mask[i]);
+                        sparse_inner_mask.push(optional_bytes.mask()[i]);
                     }
                 }
 
@@ -147,7 +119,7 @@ impl OptionalCodec {
 
                 // Recursively extract sparse data from the inner data
                 let sparse_inner_data =
-                    Self::extract_sparse_data(inner_data, mask, inner_inner_type)?;
+                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_inner_type)?;
 
                 Ok(sparse_inner_data.with_optional_mask(sparse_inner_mask))
             }
@@ -212,7 +184,7 @@ impl OptionalCodec {
                 let dense_offsets = unsafe { RawBytesOffsets::new_unchecked(dense_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(dense_bytes, dense_offsets) })
             }
-            ArrayBytes::Optional(sparse_inner_data, sparse_inner_mask) => {
+            ArrayBytes::Optional(sparse_optional_bytes) => {
                 // Nested optional: Expand the inner data and then expand the inner mask
 
                 // Get the inner-inner type (unwrap the Optional)
@@ -223,6 +195,9 @@ impl OptionalCodec {
                         "nested optional ArrayBytes requires nested optional DataType".to_string(),
                     ));
                 };
+
+                // Destructure to get owned data and mask
+                let (sparse_inner_data, sparse_inner_mask) = sparse_optional_bytes.into_parts();
 
                 // Recursively expand the inner data
                 let dense_inner_data =
@@ -328,14 +303,24 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<RawBytes<'a>, CodecError> {
-        let num_elements = decoded_representation.num_elements_usize();
-
-        // Extract mask and dense data
-        let (dense_data, mask) = Self::extract_optional_array_bytes(
-            &bytes,
-            decoded_representation.data_type(),
-            num_elements,
-        )?;
+        if !decoded_representation.data_type().is_optional() {
+            return Err(CodecError::Other(
+                "optional codec requires an optional data type".to_string(),
+            ));
+        }
+        let ArrayBytes::Optional(optional_bytes) = bytes else {
+            return Err(CodecError::Other(
+                "expected optional array bytes for optional codec".to_string(),
+            ));
+        };
+        let (dense_data, mask) = optional_bytes.into_parts();
+        if mask.len() != decoded_representation.num_elements_usize() {
+            return Err(CodecError::Other(format!(
+                "mask length {} does not match number of elements {}",
+                mask.len(),
+                decoded_representation.num_elements_usize()
+            )));
+        }
 
         // Create representations for mask and data
         let mask_representation =
@@ -348,13 +333,15 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         };
 
         // Encode mask
-        let encoded_mask =
-            self.mask_codecs
-                .encode(ArrayBytes::from(mask), &mask_representation, options)?;
+        let encoded_mask = self.mask_codecs.encode(
+            ArrayBytes::from(mask.as_ref()),
+            &mask_representation,
+            options,
+        )?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = Self::extract_sparse_data(dense_data, mask, inner_type)?;
+        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, inner_type)?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
@@ -536,7 +523,7 @@ mod tests {
                 // Create outer mask (every third element is invalid at this level)
                 let outer_mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 3 != 0)).collect();
 
-                ArrayBytes::Optional(Box::new(inner_array_bytes), outer_mask.into())
+                inner_array_bytes.with_optional_mask(outer_mask)
             }
             DataType::Optional(inner) => {
                 // Innermost optional level - create data and mask
@@ -560,7 +547,7 @@ mod tests {
                     }
                 }
 
-                ArrayBytes::Optional(Box::new(ArrayBytes::new_flen(data)), mask.into())
+                ArrayBytes::new_flen(data).with_optional_mask(mask)
             }
             _ => {
                 // Non-optional type - shouldn't reach here in these tests
@@ -603,7 +590,7 @@ mod tests {
         let decoded = codec.decode(encoded, &chunk_representation, &CodecOptions::default())?;
 
         // The codec now returns optional ArrayBytes
-        assert!(matches!(decoded, ArrayBytes::Optional(_, _)));
+        assert!(matches!(decoded, ArrayBytes::Optional(..)));
         Ok(())
     }
 
@@ -735,16 +722,16 @@ mod tests {
             .unwrap();
 
         // Verify the decoded structure
-        if let ArrayBytes::Optional(decoded_inner_box, decoded_outer_mask) = decoded {
+        if let ArrayBytes::Optional(decoded_outer) = decoded {
             // Check outer mask
-            assert_eq!(decoded_outer_mask.as_ref(), &[1u8, 1, 0, 1, 0, 1, 1, 1]);
+            assert_eq!(decoded_outer.mask().as_ref(), &[1u8, 1, 0, 1, 0, 1, 1, 1]);
 
             // Check inner optional structure
-            if let ArrayBytes::Optional(decoded_data_box, decoded_inner_mask) = *decoded_inner_box {
-                assert_eq!(decoded_inner_mask.as_ref(), &[1u8, 0, 0, 1, 0, 1, 0, 1]);
+            if let ArrayBytes::Optional(decoded_inner) = decoded_outer.data() {
+                assert_eq!(decoded_inner.mask().as_ref(), &[1u8, 0, 0, 1, 0, 1, 0, 1]);
 
                 // Check data
-                if let ArrayBytes::Fixed(decoded_data) = *decoded_data_box {
+                if let ArrayBytes::Fixed(decoded_data) = decoded_inner.data() {
                     assert_eq!(decoded_data.as_ref(), &[10u8, 0, 0, 30, 0, 50, 0, 70]);
                 } else {
                     panic!("Expected Fixed ArrayBytes for innermost data");
@@ -804,14 +791,14 @@ mod tests {
             .unwrap();
 
         // Verify the decoded structure
-        if let ArrayBytes::Optional(decoded_data_box, decoded_mask) = decoded {
-            assert_eq!(decoded_mask.as_ref(), &[1u8, 0, 1, 0, 1, 0]);
-            if let ArrayBytes::Fixed(decoded_data) = *decoded_data_box {
+        if let ArrayBytes::Optional(decoded_optional) = decoded {
+            assert_eq!(decoded_optional.mask().as_ref(), &[1u8, 0, 1, 0, 1, 0]);
+            if let ArrayBytes::Fixed(decoded_data) = decoded_optional.data() {
                 // Note: The fill value is used as placeholders during encoding/decoding
                 // but the exact values for invalid elements might be 0 from the sparse encoding
                 // Let's verify valid elements are preserved
                 let data_slice = decoded_data.as_ref();
-                let mask_slice = decoded_mask.as_ref();
+                let mask_slice = decoded_optional.mask().as_ref();
                 assert_eq!(data_slice[0], 10u8); // valid element
                 assert_eq!(data_slice[2], 20u8); // valid element
                 assert_eq!(data_slice[4], 30u8); // valid element
@@ -900,16 +887,16 @@ mod tests {
             .unwrap();
 
         // Verify the 3-level nested structure
-        if let ArrayBytes::Optional(level2_box, outer_mask_decoded) = decoded {
-            assert_eq!(outer_mask_decoded.as_ref(), &[1u8, 1, 1, 0, 1, 1]);
+        if let ArrayBytes::Optional(level2) = decoded {
+            assert_eq!(level2.mask().as_ref(), &[1u8, 1, 1, 0, 1, 1]);
 
-            if let ArrayBytes::Optional(level1_box, middle_mask_decoded) = *level2_box {
-                assert_eq!(middle_mask_decoded.as_ref(), &[1u8, 1, 0, 0, 1, 1]);
+            if let ArrayBytes::Optional(level1) = level2.data() {
+                assert_eq!(level1.mask().as_ref(), &[1u8, 1, 0, 0, 1, 1]);
 
-                if let ArrayBytes::Optional(data_box, inner_mask_decoded) = *level1_box {
-                    assert_eq!(inner_mask_decoded.as_ref(), &[1u8, 0, 0, 0, 1, 1]);
+                if let ArrayBytes::Optional(level0) = level1.data() {
+                    assert_eq!(level0.mask().as_ref(), &[1u8, 0, 0, 0, 1, 1]);
 
-                    if let ArrayBytes::Fixed(data_decoded) = *data_box {
+                    if let ArrayBytes::Fixed(data_decoded) = level0.data() {
                         assert_eq!(
                             data_decoded.as_ref(),
                             &[100u8, 0, 0, 0, 0, 0, 0, 0, 144, 1, 244, 1]
@@ -974,9 +961,9 @@ mod tests {
             .unwrap();
 
         // Verify the decoded structure
-        if let ArrayBytes::Optional(decoded_data_box, decoded_mask) = decoded {
-            assert_eq!(decoded_mask.as_ref(), &[1u8, 0, 1, 1, 0]);
-            if let ArrayBytes::Fixed(decoded_data) = *decoded_data_box {
+        if let ArrayBytes::Optional(decoded_optional) = decoded {
+            assert_eq!(decoded_optional.mask().as_ref(), &[1u8, 0, 1, 1, 0]);
+            if let ArrayBytes::Fixed(decoded_data) = decoded_optional.data() {
                 let data_slice = decoded_data.as_ref();
                 // Check valid elements
                 assert_eq!(

@@ -87,6 +87,59 @@ impl<'a> VariableLengthBytes<'a> {
     }
 }
 
+/// Optional array bytes composed of data and a validity mask.
+///
+/// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
+/// The mask length is validated at construction to ensure it matches the number of elements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OptionalBytes<'a> {
+    data: Box<ArrayBytes<'a>>,
+    mask: RawBytes<'a>,
+}
+
+impl<'a> OptionalBytes<'a> {
+    /// Create a new `OptionalBytes` with validation.
+    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<RawBytes<'a>>) -> Self {
+        let data = data.into();
+        let mask = mask.into();
+
+        Self { data, mask }
+    }
+
+    /// Get the underlying data.
+    #[must_use]
+    pub fn data(&self) -> &ArrayBytes<'a> {
+        &self.data
+    }
+
+    /// Get the validity mask.
+    #[must_use]
+    pub fn mask(&self) -> &RawBytes<'a> {
+        &self.mask
+    }
+
+    /// Get the number of elements.
+    #[must_use]
+    pub fn num_elements(&self) -> usize {
+        self.mask.len()
+    }
+
+    /// Consume self and return the data and mask.
+    #[must_use]
+    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, RawBytes<'a>) {
+        (self.data, self.mask)
+    }
+
+    /// Convert into owned [`OptionalBytes<'static>`].
+    #[must_use]
+    pub fn into_owned(self) -> OptionalBytes<'static> {
+        OptionalBytes {
+            data: Box::new((*self.data).into_owned()),
+            mask: self.mask.into_owned().into(),
+        }
+    }
+}
+
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -100,8 +153,8 @@ pub enum ArrayBytes<'a> {
     /// Bytes for an optional array (data with a validity mask).
     ///
     /// The data can be either Fixed or Variable length.
-    /// The mask is a bitmask indicating which elements are valid/present.
-    Optional(Box<ArrayBytes<'a>>, RawBytes<'a>),
+    /// The mask is validated at construction to have 1 byte per element.
+    Optional(OptionalBytes<'a>),
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -155,7 +208,7 @@ impl<'a> ArrayBytes<'a> {
     /// This creates an `Optional` variant that contains the current array bytes and the provided mask.
     #[must_use]
     pub fn with_optional_mask(self, mask: impl Into<RawBytes<'a>>) -> Self {
-        Self::Optional(Box::new(self), mask.into())
+        Self::Optional(OptionalBytes::new(self, mask))
     }
 
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
@@ -177,7 +230,8 @@ impl<'a> ArrayBytes<'a> {
                 } else {
                     FillValue::from(&[])
                 };
-                let mask = vec![0u8; usize::try_from(num_elements).unwrap()];
+                let num_elements_usize = usize::try_from(num_elements).unwrap();
+                let mask = vec![0u8; num_elements_usize];
                 return Ok(
                     ArrayBytes::new_fill_value(data_type, num_elements, &fill_value)?
                         .with_optional_mask(mask),
@@ -247,7 +301,21 @@ impl<'a> ArrayBytes<'a> {
     /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
     pub fn into_optional(self) -> Result<(ArrayBytes<'a>, RawBytes<'a>), CodecError> {
         match self {
-            Self::Optional(data, mask) => Ok((*data, mask)),
+            Self::Optional(optional_bytes) => {
+                let (data, mask) = optional_bytes.into_parts();
+                Ok((*data, mask))
+            }
+            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
+        }
+    }
+
+    /// Convert the array bytes into [`OptionalBytes`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
+    pub fn into_optional_bytes(self) -> Result<OptionalBytes<'a>, CodecError> {
+        match self {
+            Self::Optional(optional_bytes) => Ok(optional_bytes),
             Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
         }
     }
@@ -261,7 +329,7 @@ impl<'a> ArrayBytes<'a> {
             Self::Fixed(bytes) | Self::Variable(VariableLengthBytes { bytes, offsets: _ }) => {
                 bytes.len()
             }
-            Self::Optional(data, _) => data.size(),
+            Self::Optional(optional_bytes) => optional_bytes.data().size(),
         }
     }
 
@@ -271,7 +339,7 @@ impl<'a> ArrayBytes<'a> {
         match self {
             Self::Fixed(..) => None,
             Self::Variable(VariableLengthBytes { offsets, .. }) => Some(offsets),
-            Self::Optional(data, _) => data.offsets(),
+            Self::Optional(optional_bytes) => optional_bytes.data().offsets(),
         }
     }
 
@@ -286,9 +354,7 @@ impl<'a> ArrayBytes<'a> {
                     offsets: offsets.into_owned(),
                 })
             }
-            Self::Optional(data, mask) => {
-                ArrayBytes::Optional(Box::new(data.into_owned()), mask.into_owned().into())
-            }
+            Self::Optional(optional_bytes) => ArrayBytes::Optional(optional_bytes.into_owned()),
         }
     }
 
@@ -311,13 +377,14 @@ impl<'a> ArrayBytes<'a> {
             Self::Variable(VariableLengthBytes { bytes, offsets: _ }) => {
                 fill_value.equals_all(bytes)
             }
-            Self::Optional(data, mask) => {
+            Self::Optional(optional_bytes) => {
                 if fill_value.is_null() {
                     // For optional arrays with null fill value, check if mask is all zeros
-                    mask.iter().all(|&b| b == 0)
+                    optional_bytes.mask().iter().all(|&b| b == 0)
                 } else if !fill_value.is_null() {
                     // For optional arrays with non-null fill value, check if mask is all ones and data is fill value
-                    mask.iter().all(|&b| b == 1) && data.is_fill_value(fill_value)
+                    optional_bytes.mask().iter().all(|&b| b == 1)
+                        && optional_bytes.data().is_fill_value(fill_value)
                 } else {
                     // Otherwise, the array cannot be all fill value
                     false
@@ -377,7 +444,7 @@ impl<'a> ArrayBytes<'a> {
                 let bytes = extract_byte_ranges_concat(bytes, byte_ranges)?;
                 Ok(ArrayBytes::new_flen(bytes))
             }
-            ArrayBytes::Optional(data, mask) => {
+            ArrayBytes::Optional(optional_bytes) => {
                 // Extract the inner data type from the optional data type
                 let inner_data_type = if let DataType::Optional(inner) = data_type {
                     inner.as_ref()
@@ -388,12 +455,15 @@ impl<'a> ArrayBytes<'a> {
                 };
 
                 // Extract subset of the inner data recursively
-                let subset_data =
-                    data.extract_array_subset(indexer, array_shape, inner_data_type)?;
+                let subset_data = optional_bytes.data().extract_array_subset(
+                    indexer,
+                    array_shape,
+                    inner_data_type,
+                )?;
 
                 // Extract subset of the mask (1 byte per element)
                 let byte_ranges = indexer.iter_contiguous_byte_ranges(array_shape, 1)?; // mask is 1 byte per element
-                let subset_mask = extract_byte_ranges_concat(mask, byte_ranges)?;
+                let subset_mask = extract_byte_ranges_concat(optional_bytes.mask(), byte_ranges)?;
 
                 Ok(subset_data.with_optional_mask(subset_mask))
             }
@@ -470,25 +540,15 @@ fn validate_bytes(
                 )),
             }
         }
-        ArrayBytes::Optional(data, mask) => {
+        ArrayBytes::Optional(optional_bytes) => {
             let DataType::Optional(inner_type) = data_type else {
                 return Err(CodecError::Other(
                     "Used optional array bytes with a non-optional data type.".to_string(),
                 ));
             };
-            // Validate the underlying data with the inner type
-            validate_bytes(data, num_elements, inner_type)?;
-            // Validate mask size (should be num_elements bytes for a bitmask)
-            let expected_mask_size = usize::try_from(num_elements).unwrap();
-            if mask.len() == expected_mask_size {
-                Ok(())
-            } else {
-                Err(CodecError::Other(format!(
-                    "Optional array mask size {} does not match number of elements {}",
-                    mask.len(),
-                    num_elements
-                )))
-            }
+            // Mask validation is already done at construction time
+            // Just validate the underlying data with the inner type
+            validate_bytes(optional_bytes.data(), num_elements, inner_type)
         }
     }
 }
@@ -674,16 +734,17 @@ fn update_array_bytes_array_subset<'a>(
             Ok(ArrayBytes::new_flen(bytes))
         }
         (
-            ArrayBytes::Optional(data, mask),
-            ArrayBytes::Optional(update_data, update_mask),
+            ArrayBytes::Optional(optional_bytes),
+            ArrayBytes::Optional(update_optional_bytes),
             data_type_size,
         ) => {
             // Update the data recursively
+            let (data, mask) = optional_bytes.into_parts();
             let data_after_update = update_array_bytes_array_subset(
                 *data,
                 shape,
                 update_subset,
-                update_data,
+                update_optional_bytes.data(),
                 data_type_size,
             )?;
 
@@ -699,12 +760,12 @@ fn update_array_bytes_array_subset<'a>(
                 )
             }
             .map_err(CodecError::from)?;
-            mask_view.copy_from_slice(update_mask)?;
+            mask_view.copy_from_slice(update_optional_bytes.mask())?;
 
-            Ok(ArrayBytes::Optional(
-                Box::new(data_after_update),
-                mask.into(),
-            ))
+            Ok(ArrayBytes::Optional(OptionalBytes::new(
+                data_after_update,
+                mask,
+            )))
         }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
@@ -776,13 +837,19 @@ pub fn update_array_bytes<'a>(
             Ok(ArrayBytes::new_flen(bytes))
         }
         (
-            ArrayBytes::Optional(data, mask),
-            ArrayBytes::Optional(update_data, update_mask),
+            ArrayBytes::Optional(optional_bytes),
+            ArrayBytes::Optional(update_optional_bytes),
             data_type_size,
         ) => {
             // Update the data recursively
-            let data_after_update =
-                update_array_bytes(*data, shape, update_indexer, update_data, data_type_size)?;
+            let (data, mask) = optional_bytes.into_parts();
+            let data_after_update = update_array_bytes(
+                *data,
+                shape,
+                update_indexer,
+                update_optional_bytes.data(),
+                data_type_size,
+            )?;
 
             // Update the mask (it's a fixed-size bool array, 1 byte per element)
             let mut mask = mask.into_owned();
@@ -792,15 +859,16 @@ pub fn update_array_bytes<'a>(
                 let start = usize::try_from(byte_range.start).unwrap();
                 let end = usize::try_from(byte_range.end).unwrap();
                 let byte_range_len = end.saturating_sub(start);
-                mask.index_mut(start..end)
-                    .copy_from_slice(&update_mask[offset..offset + byte_range_len]);
+                mask.index_mut(start..end).copy_from_slice(
+                    &update_optional_bytes.mask()[offset..offset + byte_range_len],
+                );
                 offset += byte_range_len;
             }
 
-            Ok(ArrayBytes::Optional(
-                Box::new(data_after_update),
-                mask.into(),
-            ))
+            Ok(ArrayBytes::Optional(OptionalBytes::new(
+                data_after_update,
+                mask,
+            )))
         }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
@@ -961,13 +1029,13 @@ pub(crate) fn decode_into_array_bytes_target(
 
         // Optional source → Optional target (recursive)
         (
-            ArrayBytes::Optional(data, mask_bytes),
+            ArrayBytes::Optional(optional_bytes),
             ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
         ) => {
             // Recursively decode the inner data
-            decode_into_array_bytes_target(data.as_ref(), *data_target)?;
+            decode_into_array_bytes_target(optional_bytes.data(), *data_target)?;
             // Decode the mask
-            mask_target.copy_from_slice(mask_bytes)?;
+            mask_target.copy_from_slice(optional_bytes.mask())?;
             Ok(())
         }
 

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `VariableLengthBytes`
 - Add `ArrayBytesDecodeIntoTarget`
 - Add `OptionalCodec`
+- Add `OptionalBytes`
 - Add `DataType::Optional`
 - Implement `Element` for `Option<T>` where `T: Element`
 - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`

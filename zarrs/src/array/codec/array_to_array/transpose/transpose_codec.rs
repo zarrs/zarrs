@@ -197,7 +197,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                 .map_err(|_| CodecError::Other("transpose_array invalid arguments?".to_string()))?;
                 Ok(ArrayBytes::from(bytes_transposed))
             }
-            ArrayBytes::Optional(_, _) => Err(CodecError::UnsupportedDataType(
+            ArrayBytes::Optional(..) => Err(CodecError::UnsupportedDataType(
                 decoded_representation.data_type().clone(),
                 TRANSPOSE.to_string(),
             )),
@@ -254,7 +254,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                         .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
                 Ok(ArrayBytes::from(bytes_decoded))
             }
-            ArrayBytes::Optional(_, _) => Err(CodecError::UnsupportedDataType(
+            ArrayBytes::Optional(..) => Err(CodecError::UnsupportedDataType(
                 decoded_representation.data_type().clone(),
                 TRANSPOSE.to_string(),
             )),
