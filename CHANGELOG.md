@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `[Async]ArrayPartialDecoderTraits::partial_decode_into()`
   - `ArrayToBytesCodecTraits::decode_into()`
   - `[Async]Array::retrieve_chunk[_subset]_into()`
+  - `copy_fill_value_into()`
 - **Breaking**: `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
 - **Breaking**: Mark `ArrayBytes` as non-exhaustive
 
