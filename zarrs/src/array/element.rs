@@ -4,7 +4,8 @@ use itertools::Itertools;
 use ArrayError::IncompatibleElementType as IET;
 
 use super::{
-    convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayError, DataType, RawBytesOffsets,
+    convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayBytesOffsets, ArrayError,
+    DataType,
 };
 
 mod numpy;
@@ -235,7 +236,7 @@ macro_rules! impl_element_string {
                 offsets.push(len);
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(offsets)
+                    ArrayBytesOffsets::new_unchecked(offsets)
                 };
 
                 // Concatenate bytes
@@ -297,7 +298,7 @@ macro_rules! impl_element_bytes {
                 offsets.push(len);
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(offsets)
+                    ArrayBytesOffsets::new_unchecked(offsets)
                 };
 
                 // Concatenate bytes

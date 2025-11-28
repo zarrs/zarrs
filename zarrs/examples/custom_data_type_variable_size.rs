@@ -6,8 +6,8 @@ use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3, RawBytesOffsets,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
+    ElementOwned, FillValueMetadataV3,
 };
 use zarrs_data_type::{
     DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
@@ -50,7 +50,7 @@ impl Element for CustomDataTypeVariableSizeElement {
         offsets.push(bytes.len());
         let offsets = unsafe {
             // SAFETY: Constructed correctly above
-            RawBytesOffsets::new_unchecked(offsets)
+            ArrayBytesOffsets::new_unchecked(offsets)
         };
         unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
     }

@@ -48,7 +48,7 @@ mod array_sync_sharded_readable_ext;
 use std::sync::Arc;
 
 #[allow(deprecated)]
-pub use self::array_bytes::RawBytes;
+pub use self::array_bytes::{RawBytes, RawBytesOffsets};
 
 pub use self::{
     array_builder::{
@@ -56,8 +56,8 @@ pub use self::{
         ArrayBuilderFillValue,
     },
     array_bytes::{
-        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOptional,
-        ArrayBytesRaw, ArrayBytesVariableLength, RawBytesOffsets, RawBytesOffsetsCreateError,
+        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOffsets,
+        ArrayBytesOptional, ArrayBytesRaw, ArrayBytesVariableLength, RawBytesOffsetsCreateError,
         RawBytesOffsetsOutOfBoundsError,
     },
     array_bytes_fixed_disjoint_view::{

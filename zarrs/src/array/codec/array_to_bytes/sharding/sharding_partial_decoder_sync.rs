@@ -18,8 +18,8 @@ use crate::{
             ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
             CodecOptions,
         },
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayIndices,
-        ChunkRepresentation, ChunkShape, DataType, DataTypeSize, RawBytesOffsets,
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw,
+        ArrayIndices, ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -642,5 +642,8 @@ pub(crate) fn partial_decode_variable_indexer(
         offsets.push(bytes.len());
     }
 
-    Ok(ArrayBytes::new_vlen(bytes, RawBytesOffsets::new(offsets)?)?)
+    Ok(ArrayBytes::new_vlen(
+        bytes,
+        ArrayBytesOffsets::new(offsets)?,
+    )?)
 }

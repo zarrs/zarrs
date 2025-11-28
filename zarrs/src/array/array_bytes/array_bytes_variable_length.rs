@@ -1,4 +1,4 @@
-use crate::array::{ArrayBytesRaw, RawBytesOffsets, RawBytesOffsetsOutOfBoundsError};
+use crate::array::{ArrayBytesOffsets, ArrayBytesRaw, RawBytesOffsetsOutOfBoundsError};
 
 /// Variable length array bytes composed of bytes and element bytes offsets.
 ///
@@ -9,7 +9,7 @@ use crate::array::{ArrayBytesRaw, RawBytesOffsets, RawBytesOffsetsOutOfBoundsErr
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayBytesVariableLength<'a> {
     pub(crate) bytes: ArrayBytesRaw<'a>,
-    pub(crate) offsets: RawBytesOffsets<'a>,
+    pub(crate) offsets: ArrayBytesOffsets<'a>,
 }
 
 impl<'a> ArrayBytesVariableLength<'a> {
@@ -19,7 +19,7 @@ impl<'a> ArrayBytesVariableLength<'a> {
     /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
     pub fn new(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: RawBytesOffsets<'a>,
+        offsets: ArrayBytesOffsets<'a>,
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
         let bytes = bytes.into();
         if offsets.last() <= bytes.len() {
@@ -38,7 +38,7 @@ impl<'a> ArrayBytesVariableLength<'a> {
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_unchecked(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: RawBytesOffsets<'a>,
+        offsets: ArrayBytesOffsets<'a>,
     ) -> Self {
         let bytes = bytes.into();
         debug_assert!(offsets.last() <= bytes.len());
@@ -53,7 +53,7 @@ impl<'a> ArrayBytesVariableLength<'a> {
 
     /// Get the underlying offsets.
     #[must_use]
-    pub fn offsets(&self) -> &RawBytesOffsets<'_> {
+    pub fn offsets(&self) -> &ArrayBytesOffsets<'_> {
         &self.offsets
     }
 }

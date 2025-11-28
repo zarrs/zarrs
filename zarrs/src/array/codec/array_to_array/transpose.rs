@@ -40,7 +40,7 @@ use zarrs_registry::codec::TRANSPOSE;
 
 use crate::{
     array::{
-        array_bytes::{ArrayBytesVariableLength, RawBytesOffsets},
+        array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength},
         codec::{Codec, CodecError, CodecPlugin},
         ArrayBytes, ArrayBytesRaw, DataType,
     },
@@ -126,7 +126,7 @@ fn permute<T: Copy>(v: &[T], order: &[usize]) -> Option<Vec<T>> {
 
 fn transpose_vlen<'a>(
     bytes: &ArrayBytesRaw,
-    offsets: &RawBytesOffsets,
+    offsets: &ArrayBytesOffsets,
     shape: &[usize],
     order: Vec<usize>,
 ) -> ArrayBytes<'a> {
@@ -149,7 +149,7 @@ fn transpose_vlen<'a>(
     offsets_new.push(bytes_new.len());
     let offsets_new = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        RawBytesOffsets::new_unchecked(offsets_new)
+        ArrayBytesOffsets::new_unchecked(offsets_new)
     };
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes

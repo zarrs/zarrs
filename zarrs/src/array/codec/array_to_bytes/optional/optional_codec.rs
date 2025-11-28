@@ -15,7 +15,8 @@ use crate::array::{
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataType, RawBytesOffsets,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+    DataType,
 };
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
@@ -92,7 +93,7 @@ impl OptionalCodec {
                     }
                 }
 
-                let sparse_offsets = unsafe { RawBytesOffsets::new_unchecked(sparse_offsets) };
+                let sparse_offsets = unsafe { ArrayBytesOffsets::new_unchecked(sparse_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(sparse_bytes, sparse_offsets) })
             }
             ArrayBytes::Optional(optional_bytes) => {
@@ -181,7 +182,7 @@ impl OptionalCodec {
                     dense_offsets.push(dense_bytes.len());
                 }
 
-                let dense_offsets = unsafe { RawBytesOffsets::new_unchecked(dense_offsets) };
+                let dense_offsets = unsafe { ArrayBytesOffsets::new_unchecked(dense_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(dense_bytes, dense_offsets) })
             }
             ArrayBytes::Optional(sparse_optional_bytes) => {

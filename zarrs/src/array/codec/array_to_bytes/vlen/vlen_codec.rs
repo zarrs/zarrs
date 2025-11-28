@@ -10,8 +10,8 @@ use crate::{
             BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
-        transmute_to_bytes_vec, ArrayBytes, ArrayBytesRaw, BytesRepresentation,
-        ChunkRepresentation, CodecChain, DataType, DataTypeSize, Endianness, RawBytesOffsets,
+        transmute_to_bytes_vec, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation,
+        ChunkRepresentation, CodecChain, DataType, DataTypeSize, Endianness,
     },
     plugin::PluginCreateError,
 };
@@ -314,7 +314,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.index_location,
             options,
         )?;
-        let offsets = RawBytesOffsets::new(offsets)?;
+        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }

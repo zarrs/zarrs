@@ -19,7 +19,7 @@ use super::{
 };
 
 mod array_bytes_offsets;
-pub use array_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
+pub use array_bytes_offsets::{ArrayBytesOffsets, RawBytesOffsetsCreateError};
 
 mod array_bytes_raw;
 pub use array_bytes_raw::ArrayBytesRaw;
@@ -27,6 +27,10 @@ pub use array_bytes_raw::ArrayBytesRaw;
 /// Deprecated alias for [`ArrayBytesRaw`].
 #[deprecated(since = "0.23.0", note = "Renamed to ArrayBytesRaw")]
 pub type RawBytes<'a> = ArrayBytesRaw<'a>;
+
+/// Deprecated alias for [`ArrayBytesOffsets`].
+#[deprecated(since = "0.23.0", note = "Renamed to ArrayBytesOffsets")]
+pub type RawBytesOffsets<'a> = ArrayBytesOffsets<'a>;
 
 mod array_bytes_variable_length;
 pub use array_bytes_variable_length::ArrayBytesVariableLength;
@@ -81,7 +85,7 @@ impl<'a> ArrayBytes<'a> {
     /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
     pub fn new_vlen(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: RawBytesOffsets<'a>,
+        offsets: ArrayBytesOffsets<'a>,
     ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
         ArrayBytesVariableLength::new(bytes, offsets).map(Self::Variable)
     }
@@ -92,7 +96,7 @@ impl<'a> ArrayBytes<'a> {
     /// The last offset must be less than or equal to the length of the bytes.
     pub unsafe fn new_vlen_unchecked(
         bytes: impl Into<ArrayBytesRaw<'a>>,
-        offsets: RawBytesOffsets<'a>,
+        offsets: ArrayBytesOffsets<'a>,
     ) -> Self {
         Self::Variable(unsafe { ArrayBytesVariableLength::new_unchecked(bytes, offsets) })
     }
@@ -151,7 +155,7 @@ impl<'a> ArrayBytes<'a> {
                 let num_elements = usize::try_from(num_elements).unwrap();
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(
+                    ArrayBytesOffsets::new_unchecked(
                         (0..=num_elements)
                             .map(|i| i * fill_value.size())
                             .collect::<Vec<_>>(),
@@ -181,7 +185,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
-    pub fn into_variable(self) -> Result<(ArrayBytesRaw<'a>, RawBytesOffsets<'a>), CodecError> {
+    pub fn into_variable(self) -> Result<(ArrayBytesRaw<'a>, ArrayBytesOffsets<'a>), CodecError> {
         match self {
             Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
             Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => Ok((bytes, offsets)),
@@ -226,7 +230,7 @@ impl<'a> ArrayBytes<'a> {
 
     /// Return the byte offsets for variable sized bytes. Returns [`None`] for fixed size bytes.
     #[must_use]
-    pub fn offsets(&self) -> Option<&RawBytesOffsets<'a>> {
+    pub fn offsets(&self) -> Option<&ArrayBytesOffsets<'a>> {
         match self {
             Self::Fixed(..) => None,
             Self::Variable(ArrayBytesVariableLength { offsets, .. }) => Some(offsets),
@@ -321,7 +325,7 @@ impl<'a> ArrayBytes<'a> {
                 ss_offsets.push(ss_bytes.len());
                 let ss_offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(ss_offsets)
+                    ArrayBytesOffsets::new_unchecked(ss_offsets)
                 };
                 let array_bytes = unsafe {
                     // SAFETY: The last offset is equal to the length of the bytes
@@ -377,7 +381,7 @@ fn validate_bytes_flen(
 /// Validate variable length array bytes for an array with `num_elements`.
 fn validate_bytes_vlen(
     bytes: &ArrayBytesRaw,
-    offsets: &RawBytesOffsets,
+    offsets: &ArrayBytesOffsets,
     num_elements: u64,
 ) -> Result<(), CodecError> {
     if offsets.len() as u64 != num_elements + 1 {
@@ -449,10 +453,10 @@ fn validate_bytes(
 
 fn update_bytes_vlen_array_subset<'a>(
     input_bytes: &ArrayBytesRaw,
-    input_offsets: &RawBytesOffsets,
+    input_offsets: &ArrayBytesOffsets,
     input_shape: &[u64],
     update_bytes: &ArrayBytesRaw,
-    update_offsets: &RawBytesOffsets,
+    update_offsets: &ArrayBytesOffsets,
     update_subset: &ArraySubset,
 ) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
     if !update_subset.inbounds_shape(input_shape) {
@@ -509,7 +513,7 @@ fn update_bytes_vlen_array_subset<'a>(
     offsets_new.push(bytes_new.len());
     let offsets_new = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        RawBytesOffsets::new_unchecked(offsets_new)
+        ArrayBytesOffsets::new_unchecked(offsets_new)
     };
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
@@ -520,10 +524,10 @@ fn update_bytes_vlen_array_subset<'a>(
 
 fn update_bytes_vlen_indexer<'a>(
     input_bytes: &ArrayBytesRaw,
-    input_offsets: &RawBytesOffsets,
+    input_offsets: &ArrayBytesOffsets,
     input_shape: &[u64],
     update_bytes: &ArrayBytesRaw,
-    update_offsets: &RawBytesOffsets,
+    update_offsets: &ArrayBytesOffsets,
     update_indexer: &dyn Indexer,
 ) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
     // Get the size of the new bytes
@@ -569,7 +573,7 @@ fn update_bytes_vlen_indexer<'a>(
     offsets_new.push(bytes_new.len());
     let offsets_new = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        RawBytesOffsets::new_unchecked(offsets_new)
+        ArrayBytesOffsets::new_unchecked(offsets_new)
     };
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
@@ -830,7 +834,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
     }));
     let offsets = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        RawBytesOffsets::new_unchecked(offsets)
+        ArrayBytesOffsets::new_unchecked(offsets)
     };
 
     // Write bytes
@@ -885,7 +889,7 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     region_offsets.push(region_bytes.len());
     let region_offsets = unsafe {
         // SAFETY: The offsets are monotonically increasing.
-        RawBytesOffsets::new_unchecked(region_offsets)
+        ArrayBytesOffsets::new_unchecked(region_offsets)
     };
     let array_bytes = unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
@@ -970,7 +974,7 @@ impl<'a> From<ArrayBytesRaw<'a>> for ArrayBytes<'a> {
 //             },
 //             Self::Variable(bytes, offsets) => {
 //                 let bytes: ArrayBytesRaw<'b> = bytes.to_vec().into();
-//                 let offsets: RawBytesOffsets<'b> = offsets.to_vec().into();
+//                 let offsets: ArrayBytesOffsets<'b> = offsets.to_vec().into();
 //                 ArrayBytes::new_vlen(bytes, offsets)
 //             }
 //         }

@@ -7,9 +7,9 @@ use thiserror::Error;
 ///
 /// These must be monotonically increasing. See [`ArrayBytes`](crate::array::ArrayBytes).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RawBytesOffsets<'a>(Cow<'a, [usize]>);
+pub struct ArrayBytesOffsets<'a>(Cow<'a, [usize]>);
 
-impl Deref for RawBytesOffsets<'_> {
+impl Deref for ArrayBytesOffsets<'_> {
     type Target = [usize];
 
     fn deref(&self) -> &Self::Target {
@@ -17,7 +17,7 @@ impl Deref for RawBytesOffsets<'_> {
     }
 }
 
-/// An error creating [`RawBytesOffsets`].
+/// An error creating [`ArrayBytesOffsets`].
 #[derive(Clone, Debug, Display, Error)]
 pub enum RawBytesOffsetsCreateError {
     /// The offsets length must be greater than zero.
@@ -28,8 +28,8 @@ pub enum RawBytesOffsetsCreateError {
     NotMonotonicallyIncreasing,
 }
 
-impl<'a> RawBytesOffsets<'a> {
-    /// Creates a new `RawBytesOffsets`.
+impl<'a> ArrayBytesOffsets<'a> {
+    /// Creates a new `ArrayBytesOffsets`.
     ///
     /// # Errors
     /// Returns an error if the offsets are not monotonically increasing.
@@ -44,7 +44,7 @@ impl<'a> RawBytesOffsets<'a> {
         }
     }
 
-    /// Creates a new `RawBytesOffsets` without checking the offsets.
+    /// Creates a new `ArrayBytesOffsets` without checking the offsets.
     ///
     /// # Safety
     /// The offsets must be monotonically increasing.
@@ -58,8 +58,8 @@ impl<'a> RawBytesOffsets<'a> {
 
     /// Clones the offsets if not already owned.
     #[must_use]
-    pub fn into_owned(self) -> RawBytesOffsets<'static> {
-        RawBytesOffsets(self.0.into_owned().into())
+    pub fn into_owned(self) -> ArrayBytesOffsets<'static> {
+        ArrayBytesOffsets(self.0.into_owned().into())
     }
 
     /// Returns the last offset.
@@ -72,7 +72,7 @@ impl<'a> RawBytesOffsets<'a> {
     }
 }
 
-impl<'a> TryFrom<Cow<'a, [usize]>> for RawBytesOffsets<'a> {
+impl<'a> TryFrom<Cow<'a, [usize]>> for ArrayBytesOffsets<'a> {
     type Error = RawBytesOffsetsCreateError;
 
     fn try_from(value: Cow<'a, [usize]>) -> Result<Self, Self::Error> {
@@ -80,7 +80,7 @@ impl<'a> TryFrom<Cow<'a, [usize]>> for RawBytesOffsets<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a [usize]> for RawBytesOffsets<'a> {
+impl<'a> TryFrom<&'a [usize]> for ArrayBytesOffsets<'a> {
     type Error = RawBytesOffsetsCreateError;
 
     fn try_from(value: &'a [usize]) -> Result<Self, Self::Error> {
@@ -88,7 +88,7 @@ impl<'a> TryFrom<&'a [usize]> for RawBytesOffsets<'a> {
     }
 }
 
-impl<'a, const N: usize> TryFrom<&'a [usize; N]> for RawBytesOffsets<'a> {
+impl<'a, const N: usize> TryFrom<&'a [usize; N]> for ArrayBytesOffsets<'a> {
     type Error = RawBytesOffsetsCreateError;
 
     fn try_from(value: &'a [usize; N]) -> Result<Self, Self::Error> {
@@ -96,7 +96,7 @@ impl<'a, const N: usize> TryFrom<&'a [usize; N]> for RawBytesOffsets<'a> {
     }
 }
 
-impl TryFrom<Vec<usize>> for RawBytesOffsets<'_> {
+impl TryFrom<Vec<usize>> for ArrayBytesOffsets<'_> {
     type Error = RawBytesOffsetsCreateError;
 
     fn try_from(value: Vec<usize>) -> Result<Self, Self::Error> {
@@ -110,19 +110,19 @@ mod tests {
 
     #[test]
     fn raw_bytes_offsets() {
-        let offsets = RawBytesOffsets::new(vec![0, 1, 2, 3]).unwrap();
+        let offsets = ArrayBytesOffsets::new(vec![0, 1, 2, 3]).unwrap();
         assert_eq!(&*offsets, &[0, 1, 2, 3]);
-        assert!(RawBytesOffsets::new(vec![]).is_err());
-        assert!(RawBytesOffsets::new(vec![0]).is_ok());
-        assert!(RawBytesOffsets::new(vec![10]).is_ok()); // nonsense, but not invalid
-        assert!(RawBytesOffsets::new(vec![0, 1, 1]).is_ok());
-        assert!(RawBytesOffsets::new(vec![0, 1, 0]).is_err());
-        assert!(RawBytesOffsets::try_from(vec![0, 1, 2]).is_ok());
-        assert!(RawBytesOffsets::try_from(vec![0, 1, 0]).is_err());
-        assert!(RawBytesOffsets::try_from([0, 1, 2].as_slice()).is_ok());
-        assert!(RawBytesOffsets::try_from([0, 1, 0].as_slice()).is_err());
-        assert!(RawBytesOffsets::try_from(&[0, 1, 2]).is_ok());
-        assert!(RawBytesOffsets::try_from(&[0, 1, 0]).is_err());
-        assert!(RawBytesOffsets::try_from(Cow::Owned(vec![0, 1, 0])).is_err());
+        assert!(ArrayBytesOffsets::new(vec![]).is_err());
+        assert!(ArrayBytesOffsets::new(vec![0]).is_ok());
+        assert!(ArrayBytesOffsets::new(vec![10]).is_ok()); // nonsense, but not invalid
+        assert!(ArrayBytesOffsets::new(vec![0, 1, 1]).is_ok());
+        assert!(ArrayBytesOffsets::new(vec![0, 1, 0]).is_err());
+        assert!(ArrayBytesOffsets::try_from(vec![0, 1, 2]).is_ok());
+        assert!(ArrayBytesOffsets::try_from(vec![0, 1, 0]).is_err());
+        assert!(ArrayBytesOffsets::try_from([0, 1, 2].as_slice()).is_ok());
+        assert!(ArrayBytesOffsets::try_from([0, 1, 0].as_slice()).is_err());
+        assert!(ArrayBytesOffsets::try_from(&[0, 1, 2]).is_ok());
+        assert!(ArrayBytesOffsets::try_from(&[0, 1, 0]).is_err());
+        assert!(ArrayBytesOffsets::try_from(Cow::Owned(vec![0, 1, 0])).is_err());
     }
 }

@@ -9,8 +9,8 @@ use crate::array::{
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
-    RawBytesOffsets,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+    DataTypeSize,
 };
 
 #[cfg(feature = "async")]
@@ -114,7 +114,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let num_elements = decoded_representation.num_elements_usize();
         let (bytes, offsets) = super::get_interleaved_bytes_and_offsets(num_elements, &bytes)?;
-        let offsets = RawBytesOffsets::new(offsets)?;
+        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }
