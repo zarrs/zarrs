@@ -5,13 +5,13 @@ use crate::array::{ArrayBytes, RawBytes};
 /// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
 /// The mask length is validated at construction to ensure it matches the number of elements.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OptionalBytes<'a> {
+pub struct ArrayBytesOptional<'a> {
     data: Box<ArrayBytes<'a>>,
     mask: RawBytes<'a>,
 }
 
-impl<'a> OptionalBytes<'a> {
-    /// Create a new `OptionalBytes` with validation.
+impl<'a> ArrayBytesOptional<'a> {
+    /// Create a new `ArrayBytesOptional` with validation.
     pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<RawBytes<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();
@@ -43,10 +43,10 @@ impl<'a> OptionalBytes<'a> {
         (self.data, self.mask)
     }
 
-    /// Convert into owned [`OptionalBytes<'static>`].
+    /// Convert into owned [`ArrayBytesOptional<'static>`].
     #[must_use]
-    pub fn into_owned(self) -> OptionalBytes<'static> {
-        OptionalBytes {
+    pub fn into_owned(self) -> ArrayBytesOptional<'static> {
+        ArrayBytesOptional {
             data: Box::new((*self.data).into_owned()),
             mask: self.mask.into_owned().into(),
         }

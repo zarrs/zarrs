@@ -28,7 +28,7 @@ mod array_bytes_variable_length;
 pub use array_bytes_variable_length::VariableLengthBytes;
 
 mod array_bytes_optional;
-pub use array_bytes_optional::OptionalBytes;
+pub use array_bytes_optional::ArrayBytesOptional;
 
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,7 +44,7 @@ pub enum ArrayBytes<'a> {
     ///
     /// The data can be either Fixed or Variable length.
     /// The mask is validated at construction to have 1 byte per element.
-    Optional(OptionalBytes<'a>),
+    Optional(ArrayBytesOptional<'a>),
 }
 
 /// An error raised if variable length array bytes offsets are out of bounds.
@@ -98,7 +98,7 @@ impl<'a> ArrayBytes<'a> {
     /// This creates an `Optional` variant that contains the current array bytes and the provided mask.
     #[must_use]
     pub fn with_optional_mask(self, mask: impl Into<RawBytes<'a>>) -> Self {
-        Self::Optional(OptionalBytes::new(self, mask))
+        Self::Optional(ArrayBytesOptional::new(self, mask))
     }
 
     /// Create a new [`ArrayBytes`] with `num_elements` composed entirely of the `fill_value`.
@@ -186,11 +186,22 @@ impl<'a> ArrayBytes<'a> {
         }
     }
 
-    /// Convert the array bytes into [`OptionalBytes`].
+    /// Convert the array bytes into optional data and validity mask.
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional(self) -> Result<OptionalBytes<'a>, CodecError> {
+    pub fn into_optional(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
+        match self {
+            Self::Optional(optional_bytes) => Ok(optional_bytes),
+            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
+        }
+    }
+
+    /// Convert the array bytes into [`ArrayBytesOptional`].
+    ///
+    /// # Errors
+    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
+    pub fn into_optional_bytes(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
         match self {
             Self::Optional(optional_bytes) => Ok(optional_bytes),
             Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
@@ -639,7 +650,7 @@ fn update_array_bytes_array_subset<'a>(
             .map_err(CodecError::from)?;
             mask_view.copy_from_slice(update_optional_bytes.mask())?;
 
-            Ok(ArrayBytes::Optional(OptionalBytes::new(
+            Ok(ArrayBytes::Optional(ArrayBytesOptional::new(
                 data_after_update,
                 mask,
             )))
@@ -727,7 +738,7 @@ fn update_array_bytes_indexer<'a>(
                 offset += byte_range_len;
             }
 
-            Ok(ArrayBytes::Optional(OptionalBytes::new(
+            Ok(ArrayBytes::Optional(ArrayBytesOptional::new(
                 data_after_update,
                 mask,
             )))

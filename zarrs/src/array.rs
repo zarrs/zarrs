@@ -53,7 +53,7 @@ pub use self::{
         ArrayBuilderFillValue,
     },
     array_bytes::{
-        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, OptionalBytes,
+        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOptional,
         RawBytes, RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
         VariableLengthBytes,
     },
