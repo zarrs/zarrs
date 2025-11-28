@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::IndexMut};
+use std::ops::IndexMut;
 
 use derive_more::derive::Display;
 use itertools::Itertools;
@@ -18,127 +18,17 @@ use super::{
     ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
 };
 
-mod raw_bytes_offsets;
-pub use raw_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
+mod array_bytes_offsets;
+pub use array_bytes_offsets::{RawBytesOffsets, RawBytesOffsetsCreateError};
 
-/// Array element bytes.
-///
-/// These can represent:
-/// - [`ArrayBytes::Fixed`]: fixed length elements of an array in C-contiguous order,
-/// - [`ArrayBytes::Variable`]: variable length elements of an array in C-contiguous order with padding permitted,
-/// - Encoded array bytes after an array to bytes or bytes to bytes codecs.
-pub type RawBytes<'a> = Cow<'a, [u8]>;
+mod array_bytes_raw;
+pub use array_bytes_raw::RawBytes;
 
-/// Variable length array bytes composed of bytes and element bytes offsets.
-///
-/// The bytes and offsets are modeled on the [Apache Arrow Variable-size Binary Layout](https://arrow.apache.org/docs/format/Columnar.html#variable-size-binary-layout).
-/// - The offsets buffer contains length + 1 ~~signed integers (either 32-bit or 64-bit, depending on the data type)~~ usize integers.
-/// - Offsets must be monotonically increasing, that is `offsets[j+1] >= offsets[j]` for `0 <= j < length`, even for null slots. Thus, the bytes represent C-contiguous elements with padding permitted.
-/// - The final offset must be less than or equal to the length of the bytes buffer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VariableLengthBytes<'a> {
-    pub(crate) bytes: RawBytes<'a>,
-    pub(crate) offsets: RawBytesOffsets<'a>,
-}
+mod array_bytes_variable_length;
+pub use array_bytes_variable_length::VariableLengthBytes;
 
-impl<'a> VariableLengthBytes<'a> {
-    /// Create a new variable length bytes from `bytes` and `offsets`.
-    ///
-    /// # Errors
-    /// Returns a [`RawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
-    pub fn new(
-        bytes: impl Into<RawBytes<'a>>,
-        offsets: RawBytesOffsets<'a>,
-    ) -> Result<Self, RawBytesOffsetsOutOfBoundsError> {
-        let bytes = bytes.into();
-        if offsets.last() <= bytes.len() {
-            Ok(VariableLengthBytes { bytes, offsets })
-        } else {
-            Err(RawBytesOffsetsOutOfBoundsError {
-                offset: offsets.last(),
-                len: bytes.len(),
-            })
-        }
-    }
-
-    /// Create a new variable length bytes from `bytes` and `offsets`.
-    ///
-    /// # Safety
-    /// The last offset must be less than or equal to the length of the bytes.
-    pub unsafe fn new_unchecked(
-        bytes: impl Into<RawBytes<'a>>,
-        offsets: RawBytesOffsets<'a>,
-    ) -> Self {
-        let bytes = bytes.into();
-        debug_assert!(offsets.last() <= bytes.len());
-        Self { bytes, offsets }
-    }
-
-    /// Get the underlying bytes.
-    #[must_use]
-    pub fn bytes(&self) -> &RawBytes<'_> {
-        &self.bytes
-    }
-
-    /// Get the underlying offsets.
-    #[must_use]
-    pub fn offsets(&self) -> &RawBytesOffsets<'_> {
-        &self.offsets
-    }
-}
-
-/// Optional array bytes composed of data and a validity mask.
-///
-/// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
-/// The mask length is validated at construction to ensure it matches the number of elements.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OptionalBytes<'a> {
-    data: Box<ArrayBytes<'a>>,
-    mask: RawBytes<'a>,
-}
-
-impl<'a> OptionalBytes<'a> {
-    /// Create a new `OptionalBytes` with validation.
-    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<RawBytes<'a>>) -> Self {
-        let data = data.into();
-        let mask = mask.into();
-
-        Self { data, mask }
-    }
-
-    /// Get the underlying data.
-    #[must_use]
-    pub fn data(&self) -> &ArrayBytes<'a> {
-        &self.data
-    }
-
-    /// Get the validity mask.
-    #[must_use]
-    pub fn mask(&self) -> &RawBytes<'a> {
-        &self.mask
-    }
-
-    /// Get the number of elements.
-    #[must_use]
-    pub fn num_elements(&self) -> usize {
-        self.mask.len()
-    }
-
-    /// Consume self and return the data and mask.
-    #[must_use]
-    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, RawBytes<'a>) {
-        (self.data, self.mask)
-    }
-
-    /// Convert into owned [`OptionalBytes<'static>`].
-    #[must_use]
-    pub fn into_owned(self) -> OptionalBytes<'static> {
-        OptionalBytes {
-            data: Box::new((*self.data).into_owned()),
-            mask: self.mask.into_owned().into(),
-        }
-    }
-}
+mod array_bytes_optional;
+pub use array_bytes_optional::OptionalBytes;
 
 /// Fixed or variable length array bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
