@@ -505,18 +505,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 )
                 .map_err(ArrayError::CodecError)
         } else {
-            // For fill value, we need to extract the fixed view from the target
-            if let Some(mask) = output_target.mask {
-                // For optional data with no chunk, fill with None (mask all zeros)
-                mask.fill(&[0])
-                    .map_err(|e| ArrayError::CodecError(e.into()))?;
-                // Data can be anything since mask is 0, but fill it anyway
-                copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
-                    .map_err(ArrayError::CodecError)
-            } else {
-                copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
-                    .map_err(ArrayError::CodecError)
-            }
+            copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
+                .map_err(ArrayError::CodecError)
         }
     }
 
@@ -731,9 +721,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 self.retrieve_chunk_subset_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    ArrayBytesDecodeIntoTarget {
-                        data: &mut data_view,
-                        mask: mask_view.as_mut(),
+                    match mask_view.as_mut() {
+                        Some(mask) => ArrayBytesDecodeIntoTarget::Optional(
+                            Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
+                            mask,
+                        ),
+                        None => ArrayBytesDecodeIntoTarget::Fixed(&mut data_view),
                     },
                     options,
                 )?;

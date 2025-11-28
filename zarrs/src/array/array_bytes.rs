@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    codec::{CodecError, InvalidBytesLengthError},
+    codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
     ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
 };
 
@@ -937,17 +937,11 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
 pub fn copy_fill_value_into(
     data_type: &DataType,
     fill_value: &FillValue,
-    output_view: &mut ArrayBytesFixedDisjointView,
+    output_target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
-    if let ArrayBytes::Fixed(fill_value_bytes) =
-        ArrayBytes::new_fill_value(data_type, output_view.num_elements(), fill_value)?
-    {
-        output_view.copy_from_slice(&fill_value_bytes)?;
-        Ok(())
-    } else {
-        // TODO: Variable length data type support?
-        Err(CodecError::ExpectedFixedLengthBytes)
-    }
+    let num_elements = output_target.num_elements();
+    let fill_value_bytes = ArrayBytes::new_fill_value(data_type, num_elements, fill_value)?;
+    decode_into_array_bytes_target(&fill_value_bytes, output_target)
 }
 
 /// Helper function to decode `ArrayBytes` into a target, handling mask and data separately.
@@ -958,31 +952,35 @@ pub(crate) fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
     target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
-    // Handle data based on whether it's fixed or variable length
-    match &bytes {
-        ArrayBytes::Fixed(data_bytes) => {
-            target.data.copy_from_slice(data_bytes)?;
+    use crate::array::codec::ArrayBytesDecodeIntoTarget;
+
+    match (bytes, target) {
+        // Fixed source → Fixed target
+        (ArrayBytes::Fixed(data_bytes), ArrayBytesDecodeIntoTarget::Fixed(data)) => {
+            data.copy_from_slice(data_bytes)?;
             Ok(())
         }
-        ArrayBytes::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
-        ArrayBytes::Optional(data, mask_bytes) => {
-            // Decode the data into the target
-            match data.as_ref() {
-                ArrayBytes::Fixed(data_bytes) => {
-                    target.data.copy_from_slice(data_bytes)?;
-                }
-                ArrayBytes::Variable(..) | ArrayBytes::Optional(..) => {
-                    return Err(CodecError::ExpectedFixedLengthBytes);
-                }
-            }
 
-            // If a mask target is provided, decode the mask
-            if let Some(mask_target) = target.mask {
-                mask_target.copy_from_slice(mask_bytes)?;
-            }
-
+        // Optional source → Optional target (recursive)
+        (
+            ArrayBytes::Optional(data, mask_bytes),
+            ArrayBytesDecodeIntoTarget::Optional(data_target, mask_target),
+        ) => {
+            // Recursively decode the inner data
+            decode_into_array_bytes_target(data.as_ref(), *data_target)?;
+            // Decode the mask
+            mask_target.copy_from_slice(mask_bytes)?;
             Ok(())
         }
+
+        // Type mismatches
+        (ArrayBytes::Variable(..), _) => Err(CodecError::ExpectedFixedLengthBytes),
+        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(..)) => Err(CodecError::Other(
+            "Cannot decode non-optional data into optional target".to_string(),
+        )),
+        (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => Err(CodecError::Other(
+            "Cannot decode optional data into non-optional target".to_string(),
+        )),
     }
 }
 

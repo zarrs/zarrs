@@ -122,36 +122,36 @@ use super::{
 
 /// A target for decoding array bytes into a preallocated output view.
 ///
-/// This struct contains:
-/// - A data view (required) for the array elements
-/// - An optional mask view for optional data types
+/// This enum mirrors the structure of [`ArrayBytes`] to support decoding fixed-length
+/// and optional data types into preallocated views.
 #[non_exhaustive]
-pub struct ArrayBytesDecodeIntoTarget<'a> {
-    /// Data view for array elements.
-    /// For non-optional types, this is the only view needed.
-    /// For optional types, this holds the dense data (including placeholders for None values).
-    pub data: &'a mut ArrayBytesFixedDisjointView<'a>,
+pub enum ArrayBytesDecodeIntoTarget<'a> {
+    /// Target for non-optional (fixed-length) data.
+    Fixed(&'a mut ArrayBytesFixedDisjointView<'a>),
 
-    /// Optional mask view for optional data types.
-    /// If present, contains one byte per element (0 = None, non-zero = Some).
-    /// Should be `None` for non-optional data types.
-    pub mask: Option<&'a mut ArrayBytesFixedDisjointView<'a>>,
+    /// Target for optional data (nested data target + mask view).
+    ///
+    /// The mask is always fixed-length (one byte per element).
+    Optional(
+        Box<ArrayBytesDecodeIntoTarget<'a>>,
+        &'a mut ArrayBytesFixedDisjointView<'a>,
+    ),
 }
 
 impl ArrayBytesDecodeIntoTarget<'_> {
     /// Return the number of elements in the target.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        self.data.num_elements()
+        match self {
+            Self::Fixed(data) => data.num_elements(),
+            Self::Optional(data, _) => data.num_elements(),
+        }
     }
 }
 
 impl<'a> From<&'a mut ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
     fn from(view: &'a mut ArrayBytesFixedDisjointView<'a>) -> Self {
-        Self {
-            data: view,
-            mask: None,
-        }
+        Self::Fixed(view)
     }
 }
 
@@ -1322,15 +1322,6 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        // Validate that mask and data have the same number of elements if both present
-        if let Some(mask) = &output_target.mask {
-            if mask.num_elements() != output_target.data.num_elements() {
-                return Err(CodecError::Other(
-                    "Mask and data views must have the same number of elements".to_string(),
-                ));
-            }
-        }
-
         let num_elements = output_target.num_elements();
         if decoded_representation.num_elements() != num_elements {
             return Err(InvalidNumberOfElementsError::new(
