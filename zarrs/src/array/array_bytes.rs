@@ -950,10 +950,8 @@ pub fn copy_fill_value_into(
 /// properly handling optional data types.
 pub(crate) fn decode_into_array_bytes_target(
     bytes: &ArrayBytes,
-    target: crate::array::codec::ArrayBytesDecodeIntoTarget<'_>,
+    target: ArrayBytesDecodeIntoTarget<'_>,
 ) -> Result<(), CodecError> {
-    use crate::array::codec::ArrayBytesDecodeIntoTarget;
-
     match (bytes, target) {
         // Fixed source → Fixed target
         (ArrayBytes::Fixed(data_bytes), ArrayBytesDecodeIntoTarget::Fixed(data)) => {
