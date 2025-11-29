@@ -5,10 +5,7 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{
-    array::{unravel_index, ArrayIndices},
-    array_subset::ArraySubset,
-};
+use crate::{array_subset::ArraySubset, unravel_index, ArrayIndices};
 
 /// An iterator over the indices in an array subset.
 ///

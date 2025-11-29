@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename `RawBytes` to `ArrayBytesRaw` and add deprecated alias
 - **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets` and add deprecated alias
 - **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
+- Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
 
 ### Removed
 

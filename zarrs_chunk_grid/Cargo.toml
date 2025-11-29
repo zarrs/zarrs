@@ -1,0 +1,29 @@
+[package]
+name = "zarrs_chunk_grid"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2021"
+rust-version = "1.77"
+description = "The chunk grid API for the zarrs crate"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_chunk_grid"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_chunk_grid"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs"]
+categories = ["encoding"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+half.workspace = true
+thiserror.workspace = true
+derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
+zarrs_metadata.workspace = true
+zarrs_plugin.workspace = true
+inventory.workspace = true
+itertools = "0.14.0"
+rayon = "1.10.0"

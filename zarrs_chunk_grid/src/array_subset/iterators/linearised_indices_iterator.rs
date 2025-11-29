@@ -2,10 +2,10 @@ use std::iter::FusedIterator;
 
 use super::IndicesIterator;
 use crate::{
-    array::{ravel_indices, ArrayShape},
     array_subset::{
         iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
+    ravel_indices, ArrayShape,
 };
 
 /// An iterator over the linearised indices in an array subset.

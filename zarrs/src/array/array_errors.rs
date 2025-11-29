@@ -5,7 +5,7 @@ use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndi
 use crate::{
     array::data_type::{DataTypeFillValueError, DataTypeFillValueMetadataError},
     array_subset::{
-        ArraySubset, IncompatibleDimensionalityError, IncompatibleOffsetError,
+        ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, IncompatibleOffsetError,
         IncompatibleStartEndIndicesError,
     },
     node::NodePathError,
@@ -135,6 +135,16 @@ pub enum ArrayError {
     /// Any other error.
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<ArraySubsetError> for ArrayError {
+    fn from(arr_subset_err: ArraySubsetError) -> Self {
+        match arr_subset_err {
+            ArraySubsetError::IncompatibleDimensionalityError(v) => v.into(),
+            ArraySubsetError::IncompatibleStartEndIndicesError(v) => v.into(),
+            ArraySubsetError::IncompatibleOffset(v) => v.into(),
+        }
+    }
 }
 
 /// An unsupported additional field error.

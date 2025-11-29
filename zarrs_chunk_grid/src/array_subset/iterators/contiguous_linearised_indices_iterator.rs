@@ -1,13 +1,12 @@
 use std::iter::FusedIterator;
 
 use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIterator};
-use crate::metadata::ArrayShape;
 use crate::{
-    array::ravel_indices,
     array_subset::{
         iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator, ArraySubset,
         IncompatibleIndexerError,
     },
+    ravel_indices, ArrayShape,
 };
 
 /// Iterates over contiguous linearised element indices in an array subset.

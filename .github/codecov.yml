@@ -24,6 +24,10 @@ component_management:
       name: zarrs
       paths:
         - zarrs/**
+    - component_id: zarrs_chunk_grid
+      name: zarrs_chunk_grid
+      paths:
+        - zarrs_chunk_grid/**
     - component_id: zarrs_data_type
       name: zarrs_data_type
       paths:

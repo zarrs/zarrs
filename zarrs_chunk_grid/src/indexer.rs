@@ -2,12 +2,12 @@
 
 use thiserror::Error;
 
-use crate::metadata::ArrayShape;
-use crate::storage::{MaybeSend, MaybeSync};
+use crate::ArrayShape;
 use crate::{
-    array::{ravel_indices, ArrayIndices},
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
+    ravel_indices, ArrayIndices,
 };
+use crate::{MaybeSend, MaybeSync};
 
 /// An incompatible indexer and array shape error.
 ///
