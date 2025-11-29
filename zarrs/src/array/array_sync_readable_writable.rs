@@ -158,6 +158,36 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         self.store_array_subset_ndarray_opt(subset_start, subset_array, &CodecOptions::default())
     }
 
+    /// Retrieve the chunk at `chunk_indices`, compact it if possible, and store the compacted chunk back.
+    ///
+    /// Compaction removes any extraneous data from the encoded chunk representation.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if
+    ///  - there is a codec error, or
+    ///  - an underlying store error.
+    pub fn compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<bool, ArrayError> {
+        let chunk_bytes = self.retrieve_encoded_chunk(chunk_indices)?;
+        if let Some(chunk_bytes) = chunk_bytes {
+            if let Some(compacted_bytes) = self.codecs.compact(
+                chunk_bytes.into(),
+                &self.chunk_array_representation(chunk_indices)?,
+                options,
+            )? {
+                self.store_chunk_opt(chunk_indices, compacted_bytes, options)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
     /////////////////////////////////////////////////////////////////////////////
     // Advanced methods
     /////////////////////////////////////////////////////////////////////////////

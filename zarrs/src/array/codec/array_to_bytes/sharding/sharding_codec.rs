@@ -346,6 +346,113 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         }
     }
 
+    fn compact<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        // Calculate chunks per shard
+        let chunks_per_shard = calculate_chunks_per_shard(
+            decoded_representation.shape(),
+            self.chunk_shape.as_slice(),
+        )?;
+
+        // Decode the shard index
+        let shard_index = self.decode_index(&bytes, chunks_per_shard.as_slice(), options)?;
+
+        // Get index metadata
+        let index_array_representation =
+            sharding_index_decoded_representation(chunks_per_shard.as_slice());
+        let index_encoded_size =
+            compute_index_encoded_size(self.index_codecs.as_ref(), &index_array_representation)?;
+
+        // Check if compaction is needed (no-op optimization)
+        let mut needs_compaction = false;
+        let mut chunks_size = 0;
+        for chunk in shard_index.chunks_exact(2) {
+            let offset = chunk[0];
+            let size = chunk[1];
+
+            if offset != u64::MAX && size != u64::MAX {
+                chunks_size += size;
+            }
+        }
+        if chunks_size != bytes.len() as u64 - index_encoded_size {
+            needs_compaction = true;
+        }
+
+        if !needs_compaction {
+            return Ok(None); // No compaction needed
+        }
+
+        // Calculate compact size
+        let data_size: usize = shard_index
+            .chunks_exact(2)
+            .filter(|chunk| chunk[0] != u64::MAX)
+            .map(|chunk| usize::try_from(chunk[1]).unwrap())
+            .sum();
+
+        let compact_size = data_size + usize::try_from(index_encoded_size).unwrap();
+
+        // Build compacted shard
+        let mut compact_shard = vec![0u8; compact_size];
+        let mut new_index = vec![u64::MAX; shard_index.len()];
+
+        let mut write_offset = match self.index_location {
+            ShardingIndexLocation::Start => usize::try_from(index_encoded_size).unwrap(),
+            ShardingIndexLocation::End => 0,
+        };
+
+        for (i, chunk) in shard_index.chunks_exact(2).enumerate() {
+            let old_offset = chunk[0];
+            let size = chunk[1];
+
+            if old_offset != u64::MAX && size != u64::MAX {
+                let old_offset_usize = usize::try_from(old_offset).unwrap();
+                let size_usize = usize::try_from(size).unwrap();
+
+                // Validate bounds
+                if old_offset_usize + size_usize > bytes.len() {
+                    return Err(CodecError::Other(
+                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                            .to_string(),
+                    ));
+                }
+
+                // Copy chunk data
+                compact_shard[write_offset..write_offset + size_usize]
+                    .copy_from_slice(&bytes[old_offset_usize..old_offset_usize + size_usize]);
+
+                // Update index
+                new_index[i * 2] = u64::try_from(write_offset).unwrap();
+                new_index[i * 2 + 1] = size;
+
+                write_offset += size_usize;
+            }
+        }
+
+        // Encode and write index
+        let index_bytes = transmute_to_bytes_vec(new_index);
+        let encoded_index = self.index_codecs.encode(
+            ArrayBytes::from(index_bytes),
+            &index_array_representation,
+            options,
+        )?;
+
+        match self.index_location {
+            ShardingIndexLocation::Start => {
+                compact_shard[..encoded_index.len()].copy_from_slice(&encoded_index);
+            }
+            ShardingIndexLocation::End => {
+                let index_start = compact_size - encoded_index.len();
+                compact_shard[index_start..].copy_from_slice(&encoded_index);
+            }
+        }
+
+        Ok(Some(Cow::Owned(compact_shard)))
+    }
+
     #[allow(clippy::too_many_lines)]
     fn decode_into(
         &self,

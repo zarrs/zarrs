@@ -122,6 +122,32 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         .await
     }
 
+    /// Async variant of [`compact_chunk`](Array::compact_chunk).
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    pub async fn async_compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<bool, ArrayError> {
+        let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
+        if let Some(chunk_bytes) = chunk_bytes {
+            let chunk_bytes: Vec<u8> = chunk_bytes.into();
+            if let Some(compacted_bytes) = self.codecs.compact(
+                chunk_bytes.into(),
+                &self.chunk_array_representation(chunk_indices)?,
+                options,
+            )? {
+                self.async_store_chunk_opt(chunk_indices, compacted_bytes, options)
+                    .await?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
     /////////////////////////////////////////////////////////////////////////////
     // Advanced methods
     /////////////////////////////////////////////////////////////////////////////
