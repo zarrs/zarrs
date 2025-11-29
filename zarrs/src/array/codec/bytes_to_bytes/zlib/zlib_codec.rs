@@ -127,9 +127,10 @@ impl BytesToBytesCodecTraits for ZlibCodec {
         decoded_representation
             .size()
             .map_or(BytesRepresentation::UnboundedSize, |size| {
-                // https://en.wikipedia.org/wiki/Bzip2#Implementation
-                // TODO: Below assumes a maximum expansion of 1.25 for the blocks + header (4 byte) + footer (11 byte), but need to read spec
-                BytesRepresentation::BoundedSize(4 + 11 + size + size.div_ceil(4))
+                // https://github.com/madler/zlib/blob/v1.3.1/compress.c#L72-L75
+                BytesRepresentation::BoundedSize(
+                    size + (size >> 12) + (size >> 14) + (size >> 25) + 13,
+                )
             })
     }
 }
