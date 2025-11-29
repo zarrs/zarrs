@@ -676,8 +676,8 @@ fn update_bytes_vlen_indexer<'a>(
 /// # Errors
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
-/// - `output_subset_bytes` are not compatible with the `output_subset` and `data_type_size`,
-/// - `output_subset` is not within the bounds of `shape`
+/// - `update_bytes` are not compatible with the `update_subset` and `data_type_size`,
+/// - `update_subset` is not within the bounds of `shape`
 fn update_array_bytes_array_subset<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
@@ -759,35 +759,20 @@ fn update_array_bytes_array_subset<'a>(
     }
 }
 
-/// Update array bytes.
-///
-/// This function is used internally by [`crate::array::Array::store_chunk_subset_opt`] and [`crate::array::Array::async_store_chunk_subset_opt`].
+/// Update array bytes. Specialised for `Indexer`.
 ///
 /// # Errors
 /// Returns a [`CodecError`] if
 /// - `bytes` are not compatible with the `shape` and `data_type_size`,
-/// - `output_subset_bytes` are not compatible with the `output_subset` and `data_type_size`,
-/// - `output_subset` is not within the bounds of `shape`
-///
-/// # Panics
-/// Panics if the indexer references bytes beyond [`usize::MAX`].
-pub fn update_array_bytes<'a>(
+/// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
+/// - `update_indexer` is not within the bounds of `shape`
+fn update_array_bytes_indexer<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
     update_indexer: &dyn crate::indexer::Indexer,
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    if let Some(output_subset) = update_indexer.as_array_subset() {
-        return update_array_bytes_array_subset(
-            bytes,
-            shape,
-            output_subset,
-            update_bytes,
-            data_type_size,
-        );
-    }
-
     match (bytes, update_bytes, data_type_size) {
         (
             ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }),
@@ -859,6 +844,32 @@ pub fn update_array_bytes<'a>(
         }
         (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
         (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
+    }
+}
+
+/// Update array bytes.
+///
+/// This function is used internally by [`crate::array::Array::store_chunk_subset_opt`] and [`crate::array::Array::async_store_chunk_subset_opt`].
+///
+/// # Errors
+/// Returns a [`CodecError`] if
+/// - `bytes` are not compatible with the `shape` and `data_type_size`,
+/// - `update_bytes` are not compatible with the `update_indexer` and `data_type_size`,
+/// - `update_indexer` is not within the bounds of `shape`
+///
+/// # Panics
+/// Panics if the indexer references bytes beyond [`usize::MAX`].
+pub fn update_array_bytes<'a>(
+    bytes: ArrayBytes,
+    shape: &[u64],
+    update_indexer: &dyn crate::indexer::Indexer,
+    update_bytes: &ArrayBytes,
+    data_type_size: DataTypeSize,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    if let Some(output_subset) = update_indexer.as_array_subset() {
+        update_array_bytes_array_subset(bytes, shape, output_subset, update_bytes, data_type_size)
+    } else {
+        update_array_bytes_indexer(bytes, shape, update_indexer, update_bytes, data_type_size)
     }
 }
 
@@ -1199,6 +1210,18 @@ mod tests {
             DataTypeSize::Fixed(1),
         )?;
 
+        // Update using indexer
+        let indexer = vec![vec![3, 2], vec![3, 3]];
+        let update_bytes =
+            ArrayBytes::new_flen(vec![0u8, 255u8]).with_optional_mask(vec![0u8, 1u8]);
+        let result = update_array_bytes(
+            result,
+            &[4, 4],
+            &indexer,
+            &update_bytes,
+            DataTypeSize::Fixed(1),
+        )?;
+
         // Verify result
         let (result_data, result_mask) = result.into_optional()?.into_parts();
         let ArrayBytes::Fixed(result_data) = *result_data else {
@@ -1209,7 +1232,7 @@ mod tests {
         // [1  2  3  4 ]
         // [5  99 N  8 ]
         // [9  97 96 12]
-        // [N  14 15 16]
+        // [N  14 N 255]
 
         // Verify updated positions
         assert_eq!(result_data[5], 99); // [1,1]
@@ -1227,7 +1250,9 @@ mod tests {
         assert_eq!(result_data[0], 1); // [0,0]
         assert_eq!(result_mask[0], 1);
 
-        assert_eq!(result_data[15], 16); // [3,3]
+        assert_eq!(result_mask[14], 0); // [3,2]
+
+        assert_eq!(result_data[15], 255); // [3,3]
         assert_eq!(result_mask[15], 1);
 
         assert_eq!(result_mask[12], 0); // [3,0] - still None
