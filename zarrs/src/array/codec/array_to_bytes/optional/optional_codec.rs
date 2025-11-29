@@ -9,13 +9,14 @@ use zarrs_plugin::PluginCreateError;
 use zarrs_registry::codec::OPTIONAL;
 
 use crate::array::{
-    array_bytes::VariableLengthBytes,
+    array_bytes::ArrayBytesVariableLength,
     codec::{
         ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, DataType, RawBytes, RawBytesOffsets,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+    DataType,
 };
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
@@ -77,7 +78,7 @@ impl OptionalCodec {
                 }
                 Ok(ArrayBytes::new_flen(sparse_bytes))
             }
-            ArrayBytes::Variable(VariableLengthBytes { bytes, offsets }) => {
+            ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
                 // Variable-length: Extract only valid elements based on mask
                 let mut sparse_bytes = Vec::new();
                 let mut sparse_offsets = Vec::new();
@@ -92,7 +93,7 @@ impl OptionalCodec {
                     }
                 }
 
-                let sparse_offsets = unsafe { RawBytesOffsets::new_unchecked(sparse_offsets) };
+                let sparse_offsets = unsafe { ArrayBytesOffsets::new_unchecked(sparse_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(sparse_bytes, sparse_offsets) })
             }
             ArrayBytes::Optional(optional_bytes) => {
@@ -157,7 +158,7 @@ impl OptionalCodec {
 
                 Ok(ArrayBytes::new_flen(dense_bytes))
             }
-            ArrayBytes::Variable(VariableLengthBytes {
+            ArrayBytes::Variable(ArrayBytesVariableLength {
                 bytes: sparse_bytes,
                 offsets: sparse_offsets,
             }) => {
@@ -181,7 +182,7 @@ impl OptionalCodec {
                     dense_offsets.push(dense_bytes.len());
                 }
 
-                let dense_offsets = unsafe { RawBytesOffsets::new_unchecked(dense_offsets) };
+                let dense_offsets = unsafe { ArrayBytesOffsets::new_unchecked(dense_offsets) };
                 Ok(unsafe { ArrayBytes::new_vlen_unchecked(dense_bytes, dense_offsets) })
             }
             ArrayBytes::Optional(sparse_optional_bytes) => {
@@ -302,7 +303,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if !decoded_representation.data_type().is_optional() {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
@@ -354,7 +355,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
                 options,
             )?
         } else {
-            RawBytes::from(vec![])
+            ArrayBytesRaw::from(vec![])
         };
 
         // Concatenate: [mask_len (u64) | data_len (u64) | mask | data]
@@ -364,12 +365,12 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         result.extend_from_slice(&encoded_mask);
         result.extend_from_slice(&encoded_data);
 
-        Ok(RawBytes::from(result))
+        Ok(ArrayBytesRaw::from(result))
     }
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

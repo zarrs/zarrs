@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add `VariableLengthBytes`
+- Add `ArrayBytesVariableLength`
 - Add `ArrayBytesDecodeIntoTarget`
 - Add `OptionalCodec`
-- Add `OptionalBytes`
+- Add `ArrayBytesOptional`
 - Add `DataType::Optional`
 - Implement `Element` for `Option<T>` where `T: Element`
 - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
-- **Breaking**: The `ArrayBytes::Variable` variant now holds `VariableLengthBytes` rather than bytes and offsets
+- **Breaking**: The `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets
 - **Breaking**: Change various methods to take a `ArrayBytesDecodeIntoTarget` instead of a `ArrayBytesFixedDisjointView`
   - `[Async]ArrayPartialDecoderTraits::partial_decode_into()`
   - `ArrayToBytesCodecTraits::decode_into()`
@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `copy_fill_value_into()`
 - **Breaking**: `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
 - **Breaking**: Mark `ArrayBytes` as non-exhaustive
+- **Breaking**: Rename `RawBytes` to `ArrayBytesRaw` and add deprecated alias
+- **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets` and add deprecated alias
+- **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 
 ### Removed
 

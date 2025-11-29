@@ -105,7 +105,7 @@ use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 
 use crate::array::{
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice, ChunkRepresentation, CodecChain, DataType, Endianness, RawBytes,
+    convert_from_bytes_slice, ArrayBytesRaw, ChunkRepresentation, CodecChain, DataType, Endianness,
 };
 pub use zarrs_metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
@@ -142,7 +142,7 @@ pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCr
 
 fn get_vlen_bytes_and_offsets(
     index_chunk_representation: &ChunkRepresentation,
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
     index_codecs: &CodecChain,
     data_codecs: &CodecChain,
     index_location: VlenIndexLocation,

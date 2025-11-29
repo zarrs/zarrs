@@ -5,7 +5,7 @@ use derive_more::Display;
 use dlpark::{ffi::Device, ShapeAndStrides, ToTensor};
 use thiserror::Error;
 
-use super::{ChunkRepresentation, RawBytes};
+use super::{ArrayBytesRaw, ChunkRepresentation};
 
 mod array_dlpack_ext_async;
 mod array_dlpack_ext_sync;
@@ -13,9 +13,9 @@ mod array_dlpack_ext_sync;
 pub use array_dlpack_ext_async::AsyncArrayDlPackExt;
 pub use array_dlpack_ext_sync::ArrayDlPackExt;
 
-/// [`RawBytes`] for use in a [`dlpark::ManagerCtx`].
+/// [`ArrayBytesRaw`] for use in a [`dlpark::ManagerCtx`].
 pub struct RawBytesDlPack {
-    bytes: Arc<RawBytes<'static>>,
+    bytes: Arc<ArrayBytesRaw<'static>>,
     dtype: dlpark::ffi::DataType,
     shape: Vec<i64>,
 }
@@ -86,7 +86,7 @@ impl RawBytesDlPack {
     /// # Panics
     /// Panics if an element in the shape cannot be encoded in a `i64`.
     pub fn new(
-        bytes: Arc<RawBytes<'static>>,
+        bytes: Arc<ArrayBytesRaw<'static>>,
         representation: &ChunkRepresentation,
     ) -> Result<Self, ArrayDlPackExtError> {
         let dtype = match representation.data_type() {

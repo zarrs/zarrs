@@ -246,7 +246,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::RawBytes::from(&bytes_to_encode[range_in]),
+                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();
@@ -346,7 +346,7 @@ where
                     *offset_in += len;
                     Some((
                         range_out.start,
-                        crate::array::RawBytes::from(&bytes_to_encode[range_in]),
+                        crate::array::ArrayBytesRaw::from(&bytes_to_encode[range_in]),
                     ))
                 })
                 .collect();

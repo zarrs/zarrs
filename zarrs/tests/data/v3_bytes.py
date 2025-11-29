@@ -7,7 +7,7 @@
 # ///
 
 import zarr
-from zarr.dtype import VariableLengthBytes
+from zarr.dtype import ArrayBytesVariableLength
 
 data = [
     b"New York",
@@ -19,7 +19,7 @@ path_out = "tests/data/zarr_python_compat/v3_bytes.zarr"
 
 array = zarr.create_array(
     path_out,
-    dtype=VariableLengthBytes(),
+    dtype=ArrayBytesVariableLength(),
     shape=(len(data),),
     chunks=(1000,),
     compressors=[],

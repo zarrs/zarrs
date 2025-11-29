@@ -19,7 +19,7 @@ use crate::{
         },
         concurrency::calc_concurrency_outer_inner,
         transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView,
-        BytesRepresentation, ChunkRepresentation, ChunkShape, DataTypeSize, RawBytes,
+        ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, ChunkShape, DataTypeSize,
     },
     array_subset::ArraySubset,
     plugin::PluginCreateError,
@@ -170,7 +170,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         bytes: ArrayBytes<'a>,
         shard_rep: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         bytes.validate(shard_rep.num_elements(), shard_rep.data_type())?;
 
         // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
@@ -191,13 +191,13 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.encode_unbounded(&bytes, shard_rep, &chunk_rep, options)
             }
         }?;
-        Ok(RawBytes::from(bytes))
+        Ok(ArrayBytesRaw::from(bytes))
     }
 
     #[allow(clippy::too_many_lines)]
     fn decode<'a>(
         &self,
-        encoded_shard: RawBytes<'a>,
+        encoded_shard: ArrayBytesRaw<'a>,
         shard_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -354,7 +354,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
     #[allow(clippy::too_many_lines)]
     fn decode_into(
         &self,
-        encoded_shard: RawBytes<'_>,
+        encoded_shard: ArrayBytesRaw<'_>,
         shard_representation: &ChunkRepresentation,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
@@ -699,7 +699,7 @@ impl ShardingCodec {
             };
 
         // Encode and write array index
-        let shard_index_bytes: RawBytes = transmute_to_bytes_vec(shard_index).into();
+        let shard_index_bytes: ArrayBytesRaw = transmute_to_bytes_vec(shard_index).into();
         let encoded_array_index = self.index_codecs.encode(
             shard_index_bytes.into(),
             &index_decoded_representation,

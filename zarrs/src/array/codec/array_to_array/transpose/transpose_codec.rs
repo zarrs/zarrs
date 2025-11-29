@@ -1,7 +1,7 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use crate::array::{
-    array_bytes::VariableLengthBytes,
+    array_bytes::ArrayBytesVariableLength,
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
 };
@@ -172,7 +172,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
-            ArrayBytes::Variable(VariableLengthBytes {
+            ArrayBytes::Variable(ArrayBytesVariableLength {
                 ref bytes,
                 ref offsets,
             }) => {
@@ -228,7 +228,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
 
         match bytes {
-            ArrayBytes::Variable(VariableLengthBytes {
+            ArrayBytes::Variable(ArrayBytesVariableLength {
                 ref bytes,
                 ref offsets,
             }) => {

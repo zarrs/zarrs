@@ -17,7 +17,7 @@ use crate::array::{
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         InvalidBytesLengthError, PartialDecoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, DataTypeSize, RawBytes,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
 };
 
 #[cfg(feature = "async")]
@@ -81,9 +81,9 @@ impl BytesCodec {
 
     fn do_encode_or_decode<'a>(
         &self,
-        mut value: RawBytes<'a>,
+        mut value: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let Some(data_type_size) = decoded_representation.data_type().fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 decoded_representation.data_type().clone(),
@@ -176,7 +176,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Reject optional data types explicitly
         if decoded_representation.data_type().is_optional() {
             return Err(CodecError::UnsupportedDataType(
@@ -202,7 +202,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

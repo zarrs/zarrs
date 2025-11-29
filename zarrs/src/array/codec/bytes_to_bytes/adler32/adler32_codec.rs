@@ -15,7 +15,7 @@ use crate::array::{
         CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
     },
-    BytesRepresentation, RawBytes,
+    ArrayBytesRaw, BytesRepresentation,
 };
 
 #[cfg(feature = "async")]
@@ -109,9 +109,9 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut adler = simd_adler32::Adler32::new();
         adler.write(&decoded_value);
         let checksum = adler.finish().to_le_bytes();
@@ -132,10 +132,10 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {

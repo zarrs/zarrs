@@ -8,7 +8,7 @@ use crate::array::{
         CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
     },
-    BytesRepresentation, RawBytes,
+    ArrayBytesRaw, BytesRepresentation,
 };
 
 #[cfg(feature = "async")]
@@ -77,18 +77,18 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(decoded_value)
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(encoded_value)
     }
 

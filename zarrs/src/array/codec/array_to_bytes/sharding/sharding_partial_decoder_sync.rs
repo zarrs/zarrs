@@ -18,8 +18,8 @@ use crate::{
             ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
             CodecOptions,
         },
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndices, ChunkRepresentation,
-        ChunkShape, DataType, DataTypeSize, RawBytes, RawBytesOffsets,
+        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw,
+        ArrayIndices, ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -93,7 +93,7 @@ impl ShardingPartialDecoder {
     pub(crate) fn retrieve_inner_chunk_encoded(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<RawBytes<'_>>, CodecError> {
+    ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
         let byte_range = self.inner_chunk_byte_range(chunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle
@@ -635,12 +635,15 @@ pub(crate) fn partial_decode_variable_indexer(
 
         let (element_bytes, element_offsets) = inner_partial_decoder
             .partial_decode(&[indices_in_inner_chunk], options)?
-            .into_variable()
-            .expect("fixed data");
+            .into_variable()?
+            .into_parts();
         debug_assert_eq!(element_offsets.len(), 2);
         bytes.extend_from_slice(&element_bytes);
         offsets.push(bytes.len());
     }
 
-    Ok(ArrayBytes::new_vlen(bytes, RawBytesOffsets::new(offsets)?)?)
+    Ok(ArrayBytes::new_vlen(
+        bytes,
+        ArrayBytesOffsets::new(offsets)?,
+    )?)
 }

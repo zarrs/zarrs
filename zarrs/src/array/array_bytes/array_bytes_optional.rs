@@ -1,0 +1,54 @@
+use crate::array::{ArrayBytes, ArrayBytesRaw};
+
+/// Optional array bytes composed of data and a validity mask.
+///
+/// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
+/// The mask length is validated at construction to ensure it matches the number of elements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArrayBytesOptional<'a> {
+    data: Box<ArrayBytes<'a>>,
+    mask: ArrayBytesRaw<'a>,
+}
+
+impl<'a> ArrayBytesOptional<'a> {
+    /// Create a new `ArrayBytesOptional` with validation.
+    pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
+        let data = data.into();
+        let mask = mask.into();
+
+        Self { data, mask }
+    }
+
+    /// Get the underlying data.
+    #[must_use]
+    pub fn data(&self) -> &ArrayBytes<'a> {
+        &self.data
+    }
+
+    /// Get the validity mask.
+    #[must_use]
+    pub fn mask(&self) -> &ArrayBytesRaw<'a> {
+        &self.mask
+    }
+
+    /// Get the number of elements.
+    #[must_use]
+    pub fn num_elements(&self) -> usize {
+        self.mask.len()
+    }
+
+    /// Consume self and return the data and mask.
+    #[must_use]
+    pub fn into_parts(self) -> (Box<ArrayBytes<'a>>, ArrayBytesRaw<'a>) {
+        (self.data, self.mask)
+    }
+
+    /// Convert into owned [`ArrayBytesOptional<'static>`].
+    #[must_use]
+    pub fn into_owned(self) -> ArrayBytesOptional<'static> {
+        ArrayBytesOptional {
+            data: Box::new((*self.data).into_owned()),
+            mask: self.mask.into_owned().into(),
+        }
+    }
+}

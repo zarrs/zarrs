@@ -11,7 +11,7 @@ use crate::{
             CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
             RecommendedConcurrency,
         },
-        BytesRepresentation, RawBytes,
+        ArrayBytesRaw, BytesRepresentation,
     },
     plugin::PluginCreateError,
 };
@@ -202,9 +202,9 @@ impl BytesToBytesCodecTraits for BloscCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
         //     std::thread::available_parallelism().unwrap(),
@@ -216,10 +216,10 @@ impl BytesToBytesCodecTraits for BloscCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // let n_threads = std::cmp::min(
         //     options.concurrent_limit(),
         //     std::thread::available_parallelism().unwrap(),

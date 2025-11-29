@@ -10,8 +10,8 @@ use crate::{
             BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
-        transmute_to_bytes_vec, ArrayBytes, BytesRepresentation, ChunkRepresentation, CodecChain,
-        DataType, DataTypeSize, Endianness, RawBytes, RawBytesOffsets,
+        transmute_to_bytes_vec, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation,
+        ChunkRepresentation, CodecChain, DataType, DataTypeSize, Endianness,
     },
     plugin::PluginCreateError,
 };
@@ -169,12 +169,12 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
         )?;
-        let (data, offsets) = bytes.into_variable()?;
+        let (data, offsets) = bytes.into_variable()?.into_parts();
         assert_eq!(
             offsets.len(),
             decoded_representation.num_elements_usize() + 1
@@ -285,7 +285,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -314,7 +314,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.index_location,
             options,
         )?;
-        let offsets = RawBytesOffsets::new(offsets)?;
+        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }

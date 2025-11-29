@@ -8,8 +8,8 @@ use zarrs_storage::{
 
 use crate::{
     array::{
-        array_bytes::update_array_bytes, ArrayBytes, BytesRepresentation, ChunkRepresentation,
-        RawBytes, RawBytesOffsets,
+        array_bytes::update_array_bytes, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw,
+        BytesRepresentation, ChunkRepresentation,
     },
     array_subset::ArraySubset,
 };
@@ -110,7 +110,7 @@ where
             Ok(match self.decoded_representation.data_type().size() {
                 DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
                 DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], RawBytesOffsets::new(vec![0]).unwrap()).unwrap()
+                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
                 }
             })
         }
@@ -334,7 +334,7 @@ where
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let encoded_value = self.input_output_handle.decode(options)?;
 
         let Some(encoded_value) = encoded_value else {
@@ -375,7 +375,7 @@ where
 
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<crate::array::RawBytes<'_>>,
+        offset_values: OffsetBytesIterator<crate::array::ArrayBytesRaw<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let encoded_value = self
@@ -472,7 +472,7 @@ where
             Ok(match self.decoded_representation.data_type().size() {
                 DataTypeSize::Fixed(_) => ArrayBytes::new_flen(vec![]),
                 DataTypeSize::Variable => {
-                    ArrayBytes::new_vlen(vec![], RawBytesOffsets::new(vec![0]).unwrap()).unwrap()
+                    ArrayBytes::new_vlen(vec![], ArrayBytesOffsets::new(vec![0]).unwrap()).unwrap()
                 }
             })
         }
@@ -711,7 +711,7 @@ where
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let encoded_value = self.input_output_handle.decode(options).await?;
 
         let Some(encoded_value) = encoded_value else {
@@ -755,7 +755,7 @@ where
 
     async fn partial_encode_many<'a>(
         &'a self,
-        offset_values: OffsetBytesIterator<'a, crate::array::RawBytes<'_>>,
+        offset_values: OffsetBytesIterator<'a, crate::array::ArrayBytesRaw<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let encoded_value = self

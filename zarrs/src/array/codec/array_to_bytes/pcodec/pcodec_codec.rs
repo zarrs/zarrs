@@ -10,9 +10,9 @@ use zarrs_registry::codec::PCODEC;
 
 use crate::array::{
     codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RawBytes,
-        RecommendedConcurrency,
+        ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+        CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+        PartialEncoderCapability, RecommendedConcurrency,
     },
     convert_from_bytes_slice, transmute_to_bytes_vec, BytesRepresentation, ChunkRepresentation,
     DataType,
@@ -171,7 +171,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let data_type = decoded_representation.data_type();
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
@@ -230,7 +230,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
+        bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {

@@ -7,7 +7,7 @@ use zarrs_storage::StorageError;
 use crate::array::{
     array_bytes::extract_decoded_regions_vlen,
     codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-    ArrayBytes, ChunkRepresentation, DataType, FillValue, RawBytes,
+    ArrayBytes, ArrayBytesRaw, ChunkRepresentation, DataType, FillValue,
 };
 
 #[cfg(feature = "async")]
@@ -33,7 +33,7 @@ impl VlenV2PartialDecoder {
 }
 
 fn decode_vlen_bytes<'a>(
-    bytes: Option<RawBytes>,
+    bytes: Option<ArrayBytesRaw>,
     indexer: &dyn crate::indexer::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,

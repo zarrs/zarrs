@@ -13,7 +13,7 @@ use crate::array::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    BytesRepresentation, RawBytes,
+    ArrayBytesRaw, BytesRepresentation,
 };
 
 use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
@@ -99,9 +99,9 @@ impl BytesToBytesCodecTraits for Bz2Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut encoder = bzip2::read::BzEncoder::new(Cursor::new(decoded_value), self.compression);
         let mut out: Vec<u8> = Vec::new();
         encoder.read_to_end(&mut out)?;
@@ -110,10 +110,10 @@ impl BytesToBytesCodecTraits for Bz2Codec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut decoder = bzip2::read::BzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;

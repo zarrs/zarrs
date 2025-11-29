@@ -14,7 +14,7 @@ use crate::{
             PartialEncoderCapability,
         },
         concurrency::RecommendedConcurrency,
-        ArrayBytes, BytesRepresentation, ChunkRepresentation, ChunkShape, RawBytes,
+        ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, ChunkShape,
     },
     config::global_config,
     metadata::{v3::MetadataV3, Configuration},
@@ -352,7 +352,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
         mut bytes: ArrayBytes<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
@@ -387,7 +387,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
 
     fn decode<'a>(
         &self,
-        mut bytes: RawBytes<'a>,
+        mut bytes: ArrayBytesRaw<'a>,
         decoded_representation: &ChunkRepresentation,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -428,7 +428,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
 
     fn decode_into(
         &self,
-        mut bytes: RawBytes<'_>,
+        mut bytes: ArrayBytesRaw<'_>,
         decoded_representation: &ChunkRepresentation,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,

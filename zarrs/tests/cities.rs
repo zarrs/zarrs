@@ -80,8 +80,8 @@ fn cities_impl(
     assert_eq!(cities, cities_out);
 
     let last_block = array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
-    let (_bytes, offsets) = last_block.into_variable()?;
-    assert_eq!(offsets.len() as u64, chunk_size + 1);
+    let variable_length_bytes = last_block.into_variable()?;
+    assert_eq!(variable_length_bytes.offsets().len() as u64, chunk_size + 1);
 
     Ok(store.size_prefix(&"c/".try_into().unwrap())?) // only chunks
 }

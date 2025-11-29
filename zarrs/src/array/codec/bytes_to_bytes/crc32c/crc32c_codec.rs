@@ -10,7 +10,7 @@ use crate::array::{
         CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
     },
-    BytesRepresentation, RawBytes,
+    ArrayBytesRaw, BytesRepresentation,
 };
 
 #[cfg(feature = "async")]
@@ -86,9 +86,9 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
         encoded_value.extend_from_slice(&decoded_value);
@@ -98,10 +98,10 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             if options.validate_checksums() {
                 let decoded_value = &encoded_value[..encoded_value.len() - CHECKSUM_SIZE];

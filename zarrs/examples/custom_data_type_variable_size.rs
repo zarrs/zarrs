@@ -6,8 +6,8 @@ use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3, RawBytesOffsets,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
+    ElementOwned, FillValueMetadataV3,
 };
 use zarrs_data_type::{
     DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
@@ -50,7 +50,7 @@ impl Element for CustomDataTypeVariableSizeElement {
         offsets.push(bytes.len());
         let offsets = unsafe {
             // SAFETY: Constructed correctly above
-            RawBytesOffsets::new_unchecked(offsets)
+            ArrayBytesOffsets::new_unchecked(offsets)
         };
         unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
     }
@@ -62,7 +62,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {

@@ -5,7 +5,7 @@ use zarrs_storage::StorageError;
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-        RawBytes,
+        ArrayBytesRaw,
     },
     storage::byte_range::{extract_byte_ranges, ByteRangeIterator},
 };
@@ -38,7 +38,7 @@ impl BytesPartialDecoderTraits for TestUnboundedPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -88,7 +88,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncTestUnboundedPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);

@@ -4,7 +4,8 @@ use itertools::Itertools;
 use ArrayError::IncompatibleElementType as IET;
 
 use super::{
-    convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayError, DataType, RawBytesOffsets,
+    convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayBytesOffsets, ArrayError,
+    DataType,
 };
 
 mod numpy;
@@ -235,7 +236,7 @@ macro_rules! impl_element_string {
                 offsets.push(len);
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(offsets)
+                    ArrayBytesOffsets::new_unchecked(offsets)
                 };
 
                 // Concatenate bytes
@@ -262,7 +263,7 @@ impl ElementOwned for String {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
             elements.push(
@@ -297,7 +298,7 @@ macro_rules! impl_element_bytes {
                 offsets.push(len);
                 let offsets = unsafe {
                     // SAFETY: The offsets are monotonically increasing.
-                    RawBytesOffsets::new_unchecked(offsets)
+                    ArrayBytesOffsets::new_unchecked(offsets)
                 };
 
                 // Concatenate bytes
@@ -322,7 +323,7 @@ impl ElementOwned for Vec<u8> {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
             elements.push(bytes[*curr..*next].to_vec());
