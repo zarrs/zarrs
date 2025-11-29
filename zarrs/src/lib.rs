@@ -231,14 +231,14 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod array;
-pub mod array_subset;
 pub mod config;
 pub mod group;
 pub mod hierarchy;
-pub mod indexer;
 pub mod node;
 pub mod version;
 
+pub use zarrs_chunk_grid::array_subset;
+pub use zarrs_chunk_grid::indexer;
 #[cfg(feature = "filesystem")]
 pub use zarrs_filesystem as filesystem;
 pub use zarrs_metadata as metadata;

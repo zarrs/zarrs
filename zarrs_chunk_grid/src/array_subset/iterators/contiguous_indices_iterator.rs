@@ -4,10 +4,10 @@ use itertools::izip;
 
 use super::IndicesIterator;
 use crate::{
-    array::ArrayIndices,
     array_subset::{
         iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
+    ArrayIndices,
 };
 
 /// Iterates over contiguous element indices in an array subset.

@@ -2,7 +2,6 @@
 //!
 //! An [`ArraySubset`] represents a subset of an array or chunk.
 //!
-//! Many [`Array`](crate::array::Array) store and retrieve methods have an [`ArraySubset`] parameter.
 //! [`iterators`] includes various types of [`ArraySubset`] iterators.
 //!
 //! This module also provides convenience functions for:
@@ -11,6 +10,7 @@
 pub mod iterators;
 use std::{
     fmt::{Debug, Display},
+    mem::size_of,
     num::NonZeroU64,
     ops::Range,
 };
@@ -19,11 +19,11 @@ use derive_more::From;
 use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 use itertools::izip;
 use thiserror::Error;
+use zarrs_metadata::ChunkShape;
 
-use crate::metadata::ChunkShape;
 use crate::{
-    array::{ArrayError, ArrayIndices, ArrayShape},
     indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},
+    ArrayIndices, ArrayShape,
 };
 
 /// An array subset.
@@ -521,16 +521,6 @@ pub enum ArraySubsetError {
     /// An incompatible offset.
     #[error(transparent)]
     IncompatibleOffset(#[from] IncompatibleOffsetError),
-}
-
-impl From<ArraySubsetError> for ArrayError {
-    fn from(arr_subset_err: ArraySubsetError) -> Self {
-        match arr_subset_err {
-            ArraySubsetError::IncompatibleDimensionalityError(v) => v.into(),
-            ArraySubsetError::IncompatibleStartEndIndicesError(v) => v.into(),
-            ArraySubsetError::IncompatibleOffset(v) => v.into(),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ resolver = "2"
 
 members = [
     "zarrs",
+    "zarrs_chunk_grid",
     "zarrs_data_type",
     "zarrs_metadata",
     "zarrs_metadata_ext",
@@ -28,6 +29,10 @@ module_name_repetitions = "allow"
 missing_panics_doc = "warn"
 missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
+
+[workspace.dependencies.zarrs_chunk_grid]
+version = "0.1.0"
+path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_data_type]
 version = "0.4.2"

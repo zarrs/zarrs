@@ -11,15 +11,24 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 
 #### Core
 - [`zarrs`]: The core library for manipulating Zarr hierarchies.
-- [`zarrs_metadata`]: Zarr metadata support (re-exported as `zarrs::metadata`).
-- [`zarrs_metadata_ext`]: Zarr extensions metadata support (re-exported as `zarrs::metadata_ext`).
-- [`zarrs_data_type`]: The data type extension API for `zarrs` (re-exported in `zarrs::array::data_type`).
-- [`zarrs_storage`]: The storage API for `zarrs` (re-exported as `zarrs::storage`).
-- [`zarrs_plugin`]: The plugin API for `zarrs` (re-exported as `zarrs::plugin`).
-- [`zarrs_registry`]: The Zarr extension point registry for `zarrs` (re-exported as `zarrs::registry`).
+- [`zarrs_metadata`]: Zarr metadata support.
+  - Re-exports [`zarrs::metadata`](crate::metadata).
+- [`zarrs_metadata_ext`]: Zarr extensions metadata support.
+  - Re-exports [`zarrs::metadata_ext`](crate::metadata_ext).
+- [`zarrs_plugin`]: The plugin API.
+  - Re-exports [`zarrs::plugin`](crate::plugin).
+- [`zarrs_registry`]: The Zarr extension point registry.
+  - Re-exports [`zarrs::registry`](crate::registry).
+- [`zarrs_storage`]: The storage API.
+  - Re-exports [`zarrs::storage`](crate::storage).
+- [`zarrs_chunk_grid`]: The chunk grid extension API.
+  - Re-exports [`zarrs::array::chunk_grid`](crate::array::chunk_grid), [`zarrs::array_subset`](crate::array_subset), and [`zarrs::indexer`](crate::indexer).
+- [`zarrs_data_type`]: The data type extension API.
+  - Re-exports [`zarrs::array::data_type`](crate::array::data_type).
 
 #### Stores
-- [`zarrs_filesystem`]: A filesystem store (re-exported as `zarrs::filesystem`).
+- [`zarrs_filesystem`]: A filesystem store.
+  - Re-exports [`zarrs::filesystem`](crate::filesystem).
 - [`zarrs_object_store`]: [`object_store`] store support.
 - [`zarrs_opendal`]: [`opendal`] store support.
 - [`zarrs_http`]: A synchronous http store.
@@ -47,6 +56,7 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 [The `zarrs` Book]: https://book.zarrs.dev
 
 [`zarrs`]: https://docs.rs/zarrs/latest/zarrs/
+[`zarrs_chunk_grid`]: https://docs.rs/zarrs_data_type/latest/zarrs_chunk_grid/
 [`zarrs_data_type`]: https://docs.rs/zarrs_data_type/latest/zarrs_data_type/
 [`zarrs_metadata`]: https://docs.rs/zarrs_metadata/latest/zarrs_metadata/
 [`zarrs_metadata_ext`]: https://docs.rs/zarrs_metadata_ext/latest/zarrs_metadata_ext/

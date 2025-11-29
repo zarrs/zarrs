@@ -64,6 +64,7 @@ pub use chunk_cache::{
     ChunkCacheTypePartialDecoder,
 };
 pub use data_type::{DataType, FillValue, NamedDataType};
+pub use zarrs_chunk_grid::ArrayIndices;
 
 #[allow(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
@@ -114,9 +115,6 @@ use crate::{
     node::{data_key, NodePath},
     storage::StoreKey,
 };
-
-/// An ND index to an element in an array.
-pub type ArrayIndices = Vec<u64>;
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
