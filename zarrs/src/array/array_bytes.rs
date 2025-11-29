@@ -1178,4 +1178,156 @@ mod tests {
             vec![0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 3, 4, 0, 0]
         );
     }
+
+    #[test]
+    fn update_array_bytes_array_subset_optional() -> Result<(), Box<dyn std::error::Error>> {
+        // Create initial 4x4 array with optional u8 data
+        // Layout (row-major):
+        // [1  2  3  4 ]
+        // [5  6  N  8 ]
+        // [9  N  11 12]
+        // [N  14 15 16]
+        // where N = None
+        let initial_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let initial_mask = vec![1u8, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]; // 0 = None
+        let initial_bytes = ArrayBytes::new_flen(initial_data).with_optional_mask(initial_mask);
+
+        // Create 2x2 update for subset [1..3, 1..3]
+        // This will update positions:
+        // [1,1]=6, [1,2]=N, [2,1]=N, [2,2]=11
+        // With new values:
+        // [99 N ]
+        // [97 96]
+        let update_data = vec![99u8, 98, 97, 96];
+        let update_mask = vec![1u8, 0, 1, 1]; // Second element is None
+        let update_bytes = ArrayBytes::new_flen(update_data).with_optional_mask(update_mask);
+
+        // Update using ArraySubset
+        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        let result = update_array_bytes(
+            initial_bytes,
+            &[4, 4],
+            &subset,
+            &update_bytes,
+            DataTypeSize::Fixed(1),
+        )?;
+
+        // Verify result
+        let (result_data, result_mask) = result.into_optional()?;
+        let ArrayBytes::Fixed(result_data) = result_data else {
+            panic!("Expected fixed bytes")
+        };
+
+        // Expected layout after update:
+        // [1  2  3  4 ]
+        // [5  99 N  8 ]
+        // [9  97 96 12]
+        // [N  14 15 16]
+
+        // Verify updated positions
+        assert_eq!(result_data[5], 99); // [1,1]
+        assert_eq!(result_mask[5], 1);
+
+        assert_eq!(result_mask[6], 0); // [1,2] - should be None
+
+        assert_eq!(result_data[9], 97); // [2,1]
+        assert_eq!(result_mask[9], 1);
+
+        assert_eq!(result_data[10], 96); // [2,2]
+        assert_eq!(result_mask[10], 1);
+
+        // Verify unchanged positions
+        assert_eq!(result_data[0], 1); // [0,0]
+        assert_eq!(result_mask[0], 1);
+
+        assert_eq!(result_data[15], 16); // [3,3]
+        assert_eq!(result_mask[15], 1);
+
+        assert_eq!(result_mask[12], 0); // [3,0] - still None
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_array_bytes_array_subset_nested_optional_2_level(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Create initial 4x4 array with Option<Option<u8>> data
+        // Layout (row-major, S=Some, N=None, outer/inner):
+        // [SS(1)  SS(2)  SN     NN   ]
+        // [SS(5)  SS(6)  SS(7)  SS(8)]
+        // [SN     SS(10) SS(11) SN   ]
+        // [NN     SS(14) SS(15) SS(16)]
+        let initial_data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let initial_inner_mask = vec![1u8, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1]; // inner Some/None
+        let initial_outer_mask = vec![1u8, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]; // outer Some/None
+
+        let initial_bytes = ArrayBytes::new_flen(initial_data)
+            .with_optional_mask(initial_inner_mask)
+            .with_optional_mask(initial_outer_mask);
+
+        // Create 2x2 update for subset [1..3, 1..3]
+        // Update positions [1,1], [1,2], [2,1], [2,2]
+        // New values:
+        // [SS(99) SN   ]
+        // [NN     SS(96)]
+        let update_data = vec![99u8, 98, 97, 96];
+        let update_inner_mask = vec![1u8, 0, 1, 1]; // [99 is valid, 98 is inner None, ...]
+        let update_outer_mask = vec![1u8, 1, 0, 1]; // [outer valid, outer valid, outer None, outer valid]
+
+        let update_bytes = ArrayBytes::new_flen(update_data)
+            .with_optional_mask(update_inner_mask)
+            .with_optional_mask(update_outer_mask);
+
+        // Update using ArraySubset
+        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        let result = update_array_bytes(
+            initial_bytes,
+            &[4, 4],
+            &subset,
+            &update_bytes,
+            DataTypeSize::Fixed(1),
+        )?;
+
+        // Verify result - extract outer optional layer
+        let (result_middle, result_outer_mask) = result.into_optional()?;
+
+        // Extract inner optional layer
+        let (result_data, result_inner_mask) = result_middle.into_optional()?;
+        let ArrayBytes::Fixed(result_data) = result_data else {
+            panic!("Expected fixed bytes")
+        };
+
+        // Verify updated positions
+        // [1,1] = Some(Some(99))
+        assert_eq!(result_data[5], 99);
+        assert_eq!(result_inner_mask[5], 1);
+        assert_eq!(result_outer_mask[5], 1);
+
+        // [1,2] = Some(None)
+        assert_eq!(result_inner_mask[6], 0); // inner None
+        assert_eq!(result_outer_mask[6], 1); // outer Some
+
+        // [2,1] = None (outer)
+        assert_eq!(result_outer_mask[9], 0);
+
+        // [2,2] = Some(Some(96))
+        assert_eq!(result_data[10], 96);
+        assert_eq!(result_inner_mask[10], 1);
+        assert_eq!(result_outer_mask[10], 1);
+
+        // Verify unchanged positions
+        // [0,0] = Some(Some(1))
+        assert_eq!(result_data[0], 1);
+        assert_eq!(result_inner_mask[0], 1);
+        assert_eq!(result_outer_mask[0], 1);
+
+        // [0,2] = Some(None) - unchanged
+        assert_eq!(result_inner_mask[2], 0);
+        assert_eq!(result_outer_mask[2], 1);
+
+        // [3,0] = None - unchanged
+        assert_eq!(result_outer_mask[12], 0);
+
+        Ok(())
+    }
 }
