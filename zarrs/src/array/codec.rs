@@ -1293,6 +1293,25 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
+    /// Compact a chunk.
+    ///
+    /// Takes an encoded representation and compacts it to remove any extraneous data.
+    /// The default implementation returns the input `bytes` unchanged.
+    ///
+    /// Returns `Ok(None)` if no compaction was performed.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or `bytes` is incompatible with `decoded_representation`.
+    #[expect(unused_variables)]
+    fn compact<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        Ok(None)
+    }
+
     /// Decode into a subset of a preallocated output.
     ///
     /// This method is intended for internal use by Array.

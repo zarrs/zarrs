@@ -311,7 +311,7 @@ async fn decode_shard_index_async_partial_decoder(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::*;
     use crate::{
@@ -794,5 +794,142 @@ mod tests {
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);
+    }
+
+    #[test]
+    fn codec_sharding_compact() {
+        // Test that compact removes gaps in sharded data
+        // 1. Fully encode a shard
+        // 2. Update an inner chunk and verify the shard size increased
+        // 3. Compact and check that the size matches the original fully encoded shard
+
+        let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
+        let chunk_representation =
+            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt16, 0u16).unwrap();
+        let elements: Vec<u16> = (0..chunk_representation.num_elements() as u16).collect();
+        let bytes = crate::array::transmute_to_bytes_vec(elements);
+        let original_bytes: ArrayBytes = bytes.into();
+
+        // Create a sharding codec with 2x2 inner chunks
+        let codec_configuration: ShardingCodecConfiguration =
+            serde_json::from_str(JSON_VALID3).unwrap();
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
+
+        // Step 1: Fully encode the shard
+        let original_encoded = codec
+            .encode(
+                original_bytes.clone(),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let original_size = original_encoded.len();
+
+        // Verify round trip works
+        let decoded = codec
+            .decode(
+                original_encoded.clone(),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(original_bytes, decoded);
+
+        // Step 2: Update an inner chunk using partial encoder
+        let input_output_handle = Arc::new(Mutex::new(Some(original_encoded.to_vec())));
+        {
+            // Update a single inner chunk (e.g., chunk at position [0, 1])
+            let inner_chunk_subset = ArraySubset::new_with_ranges(&[0..2, 2..4]);
+            let updated_elements: Vec<u16> = vec![100, 101, 102, 103]; // New values for this inner chunk
+            let updated_bytes = crate::array::transmute_to_bytes_vec(updated_elements);
+            let partial_encoder = codec
+                .clone()
+                .partial_encoder(
+                    input_output_handle.clone(),
+                    &chunk_representation,
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+
+            partial_encoder
+                .partial_encode(
+                    &inner_chunk_subset,
+                    &ArrayBytes::from(updated_bytes),
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+        }
+        let updated_encoded = Arc::try_unwrap(input_output_handle)
+            .unwrap()
+            .into_inner()
+            .expect("single ref")
+            .expect("non-empty shard");
+
+        // The updated shard should be larger due to gaps from partial encoding
+        let updated_size = updated_encoded.len();
+        assert!(
+            updated_size > original_size,
+            "Updated shard size ({}) should be > original size ({})",
+            updated_size,
+            original_size
+        );
+
+        // Step 3: Compact the updated shard
+        let compacted = codec
+            .compact(
+                updated_encoded.into(),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let compacted = compacted.expect("compaction should have occurred");
+
+        // The compacted shard should be the same size as the original fully encoded shard
+        let compacted_size = compacted.len();
+        assert_eq!(
+            compacted_size, original_size,
+            "Compacted size ({}) should be equal to original size ({})",
+            compacted_size, original_size
+        );
+
+        // Verify the compacted shard decodes correctly
+        let decoded_after_compact = codec
+            .decode(
+                compacted.clone(),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+
+        // Build expected result: original data with the updated inner chunk
+        let mut expected_elements: Vec<u16> =
+            (0..chunk_representation.num_elements() as u16).collect();
+        expected_elements[2] = 100; // Row 0, Col 2
+        expected_elements[3] = 101; // Row 0, Col 3
+        expected_elements[6] = 102; // Row 1, Col 2
+        expected_elements[7] = 103; // Row 1, Col 3
+        let expected_bytes = crate::array::transmute_to_bytes_vec(expected_elements);
+
+        assert_eq!(ArrayBytes::from(expected_bytes), decoded_after_compact);
+
+        // Verify that compacting an already compact shard is a no-op
+        let compacted_again = codec
+            .compact(
+                Cow::Borrowed(&compacted),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert!(compacted_again.is_none());
+
+        // Verify that compacting the original encoded shard is a no-op (returns same reference)
+        let original_compacted = codec
+            .compact(
+                Cow::Borrowed(&original_encoded),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert!(original_compacted.is_none());
     }
 }

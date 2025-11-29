@@ -487,6 +487,44 @@ impl ArrayToBytesCodecTraits for CodecChain {
         crate::array::array_bytes::decode_into_array_bytes_target(&bytes, output_target)
     }
 
+    fn compact<'a>(
+        &self,
+        mut bytes: ArrayBytesRaw<'a>,
+        decoded_representation: &ChunkRepresentation,
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        let array_representations =
+            self.get_array_representations(decoded_representation.clone())?;
+        let bytes_representations =
+            self.get_bytes_representations(array_representations.last().unwrap())?;
+
+        // Decode through bytes_to_bytes codecs (in reverse) to get to array_to_bytes level
+        for (codec, bytes_representation) in std::iter::zip(
+            self.bytes_to_bytes.iter().rev(),
+            bytes_representations.iter().rev().skip(1),
+        ) {
+            bytes = codec.decode(bytes, bytes_representation, options)?;
+        }
+
+        // Compact at the array_to_bytes level (e.g., ShardingCodec compact)
+        let compacted =
+            self.array_to_bytes
+                .codec()
+                .compact(bytes, decoded_representation, options)?;
+
+        // If compaction occurred, re-encode through bytes_to_bytes codecs
+        if let Some(mut compacted_bytes) = compacted {
+            let mut bytes_representation = *bytes_representations.first().unwrap();
+            for codec in &self.bytes_to_bytes {
+                compacted_bytes = codec.encode(compacted_bytes, options)?;
+                bytes_representation = codec.encoded_representation(&bytes_representation);
+            }
+            Ok(Some(compacted_bytes))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn partial_decoder(
         self: Arc<Self>,
         mut input_handle: Arc<dyn BytesPartialDecoderTraits>,
