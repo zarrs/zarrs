@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Element` for `Option<T>` where `T: Element`
 - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
 - Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
+- Add chunk compaction API to remove extraneous bytes from encoded chunks
+  - Add `Array::[async_]compact_chunk()`
+  - Add `{Array,Bytes}ToBytesCodecTraits::compact()` with a default implementation
 
 ### Changed
 
