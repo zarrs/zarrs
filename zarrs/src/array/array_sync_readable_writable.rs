@@ -178,7 +178,13 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 &self.chunk_array_representation(chunk_indices)?,
                 options,
             )? {
-                self.store_chunk_opt(chunk_indices, compacted_bytes, options)?;
+                // SAFETY: The compacted bytes are already encoded
+                unsafe {
+                    self.store_encoded_chunk(
+                        chunk_indices,
+                        bytes::Bytes::from(compacted_bytes.into_owned()),
+                    )?;
+                }
                 Ok(true)
             } else {
                 Ok(false)

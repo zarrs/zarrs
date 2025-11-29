@@ -137,8 +137,14 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 &self.chunk_array_representation(chunk_indices)?,
                 options,
             )? {
-                self.async_store_chunk_opt(chunk_indices, compacted_bytes, options)
+                // SAFETY: The compacted bytes are already encoded
+                unsafe {
+                    self.async_store_encoded_chunk(
+                        chunk_indices,
+                        bytes::Bytes::from(compacted_bytes.into_owned()),
+                    )
                     .await?;
+                }
                 Ok(true)
             } else {
                 Ok(false)

@@ -1474,25 +1474,6 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError>;
 
-    /// Compact chunk bytes.
-    ///
-    /// Takes an encoded representation and compacts it to remove any extraneous data.
-    /// The default implementation returns the input `bytes` unchanged.
-    ///
-    /// Returns `Ok(None)` if no compaction was performed.
-    ///
-    /// # Errors
-    /// Returns [`CodecError`] if a codec fails.
-    #[expect(unused_variables)]
-    fn compact<'a>(
-        &self,
-        encoded_value: ArrayBytesRaw<'a>,
-        decoded_representation: &BytesRepresentation,
-        options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
-        Ok(None)
-    }
-
     /// Initialises a partial decoder.
     ///
     /// The default implementation decodes the entire chunk.
