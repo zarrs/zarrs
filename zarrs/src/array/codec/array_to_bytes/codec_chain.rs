@@ -514,7 +514,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
 
         // If compaction occurred, re-encode through bytes_to_bytes codecs
         if let Some(mut compacted_bytes) = compacted {
-            let mut bytes_representation = bytes_representations.first().unwrap().clone();
+            let mut bytes_representation = *bytes_representations.first().unwrap();
             for codec in &self.bytes_to_bytes {
                 compacted_bytes = codec.encode(compacted_bytes, options)?;
                 bytes_representation = codec.encoded_representation(&bytes_representation);
