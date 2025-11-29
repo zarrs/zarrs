@@ -408,23 +408,19 @@ where
         };
 
         // Extract mask and dense data from optional ArrayBytes
-        let (data, mask) = bytes.into_optional().map_err(|e| {
+        let optional_bytes = bytes.into_optional().map_err(|e| {
             ArrayError::Other(format!(
                 "Expected optional ArrayBytes (with mask) for optional data type: {e}"
             ))
         })?;
-
-        // Get the mask bytes (one byte per element)
-        let mask_bytes = mask.as_ref();
-        let num_elements = mask_bytes.len();
+        let (data, mask) = optional_bytes.into_parts();
 
         // Convert the dense inner data to a Vec<T>
-        let dense_values = T::from_array_bytes(inner_data_type, data)?;
+        let dense_values = T::from_array_bytes(inner_data_type, *data)?;
 
         // Build the result vector using mask to determine Some vs None
-        let mut elements = Vec::with_capacity(num_elements);
-
-        for (i, &mask_byte) in mask_bytes.iter().enumerate() {
+        let mut elements = Vec::with_capacity(mask.len());
+        for (i, &mask_byte) in mask.iter().enumerate() {
             if mask_byte == 0 {
                 // None value
                 elements.push(None);

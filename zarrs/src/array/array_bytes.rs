@@ -287,6 +287,7 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
+    // FIXME: Return VariableLengthBytes
     pub fn into_variable(self) -> Result<(RawBytes<'a>, RawBytesOffsets<'a>), CodecError> {
         match self {
             Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
@@ -295,25 +296,11 @@ impl<'a> ArrayBytes<'a> {
         }
     }
 
-    /// Convert the array bytes into optional data and validity mask.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional(self) -> Result<(ArrayBytes<'a>, RawBytes<'a>), CodecError> {
-        match self {
-            Self::Optional(optional_bytes) => {
-                let (data, mask) = optional_bytes.into_parts();
-                Ok((*data, mask))
-            }
-            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
-        }
-    }
-
     /// Convert the array bytes into [`OptionalBytes`].
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional_bytes(self) -> Result<OptionalBytes<'a>, CodecError> {
+    pub fn into_optional(self) -> Result<OptionalBytes<'a>, CodecError> {
         match self {
             Self::Optional(optional_bytes) => Ok(optional_bytes),
             Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
@@ -1213,8 +1200,8 @@ mod tests {
         )?;
 
         // Verify result
-        let (result_data, result_mask) = result.into_optional()?;
-        let ArrayBytes::Fixed(result_data) = result_data else {
+        let (result_data, result_mask) = result.into_optional()?.into_parts();
+        let ArrayBytes::Fixed(result_data) = *result_data else {
             panic!("Expected fixed bytes")
         };
 
@@ -1289,11 +1276,11 @@ mod tests {
         )?;
 
         // Verify result - extract outer optional layer
-        let (result_middle, result_outer_mask) = result.into_optional()?;
+        let (result_middle, result_outer_mask) = result.into_optional()?.into_parts();
 
         // Extract inner optional layer
-        let (result_data, result_inner_mask) = result_middle.into_optional()?;
-        let ArrayBytes::Fixed(result_data) = result_data else {
+        let (result_data, result_inner_mask) = result_middle.into_optional()?.into_parts();
+        let ArrayBytes::Fixed(result_data) = *result_data else {
             panic!("Expected fixed bytes")
         };
 
