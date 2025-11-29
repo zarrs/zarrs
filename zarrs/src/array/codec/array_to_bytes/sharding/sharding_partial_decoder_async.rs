@@ -628,8 +628,8 @@ async fn partial_decode_variable_indexer(
         let (element_bytes, element_offsets) = inner_partial_decoder
             .partial_decode(&[indices_in_inner_chunk], options)
             .await?
-            .into_variable()
-            .expect("fixed data");
+            .into_variable()?
+            .into_parts();
         debug_assert_eq!(element_offsets.len(), 2);
         bytes.extend_from_slice(&element_bytes);
         offsets.push(bytes.len());

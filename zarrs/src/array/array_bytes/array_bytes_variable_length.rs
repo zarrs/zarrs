@@ -56,4 +56,10 @@ impl<'a> ArrayBytesVariableLength<'a> {
     pub fn offsets(&self) -> &ArrayBytesOffsets<'_> {
         &self.offsets
     }
+
+    /// Consume self and return the bytes and offsets.
+    #[must_use]
+    pub fn into_parts(self) -> (ArrayBytesRaw<'a>, ArrayBytesOffsets<'a>) {
+        (self.bytes, self.offsets)
+    }
 }

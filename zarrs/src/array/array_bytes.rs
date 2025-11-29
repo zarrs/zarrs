@@ -185,10 +185,10 @@ impl<'a> ArrayBytes<'a> {
     ///
     /// # Errors
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
-    pub fn into_variable(self) -> Result<(ArrayBytesRaw<'a>, ArrayBytesOffsets<'a>), CodecError> {
+    pub fn into_variable(self) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
         match self {
             Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
-            Self::Variable(ArrayBytesVariableLength { bytes, offsets }) => Ok((bytes, offsets)),
+            Self::Variable(variable_length_bytes) => Ok(variable_length_bytes),
             Self::Optional(..) => Err(CodecError::ExpectedNonOptionalBytes),
         }
     }
@@ -841,7 +841,7 @@ pub(crate) fn merge_chunks_vlen<'a>(
     // TODO: Go parallel
     let mut bytes = vec![0; offsets.last()];
     for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
-        let (chunk_bytes, chunk_offsets) = chunk_bytes.into_variable()?;
+        let (chunk_bytes, chunk_offsets) = chunk_bytes.into_variable()?.into_parts();
         let indices = chunk_subset.linearised_indices(array_shape).unwrap();
         for (subset_idx, (&chunk_curr, &chunk_next)) in
             indices.iter().zip_eq(chunk_offsets.iter().tuple_windows())

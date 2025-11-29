@@ -62,7 +62,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {

@@ -174,7 +174,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
         )?;
-        let (data, offsets) = bytes.into_variable()?;
+        let (data, offsets) = bytes.into_variable()?.into_parts();
         assert_eq!(
             offsets.len(),
             decoded_representation.num_elements_usize() + 1

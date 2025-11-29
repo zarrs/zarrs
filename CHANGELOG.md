@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Mark `ArrayBytes` as non-exhaustive
 - **Breaking**: Rename `RawBytes` to `ArrayBytesRaw` and add deprecated alias
 - **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets` and add deprecated alias
+- **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 
 ### Removed
 

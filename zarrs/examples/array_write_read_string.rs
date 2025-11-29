@@ -96,7 +96,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Retrieve bytes directly, convert into a single string allocation, create a &str ndarray
     // TODO: Add a convenience function for this?
     let data_all = array.retrieve_array_subset(&subset_all)?;
-    let (bytes, offsets) = data_all.into_variable()?;
+    let (bytes, offsets) = data_all.into_variable()?.into_parts();
     let string = String::from_utf8(bytes.into_owned())?;
     let elements = offsets
         .iter()

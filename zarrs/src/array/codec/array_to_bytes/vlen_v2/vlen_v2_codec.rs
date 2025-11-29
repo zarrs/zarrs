@@ -84,7 +84,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
         )?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         let num_elements = decoded_representation.num_elements();
         debug_assert_eq!(1 + num_elements, offsets.len() as u64);
