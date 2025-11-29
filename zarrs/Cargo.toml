@@ -120,6 +120,9 @@ walkdir = "2.3.2"
 zarrs_object_store.workspace = true
 zarrs_filesystem.workspace = true
 
+[build-dependencies]
+libz-sys = "1.1.20" # https://github.com/rust-lang/libz-sys/commit/eb42f72bb4e23ea16b726bc14587d4c5b3d07212
+
 [[example]]
 name = "array_write_read"
 required-features = ["filesystem", "ndarray"]

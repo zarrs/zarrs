@@ -10,6 +10,7 @@
 pub mod iterators;
 use std::{
     fmt::{Debug, Display},
+    mem::size_of,
     num::NonZeroU64,
     ops::Range,
 };
