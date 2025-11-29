@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
+## [0.22.10] - 2025-11-29
+
+### Fixed
+
+- Fix `bz2` codec bounded size
+- Fix `zlib` codec bounded size
+
 ## [0.22.9] - 2025-11-27
 
 ### Added
@@ -1888,7 +1895,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.9...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.10...HEAD
+[0.22.10]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.10
 [0.22.9]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.9
 [0.22.8]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.8
 [0.22.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.7
