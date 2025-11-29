@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `bz2` codec bounded size
+
 ## [0.22.9] - 2025-11-27
 
 ### Added

@@ -127,9 +127,9 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         decoded_representation
             .size()
             .map_or(BytesRepresentation::UnboundedSize, |size| {
-                // https://en.wikipedia.org/wiki/Bzip2#Implementation
-                // TODO: Below assumes a maximum expansion of 1.25 for the blocks + header (4 byte) + footer (11 byte), but need to read spec
-                BytesRepresentation::BoundedSize(4 + 11 + size + size.div_ceil(4))
+                // via https://github.com/amd/aocl-compression/blob/AOCL-Sep2025-b2/algos/bzip2/bzlib.c#L110-L122
+                const MIN_PAD_SIZE: u64 = 1024;
+                BytesRepresentation::BoundedSize(size + (size / 8) + MIN_PAD_SIZE)
             })
     }
 }
