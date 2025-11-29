@@ -102,6 +102,12 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
+        if decoded_data_type.is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_data_type.clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         Ok(decoded_data_type.clone())
     }
 
@@ -148,6 +154,13 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
@@ -171,19 +184,23 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                     .collect::<Vec<_>>();
                 Ok(super::transpose_vlen(bytes, offsets, &shape, order_encode))
             }
-            ArrayBytes::Fixed(bytes) => {
+            ArrayBytes::Fixed(ref data) => {
                 let order_encode =
                     calculate_order_encode(&self.order, decoded_representation.shape().len());
                 let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
-                let bytes = transpose_array(
+                let bytes_transposed = transpose_array(
                     &order_encode,
                     &decoded_representation.shape_u64(),
                     data_type_size,
-                    &bytes,
+                    data,
                 )
                 .map_err(|_| CodecError::Other("transpose_array invalid arguments?".to_string()))?;
-                Ok(ArrayBytes::from(bytes))
+                Ok(ArrayBytes::from(bytes_transposed))
             }
+            ArrayBytes::Optional(..) => Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            )),
         }
     }
 
@@ -193,6 +210,13 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         decoded_representation: &ChunkRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
+        // Reject optional data types explicitly
+        if decoded_representation.data_type().is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            ));
+        }
         bytes.validate(
             decoded_representation.num_elements(),
             decoded_representation.data_type(),
@@ -219,17 +243,21 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                     .collect::<Vec<_>>();
                 Ok(super::transpose_vlen(bytes, offsets, &shape, order_decode))
             }
-            ArrayBytes::Fixed(bytes) => {
+            ArrayBytes::Fixed(ref data) => {
                 let order_decode =
                     calculate_order_decode(&self.order, decoded_representation.shape().len());
                 let transposed_shape = permute(&decoded_representation.shape_u64(), &self.order.0)
                     .expect("matching dimensionality");
                 let data_type_size = decoded_representation.data_type().fixed_size().unwrap();
-                let bytes =
-                    transpose_array(&order_decode, &transposed_shape, data_type_size, &bytes)
+                let bytes_decoded =
+                    transpose_array(&order_decode, &transposed_shape, data_type_size, data)
                         .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
-                Ok(ArrayBytes::from(bytes))
+                Ok(ArrayBytes::from(bytes_decoded))
             }
+            ArrayBytes::Optional(..) => Err(CodecError::UnsupportedDataType(
+                decoded_representation.data_type().clone(),
+                TRANSPOSE.to_string(),
+            )),
         }
     }
 

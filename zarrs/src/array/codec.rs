@@ -122,24 +122,36 @@ use super::{
 
 /// A target for decoding array bytes into a preallocated output view.
 ///
-/// This struct contains:
-/// - A data view (required) for the array elements
-pub struct ArrayBytesDecodeIntoTarget<'a> {
-    /// Data view for array elements.
-    pub data: &'a mut ArrayBytesFixedDisjointView<'a>,
+/// This enum mirrors the structure of [`ArrayBytes`] to support decoding fixed-length
+/// and optional data types into preallocated views.
+#[non_exhaustive]
+pub enum ArrayBytesDecodeIntoTarget<'a> {
+    /// Target for non-optional (fixed-length) data.
+    Fixed(&'a mut ArrayBytesFixedDisjointView<'a>),
+
+    /// Target for optional data (nested data target + mask view).
+    ///
+    /// The mask is always fixed-length (one byte per element).
+    Optional(
+        Box<ArrayBytesDecodeIntoTarget<'a>>,
+        &'a mut ArrayBytesFixedDisjointView<'a>,
+    ),
 }
 
 impl ArrayBytesDecodeIntoTarget<'_> {
     /// Return the number of elements in the target.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        self.data.num_elements()
+        match self {
+            Self::Fixed(data) => data.num_elements(),
+            Self::Optional(data, _) => data.num_elements(),
+        }
     }
 }
 
 impl<'a> From<&'a mut ArrayBytesFixedDisjointView<'a>> for ArrayBytesDecodeIntoTarget<'a> {
     fn from(view: &'a mut ArrayBytesFixedDisjointView<'a>) -> Self {
-        Self { data: view }
+        Self::Fixed(view)
     }
 }
 
@@ -1293,13 +1305,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Decode into a subset of a preallocated output.
     ///
     /// This method is intended for internal use by Array.
-    /// It currently only works for fixed length data types.
+    /// It works for fixed length data types and optional data types.
     ///
-    /// The decoded representation shape and dimensionality does not need to match `output_subset`, but the number of elements must match.
+    /// The decoded representation shape and dimensionality does not need to match the output target, but the number of elements must match.
     /// Chunk elements are written to the subset of the output in C order.
     ///
+    /// For optional data types, provide an `ArrayBytesDecodeIntoTarget` with a `mask` set to `Some`.
+    /// For non-optional data types, convert a fixed view to target using `.into()` or create with `mask: None`.
+    ///
     /// # Errors
-    /// Returns [`CodecError`] if a codec fails or the number of elements in `decoded_representation` does not match the number of elements in `output_view`,
+    /// Returns [`CodecError`] if a codec fails or the number of elements in `decoded_representation` does not match the number of elements in the output target.
     fn decode_into(
         &self,
         bytes: RawBytes<'_>,
@@ -1742,7 +1757,7 @@ pub enum CodecError {
     #[error(transparent)]
     StorageError(#[from] StorageError),
     /// Unsupported data type
-    #[error("Unsupported data type {0} for codec {1}")]
+    #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
     /// Offsets are not [`None`] with a fixed length data type.
     #[error("Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)")]
@@ -1759,6 +1774,9 @@ pub enum CodecError {
     /// Expected variable length bytes.
     #[error("Expected variable length array bytes")]
     ExpectedVariableLengthBytes,
+    /// Expected non-optional bytes.
+    #[error("Expected non-optional array bytes")]
+    ExpectedNonOptionalBytes,
     /// Invalid array shape.
     #[error(transparent)]
     InvalidArrayShape(#[from] InvalidArrayShapeError),
@@ -1780,6 +1798,16 @@ pub enum CodecError {
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),
+}
+
+fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {
+    if data_type.is_optional() {
+        format!(
+            "Unsupported data type {data_type} for codec {codec}. Use the optional codec to handle optional data types.",
+        )
+    } else {
+        format!("Unsupported data type {data_type} for codec {codec}")
+    }
 }
 
 impl From<std::io::Error> for CodecError {

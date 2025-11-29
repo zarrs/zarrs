@@ -23,7 +23,7 @@ use super::{
     concurrency::concurrency_chunks_and_codec,
     element::ElementOwned,
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV3, DataTypeSize,
+    ArrayMetadataV3, DataType,
 };
 
 #[cfg(feature = "ndarray")]
@@ -505,7 +505,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 )
                 .map_err(ArrayError::CodecError)
         } else {
-            copy_fill_value_into(self.data_type(), self.fill_value(), output_target.data)
+            copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
                 .map_err(ArrayError::CodecError)
         }
     }
@@ -617,13 +617,23 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with variable-length data types.
+    /// Also handles optional data types with variable-length inner types (will error).
     fn retrieve_multi_chunk_variable(
         &self,
         array_subset: &ArraySubset,
         chunks: &ArraySubset,
+        data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
+        if data_type.is_optional() {
+            // Optional data type with variable-length inner type is not supported
+            // TODO: Support this
+            return Err(ArrayError::CodecError(CodecError::Other(
+                "Optional data type with variable-length inner type is not supported in multi-chunk retrieval".to_string(),
+            )));
+        }
+
         // Retrieve all the chunks
         let retrieve_chunk =
             |chunk_indices: Vec<u64>| -> Result<(ArrayBytes<'_>, ArraySubset), ArrayError> {
@@ -650,45 +660,79 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types.
+    /// Also handles optional data types with fixed-length inner types.
     fn retrieve_multi_chunk_fixed(
         &self,
         array_subset: &ArraySubset,
         chunks: &ArraySubset,
-        data_type_size: usize,
+        data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        // Allocate the output
-        let size_output = array_subset.num_elements_usize() * data_type_size;
-        if size_output == 0 {
-            return Ok(ArrayBytes::new_flen(vec![]));
-        }
-        let mut output = Vec::with_capacity(size_output);
+        // Allocate data buffer and optional mask buffer
+        let data_type_size = data_type
+            .fixed_size()
+            .expect("data_type must have fixed size");
+        let num_elements = array_subset.num_elements_usize();
+        let size_output = num_elements * data_type_size;
+        let is_optional = data_type.is_optional();
+        let mut data_output = Vec::with_capacity(size_output);
+        let mut mask_output = if is_optional {
+            Some(Vec::with_capacity(num_elements))
+        } else {
+            None
+        };
 
         {
-            let output = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
+            let data_output_slice =
+                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+            let mask_output_slice = mask_output
+                .as_mut()
+                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
+
             let retrieve_chunk = |chunk_indices: Vec<u64>| {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                let mut output_view = unsafe {
+                let chunk_subset_in_array =
+                    chunk_subset_overlap.relative_to(array_subset.start())?;
+
+                let mut data_view = unsafe {
                     // SAFETY: chunks represent disjoint array subsets
                     ArrayBytesFixedDisjointView::new(
-                        output,
+                        data_output_slice,
                         data_type_size,
                         array_subset.shape(),
-                        chunk_subset_overlap.relative_to(array_subset.start())?,
+                        chunk_subset_in_array.clone(),
                     )?
                 };
+
+                let mut mask_view = mask_output_slice
+                    .map(|mask_slice| unsafe {
+                        // SAFETY: chunks represent disjoint array subsets
+                        ArrayBytesFixedDisjointView::new(
+                            mask_slice,
+                            1, // 1 byte per element for mask
+                            array_subset.shape(),
+                            chunk_subset_in_array.clone(),
+                        )
+                    })
+                    .transpose()?;
+
                 self.retrieve_chunk_subset_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    ArrayBytesDecodeIntoTarget {
-                        data: &mut output_view,
+                    match mask_view.as_mut() {
+                        Some(mask) => ArrayBytesDecodeIntoTarget::Optional(
+                            Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
+                            mask,
+                        ),
+                        None => ArrayBytesDecodeIntoTarget::Fixed(&mut data_view),
                     },
                     options,
                 )?;
                 Ok::<_, ArrayError>(())
             };
+
             let indices = chunks.indices();
             iter_concurrent_limit!(
                 chunk_concurrent_limit,
@@ -697,8 +741,18 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 retrieve_chunk
             )?;
         }
-        unsafe { output.set_len(size_output) };
-        Ok(ArrayBytes::from(output))
+
+        unsafe { data_output.set_len(size_output) };
+        if let Some(ref mut mask) = mask_output {
+            unsafe { mask.set_len(num_elements) };
+        }
+
+        let array_bytes = ArrayBytes::new_flen(data_output);
+        Ok(if let Some(mask) = mask_output {
+            array_bytes.with_optional_mask(mask)
+        } else {
+            array_bytes
+        })
     }
 
     /// Explicit options version of [`retrieve_array_subset`](Array::retrieve_array_subset).
@@ -764,21 +818,24 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
-                // Delegate to appropriate helper based on data type
-                match chunk_representation.data_type().size() {
-                    DataTypeSize::Variable => self.retrieve_multi_chunk_variable(
+                // Delegate to appropriate helper based on data type size
+                let data_type = chunk_representation.data_type();
+                if data_type.is_fixed() {
+                    self.retrieve_multi_chunk_fixed(
                         array_subset,
                         &chunks,
+                        data_type,
                         chunk_concurrent_limit,
                         &options,
-                    ),
-                    DataTypeSize::Fixed(data_type_size) => self.retrieve_multi_chunk_fixed(
+                    )
+                } else {
+                    self.retrieve_multi_chunk_variable(
                         array_subset,
                         &chunks,
-                        data_type_size,
+                        data_type,
                         chunk_concurrent_limit,
                         &options,
-                    ),
+                    )
                 }
             }
         }

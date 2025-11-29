@@ -1,5 +1,10 @@
 ## TODO
 
+- Optional data types
+  - Support optional variable length data in retrieve_multi_chunk_variable and retrieve_multi_chunk_variable_impl
+  - Example optional data
+  - Partial encoding and decoding
+
 ### Features
 - Add array methods supporting advanced indexing <https://github.com/zarrs/zarrs/issues/52>
 - Stabilise the async `Array` API <https://github.com/zarrs/zarrs/issues/127>

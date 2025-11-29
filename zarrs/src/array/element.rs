@@ -60,6 +60,7 @@ impl ElementFixedLength for num::complex::Complex<half::f16> {}
 impl ElementFixedLength for num::complex::Complex32 {}
 impl ElementFixedLength for num::complex::Complex64 {}
 impl<const N: usize> ElementFixedLength for [u8; N] {}
+impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
@@ -341,3 +342,99 @@ impl_element_pod!(num::Complex<float8::F8E4M3>, DataType::ComplexFloat8E4M3);
 
 #[cfg(feature = "float8")]
 impl_element_pod!(num::Complex<float8::F8E5M2>, DataType::ComplexFloat8E5M2);
+
+impl<T> Element for Option<T>
+where
+    T: Element + Default,
+{
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if let DataType::Optional(inner_data_type) = data_type {
+            T::validate_data_type(inner_data_type)
+        } else {
+            Err(IET)
+        }
+    }
+
+    fn into_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        let DataType::Optional(inner_data_type) = data_type else {
+            return Err(IET);
+        };
+
+        let num_elements = elements.len();
+
+        // Create validity mask - one byte per element
+        let mut mask = Vec::with_capacity(num_elements);
+
+        // Create dense data - all elements, using default/zero for None values
+        // We need to use a placeholder value for None elements
+        let default_value = T::default();
+        let mut dense_elements = Vec::with_capacity(num_elements);
+
+        for element in elements {
+            if let Some(value) = element {
+                mask.push(1u8);
+                dense_elements.push(value.clone());
+            } else {
+                mask.push(0u8);
+                dense_elements.push(default_value.clone());
+            }
+        }
+
+        // Convert all elements (dense) to ArrayBytes
+        let data = T::into_array_bytes(inner_data_type, &dense_elements)?.into_owned();
+
+        // Create optional ArrayBytes by adding mask to the data
+        Ok(data.with_optional_mask(mask))
+    }
+}
+
+impl<T> ElementOwned for Option<T>
+where
+    T: ElementOwned + Clone + Default,
+{
+    fn from_array_bytes(
+        data_type: &DataType,
+        bytes: ArrayBytes<'_>,
+    ) -> Result<Vec<Self>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        let DataType::Optional(inner_data_type) = data_type else {
+            return Err(IET);
+        };
+
+        // Extract mask and dense data from optional ArrayBytes
+        let optional_bytes = bytes.into_optional().map_err(|e| {
+            ArrayError::Other(format!(
+                "Expected optional ArrayBytes (with mask) for optional data type: {e}"
+            ))
+        })?;
+        let (data, mask) = optional_bytes.into_parts();
+
+        // Convert the dense inner data to a Vec<T>
+        let dense_values = T::from_array_bytes(inner_data_type, *data)?;
+
+        // Build the result vector using mask to determine Some vs None
+        let mut elements = Vec::with_capacity(mask.len());
+        for (i, &mask_byte) in mask.iter().enumerate() {
+            if mask_byte == 0 {
+                // None value
+                elements.push(None);
+            } else {
+                // Some value - take from dense data
+                if i >= dense_values.len() {
+                    return Err(ArrayError::Other(format!(
+                        "Not enough dense values for mask at index {i}"
+                    )));
+                }
+                elements.push(Some(dense_values[i].clone()));
+            }
+        }
+
+        Ok(elements)
+    }
+}

@@ -53,8 +53,8 @@ pub use self::{
         ArrayBuilderFillValue,
     },
     array_bytes::{
-        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, RawBytes,
-        RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
+        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, OptionalBytes,
+        RawBytes, RawBytesOffsets, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
         VariableLengthBytes,
     },
     array_bytes_fixed_disjoint_view::{
