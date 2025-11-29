@@ -1,7 +1,6 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-
 use zarrs_metadata::{ConfigurationSerialize, DataTypeSize};
 
 /// A wrapper to handle various versions of `blosc` codec configuration parameters.

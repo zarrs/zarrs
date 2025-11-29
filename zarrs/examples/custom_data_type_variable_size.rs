@@ -9,13 +9,13 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
     ElementOwned, FillValueMetadataV3,
 };
+use zarrs::metadata::{v3::MetadataV3, Configuration};
+use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
     FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, Deref)]
 struct CustomDataTypeVariableSizeElement(Option<f32>);

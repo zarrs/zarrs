@@ -1,13 +1,14 @@
 #![allow(missing_docs)]
 
-use zarrs_filesystem::FilesystemStore;
-
 use std::error::Error;
+
+use zarrs_filesystem::FilesystemStore;
 
 #[cfg(target_os = "linux")]
 fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
-    use libc::{open, O_DIRECT, O_RDONLY};
     use std::os::fd::FromRawFd;
+
+    use libc::{open, O_DIRECT, O_RDONLY};
 
     let c_path = std::ffi::CString::new(path).unwrap();
     unsafe {

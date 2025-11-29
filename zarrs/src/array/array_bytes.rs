@@ -6,16 +6,15 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::DataTypeFillValueError;
 
+use super::{
+    codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
+    ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
+};
 use crate::{
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
     metadata::DataTypeSize,
     storage::byte_range::extract_byte_ranges_concat,
-};
-
-use super::{
-    codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
-    ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
 };
 
 mod array_bytes_offsets;
@@ -1012,9 +1011,8 @@ impl<'a, const N: usize> From<&'a [u8; N]> for ArrayBytes<'a> {
 mod tests {
     use std::error::Error;
 
-    use crate::array::Element;
-
     use super::*;
+    use crate::array::Element;
 
     #[test]
     fn array_bytes_flen() -> Result<(), Box<dyn Error>> {

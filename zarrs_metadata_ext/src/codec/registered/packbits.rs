@@ -1,6 +1,5 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// Helper function to determine if `padding_encoding` should be skipped during serialization.

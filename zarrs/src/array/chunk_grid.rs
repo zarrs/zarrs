@@ -13,22 +13,20 @@ pub mod regular_bounded;
 
 use std::sync::Arc;
 
+use derive_more::{Deref, From};
 pub use rectangular::*;
 pub use regular::*;
 pub use regular_bounded::*;
-
-use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
-use zarrs_storage::{MaybeSend, MaybeSync};
 
+use super::{ArrayIndices, ArrayShape, ChunkShape};
 use crate::array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
     plugin::{Plugin, PluginCreateError},
 };
-
-use super::{ArrayIndices, ArrayShape, ChunkShape};
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]

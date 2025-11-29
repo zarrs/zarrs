@@ -9,22 +9,21 @@
 #![doc = include_str!("../../doc/status/storage_transformers.md")]
 
 mod storage_transformer_chain;
-pub use storage_transformer_chain::StorageTransformerChain;
-use zarrs_plugin::{Plugin, PluginUnsupportedError};
-use zarrs_storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
-
 use std::sync::Arc;
 
+pub use storage_transformer_chain::StorageTransformerChain;
+use zarrs_plugin::{Plugin, PluginUnsupportedError};
+
+#[cfg(feature = "async")]
+use crate::storage::{
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
+use crate::storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
 use crate::{
     metadata::v3::MetadataV3,
     node::NodePath,
     plugin::PluginCreateError,
     storage::{ListableStorage, ReadableStorage, StorageError, WritableStorage},
-};
-
-#[cfg(feature = "async")]
-use crate::storage::{
-    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
 
 /// An [`Arc`] wrapped storage transformer.

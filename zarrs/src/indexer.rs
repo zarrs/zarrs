@@ -1,9 +1,9 @@
 //! Generic indexer support.
 
 use thiserror::Error;
-use zarrs_metadata::ArrayShape;
-use zarrs_storage::{MaybeSend, MaybeSync};
 
+use crate::metadata::ArrayShape;
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{ravel_indices, ArrayIndices},
     array_subset::{ArraySubset, IncompatibleDimensionalityError},

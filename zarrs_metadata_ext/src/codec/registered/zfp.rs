@@ -1,6 +1,5 @@
 use derive_more::From;
 use serde::{Deserialize, Serialize};
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `zfp` codec configuration parameters.

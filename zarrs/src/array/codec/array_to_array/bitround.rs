@@ -29,7 +29,7 @@
 //!     "keepbits": 10
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::bitround::BitroundCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::bitround::BitroundCodecConfigurationV1;
 //! # let configuration: BitroundCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -39,11 +39,11 @@ mod bitround_codec_partial;
 use std::sync::Arc;
 
 pub use bitround_codec::BitroundCodec;
-pub use zarrs_metadata_ext::codec::bitround::{
+
+pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use zarrs_registry::codec::BITROUND;
-
+use crate::registry::codec::BITROUND;
 use crate::{
     array::{
         codec::{Codec, CodecError, CodecPlugin},
@@ -284,6 +284,7 @@ mod tests {
 
     use array_representation::ChunkRepresentation;
 
+    use super::*;
     use crate::{
         array::{
             array_representation,
@@ -292,8 +293,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     #[test]
     fn codec_bitround_float() {

@@ -1,7 +1,9 @@
-use crate::storage::{StorePrefix, StorePrefixError};
-use derive_more::Display;
 use std::path::PathBuf;
+
+use derive_more::Display;
 use thiserror::Error;
+
+use crate::storage::{StorePrefix, StorePrefixError};
 
 /// A Zarr hierarchy node path.
 ///

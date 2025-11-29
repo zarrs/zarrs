@@ -2,11 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_metadata::ConfigurationSerialize;
-use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::StorageHandle;
-use zarrs_storage::{MaybeSend, MaybeSync};
 
 use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
@@ -18,7 +13,12 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
+use crate::metadata::ConfigurationSerialize;
+use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
+use crate::storage::byte_range::ByteRange;
 use crate::storage::AsyncReadableStorageTraits;
+use crate::storage::StorageHandle;
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
 
 // TODO: Remove with trait upcasting
@@ -736,8 +736,8 @@ mod private {
 mod tests {
     use std::sync::Arc;
 
-    use zarrs_metadata_ext::codec::transpose::TransposeOrder;
-
+    use super::*;
+    use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
             codec::{array_to_bytes::sharding::ShardingCodecBuilder, TransposeCodec},
@@ -746,8 +746,6 @@ mod tests {
         array_subset::ArraySubset,
         storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
     };
-
-    use super::*;
 
     async fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
         let store = object_store::memory::InMemory::new();

@@ -23,20 +23,21 @@ pub use key::{
 
 #[cfg(feature = "async")]
 mod node_async;
+use std::{collections::HashMap, sync::Arc};
+
 #[cfg(feature = "async")]
 pub(crate) use node_async::async_get_all_nodes_of;
 #[cfg(feature = "async")]
 pub use node_async::{
     async_get_child_nodes, async_get_child_nodes_opt, async_node_exists, async_node_exists_listable,
 };
-use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
-use zarrs_storage::StorePrefixError;
-
-use std::{collections::HashMap, sync::Arc};
-
-pub use crate::metadata::NodeMetadata;
 use thiserror::Error;
 
+pub use crate::metadata::NodeMetadata;
+use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
+use crate::storage::StorePrefixError;
+#[cfg(feature = "async")]
+use crate::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
 use crate::{
     array::{ArrayCreateError, ArrayMetadata},
     config::MetadataRetrieveVersion,
@@ -47,9 +48,6 @@ use crate::{
     },
     storage::{ListableStorageTraits, ReadableStorageTraits, StorageError},
 };
-
-#[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
 
 /// A Zarr hierarchy node.
 ///
@@ -467,13 +465,12 @@ impl Node {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         array::{ArrayBuilder, ArrayMetadataOptions},
         group::{GroupMetadata, GroupMetadataV3},
         storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
     };
-
-    use super::*;
 
     #[test]
     fn node_metadata_array() {

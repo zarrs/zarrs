@@ -7,6 +7,7 @@ use zarrs::storage::{
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
+
     use zarrs::{
         array::{DataType, ZARR_NAN_F32},
         array_subset::ArraySubset,

@@ -1,8 +1,9 @@
 use std::num::NonZeroU64;
 
+use derive_more::Display;
+
 use super::{ArrayShape, DataType, DataTypeSize, FillValue};
 use crate::array::data_type::DataTypeFillValueError;
-use derive_more::Display;
 
 /// The shape, data type, and fill value of an `array`.
 #[derive(Clone, Debug, Display)]

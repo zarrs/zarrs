@@ -1,9 +1,8 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zarrs_metadata::ConfigurationSerialize;
 
 use crate::codec::zfp::{ZfpCodecConfigurationV1, ZfpMode};
-
-use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `zfpy` codec configuration parameters.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Display, From)]
@@ -144,9 +143,8 @@ pub fn codec_zfpy_v2_numcodecs_to_v3(
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::zfp::ZfpCodecConfigurationV1;
-
     use super::*;
+    use crate::codec::zfp::ZfpCodecConfigurationV1;
 
     #[test]
     fn codec_zfpy_fixed_rate() {

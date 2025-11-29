@@ -1,7 +1,9 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_storage::StorageError;
-
+use super::{blosc_decompress_bytes_partial, blosc_typesize, blosc_validate};
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use crate::storage::StorageError;
 use crate::{
     array::{
         codec::{
@@ -12,11 +14,6 @@ use crate::{
     },
     storage::byte_range::ByteRangeIterator,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-use super::{blosc_decompress_bytes_partial, blosc_typesize, blosc_validate};
 
 /// Partial decoder for the `blosc` codec.
 pub(crate) struct BloscPartialDecoder {

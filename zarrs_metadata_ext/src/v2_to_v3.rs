@@ -3,6 +3,19 @@
 use std::sync::Arc;
 
 use thiserror::Error;
+use zarrs_metadata::{
+    v2::{
+        data_type_metadata_v2_to_endianness, ArrayMetadataV2, ArrayMetadataV2Order,
+        DataTypeMetadataV2, DataTypeMetadataV2EndiannessError, FillValueMetadataV2,
+        GroupMetadataV2, MetadataV2,
+    },
+    v3::{ArrayMetadataV3, FillValueMetadataV3, GroupMetadataV3, MetadataV3},
+    DataTypeSize, Endianness,
+};
+use zarrs_registry::{
+    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
+    ExtensionAliasesDataTypeV3,
+};
 
 use crate::{
     chunk_grid::regular::RegularChunkGridConfiguration,
@@ -16,20 +29,6 @@ use crate::{
         transpose::{TransposeCodecConfigurationV1, TransposeOrder},
         zstd::{codec_zstd_v2_numcodecs_to_v3, ZstdCodecConfiguration},
     },
-};
-
-use zarrs_metadata::{
-    v2::{
-        data_type_metadata_v2_to_endianness, ArrayMetadataV2, ArrayMetadataV2Order,
-        DataTypeMetadataV2, DataTypeMetadataV2EndiannessError, FillValueMetadataV2,
-        GroupMetadataV2, MetadataV2,
-    },
-    v3::{ArrayMetadataV3, FillValueMetadataV3, GroupMetadataV3, MetadataV3},
-    DataTypeSize, Endianness,
-};
-use zarrs_registry::{
-    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-    ExtensionAliasesDataTypeV3,
 };
 
 /// Convert Zarr V2 group metadata to Zarr V3.
@@ -373,15 +372,15 @@ pub fn fill_value_metadata_v2_to_v3(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::codec::{
-        blosc::BloscCodecConfigurationV1, transpose::TransposeCodecConfigurationV1,
-    };
     use zarrs_metadata::{ChunkKeySeparator, ChunkShape, Endianness};
     use zarrs_registry::{
         ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
         ExtensionAliasesDataTypeV3,
+    };
+
+    use super::*;
+    use crate::codec::{
+        blosc::BloscCodecConfigurationV1, transpose::TransposeCodecConfigurationV1,
     };
 
     #[test]

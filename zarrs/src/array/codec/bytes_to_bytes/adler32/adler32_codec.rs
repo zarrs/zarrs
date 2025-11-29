@@ -1,10 +1,15 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ADLER32;
 
+use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+#[cfg(feature = "async")]
+use crate::array::codec::bytes_to_bytes::{
+    strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder,
+    strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::array::{
     codec::{
         bytes_to_bytes::{
@@ -17,17 +22,9 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::{
-    strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder,
-    strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
-};
-
-use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
+use crate::registry::codec::ADLER32;
 
 /// A `adler32` codec implementation.
 #[derive(Clone, Debug, Default)]

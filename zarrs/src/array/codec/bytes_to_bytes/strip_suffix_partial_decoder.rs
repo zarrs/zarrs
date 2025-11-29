@@ -1,7 +1,8 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_storage::StorageError;
-
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use crate::storage::StorageError;
 use crate::{
     array::{
         codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
@@ -9,9 +10,6 @@ use crate::{
     },
     storage::byte_range::{ByteRange, ByteRangeIterator},
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
 
 /// Partial decoder for stripping a suffix (e.g. checksum).
 pub(crate) struct StripSuffixPartialDecoder {

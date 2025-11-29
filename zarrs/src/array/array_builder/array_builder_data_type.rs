@@ -1,5 +1,4 @@
-use zarrs_metadata::v3::MetadataV3;
-
+use crate::metadata::v3::MetadataV3;
 use crate::{
     array::{ArrayCreateError, DataType},
     config::global_config,

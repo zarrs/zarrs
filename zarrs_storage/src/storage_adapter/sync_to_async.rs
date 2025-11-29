@@ -2,15 +2,16 @@
 //!
 //! The docs for the [`SyncToAsyncSpawnBlocking`] trait include an example implementation for the `tokio` runtime.
 
+use std::sync::Arc;
+
+use futures::stream;
+
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncMaybeBytesIterator,
     AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes, ListableStorageTraits,
     MaybeSend, MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey,
     StoreKeys, StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
-
-use futures::stream;
-use std::sync::Arc;
 
 /// Trait for spawning synchronous work onto an asynchronous runtime.
 ///

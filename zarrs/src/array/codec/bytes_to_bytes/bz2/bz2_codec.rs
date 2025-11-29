@@ -4,10 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::BZ2;
 
+use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -15,8 +14,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
+use crate::metadata::Configuration;
+use crate::registry::codec::BZ2;
 
 /// A `bz2` codec implementation.
 #[derive(Clone, Debug)]

@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
-
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_storage::{
+
+use super::{calculate_chunks_per_shard, ShardingIndexLocation};
+use crate::storage::{
     byte_range::{ByteLength, ByteOffset, ByteRange},
     StorageError,
 };
-
 use crate::{
     array::{
         array_bytes::merge_chunks_vlen,
@@ -24,8 +24,6 @@ use crate::{
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},
 };
-
-use super::{calculate_chunks_per_shard, ShardingIndexLocation};
 
 /// Partial decoder for the sharding codec.
 pub(crate) struct ShardingPartialDecoder {

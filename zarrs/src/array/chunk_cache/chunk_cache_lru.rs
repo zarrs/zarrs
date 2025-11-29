@@ -1,15 +1,14 @@
 use std::borrow::Cow;
 use std::sync::{atomic, Arc};
-use zarrs_storage::{ReadableStorageTraits, StorageError};
 
+use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ChunkCache, ChunkCacheTypeDecoded,
     ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
 };
 use crate::array_subset::ArraySubset;
-
-use super::ChunkCacheType;
+use crate::storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;
 
@@ -409,14 +408,12 @@ impl ChunkCache for ChunkCachePartialDecoderLruSizeLimitThreadLocal {
 #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
-    use zarrs_storage::{
-        ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
-    };
-
-    use super::*;
-
     use std::sync::Arc;
 
+    use super::*;
+    use crate::storage::{
+        ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
+    };
     use crate::{
         array::{
             chunk_cache::ChunkCache,

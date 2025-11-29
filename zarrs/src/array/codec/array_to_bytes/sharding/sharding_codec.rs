@@ -4,8 +4,22 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
-use zarrs_metadata::Configuration;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
+use unsafe_cell_slice::UnsafeCellSlice;
 
+#[cfg(feature = "async")]
+use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+use super::{
+    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
+    sharding_index_decoded_representation, sharding_partial_decoder_sync::ShardingPartialDecoder,
+    sharding_partial_encoder, ShardingCodecConfiguration, ShardingCodecConfigurationV1,
+    ShardingIndexLocation,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::metadata::Configuration;
+use crate::registry::codec::SHARDING;
 use crate::{
     array::{
         array_bytes::merge_chunks_vlen,
@@ -24,25 +38,6 @@ use crate::{
     array_subset::ArraySubset,
     plugin::PluginCreateError,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
-use super::{
-    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_decoded_representation, sharding_partial_decoder_sync::ShardingPartialDecoder,
-    sharding_partial_encoder, ShardingCodecConfiguration, ShardingCodecConfigurationV1,
-    ShardingIndexLocation,
-};
-
-#[cfg(feature = "async")]
-use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-
-use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_registry::codec::SHARDING;
-
-#[cfg(not(target_arch = "wasm32"))]
-use rayon::prelude::*;
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]

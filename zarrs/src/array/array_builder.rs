@@ -1,12 +1,6 @@
 use std::sync::Arc;
 
 use derive_more::From;
-use zarrs_metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
-
-use crate::{
-    array::{codec::array_to_bytes::optional::OptionalCodec, ChunkGrid},
-    node::NodePath,
-};
 
 use super::{
     chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
@@ -17,6 +11,11 @@ use super::{
     },
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, CodecChain, DataType,
     DimensionName, StorageTransformerChain,
+};
+use crate::metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
+use crate::{
+    array::{codec::array_to_bytes::optional::OptionalCodec, ChunkGrid},
+    node::NodePath,
 };
 
 mod array_builder_chunk_grid;
@@ -588,9 +587,10 @@ mod tests {
     use std::num::NonZeroU64;
 
     use zarrs_data_type::FillValue;
-    use zarrs_metadata::v3::{FillValueMetadataV3, MetadataV3};
-    use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
+    use super::*;
+    use crate::metadata::v3::{FillValueMetadataV3, MetadataV3};
+    use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use crate::{
         array::{
             chunk_grid::{ChunkGridTraits, RegularChunkGrid},
@@ -599,8 +599,6 @@ mod tests {
         },
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
-
-    use super::*;
 
     #[test]
     fn array_builder() {

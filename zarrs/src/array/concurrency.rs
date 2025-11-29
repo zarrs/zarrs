@@ -13,9 +13,8 @@
 //     Maximum,
 // }
 
-use crate::config::global_config;
-
 use super::codec::CodecOptions;
+use crate::config::global_config;
 
 /// The recommended concurrency of a codec includes the most efficient and maximum recommended concurrency.
 ///

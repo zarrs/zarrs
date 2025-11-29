@@ -23,7 +23,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::squeeze::SqueezeCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::squeeze::SqueezeCodecConfiguration;
 //! # let configuration: SqueezeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -34,11 +34,11 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::{izip, Itertools};
 pub use squeeze_codec::SqueezeCodec;
-pub use zarrs_metadata_ext::codec::squeeze::{
+
+pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use zarrs_registry::codec::SQUEEZE;
-
+use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
         codec::{Codec, CodecError, CodecPlugin},
@@ -85,7 +85,7 @@ fn get_squeezed_array_subset(
         decoded_region.shape().iter(),
         shape.iter()
     )
-    .filter(|(_, _, &shape)| shape.get() > 1)
+    .filter(|&(_, _, shape)| shape.get() > 1)
     .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
 
     let decoded_region_squeeze = ArraySubset::from(ranges);
@@ -123,6 +123,7 @@ fn get_squeezed_indexer(
 mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
@@ -130,8 +131,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     fn codec_squeeze_round_trip_impl(
         json: &str,

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use zarrs::array::codec::BloscCodec;
-use zarrs_metadata_ext::codec::blosc::{BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
+use zarrs::metadata_ext::codec::blosc::{BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
 
 fn array_blosc_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_blosc_write_all");

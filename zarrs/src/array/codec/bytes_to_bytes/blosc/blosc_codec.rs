@@ -1,9 +1,16 @@
 use std::{borrow::Cow, ffi::c_char, sync::Arc};
 
 use blosc_src::{blosc_get_complib_info, BLOSC_MAX_OVERHEAD};
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::BLOSC;
 
+use super::{
+    blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder, blosc_validate,
+    compressor_as_cstr, BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel,
+    BloscCompressor, BloscError, BloscShuffleMode,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use crate::metadata::Configuration;
+use crate::registry::codec::BLOSC;
 use crate::{
     array::{
         codec::{
@@ -14,15 +21,6 @@ use crate::{
         ArrayBytesRaw, BytesRepresentation,
     },
     plugin::PluginCreateError,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-use super::{
-    blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder, blosc_validate,
-    compressor_as_cstr, BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel,
-    BloscCompressor, BloscError, BloscShuffleMode,
 };
 
 /// A `blosc` codec implementation.

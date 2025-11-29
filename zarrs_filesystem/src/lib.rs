@@ -7,6 +7,10 @@
 //! - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
+use bytes::BytesMut;
+use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
+use thiserror::Error;
+use walkdir::WalkDir;
 use zarrs_storage::{
     byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
     store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
@@ -14,16 +18,8 @@ use zarrs_storage::{
     StorePrefix, StorePrefixes, WritableStorageTraits,
 };
 
-use bytes::BytesMut;
-use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
-use thiserror::Error;
-use walkdir::WalkDir;
-
 #[cfg(target_os = "linux")]
 mod direct_io;
-#[cfg(target_os = "linux")]
-use direct_io::{AsRawFd, MetadataExt, OpenOptionsExt, O_DIRECT};
-
 use std::{
     collections::HashMap,
     fs::OpenOptions,
@@ -31,6 +27,9 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
+
+#[cfg(target_os = "linux")]
+use direct_io::{AsRawFd, MetadataExt, OpenOptionsExt, O_DIRECT};
 
 // // Register the store.
 // inventory::submit! {

@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::BITROUND;
 
+use super::{
+    bitround_codec_partial, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     codec::{
         ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -12,13 +15,8 @@ use crate::array::{
     },
     ChunkRepresentation, DataType,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-
-use super::{
-    bitround_codec_partial, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
-};
+use crate::metadata::Configuration;
+use crate::registry::codec::BITROUND;
 
 /// A `bitround` codec implementation.
 #[derive(Clone, Debug, Default)]

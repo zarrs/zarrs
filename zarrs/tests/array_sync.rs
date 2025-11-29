@@ -393,8 +393,8 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "zfp")]
 #[test]
 fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::metadata_ext::codec::reshape::ReshapeShape;
     use zarrs_data_type::FillValue;
-    use zarrs_metadata_ext::codec::reshape::ReshapeShape;
 
     let store = std::sync::Arc::new(MemoryStore::default());
     let mut builder = ArrayBuilder::new(

@@ -18,20 +18,12 @@ pub mod bytes_to_bytes;
 mod options;
 
 mod named_codec;
-pub use named_codec::{
-    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
-};
-
-use derive_more::derive::Display;
-pub use options::{CodecMetadataOptions, CodecOptions, CodecOptionsBuilder};
-
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
 #[cfg(feature = "transpose")]
 pub use array_to_array::transpose::*;
 pub use array_to_array::{fixedscaleoffset::*, reshape::*, squeeze::*};
-
 // Array to bytes
 #[cfg(feature = "pcodec")]
 pub use array_to_bytes::pcodec::*;
@@ -45,7 +37,6 @@ pub use array_to_bytes::{
     bytes::*, codec_chain::CodecChain, packbits::*, vlen::*, vlen_array::*, vlen_bytes::*,
     vlen_utf8::*, vlen_v2::*,
 };
-
 // Bytes to bytes
 #[cfg(feature = "adler32")]
 pub use bytes_to_bytes::adler32::*;
@@ -66,7 +57,11 @@ pub use bytes_to_bytes::shuffle::*;
 pub use bytes_to_bytes::zlib::*;
 #[cfg(feature = "zstd")]
 pub use bytes_to_bytes::zstd::*;
-
+use derive_more::derive::Display;
+pub use named_codec::{
+    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
+};
+pub use options::{CodecMetadataOptions, CodecOptions, CodecOptionsBuilder};
 use thiserror::Error;
 
 mod array_partial_decoder_cache;
@@ -75,49 +70,45 @@ pub(crate) use array_partial_decoder_cache::ArrayPartialDecoderCache;
 pub(crate) use bytes_partial_decoder_cache::BytesPartialDecoderCache;
 
 mod byte_interval_partial_decoder;
-pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
-
 #[cfg(feature = "async")]
 pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
+pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 
 mod codec_partial_default;
-pub use codec_partial_default::CodecPartialDefault;
-use codec_partial_default::{
-    ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
-    BytesToBytesCodecPartialDefault,
-};
-use zarrs_metadata::Configuration;
-
-use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
-use zarrs_metadata::{v3::MetadataV3, ArrayShape};
-use zarrs_plugin::PluginUnsupportedError;
-use zarrs_registry::ExtensionAliasesCodecV3;
-use zarrs_storage::byte_range::extract_byte_ranges;
-use zarrs_storage::OffsetBytesIterator;
-use zarrs_storage::{MaybeSend, MaybeSync};
-
-use crate::config::global_config;
-use crate::{
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    indexer::IncompatibleIndexerError,
-    plugin::{Plugin, PluginCreateError},
-    storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError},
-    storage::{ReadableStorage, ReadableWritableStorage, StorageError, StoreKey},
-};
-
-#[cfg(feature = "async")]
-use crate::storage::{AsyncReadableStorage, AsyncReadableWritableStorage};
-
 use std::any::Any;
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+pub use codec_partial_default::CodecPartialDefault;
+use codec_partial_default::{
+    ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
+    BytesToBytesCodecPartialDefault,
+};
+use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
+use zarrs_plugin::PluginUnsupportedError;
+
 use super::{
     array_bytes::RawBytesOffsetsCreateError, concurrency::RecommendedConcurrency, ArrayBytes,
     ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
     ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError,
+};
+use crate::config::global_config;
+use crate::metadata::Configuration;
+use crate::metadata::{v3::MetadataV3, ArrayShape};
+use crate::registry::ExtensionAliasesCodecV3;
+use crate::storage::byte_range::extract_byte_ranges;
+use crate::storage::OffsetBytesIterator;
+#[cfg(feature = "async")]
+use crate::storage::{AsyncReadableStorage, AsyncReadableWritableStorage};
+use crate::storage::{MaybeSend, MaybeSync};
+use crate::{
+    array_subset::{ArraySubset, IncompatibleDimensionalityError},
+    indexer::IncompatibleIndexerError,
+    plugin::{Plugin, PluginCreateError},
+    storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError},
+    storage::{ReadableStorage, ReadableWritableStorage, StorageError, StoreKey},
 };
 
 /// A target for decoding array bytes into a preallocated output view.
@@ -1760,7 +1751,9 @@ pub enum CodecError {
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
     /// Offsets are not [`None`] with a fixed length data type.
-    #[error("Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)")]
+    #[error(
+        "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"
+    )]
     InvalidOffsets,
     /// Other
     #[error("{_0}")]

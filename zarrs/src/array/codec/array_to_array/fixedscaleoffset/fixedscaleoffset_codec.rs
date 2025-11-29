@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use zarrs_metadata::{v2::DataTypeMetadataV2, Configuration};
-use zarrs_metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::FIXEDSCALEOFFSET;
 
+use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
+use crate::metadata::{v2::DataTypeMetadataV2, Configuration};
+use crate::metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
+use crate::registry::codec::FIXEDSCALEOFFSET;
 use crate::{
     array::{
         codec::{
@@ -16,8 +17,6 @@ use crate::{
     },
     config::global_config,
 };
-
-use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
 
 macro_rules! unsupported_dtypes {
     // TODO: Add support for all int/float types?

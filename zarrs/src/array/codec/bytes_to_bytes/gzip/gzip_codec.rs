@@ -5,10 +5,12 @@ use std::{
 };
 
 use flate2::bufread::{GzDecoder, GzEncoder};
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::GZIP;
 
+use super::{
+    GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
+    GzipCompressionLevelError,
+};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -16,11 +18,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-use super::{
-    GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
-    GzipCompressionLevelError,
-};
+use crate::metadata::Configuration;
+use crate::registry::codec::GZIP;
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]

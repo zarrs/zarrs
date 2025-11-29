@@ -33,7 +33,7 @@
 //!     "equal_pages_up_to": 262144
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::pcodec::PcodecCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::pcodec::PcodecCodecConfiguration;
 //! # serde_json::from_str::<PcodecCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -41,19 +41,18 @@ mod pcodec_codec;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata_ext::codec::pcodec::{
+pub use pcodec_codec::PcodecCodec;
+
+pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-
-pub use pcodec_codec::PcodecCodec;
-
+use crate::registry::codec::PCODEC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-use zarrs_registry::codec::PCODEC;
 
 // Register the codec.
 inventory::submit! {
@@ -118,6 +117,7 @@ use unsupported_dtypes;
 mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
@@ -126,8 +126,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     const JSON_VALID: &str = r#"{
         "level": 8,

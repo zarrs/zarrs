@@ -92,7 +92,7 @@
 //!     "index_location": "end"
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::vlen::VlenCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::vlen::VlenCodecConfiguration;
 //! # let configuration: VlenCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
 mod vlen_codec;
@@ -101,26 +101,23 @@ mod vlen_partial_decoder;
 use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::Itertools;
-use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
+pub use vlen_codec::VlenCodec;
 
+use super::bytes::reverse_endianness;
 use crate::array::{
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
     convert_from_bytes_slice, ArrayBytesRaw, ChunkRepresentation, CodecChain, DataType, Endianness,
 };
-pub use zarrs_metadata_ext::codec::vlen::{
+use crate::metadata_ext::codec::vlen::VlenIndexLocation;
+pub use crate::metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use zarrs_registry::codec::VLEN;
-
-pub use vlen_codec::VlenCodec;
-
+use crate::registry::codec::VLEN;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-use super::bytes::reverse_endianness;
 
 // Register the codec.
 inventory::submit! {

@@ -23,7 +23,6 @@ mod store_prefix;
 
 pub mod byte_range;
 use byte_range::{ByteOffset, InvalidByteRangeError};
-
 pub use maybe::{MaybeSend, MaybeSync};
 
 #[cfg(feature = "async")]
@@ -35,10 +34,10 @@ pub mod store_test;
 
 use std::sync::Arc;
 
-use thiserror::Error;
-
+pub use storage_value_io::StorageValueIO;
 pub use store_key::{StoreKey, StoreKeyError, StoreKeys};
 pub use store_prefix::{StorePrefix, StorePrefixError, StorePrefixes};
+use thiserror::Error;
 
 #[cfg(feature = "async")]
 pub use self::storage_async::{
@@ -47,16 +46,12 @@ pub use self::storage_async::{
     AsyncReadableWritableListableStorageTraits, AsyncReadableWritableStorageTraits,
     AsyncWritableStorageTraits,
 };
-
+pub use self::storage_handle::StorageHandle;
 pub use self::storage_sync::{
     discover_children, store_set_partial_many, ListableStorageTraits,
     ReadableListableStorageTraits, ReadableStorageTraits, ReadableWritableListableStorageTraits,
     ReadableWritableStorageTraits, WritableStorageTraits,
 };
-
-pub use self::storage_handle::StorageHandle;
-
-pub use storage_value_io::StorageValueIO;
 
 /// [`Arc`] wrapped readable storage.
 pub type ReadableStorage = Arc<dyn ReadableStorageTraits>;

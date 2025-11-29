@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
+use super::{
+    meta_key_v2_array, meta_key_v2_group, meta_key_v3, Node, NodeCreateError, NodeMetadata,
+    NodePath, NodePathError,
+};
 use crate::{
     config::MetadataRetrieveVersion,
     storage::{
         discover_children, ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix,
     },
-};
-
-use super::{
-    meta_key_v2_array, meta_key_v2_group, meta_key_v3, Node, NodeCreateError, NodeMetadata,
-    NodePath, NodePathError,
 };
 
 /// Get the child nodes.
@@ -45,8 +44,8 @@ pub fn get_child_nodes_opt<TStorage: ?Sized + ReadableStorageTraits + ListableSt
             Ok(metadata) => metadata,
             Err(NodeCreateError::MissingMetadata(_)) => {
                 log::warn!(
-                        "Object at {path} is not recognized as a component of a Zarr hierarchy. Ignoring."
-                    );
+                    "Object at {path} is not recognized as a component of a Zarr hierarchy. Ignoring."
+                );
                 continue;
             }
             Err(e) => return Err(e),
@@ -117,9 +116,8 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
-
     use super::*;
+    use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
 
     #[test]
     fn warning_get_child_nodes() {

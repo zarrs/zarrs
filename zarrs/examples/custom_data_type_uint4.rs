@@ -5,6 +5,8 @@
 use std::{borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
+use zarrs::metadata::{v3::MetadataV3, Configuration};
+use zarrs::storage::store::MemoryStore;
 use zarrs::{
     array::{
         ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
@@ -17,9 +19,7 @@ use zarrs_data_type::{
     DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
 
 /// A unique identifier for  the custom data type.
 const UINT4: &'static str = "zarrs.test.uint4";

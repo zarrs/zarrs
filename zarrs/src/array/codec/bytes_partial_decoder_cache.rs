@@ -1,17 +1,15 @@
 //! A cache for partial decoders.
 
 use std::borrow::Cow;
-use zarrs_storage::StorageError;
 
+#[cfg(feature = "async")]
+use super::AsyncBytesPartialDecoderTraits;
+use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use crate::storage::StorageError;
 use crate::{
     array::ArrayBytesRaw,
     storage::byte_range::{extract_byte_ranges, ByteRange, ByteRangeIterator},
 };
-
-use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
-
-#[cfg(feature = "async")]
-use super::AsyncBytesPartialDecoderTraits;
 
 /// A cache for a [`BytesPartialDecoderTraits`] partial decoder.
 pub(crate) struct BytesPartialDecoderCache {

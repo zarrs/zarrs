@@ -3,21 +3,19 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use zarrs_storage::ReadableStorageTraits;
-
-use crate::{
-    array::codec::CodecTraits,
-    array::ArrayBytes,
-    array_subset::ArraySubset,
-    storage::{ReadableWritableStorageTraits, StorageHandle},
-};
-
 use super::{
     codec::{
         ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialEncoder,
     },
     concurrency::concurrency_chunks_and_codec,
     update_array_bytes, Array, ArrayError, Element,
+};
+use crate::storage::ReadableStorageTraits;
+use crate::{
+    array::codec::CodecTraits,
+    array::ArrayBytes,
+    array_subset::ArraySubset,
+    storage::{ReadableWritableStorageTraits, StorageHandle},
 };
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {

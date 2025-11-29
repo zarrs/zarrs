@@ -25,7 +25,7 @@
 //!     "shape": [[0, 1], -1, [3], 10]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::reshape::ReshapeCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::reshape::ReshapeCodecConfiguration;
 //! # let configuration: ReshapeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -34,14 +34,14 @@ mod reshape_codec;
 use std::{num::NonZeroU64, sync::Arc};
 
 use num::Integer;
-// use itertools::Itertools;
 pub use reshape_codec::ReshapeCodec;
-use zarrs_metadata::ChunkShape;
-pub use zarrs_metadata_ext::codec::reshape::{
+
+// use itertools::Itertools;
+use crate::metadata::ChunkShape;
+pub use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use zarrs_registry::codec::RESHAPE;
-
+use crate::registry::codec::RESHAPE;
 use crate::{
     array::codec::{Codec, CodecError, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -85,14 +85,14 @@ fn get_encoded_shape(
         if rem == 0 {
             encoded_shape[fill_index] = NonZeroU64::new(quot).unwrap();
         } else {
-            return Err(CodecError::Other(
-                format!("reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."),
-            ));
+            return Err(CodecError::Other(format!(
+                "reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."
+            )));
         }
     } else if num_elements_input != num_elements_output {
-        return Err(CodecError::Other(
-                format!("reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."),
-            ));
+        return Err(CodecError::Other(format!(
+            "reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."
+        )));
     }
 
     Ok(encoded_shape.into())
@@ -119,12 +119,11 @@ pub(crate) fn create_codec_reshape(metadata: &MetadataV3) -> Result<Codec, Plugi
 mod tests {
     use std::num::NonZeroU64;
 
+    use super::*;
     use crate::array::{
         codec::{ArrayToArrayCodecTraits, CodecOptions},
         ArrayBytes, ChunkRepresentation, DataType, FillValue,
     };
-
-    use super::*;
 
     fn codec_reshape_round_trip_impl(
         json: &str,

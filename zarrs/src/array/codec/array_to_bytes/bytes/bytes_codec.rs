@@ -2,15 +2,18 @@
 
 use std::sync::Arc;
 
-use crate::array::{
-    codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
-    DataType,
-};
 use zarrs_data_type::DataTypeExtensionError;
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::BYTES;
 
+use super::{
+    bytes_codec_partial, reverse_endianness, BytesCodecConfiguration, BytesCodecConfigurationV1,
+    Endianness,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 use crate::array::{
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -19,17 +22,12 @@ use crate::array::{
     },
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
+use crate::array::{
+    codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
+    DataType,
 };
-
-use super::{
-    bytes_codec_partial, reverse_endianness, BytesCodecConfiguration, BytesCodecConfigurationV1,
-    Endianness,
-};
+use crate::metadata::Configuration;
+use crate::registry::codec::BYTES;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]

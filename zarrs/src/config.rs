@@ -5,13 +5,13 @@
 use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
-use zarrs_registry::{
-    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-    ExtensionAliasesDataTypeV3,
-};
 
 #[cfg(doc)]
 use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
+use crate::registry::{
+    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
+    ExtensionAliasesDataTypeV3,
+};
 
 /// Global configuration options for the `zarrs` crate.
 ///
@@ -405,8 +405,9 @@ pub enum MetadataEraseVersion {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serial_test::serial;
+
+    use super::*;
 
     #[test]
     #[serial]

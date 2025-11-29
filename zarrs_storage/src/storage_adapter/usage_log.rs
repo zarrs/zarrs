@@ -13,7 +13,6 @@ use crate::{
     OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
-
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
@@ -495,10 +494,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
 #[cfg(test)]
 mod tests {
-    use crate::{store::MemoryStore, store_test};
     use std::sync::{Arc, Mutex};
 
     use super::*;
+    use crate::{store::MemoryStore, store_test};
 
     #[test]
     fn usage_log() {

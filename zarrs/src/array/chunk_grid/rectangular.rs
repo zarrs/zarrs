@@ -21,20 +21,20 @@
 //!   "chunk_shape": [[5, 5, 5, 15, 15, 20, 35], 10]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridConfiguration;
+//! # use zarrs::metadata_ext::chunk_grid::rectangular::RectangularChunkGridConfiguration;
 //! # let configuration: RectangularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
+use std::num::NonZeroU64;
+
 use derive_more::From;
 use itertools::Itertools;
-use std::num::NonZeroU64;
 use thiserror::Error;
 
-pub use zarrs_metadata_ext::chunk_grid::rectangular::{
+pub use crate::metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use zarrs_registry::chunk_grid::RECTANGULAR;
-
+use crate::registry::chunk_grid::RECTANGULAR;
 use crate::{
     array::{
         chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
@@ -364,9 +364,8 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
 
 #[cfg(test)]
 mod tests {
-    use crate::array_subset::ArraySubset;
-
     use super::*;
+    use crate::array_subset::ArraySubset;
 
     #[test]
     fn chunk_grid_rectangular() {

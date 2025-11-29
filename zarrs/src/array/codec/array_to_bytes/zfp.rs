@@ -37,7 +37,7 @@
 //!     "rate": 10.5
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -49,7 +49,7 @@
 //!     "precision": 19
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -61,7 +61,7 @@
 //!     "tolerance": 0.05
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -72,7 +72,7 @@
 //!     "mode": "reversible"
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -87,7 +87,7 @@
 //!     "minexp": -2
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::zfp::ZfpCodecConfigurationV1;
 //! # let configuration: ZfpCodecConfigurationV1 = serde_json::from_str(JSON).unwrap();
 
 mod zfp_array;
@@ -98,15 +98,20 @@ mod zfp_stream;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
 pub use zfp_codec::ZfpCodec;
-
 use zfp_sys::{
     zfp_decompress, zfp_exec_policy_zfp_exec_omp, zfp_field_alloc, zfp_field_free,
     zfp_field_set_pointer, zfp_read_header, zfp_stream_close, zfp_stream_open, zfp_stream_rewind,
     zfp_stream_set_bit_stream, zfp_stream_set_execution,
 };
 
+use self::{
+    zfp_array::ZfpArray, zfp_bitstream::ZfpBitstream, zfp_field::ZfpField, zfp_stream::ZfpStream,
+};
+pub use crate::metadata_ext::codec::zfp::{
+    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode,
+};
+use crate::registry::codec::ZFP;
 use crate::{
     array::{
         codec::{Codec, CodecError, CodecPlugin},
@@ -114,11 +119,6 @@ use crate::{
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
-use zarrs_registry::codec::ZFP;
-
-use self::{
-    zfp_array::ZfpArray, zfp_bitstream::ZfpBitstream, zfp_field::ZfpField, zfp_stream::ZfpStream,
 };
 
 // Register the codec.
@@ -427,9 +427,11 @@ fn zfp_decode(
 
 #[cfg(test)]
 mod tests {
-    use num::traits::AsPrimitive;
     use std::{num::NonZeroU64, sync::Arc};
 
+    use num::traits::AsPrimitive;
+
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -441,8 +443,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     const JSON_REVERSIBLE: &'static str = r#"{
         "mode": "reversible"

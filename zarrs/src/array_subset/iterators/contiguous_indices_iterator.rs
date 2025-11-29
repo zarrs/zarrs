@@ -2,14 +2,13 @@ use std::iter::FusedIterator;
 
 use itertools::izip;
 
+use super::IndicesIterator;
 use crate::{
     array::ArrayIndices,
     array_subset::{
         iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
 };
-
-use super::IndicesIterator;
 
 /// Iterates over contiguous element indices in an array subset.
 ///

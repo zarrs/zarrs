@@ -1,13 +1,13 @@
 use std::iter::FusedIterator;
 
-use crate::{
-    array::{unravel_index, ArrayIndices},
-    array_subset::ArraySubset,
-};
-
 use rayon::iter::{
     plumbing::{bridge, Consumer, Producer, ProducerCallback, UnindexedConsumer},
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
+
+use crate::{
+    array::{unravel_index, ArrayIndices},
+    array_subset::ArraySubset,
 };
 
 /// An iterator over the indices in an array subset.

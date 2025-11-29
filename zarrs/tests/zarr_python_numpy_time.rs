@@ -2,7 +2,8 @@
 #![allow(unused)]
 
 use std::{error::Error, sync::Arc};
-use zarrs_metadata_ext::data_type::NumpyTimeUnit;
+
+use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 
 #[cfg(feature = "jiff")]
 fn try_numpy_to_jiff_unit(unit: NumpyTimeUnit) -> Result<jiff::Unit, NumpyTimeUnit> {
@@ -174,8 +175,8 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
     ] {
         println!("{unit:?}");
         use zarrs::array::ArrayBuilder;
+        use zarrs::storage::store::MemoryStore;
         use zarrs_data_type::FillValue;
-        use zarrs_storage::store::MemoryStore;
 
         let store = Arc::new(MemoryStore::new());
         let array = ArrayBuilder::new(
@@ -374,8 +375,8 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
         ] {
             use jiff::{Timestamp, TimestampRound};
             use zarrs::array::ArrayBuilder;
+            use zarrs::storage::store::MemoryStore;
             use zarrs_data_type::FillValue;
-            use zarrs_storage::store::MemoryStore;
 
             let store = Arc::new(MemoryStore::new());
             let array = ArrayBuilder::new(

@@ -1,6 +1,7 @@
 use serde_json::Value;
 use thiserror::Error;
 
+use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::{
     array::data_type::{DataTypeFillValueError, DataTypeFillValueMetadataError},
     array_subset::{
@@ -11,8 +12,6 @@ use crate::{
     plugin::PluginCreateError,
     storage::StorageError,
 };
-
-use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 
 /// An array creation error.
 #[derive(Clone, Debug, Error)]

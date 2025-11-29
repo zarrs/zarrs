@@ -5,13 +5,12 @@ use std::{
 };
 
 use itertools::Itertools;
-
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
-use zarrs_storage::StorageError;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
+use super::{sharding_index_decoded_representation, ShardingIndexLocation};
+use crate::storage::StorageError;
 use crate::{
     array::{
         array_bytes::update_array_bytes,
@@ -27,8 +26,6 @@ use crate::{
     indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,
 };
-
-use super::{sharding_index_decoded_representation, ShardingIndexLocation};
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,

@@ -2,6 +2,8 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncArrayPartialDecoderTraits;
 use crate::array::{
     codec::{
         ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, PartialDecoderCapability,
@@ -9,9 +11,11 @@ use crate::array::{
     },
     DataType, FillValue,
 };
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::RESHAPE;
-
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::reshape::{
+    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
+};
+use crate::registry::codec::RESHAPE;
 use crate::{
     array::{
         codec::{
@@ -22,12 +26,6 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
-use zarrs_metadata_ext::codec::reshape::{
-    ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]

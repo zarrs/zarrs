@@ -2,6 +2,11 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "async")]
+use crate::array::codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 use crate::{
     array::{
         codec::{
@@ -19,12 +24,6 @@ use crate::{
     config::global_config,
     metadata::{v3::MetadataV3, Configuration},
     plugin::PluginCreateError,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
 };
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
@@ -819,9 +818,8 @@ impl ArrayCodecTraits for CodecChain {
 mod tests {
     use std::num::NonZeroU64;
 
-    use crate::{array::DataType, array_subset::ArraySubset};
-
     use super::*;
+    use crate::{array::DataType, array_subset::ArraySubset};
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{

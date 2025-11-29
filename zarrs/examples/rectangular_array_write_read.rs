@@ -1,13 +1,14 @@
 #![allow(missing_docs)]
 
 use std::sync::Arc;
+
+use zarrs::metadata::v3::MetadataV3;
 use zarrs::{
     array::chunk_grid::RectangularChunkGridConfiguration,
     storage::{
         storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
     },
 };
-use zarrs_metadata::v3::MetadataV3;
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};

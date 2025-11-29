@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use zarrs_object_store::AsyncObjectStore;
-
 use std::error::Error;
+
+use zarrs_object_store::AsyncObjectStore;
 
 #[tokio::test]
 async fn memory() -> Result<(), Box<dyn Error>> {

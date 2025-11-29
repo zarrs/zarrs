@@ -6,11 +6,17 @@
 use std::{borrow::Cow, sync::Arc};
 
 use num::Integer;
-use zarrs_metadata::{Configuration, Endianness};
-use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::PACKBITS;
 
+#[cfg(feature = "async")]
+use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
+use super::{
+    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
+    DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
+    PackBitsCodecConfigurationV1,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
     codec::{
         array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
@@ -21,18 +27,9 @@ use crate::array::{
     },
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
-#[cfg(feature = "async")]
-use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
-
-use super::{
-    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
-    DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
-    PackBitsCodecConfigurationV1,
-};
+use crate::metadata::{Configuration, Endianness};
+use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+use crate::registry::codec::PACKBITS;
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]

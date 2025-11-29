@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use zarrs_registry::codec::BITROUND;
-use zarrs_storage::StorageError;
-
+use super::round_bytes;
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     codec::{
         ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
     },
     DataType,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-
-use super::round_bytes;
+use crate::registry::codec::BITROUND;
+use crate::storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {

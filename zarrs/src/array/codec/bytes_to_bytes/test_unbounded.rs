@@ -11,6 +11,7 @@ pub use test_unbounded_codec::TestUnboundedCodec;
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -18,8 +19,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     #[test]
     fn codec_test_unbounded_round_trip1() {

@@ -37,19 +37,21 @@
 //!     "level": 9
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::gdeflate::GDeflateCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::gdeflate::GDeflateCodecConfiguration;
 //! # serde_json::from_str::<GDeflateCodecConfiguration>(JSON).unwrap();
 //! ```
 
 mod gdeflate_codec;
 
+use std::sync::Arc;
+
 pub use gdeflate_codec::GDeflateCodec;
-pub use zarrs_metadata_ext::codec::gdeflate::{
+
+pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use zarrs_registry::codec::GDEFLATE;
-
+use crate::registry::codec::GDEFLATE;
 use crate::{
     array::{
         codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError},
@@ -58,8 +60,6 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-use std::sync::Arc;
 
 // Register the codec.
 inventory::submit! {
@@ -270,6 +270,7 @@ impl Drop for GDeflateDecompressor {
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -277,8 +278,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON_VALID: &str = r#"{
         "level": 1

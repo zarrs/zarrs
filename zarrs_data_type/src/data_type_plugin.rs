@@ -27,13 +27,13 @@ impl DataTypePlugin {
 mod tests {
     use std::sync::Arc;
 
+    use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
+    use zarrs_plugin::PluginCreateError;
+
+    use super::*;
     use crate::{
         DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue,
     };
-
-    use super::*;
-    use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-    use zarrs_plugin::PluginCreateError;
 
     inventory::submit! {
         DataTypePlugin::new("zarrs.test_void", is_test_void, create_test_void)

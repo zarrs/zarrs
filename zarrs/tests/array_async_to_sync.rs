@@ -1,8 +1,9 @@
 #![allow(missing_docs)]
 #![cfg(all(feature = "async"))]
 
-use serde_json::json;
 use std::sync::Arc;
+
+use serde_json::json;
 use zarrs::storage::{
     storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
     ReadableWritableStorage,

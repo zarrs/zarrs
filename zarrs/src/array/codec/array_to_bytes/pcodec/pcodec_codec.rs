@@ -1,13 +1,12 @@
 use std::{borrow::Cow, sync::Arc};
 
 use pco::{standalone::guarantee::file_size, ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::pcodec::{
-    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
-};
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::PCODEC;
 
+use super::{
+    PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
+    PcodecDeltaEncodingOrder,
+};
 use crate::array::{
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
@@ -17,11 +16,11 @@ use crate::array::{
     convert_from_bytes_slice, transmute_to_bytes_vec, BytesRepresentation, ChunkRepresentation,
     DataType,
 };
-
-use super::{
-    PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
-    PcodecDeltaEncodingOrder,
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::pcodec::{
+    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
+use crate::registry::codec::PCODEC;
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]

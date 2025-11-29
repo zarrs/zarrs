@@ -1,29 +1,26 @@
 use std::{borrow::Cow, num::NonZero, sync::Arc};
 
-use zarrs_metadata::DataTypeSize;
-use zarrs_storage::{
+use super::{
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    BytesToBytesCodecTraits, CodecError, CodecOptions,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
+use crate::metadata::DataTypeSize;
+use crate::storage::{
     byte_range::{extract_byte_ranges, ByteRangeIterator},
     OffsetBytesIterator, StorageError,
 };
-
 use crate::{
     array::{
         array_bytes::update_array_bytes, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw,
         BytesRepresentation, ChunkRepresentation,
     },
     array_subset::ArraySubset,
-};
-
-use super::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesToBytesCodecTraits, CodecError, CodecOptions,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
 };
 
 /// Generic partial codec for all codec operations with default behavior.

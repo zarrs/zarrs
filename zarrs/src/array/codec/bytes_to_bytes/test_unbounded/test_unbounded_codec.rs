@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-
+use super::test_unbounded_partial_decoder;
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::array::{
     codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
@@ -10,11 +11,7 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-use super::test_unbounded_partial_decoder;
+use crate::metadata::Configuration;
 
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]

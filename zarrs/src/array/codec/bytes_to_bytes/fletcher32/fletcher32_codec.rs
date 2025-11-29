@@ -1,9 +1,12 @@
 use std::{borrow::Cow, sync::Arc};
 
 use num::Integer;
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::FLETCHER32;
 
+use super::{Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1, CHECKSUM_SIZE};
+#[cfg(feature = "async")]
+use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::array::{
     codec::{
         bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder,
@@ -13,14 +16,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-
-use super::{Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::metadata::Configuration;
+use crate::registry::codec::FLETCHER32;
 
 /// A `fletcher32` codec implementation.
 #[derive(Clone, Debug, Default)]

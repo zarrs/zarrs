@@ -3,15 +3,13 @@
 
 use std::sync::Arc;
 
+use object_store::memory::InMemory;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
 use zarrs::array::{Array, ArrayBuilder, DataType};
 use zarrs::array_subset::ArraySubset;
-
-use object_store::memory::InMemory;
-
-use zarrs_metadata_ext::codec::transpose::TransposeOrder;
-use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
+use zarrs::metadata_ext::codec::transpose::TransposeOrder;
+use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
 
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {

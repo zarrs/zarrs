@@ -1,13 +1,19 @@
 use std::{num::NonZeroU64, sync::Arc};
 
+use super::{
+    calculate_order_decode, calculate_order_encode, permute, transpose_array,
+    TransposeCodecConfiguration, TransposeOrder,
+};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     array_bytes::ArrayBytesVariableLength,
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
 };
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::TRANSPOSE;
-
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
+use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         codec::{
@@ -18,15 +24,6 @@ use crate::{
         ChunkRepresentation, ChunkShape,
     },
     plugin::PluginCreateError,
-};
-use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-
-use super::{
-    calculate_order_decode, calculate_order_encode, permute, transpose_array,
-    TransposeCodecConfiguration, TransposeOrder,
 };
 
 /// A Transpose codec implementation.

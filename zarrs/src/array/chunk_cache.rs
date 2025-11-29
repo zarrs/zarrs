@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_storage::ReadableStorageTraits;
-use zarrs_storage::{MaybeSend, MaybeSync};
 
+use super::{codec::CodecOptions, ArrayBytes, ArrayBytesRaw, ArrayError};
+use crate::iter_concurrent_limit;
+use crate::storage::ReadableStorageTraits;
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{
         array_bytes::merge_chunks_vlen,
@@ -17,8 +17,6 @@ use crate::{
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
-
-use super::{codec::CodecOptions, ArrayBytes, ArrayBytesRaw, ArrayError};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;

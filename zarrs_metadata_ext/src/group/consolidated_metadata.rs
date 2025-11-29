@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 use zarrs_metadata::NodeMetadata;
 
 /// Consolidated metadata of a Zarr hierarchy.

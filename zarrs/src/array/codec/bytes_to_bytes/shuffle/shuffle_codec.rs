@@ -1,9 +1,8 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::SHUFFLE;
 
+use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -11,8 +10,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
+use crate::metadata::Configuration;
+use crate::registry::codec::SHUFFLE;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]

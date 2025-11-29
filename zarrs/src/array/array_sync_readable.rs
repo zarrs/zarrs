@@ -2,18 +2,10 @@ use std::{borrow::Cow, sync::Arc};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
-use crate::iter_concurrent_limit;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use crate::{
-    array::{ArrayBytes, ArrayMetadataV2},
-    array_subset::ArraySubset,
-    config::MetadataRetrieveVersion,
-    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
-    storage::{ReadableStorageTraits, StorageError, StorageHandle},
-};
-
+#[cfg(feature = "ndarray")]
+use super::elements_to_ndarray;
 use super::{
     array_bytes::{copy_fill_value_into, merge_chunks_vlen},
     codec::{
@@ -25,9 +17,14 @@ use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
     ArrayMetadataV3, DataType,
 };
-
-#[cfg(feature = "ndarray")]
-use super::elements_to_ndarray;
+use crate::iter_concurrent_limit;
+use crate::{
+    array::{ArrayBytes, ArrayMetadataV2},
+    array_subset::ArraySubset,
+    config::MetadataRetrieveVersion,
+    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
+    storage::{ReadableStorageTraits, StorageError, StorageHandle},
+};
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Open an existing array in `storage` at `path` with default [`MetadataRetrieveVersion`].

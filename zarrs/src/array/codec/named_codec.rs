@@ -1,11 +1,10 @@
 use std::{ops::Deref, sync::Arc};
 
-use zarrs_metadata::Configuration;
-
 use super::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
     CodecMetadataOptions, CodecTraits,
 };
+use crate::metadata::Configuration;
 
 /// A named codec.
 #[derive(Debug)]

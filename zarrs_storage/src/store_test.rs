@@ -4,7 +4,6 @@ use crate::{
     byte_range::ByteRange, ListableStorageTraits, ReadableStorageTraits, StorePrefix,
     WritableStorageTraits,
 };
-
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
 

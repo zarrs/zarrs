@@ -1,7 +1,9 @@
 //! A synchronous in-memory store.
 
-use bytes::BytesMut;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
+
+use bytes::BytesMut;
 
 use crate::{
     byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
@@ -9,8 +11,6 @@ use crate::{
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
-
-use std::collections::{BTreeMap, BTreeSet};
 
 /// A synchronous in-memory store.
 #[derive(Debug)]
@@ -191,10 +191,10 @@ impl ListableStorageTraits for MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::ReadableWritableListableStorageTraits;
+    use std::{error::Error, sync::Arc};
 
     use super::*;
-    use std::{error::Error, sync::Arc};
+    use crate::ReadableWritableListableStorageTraits;
 
     #[test]
     fn memory() -> Result<(), Box<dyn Error>> {

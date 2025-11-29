@@ -22,7 +22,7 @@
 //!     "order": [2, 1, 0]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::transpose::TransposeCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::transpose::TransposeCodecConfiguration;
 //! # let configuration: TransposeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -32,12 +32,12 @@ mod transpose_codec_partial;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
-use zarrs_metadata::DataTypeSize;
-pub use zarrs_metadata_ext::codec::transpose::{
+
+use crate::metadata::DataTypeSize;
+pub use crate::metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use zarrs_registry::codec::TRANSPOSE;
-
+use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength},
@@ -151,11 +151,10 @@ fn transpose_vlen<'a>(
         // SAFETY: The offsets are monotonically increasing.
         ArrayBytesOffsets::new_unchecked(offsets_new)
     };
-    let array_bytes = unsafe {
+    unsafe {
         // SAFETY: The last offset is equal to the length of the bytes
         ArrayBytes::new_vlen_unchecked(bytes_new, offsets_new)
-    };
-    array_bytes
+    }
 }
 
 fn get_transposed_array_subset(
@@ -246,6 +245,7 @@ fn do_transpose<'a>(
 mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
@@ -253,8 +253,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     fn codec_transpose_round_trip_impl(
         json: &str,

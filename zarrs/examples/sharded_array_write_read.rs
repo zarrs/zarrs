@@ -9,6 +9,9 @@ use zarrs::{
 };
 
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
+    use std::sync::Arc;
+
+    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
         array::{
             codec::{self, array_to_bytes::sharding::ShardingCodecBuilder},
@@ -18,9 +21,6 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         node::Node,
         storage::store,
     };
-
-    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use std::sync::Arc;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;

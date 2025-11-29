@@ -1,21 +1,19 @@
 //! A sequence of storage transformers.
 
 use derive_more::From;
-use zarrs_storage::StorageError;
 
+use super::{try_create_storage_transformer, StorageTransformer};
+use crate::storage::StorageError;
+#[cfg(feature = "async")]
+use crate::storage::{
+    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
 use crate::{
     metadata::v3::MetadataV3,
     node::NodePath,
     plugin::PluginCreateError,
     storage::{ListableStorage, ReadableStorage, ReadableWritableStorage, WritableStorage},
 };
-
-#[cfg(feature = "async")]
-use crate::storage::{
-    AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
-};
-
-use super::{try_create_storage_transformer, StorageTransformer};
 
 /// Configuration for a storage transformer chain.
 #[derive(Debug, Clone, Default, From)]

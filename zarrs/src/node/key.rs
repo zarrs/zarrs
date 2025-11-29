@@ -1,6 +1,5 @@
-use crate::storage::StoreKey;
-
 use super::NodePath;
+use crate::storage::StoreKey;
 
 /// Return the metadata key given a node path for a specified metadata file name (e.g. zarr.json, .zarray, .zgroup, .zaatrs).
 #[must_use]

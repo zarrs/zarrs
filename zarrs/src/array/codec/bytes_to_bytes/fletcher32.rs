@@ -27,7 +27,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::fletcher32::Fletcher32CodecConfiguration;
+//! # use zarrs::metadata_ext::codec::fletcher32::Fletcher32CodecConfiguration;
 //! # serde_json::from_str::<Fletcher32CodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -36,11 +36,11 @@ mod fletcher32_codec;
 use std::sync::Arc;
 
 pub use fletcher32_codec::Fletcher32Codec;
-pub use zarrs_metadata_ext::codec::fletcher32::{
+
+pub use crate::metadata_ext::codec::fletcher32::{
     Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1,
 };
-use zarrs_registry::codec::FLETCHER32;
-
+use crate::registry::codec::FLETCHER32;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -70,6 +70,7 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -79,8 +80,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON1: &str = r#"{}"#;
 

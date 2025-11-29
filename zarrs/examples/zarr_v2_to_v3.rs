@@ -5,11 +5,11 @@ use std::sync::Arc;
 use zarrs::array::ArrayMetadataOptions;
 use zarrs::config::MetadataConvertVersion;
 use zarrs::group::{Group, GroupMetadataOptions};
-use zarrs_metadata::v2::{
+use zarrs::metadata::v2::{
     ArrayMetadataV2, ArrayMetadataV2Order, FillValueMetadataV2, GroupMetadataV2,
 };
-use zarrs_metadata::{ChunkKeySeparator, GroupMetadata};
-use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
+use zarrs::metadata::{ChunkKeySeparator, GroupMetadata};
+use zarrs::storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
 
 fn key_to_str<T: ReadableStorageTraits>(
     store: &Arc<T>,

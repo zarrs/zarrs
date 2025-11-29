@@ -7,6 +7,9 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "transpose")]
+use zarrs::array::codec::{TransposeCodec, TransposeOrder};
+use zarrs::metadata::ChunkShape;
 use zarrs::{
     array::{
         codec::{
@@ -18,10 +21,6 @@ use zarrs::{
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
 };
-use zarrs_metadata::ChunkShape;
-
-#[cfg(feature = "transpose")]
-use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 
 fn indexer_basic<T: Indexer>(
     indexer: T,

@@ -4,10 +4,9 @@
 use std::{mem::size_of, sync::Arc};
 
 use zarrs_data_type::FillValue;
-use zarrs_metadata::{Configuration, DataTypeSize};
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::OPTIONAL;
 
+use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::{
     array_bytes::ArrayBytesVariableLength,
     codec::{
@@ -18,8 +17,8 @@ use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
     DataType,
 };
-
-use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
+use crate::metadata::{Configuration, DataTypeSize};
+use crate::registry::codec::OPTIONAL;
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -460,12 +459,11 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::array::{
         codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
         ArrayBytes, ChunkRepresentation, DataType,
     };
-
-    use super::*;
 
     #[test]
     fn codec_optional_configuration() {

@@ -1,5 +1,6 @@
-use derive_more::{Display, From};
 use std::path::Path;
+
+use derive_more::{Display, From};
 use thiserror::Error;
 
 /// A Zarr abstract store prefix.

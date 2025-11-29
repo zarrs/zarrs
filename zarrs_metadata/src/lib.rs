@@ -177,8 +177,9 @@ impl ConfigurationError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use v3::{AdditionalFieldV3, AdditionalFieldsV3, MetadataV3};
+
+    use super::*;
 
     #[test]
     fn metadata() {

@@ -10,14 +10,14 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
 };
+use zarrs::metadata::{v3::MetadataV3, Configuration};
+use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
     DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
     FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
 
 /// A unique identifier for  the custom data type.
 const FLOAT8_E3M4: &'static str = "zarrs.test.float8_e3m4";

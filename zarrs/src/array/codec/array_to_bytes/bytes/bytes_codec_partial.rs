@@ -1,8 +1,13 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_registry::codec::BYTES;
-use zarrs_storage::{byte_range::ByteRange, StorageError};
-
+use super::{reverse_endianness, Endianness};
+#[cfg(feature = "async")]
+use crate::array::codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
+use crate::registry::codec::BYTES;
+use crate::storage::{byte_range::ByteRange, StorageError};
 use crate::{
     array::{
         codec::{
@@ -13,14 +18,6 @@ use crate::{
     },
     indexer::IncompatibleIndexerError,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
-};
-
-use super::{reverse_endianness, Endianness};
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {

@@ -1,8 +1,10 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::CRC32C;
-
+use super::{Crc32cCodecConfiguration, Crc32cCodecConfigurationV1, CHECKSUM_SIZE};
+#[cfg(feature = "async")]
+use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
+#[cfg(feature = "async")]
+use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::array::{
     codec::{
         bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder,
@@ -12,14 +14,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
-#[cfg(feature = "async")]
-use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-
-use super::{Crc32cCodecConfiguration, Crc32cCodecConfigurationV1, CHECKSUM_SIZE};
+use crate::metadata::Configuration;
+use crate::registry::codec::CRC32C;
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]

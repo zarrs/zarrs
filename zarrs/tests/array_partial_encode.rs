@@ -12,11 +12,11 @@ use zarrs::{
         ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
-};
-use zarrs_metadata_ext::codec::sharding::ShardingIndexLocation;
-use zarrs_storage::{
-    storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
-    ReadableStorageTraits,
+    metadata_ext::codec::sharding::ShardingIndexLocation,
+    storage::{
+        storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
+        ReadableStorageTraits,
+    },
 };
 
 fn array_partial_encode_sharding(
@@ -217,11 +217,11 @@ fn array_partial_encode_sharding_index_end() {
 #[test]
 fn array_partial_encode_sharding_index_compressed() {
     #[cfg(feature = "blosc")]
-    use zarrs_metadata_ext::codec::blosc::{
+    use zarrs::metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
     };
     #[cfg(feature = "bz2")]
-    use zarrs_metadata_ext::codec::bz2::Bz2CompressionLevel;
+    use zarrs::metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     for index_location in &[ShardingIndexLocation::Start, ShardingIndexLocation::End] {
         array_partial_encode_sharding(

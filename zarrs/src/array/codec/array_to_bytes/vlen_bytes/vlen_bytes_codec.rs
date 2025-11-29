@@ -1,4 +1,4 @@
-use zarrs_registry::codec::VLEN_BYTES;
+use crate::registry::codec::VLEN_BYTES;
 
 use crate::array::codec::array_to_bytes::vlen_v2::vlen_v2_macros;
 

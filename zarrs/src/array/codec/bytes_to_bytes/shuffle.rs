@@ -28,7 +28,7 @@
 //!   "elementsize": 2
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
 //! # serde_json::from_str::<ShuffleCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -39,11 +39,11 @@ mod shuffle_codec;
 use std::sync::Arc;
 
 pub use shuffle_codec::ShuffleCodec;
-pub use zarrs_metadata_ext::codec::shuffle::{
+
+pub use crate::metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
-use zarrs_registry::codec::SHUFFLE;
-
+use crate::registry::codec::SHUFFLE;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -71,6 +71,7 @@ pub(crate) fn create_codec_shuffle(metadata: &MetadataV3) -> Result<Codec, Plugi
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -78,8 +79,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
 

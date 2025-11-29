@@ -26,7 +26,7 @@
 //!     "level": 9
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zlib::ZlibCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zlib::ZlibCodecConfiguration;
 //! # serde_json::from_str::<ZlibCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -34,19 +34,16 @@ mod zlib_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::codec::ZLIB;
-
+pub use self::zlib_codec::ZlibCodec;
+pub use crate::metadata_ext::codec::zlib::{
+    ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
+};
+use crate::registry::codec::ZLIB;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-pub use zarrs_metadata_ext::codec::zlib::{
-    ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
-};
-
-pub use self::zlib_codec::ZlibCodec;
 
 // Register the codec.
 inventory::submit! {
@@ -69,8 +66,8 @@ pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCr
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
-    use zarrs_storage::byte_range::ByteRange;
-
+    use super::*;
+    use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -79,8 +76,6 @@ mod tests {
         array_subset::ArraySubset,
         indexer::Indexer,
     };
-
-    use super::*;
 
     const JSON_VALID1: &str = r#"
 {

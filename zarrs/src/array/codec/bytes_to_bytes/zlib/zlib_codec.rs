@@ -4,10 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ZLIB;
 
+use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -15,8 +14,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
+use crate::metadata::Configuration;
+use crate::registry::codec::ZLIB;
 
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]

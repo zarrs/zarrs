@@ -1,8 +1,10 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-
+use super::{vlen_partial_decoder, VlenCodecConfiguration, VlenCodecConfigurationV0_1};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::{
     array::{
         codec::{
@@ -15,11 +17,6 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
-use super::{vlen_partial_decoder, VlenCodecConfiguration, VlenCodecConfigurationV0_1};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]

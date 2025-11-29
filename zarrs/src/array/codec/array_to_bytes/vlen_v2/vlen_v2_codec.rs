@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-use zarrs_metadata::Configuration;
 
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -12,9 +13,7 @@ use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
     DataTypeSize,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::metadata::Configuration;
 
 /// The `vlen_v2` codec implementation.
 #[derive(Debug, Clone, Default)]

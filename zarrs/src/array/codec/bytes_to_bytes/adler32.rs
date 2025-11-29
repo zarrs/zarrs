@@ -25,7 +25,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::adler32::Adler32CodecConfiguration;
+//! # use zarrs::metadata_ext::codec::adler32::Adler32CodecConfiguration;
 //! # serde_json::from_str::<Adler32CodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -34,11 +34,11 @@ mod adler32_codec;
 use std::sync::Arc;
 
 pub use adler32_codec::Adler32Codec;
-pub use zarrs_metadata_ext::codec::adler32::{
+
+pub use crate::metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
-use zarrs_registry::codec::ADLER32;
-
+use crate::registry::codec::ADLER32;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -68,6 +68,7 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -77,8 +78,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON1: &str = r#"{}"#;
     const JSON2: &str = r#"{"location":"start"}"#;

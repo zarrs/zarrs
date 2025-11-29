@@ -1,8 +1,9 @@
-pub(super) use libc::O_DIRECT;
 pub(super) use std::os::{
     fd::AsRawFd,
     unix::fs::{MetadataExt, OpenOptionsExt},
 };
+
+pub(super) use libc::O_DIRECT;
 
 /// A range of intersected pages, with `Ord` tailored for coalescing.
 #[derive(Eq, PartialEq, Debug)]
@@ -53,8 +54,9 @@ pub(super) fn coalesce_byte_ranges_with_page_size(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use zarrs_storage::byte_range::ByteRange;
+
+    use super::*;
 
     #[test]
     fn test_coalesce_byte_ranges_with_page_size() {

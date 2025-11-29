@@ -3,16 +3,15 @@
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::ConfigurationSerialize;
 
+use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
+use crate::metadata::ConfigurationSerialize;
 use crate::{
     array::chunk_key_encoding::ChunkKeyEncodingPlugin,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
     storage::StoreKey,
 };
-
-use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 /// Unique identifier for the `default_suffix` chunk key encoding (extension).
 const DEFAULT_SUFFIX: &str = "zarrs.default_suffix"; // TODO: Move to zarrs_registry on stabilisation
@@ -121,9 +120,8 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::{data_key, NodePath};
-
     use super::*;
+    use crate::node::{data_key, NodePath};
 
     #[test]
     fn slash_nd() {

@@ -239,14 +239,13 @@ pub mod indexer;
 pub mod node;
 pub mod version;
 
+#[cfg(feature = "filesystem")]
+pub use zarrs_filesystem as filesystem;
 pub use zarrs_metadata as metadata;
 pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
 pub use zarrs_registry as registry;
 pub use zarrs_storage as storage;
-
-#[cfg(feature = "filesystem")]
-pub use zarrs_filesystem as filesystem;
 
 /// Get a mutable slice of the spare capacity in a vector.
 fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {

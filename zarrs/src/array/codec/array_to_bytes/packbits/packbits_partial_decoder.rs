@@ -2,11 +2,13 @@
 
 use std::{ops::Div, sync::Arc};
 
+#[cfg(feature = "async")]
+use async_generic::async_generic;
 use num::Integer;
 
-use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use zarrs_storage::{byte_range::ByteRange, StorageError};
-
+use super::DataTypeExtensionPackBitsCodecComponents;
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
     codec::{
         array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
@@ -14,14 +16,8 @@ use crate::array::{
     },
     ArrayBytes, ChunkRepresentation, DataType,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-
-#[cfg(feature = "async")]
-use async_generic::async_generic;
-
-use super::DataTypeExtensionPackBitsCodecComponents;
+use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+use crate::storage::{byte_range::ByteRange, StorageError};
 
 // https://github.com/scouten/async-generic/pull/17
 #[allow(clippy::too_many_lines)]

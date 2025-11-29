@@ -48,7 +48,7 @@
 //!     ]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::sharding::ShardingCodecConfigurationV1;
+//! # use zarrs::metadata_ext::codec::sharding::ShardingCodecConfigurationV1;
 //! # serde_json::from_str::<ShardingCodecConfigurationV1>(JSON).unwrap();
 //!
 
@@ -61,17 +61,16 @@ mod sharding_partial_encoder;
 
 use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
 
-pub use zarrs_metadata_ext::codec::sharding::{
-    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
-};
-
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
-pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
-
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
+pub use crate::metadata_ext::codec::sharding::{
+    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
+};
+use crate::registry::codec::SHARDING;
 use crate::{
     array::{
         codec::{
@@ -86,7 +85,6 @@ use crate::{
     plugin::{PluginCreateError, PluginMetadataInvalidError},
     storage::byte_range::ByteRange,
 };
-use zarrs_registry::codec::SHARDING;
 
 // Register the codec.
 inventory::submit! {
@@ -315,6 +313,7 @@ async fn decode_shard_index_async_partial_decoder(
 mod tests {
     use std::sync::Arc;
 
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -326,8 +325,6 @@ mod tests {
         array_subset::ArraySubset,
         config::global_config,
     };
-
-    use super::*;
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {

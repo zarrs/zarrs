@@ -16,16 +16,16 @@
 //!   "chunk_shape": [100, 100]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+//! # use zarrs::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 //! # let configuration: RegularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
 use std::num::NonZeroU64;
+
 use thiserror::Error;
 
-pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use zarrs_registry::chunk_grid::REGULAR;
-
+pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+use crate::registry::chunk_grid::REGULAR;
 use crate::{
     array::{
         chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
@@ -303,10 +303,9 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
 mod tests {
     use rayon::iter::ParallelIterator;
 
+    use super::*;
     use crate::array::chunk_grid::ChunkGridTraitsIterators;
     use crate::array_subset::ArraySubset;
-
-    use super::*;
 
     #[test]
     fn chunk_grid_regular_configuration() {

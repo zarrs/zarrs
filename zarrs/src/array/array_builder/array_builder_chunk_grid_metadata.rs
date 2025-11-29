@@ -2,10 +2,10 @@ use std::num::NonZeroU64;
 
 use derive_more::From;
 use serde::Serialize;
-use zarrs_metadata::{v3::MetadataV3, ArrayShape, ChunkShape};
-use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 use crate::array::ArrayCreateError;
+use crate::metadata::{v3::MetadataV3, ArrayShape, ChunkShape};
+use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 /// An input that can be mapped to a chunk grid.
 #[derive(Debug, Clone, From)]

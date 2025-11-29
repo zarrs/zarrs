@@ -1,15 +1,13 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use dlpark::ManagerCtx;
-use zarrs_storage::AsyncReadableStorageTraits;
-
-use crate::array::{codec::CodecOptions, Array, ArrayError, ChunkRepresentation};
-use crate::array_subset::ArraySubset;
-
-use super::RawBytesDlPack;
 
 #[cfg(doc)]
 use super::ArrayDlPackExtError;
+use super::RawBytesDlPack;
+use crate::array::{codec::CodecOptions, Array, ArrayError, ChunkRepresentation};
+use crate::array_subset::ArraySubset;
+use crate::storage::AsyncReadableStorageTraits;
 
 /// An async [`Array`] extension trait with methods that return `DLPack` managed tensors.
 #[cfg_attr(

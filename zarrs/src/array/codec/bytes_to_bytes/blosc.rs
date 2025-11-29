@@ -28,7 +28,7 @@
 //!     "blocksize": 0
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::blosc::BloscCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::blosc::BloscCodecConfiguration;
 //! # serde_json::from_str::<BloscCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -55,12 +55,12 @@ use blosc_src::{
 };
 use derive_more::From;
 use thiserror::Error;
-pub use zarrs_metadata_ext::codec::blosc::{
+
+pub use crate::metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
     BloscShuffleMode,
 };
-use zarrs_registry::codec::BLOSC;
-
+use crate::registry::codec::BLOSC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -147,7 +147,11 @@ fn blosc_compress_bytes(
         Ok(dest)
     } else {
         let clevel: u8 = clevel.into();
-        Err(BloscError::from(format!("blosc_compress_ctx(clevel: {}, doshuffle: {shuffle_mode:?}, typesize: {typesize}, nbytes: {}, destsize {destsize}, compressor {compressor:?}, bloscksize: {blocksize}) -> {destsize} (failure)", clevel, src.len())))
+        Err(BloscError::from(format!(
+            "blosc_compress_ctx(clevel: {}, doshuffle: {shuffle_mode:?}, typesize: {typesize}, nbytes: {}, destsize {destsize}, compressor {compressor:?}, bloscksize: {blocksize}) -> {destsize} (failure)",
+            clevel,
+            src.len()
+        )))
     }
 }
 
@@ -263,8 +267,8 @@ fn blosc_decompress_bytes_partial(
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
-    use zarrs_storage::byte_range::ByteRange;
-
+    use super::*;
+    use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -273,8 +277,6 @@ mod tests {
         array_subset::ArraySubset,
         indexer::Indexer,
     };
-
-    use super::*;
 
     const JSON_VALID1: &str = r#"
 {

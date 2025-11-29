@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
-use zarrs_storage::StorageError;
-
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
-
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     codec::{
         ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
     },
     ChunkRepresentation, DataType,
 };
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use crate::storage::StorageError;
 
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {

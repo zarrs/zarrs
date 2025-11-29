@@ -1,10 +1,9 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ZSTD;
 use zstd::zstd_safe;
 
+use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -12,8 +11,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation,
 };
-
-use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
+use crate::metadata::Configuration;
+use crate::registry::codec::ZSTD;
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]

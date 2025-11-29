@@ -6,12 +6,12 @@ macro_rules! vlen_v2_module {
 
         pub use $module_codec::$struct;
 
+        use crate::registry::codec::$identifier;
         use crate::{
             array::codec::{Codec, CodecPlugin},
             metadata::v3::MetadataV3,
             plugin::{PluginCreateError, PluginMetadataInvalidError},
         };
-        use zarrs_registry::codec::$identifier;
 
         // Register the codec.
         inventory::submit! {
@@ -40,8 +40,8 @@ macro_rules! vlen_v2_codec {
     ($struct:ident,$identifier:ident) => {
         use std::sync::Arc;
 
-        use zarrs_metadata::Configuration;
-
+        #[cfg(feature = "async")]
+        use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use crate::array::{
             codec::{
                 array_to_bytes::vlen_v2::VlenV2Codec, ArrayPartialDecoderTraits,
@@ -52,9 +52,7 @@ macro_rules! vlen_v2_codec {
             ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
             RecommendedConcurrency,
         };
-
-        #[cfg(feature = "async")]
-        use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use crate::metadata::Configuration;
 
         #[doc = concat!("The `", stringify!($identifier), "` codec implementation.")]
         #[derive(Debug, Clone)]

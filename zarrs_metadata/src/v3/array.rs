@@ -1,11 +1,10 @@
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
+use super::AdditionalFieldsV3;
 use crate::{
     array::IntoDimensionName, v3::MetadataV3, ArrayShape, ChunkKeySeparator, DimensionName,
 };
-
-use super::AdditionalFieldsV3;
 
 mod fill_value;
 mod nan_representations;

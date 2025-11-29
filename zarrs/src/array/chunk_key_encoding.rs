@@ -10,23 +10,21 @@ pub mod v2;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata::ChunkKeySeparator;
-
 pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration};
 pub use default_suffix::{
     DefaultSuffixChunkKeyEncoding, DefaultSuffixChunkKeyEncodingConfiguration,
 };
+use derive_more::{Deref, From};
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::PluginUnsupportedError;
-use zarrs_storage::{MaybeSend, MaybeSync};
 
+pub use crate::metadata::ChunkKeySeparator;
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     metadata::v3::MetadataV3,
     plugin::{Plugin, PluginCreateError},
     storage::StoreKey,
 };
-
-use derive_more::{Deref, From};
 
 /// A chunk key encoding.
 #[derive(Debug, Clone, From, Deref)]

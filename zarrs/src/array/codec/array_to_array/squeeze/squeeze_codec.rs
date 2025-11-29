@@ -1,12 +1,14 @@
 use std::{num::NonZeroU64, sync::Arc};
 
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
 };
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::SQUEEZE;
-
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
+use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
         codec::{
@@ -18,10 +20,6 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
-use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 
 /// A Squeeze codec implementation.
 #[derive(Clone, Debug)]

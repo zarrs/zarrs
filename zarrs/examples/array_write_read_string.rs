@@ -9,6 +9,7 @@ use zarrs::{
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
+
     use zarrs::{array::DataType, array_subset::ArraySubset, storage::store};
 
     // Create a store

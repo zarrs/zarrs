@@ -1,18 +1,14 @@
 use std::sync::Arc;
 
-use zarrs_storage::StorageError;
-
 use super::{do_transpose, get_transposed_array_subset, get_transposed_indexer, TransposeOrder};
-
+use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
+#[cfg(feature = "async")]
+use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
     codec::{CodecError, CodecOptions},
     ArrayBytes, ChunkRepresentation, DataType,
 };
-
-use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use crate::storage::StorageError;
 
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {

@@ -1,7 +1,6 @@
-use zarrs_metadata::ConfigurationSerialize;
-use zarrs_registry::codec::SHARDING;
-
 use super::{codec::ShardingCodecConfiguration, Array, ArrayShape, ChunkGrid, ChunkShape};
+use crate::metadata::ConfigurationSerialize;
+use crate::registry::codec::SHARDING;
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
 pub trait ArrayShardedExt: private::Sealed {

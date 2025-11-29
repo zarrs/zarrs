@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
 
-use zarrs_metadata::ArrayShape;
-
+use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIterator};
+use crate::metadata::ArrayShape;
 use crate::{
     array::ravel_indices,
     array_subset::{
@@ -9,8 +9,6 @@ use crate::{
         IncompatibleIndexerError,
     },
 };
-
-use super::{contiguous_indices_iterator::ContiguousIndices, ContiguousIndicesIterator};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///

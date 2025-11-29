@@ -61,7 +61,7 @@
 //!     ]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::optional::OptionalCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::optional::OptionalCodecConfiguration;
 //! # let configuration: OptionalCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -70,11 +70,11 @@ mod optional_codec;
 use std::sync::Arc;
 
 pub use optional_codec::OptionalCodec;
-pub use zarrs_metadata_ext::codec::optional::{
+
+pub use crate::metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
 };
-use zarrs_registry::codec::OPTIONAL;
-
+use crate::registry::codec::OPTIONAL;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,

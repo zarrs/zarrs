@@ -9,20 +9,18 @@
 //!  - computing the byte ranges of array subsets within an array with a fixed element size.
 
 pub mod iterators;
-use thiserror::Error;
-use zarrs_metadata::ChunkShape;
-
 use std::{
     fmt::{Debug, Display},
     num::NonZeroU64,
     ops::Range,
 };
 
-use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
-
 use derive_more::From;
+use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 use itertools::izip;
+use thiserror::Error;
 
+use crate::metadata::ChunkShape;
 use crate::{
     array::{ArrayError, ArrayIndices, ArrayShape},
     indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},

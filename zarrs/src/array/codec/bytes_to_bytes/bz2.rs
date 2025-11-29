@@ -27,7 +27,7 @@
 //!     "level": 9
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::bz2::Bz2CodecConfiguration;
+//! # use zarrs::metadata_ext::codec::bz2::Bz2CodecConfiguration;
 //! # serde_json::from_str::<Bz2CodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -35,19 +35,16 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::codec::BZ2;
-
+pub use self::bz2_codec::Bz2Codec;
+pub use crate::metadata_ext::codec::bz2::{
+    Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
+};
+use crate::registry::codec::BZ2;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-
-pub use zarrs_metadata_ext::codec::bz2::{
-    Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
-};
-
-pub use self::bz2_codec::Bz2Codec;
 
 // Register the codec.
 inventory::submit! {
@@ -70,8 +67,8 @@ pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCre
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
-    use zarrs_storage::byte_range::ByteRange;
-
+    use super::*;
+    use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -80,8 +77,6 @@ mod tests {
         array_subset::ArraySubset,
         indexer::Indexer,
     };
-
-    use super::*;
 
     const JSON_VALID1: &str = r#"
 {

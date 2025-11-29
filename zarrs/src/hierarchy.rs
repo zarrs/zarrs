@@ -10,18 +10,15 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+pub use crate::metadata::NodeMetadata;
 use crate::node::get_all_nodes_of;
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
-
-pub use crate::metadata::NodeMetadata;
-
 use crate::{
     array::{Array, ArrayMetadata},
     config::MetadataRetrieveVersion,
     group::Group,
     storage::{ListableStorageTraits, ReadableStorageTraits},
 };
-
 #[cfg(feature = "async")]
 use crate::{
     node::async_get_all_nodes_of,
@@ -268,15 +265,14 @@ impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_metadata::{
+    use super::*;
+    use crate::metadata::{
         v2::{ArrayMetadataV2, GroupMetadataV2},
         v3::GroupMetadataV3,
         GroupMetadata,
     };
     #[cfg(feature = "async")]
-    use zarrs_storage::AsyncReadableWritableListableStorageTraits;
-
-    use super::*;
+    use crate::storage::AsyncReadableWritableListableStorageTraits;
     use crate::{
         array::ArrayBuilder,
         group::GroupBuilder,
@@ -411,7 +407,7 @@ mod tests {
 
         assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
 
-        use zarrs_storage::AsyncWritableStorageTraits;
+        use crate::storage::AsyncWritableStorageTraits;
         // Inject fauly subgroup
         store
             .set(
@@ -470,8 +466,10 @@ mod tests {
 
         let hierarchy = Hierarchy::try_from_group(&group).unwrap();
 
-        assert_eq!("/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n"
-                    ,hierarchy.tree());
+        assert_eq!(
+            "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n",
+            hierarchy.tree()
+        );
 
         let store = Arc::new(MemoryStore::new());
         let groupv2 = Group::new_with_metadata(
@@ -566,7 +564,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_open() {
-        use zarrs_storage::AsyncReadableWritableListableStorage;
+        use crate::storage::AsyncReadableWritableListableStorage;
 
         let store: AsyncReadableWritableListableStorage = Arc::new(
             zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),

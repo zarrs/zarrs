@@ -26,10 +26,11 @@
 //! # let configuration: RegularBoundedChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
-use itertools::izip;
 use std::num::NonZeroU64;
 
-// use zarrs_registry::chunk_grid::REGULAR_BOUNDED;
+use itertools::izip;
+
+// use crate::registry::chunk_grid::REGULAR_BOUNDED;
 /// Unique identifier for the `regular_bounded` chunk grid (extension).
 const REGULAR_BOUNDED: &str = "zarrs.regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
 
@@ -307,9 +308,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
 mod tests {
     use rayon::iter::ParallelIterator;
 
-    use crate::array_subset::ArraySubset;
-
     use super::*;
+    use crate::array_subset::ArraySubset;
 
     #[test]
     fn chunk_grid_regular_bounded_metadata() {

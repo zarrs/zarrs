@@ -3,15 +3,8 @@ use std::{borrow::Cow, sync::Arc};
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use zarrs_storage::{MaybeSend, MaybeSync};
-
-use crate::{
-    array_subset::ArraySubset,
-    config::MetadataRetrieveVersion,
-    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
-    storage::{AsyncReadableStorageTraits, Bytes, StorageError, StorageHandle},
-};
-
+#[cfg(feature = "ndarray")]
+use super::elements_to_ndarray;
 use super::{
     array_bytes::{copy_fill_value_into, merge_chunks_vlen},
     codec::{
@@ -23,9 +16,13 @@ use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
     ArrayMetadataV2, ArrayMetadataV3, DataType,
 };
-
-#[cfg(feature = "ndarray")]
-use super::elements_to_ndarray;
+use crate::storage::{MaybeSend, MaybeSync};
+use crate::{
+    array_subset::ArraySubset,
+    config::MetadataRetrieveVersion,
+    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
+    storage::{AsyncReadableStorageTraits, Bytes, StorageError, StorageHandle},
+};
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`open`](Array::open).

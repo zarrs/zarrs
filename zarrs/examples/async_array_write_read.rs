@@ -6,8 +6,9 @@ use zarrs::storage::{
 };
 
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
-    use futures::StreamExt;
     use std::sync::Arc;
+
+    use futures::StreamExt;
     use zarrs::{
         array::{DataType, ZARR_NAN_F32},
         array_subset::ArraySubset,

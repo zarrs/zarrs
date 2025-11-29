@@ -10,25 +10,25 @@
 #![doc = include_str!("../../doc/status/data_types.md")]
 
 mod named_data_type;
-pub use named_data_type::NamedDataType;
-
 use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
 
+pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
     DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
-use zarrs_metadata::{
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
+
+use crate::metadata::{
     v3::{FillValueMetadataV3, MetadataV3},
     ConfigurationSerialize, DataTypeSize,
 };
-use zarrs_metadata_ext::data_type::{
+use crate::metadata_ext::data_type::{
     numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
     numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1, NumpyTimeUnit,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
-use zarrs_registry::ExtensionAliasesDataTypeV3;
+use crate::registry::ExtensionAliasesDataTypeV3;
 
 /// A data type.
 #[derive(Clone, Debug)]
@@ -487,7 +487,7 @@ impl DataType {
         if let Some(configuration) = metadata.configuration() {
             match identifier {
                 zarrs_registry::data_type::NUMPY_DATETIME64 => {
-                    use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
+                    use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
                     let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
                         NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(
                             configuration.clone(),
@@ -502,7 +502,7 @@ impl DataType {
                     return Ok(Self::NumpyDateTime64 { unit, scale_factor });
                 }
                 zarrs_registry::data_type::NUMPY_TIMEDELTA64 => {
-                    use zarrs_metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
+                    use crate::metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
                     let NumpyTimeDelta64DataTypeConfigurationV1 { unit, scale_factor } =
                         NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(
                             configuration.clone(),
@@ -517,7 +517,7 @@ impl DataType {
                     return Ok(Self::NumpyTimeDelta64 { unit, scale_factor });
                 }
                 zarrs_registry::data_type::OPTIONAL => {
-                    use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
+                    use crate::metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
                     let OptionalDataTypeConfigurationV1 {
                         name,
                         configuration,
@@ -569,7 +569,7 @@ impl DataType {
                 zarrs_registry::data_type::FLOAT8_E3M4 => return Ok(Self::Float8E3M4),
                 zarrs_registry::data_type::FLOAT8_E4M3 => return Ok(Self::Float8E4M3),
                 zarrs_registry::data_type::FLOAT8_E4M3B11FNUZ => {
-                    return Ok(Self::Float8E4M3B11FNUZ)
+                    return Ok(Self::Float8E4M3B11FNUZ);
                 }
                 zarrs_registry::data_type::FLOAT8_E4M3FNUZ => return Ok(Self::Float8E4M3FNUZ),
                 zarrs_registry::data_type::FLOAT8_E5M2 => return Ok(Self::Float8E5M2),
@@ -952,10 +952,10 @@ fn complex_subfloat_hex_string_to_fill_value(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use half::bf16;
-    use zarrs_metadata::v3::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
+
+    use super::*;
+    use crate::metadata::v3::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
 
     #[test]
     fn data_type_unknown() {

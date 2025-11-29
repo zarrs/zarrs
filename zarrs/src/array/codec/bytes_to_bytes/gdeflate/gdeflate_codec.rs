@@ -1,9 +1,12 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::GDEFLATE;
 
+use super::{
+    gdeflate_decode, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
+    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor,
+    GDEFLATE_STATIC_HEADER_LENGTH,
+};
 use crate::array::{
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -11,12 +14,8 @@ use crate::array::{
     },
     ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency,
 };
-
-use super::{
-    gdeflate_decode, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
-    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor,
-    GDEFLATE_STATIC_HEADER_LENGTH,
-};
+use crate::metadata::Configuration;
+use crate::registry::codec::GDEFLATE;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]

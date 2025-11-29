@@ -4,15 +4,16 @@
 //!
 //! The docs for the [`AsyncToSyncBlockOn`] trait include an example implementation for the `tokio` runtime.
 
+use std::sync::Arc;
+
+use futures::StreamExt;
+
 use crate::{
     byte_range::ByteRangeIterator, AsyncListableStorageTraits, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits, Bytes, ListableStorageTraits, MaybeBytesIterator, MaybeSend,
     MaybeSync, OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
     StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
-
-use futures::StreamExt;
-use std::sync::Arc;
 
 /// Trait for an asynchronous runtime implementing `block_on`.
 ///

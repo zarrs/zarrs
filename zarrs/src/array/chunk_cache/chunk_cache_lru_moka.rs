@@ -1,8 +1,3 @@
-use super::{
-    atomic, Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits,
-    ChunkCacheType, ChunkIndices,
-};
-
 use std::{
     num::NonZeroUsize,
     sync::{Mutex, MutexGuard},
@@ -11,6 +6,11 @@ use std::{
 use lru::LruCache;
 use moka::{policy::EvictionPolicy, sync::CacheBuilder};
 use thread_local::ThreadLocal;
+
+use super::{
+    atomic, Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits,
+    ChunkCacheType, ChunkIndices,
+};
 
 type Cache<CT> = moka::sync::Cache<ChunkIndices, CT>;
 

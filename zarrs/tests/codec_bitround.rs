@@ -3,18 +3,22 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 use zarrs::{
     array::{codec::BitroundCodec, ArrayBuilder, ArrayMetadataOptions, DataType},
     array_subset::ArraySubset,
 };
 use zarrs_filesystem::FilesystemStore;
-use zarrs_metadata_ext::codec::bitround::BitroundCodecConfiguration;
 
 /// Helper function to print binary representation table
 fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
     println!("\n## Bitround float32 Encoding (keepbits={})", keepbits);
-    println!("| Original           | Rounded           | Original (0b)                      | Rounded (0b)                       |");
-    println!("|--------------------|-------------------|------------------------------------|------------------------------------|");
+    println!(
+        "| Original           | Rounded           | Original (0b)                      | Rounded (0b)                       |"
+    );
+    println!(
+        "|--------------------|-------------------|------------------------------------|------------------------------------|"
+    );
 
     for (orig, round) in original.iter().zip(rounded.iter()) {
         let orig_bits = orig.to_bits();

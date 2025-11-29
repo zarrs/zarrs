@@ -1,15 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::iter_concurrent_limit;
-
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_metadata::ConfigurationSerialize;
-use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::StorageHandle;
 
 use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
@@ -21,7 +14,12 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::StoragePartialDecoder;
+use crate::iter_concurrent_limit;
+use crate::metadata::ConfigurationSerialize;
+use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
+use crate::storage::byte_range::ByteRange;
 use crate::storage::ReadableStorageTraits;
+use crate::storage::StorageHandle;
 use crate::{array::codec::ArrayPartialDecoderTraits, array_subset::ArraySubset};
 
 // TODO: Remove with trait upcasting
@@ -685,8 +683,8 @@ mod private {
 mod tests {
     use std::sync::Arc;
 
-    use zarrs_metadata_ext::codec::transpose::TransposeOrder;
-
+    use super::*;
+    use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
             codec::{array_to_bytes::sharding::ShardingCodecBuilder, TransposeCodec},
@@ -698,8 +696,6 @@ mod tests {
             store::MemoryStore,
         },
     };
-
-    use super::*;
 
     fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
         let store = Arc::new(MemoryStore::default());

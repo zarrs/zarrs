@@ -35,11 +35,9 @@
 //! - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_object_store/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_object_store/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
-pub use object_store;
-
 use futures::{stream, StreamExt, TryStreamExt};
+pub use object_store;
 use object_store::path::Path;
-
 use zarrs_storage::{
     async_store_set_partial_many, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
     AsyncMaybeBytesIterator, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,

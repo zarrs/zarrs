@@ -1,17 +1,16 @@
 //! The `default` chunk key encoding.
 
 use itertools::Itertools;
-pub use zarrs_metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
-use zarrs_registry::chunk_key_encoding::DEFAULT;
 
+use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
+pub use crate::metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
+use crate::registry::chunk_key_encoding::DEFAULT;
 use crate::{
     array::chunk_key_encoding::ChunkKeyEncodingPlugin,
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
     storage::StoreKey,
 };
-
-use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 
 // Register the chunk key encoding.
 inventory::submit! {
@@ -115,9 +114,8 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::{data_key, NodePath};
-
     use super::*;
+    use crate::node::{data_key, NodePath};
 
     #[test]
     fn slash_nd() {

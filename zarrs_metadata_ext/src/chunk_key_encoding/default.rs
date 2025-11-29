@@ -1,9 +1,7 @@
 //! `default` chunk key encoding metadata.
 
-use serde::{Deserialize, Serialize};
-
 use derive_more::Display;
-
+use serde::{Deserialize, Serialize};
 use zarrs_metadata::{ChunkKeySeparator, ConfigurationSerialize};
 
 /// A `default` chunk key encoding configuration.

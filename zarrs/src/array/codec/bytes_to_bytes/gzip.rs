@@ -22,7 +22,7 @@
 //!     "level": 1
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::gzip::GzipCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::gzip::GzipCodecConfiguration;
 //! # serde_json::from_str::<GzipCodecConfiguration>(JSON).unwrap();
 
 mod gzip_codec;
@@ -30,12 +30,12 @@ mod gzip_codec;
 use std::sync::Arc;
 
 pub use gzip_codec::GzipCodec;
-pub use zarrs_metadata_ext::codec::gzip::{
+
+pub use crate::metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use zarrs_registry::codec::GZIP;
-
+use crate::registry::codec::GZIP;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -63,6 +63,7 @@ pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCr
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -70,8 +71,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON_VALID: &str = r#"{
         "level": 1

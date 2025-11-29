@@ -20,7 +20,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::crc32c::Crc32cCodecConfiguration;
 //! # serde_json::from_str::<Crc32cCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -29,9 +29,11 @@ mod crc32c_codec;
 use std::sync::Arc;
 
 pub use crc32c_codec::Crc32cCodec;
-pub use zarrs_metadata_ext::codec::crc32c::{Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
-use zarrs_registry::codec::CRC32C;
 
+pub use crate::metadata_ext::codec::crc32c::{
+    Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
+};
+use crate::registry::codec::CRC32C;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -61,6 +63,7 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -70,8 +73,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON1: &str = r#"{}"#;
 

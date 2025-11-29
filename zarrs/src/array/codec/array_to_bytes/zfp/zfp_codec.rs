@@ -1,12 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::{
-    zfp::ZfpMode,
-    zfpy::{ZfpyCodecConfiguration, ZfpyCodecConfigurationMode},
-};
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ZFP;
 use zfp_sys::{
     zfp_compress,
     zfp_stream_maximum_size,
@@ -16,6 +10,10 @@ use zfp_sys::{
     // zfp_exec_policy_zfp_exec_omp, zfp_stream_set_execution
 };
 
+use super::{
+    promote_before_zfp_encoding, zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode,
+    zfp_field::ZfpField, zfp_stream::ZfpStream, ZfpCodecConfiguration, ZfpCodecConfigurationV1,
+};
 use crate::array::{
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
@@ -24,11 +22,12 @@ use crate::array::{
     },
     BytesRepresentation, ChunkRepresentation, DataType,
 };
-
-use super::{
-    promote_before_zfp_encoding, zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode,
-    zfp_field::ZfpField, zfp_stream::ZfpStream, ZfpCodecConfiguration, ZfpCodecConfigurationV1,
+use crate::metadata::Configuration;
+use crate::metadata_ext::codec::{
+    zfp::ZfpMode,
+    zfpy::{ZfpyCodecConfiguration, ZfpyCodecConfigurationMode},
 };
+use crate::registry::codec::ZFP;
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]

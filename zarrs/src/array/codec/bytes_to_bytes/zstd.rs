@@ -27,19 +27,19 @@
 //!     "checksum": true
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zstd::ZstdCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zstd::ZstdCodecConfiguration;
 //! # serde_json::from_str::<ZstdCodecConfiguration>(JSON).unwrap();
 
 mod zstd_codec;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata_ext::codec::zstd::{
-    ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
-};
-use zarrs_registry::codec::ZSTD;
 pub use zstd_codec::ZstdCodec;
 
+pub use crate::metadata_ext::codec::zstd::{
+    ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
+};
+use crate::registry::codec::ZSTD;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -67,6 +67,7 @@ pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCr
 mod tests {
     use std::{borrow::Cow, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
@@ -74,8 +75,6 @@ mod tests {
         },
         storage::byte_range::ByteRange,
     };
-
-    use super::*;
 
     const JSON_VALID: &str = r#"{
     "level": 22,

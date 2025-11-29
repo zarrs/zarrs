@@ -2,20 +2,18 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 
-use zarrs_storage::{MaybeSend, MaybeSync};
-
+use super::{
+    codec::{ArrayToBytesCodecTraits, CodecOptions},
+    concurrency::concurrency_chunks_and_codec,
+    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element,
+};
+use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::ArrayBytes,
     array_subset::ArraySubset,
     config::{global_config, MetadataEraseVersion},
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{AsyncWritableStorageTraits, Bytes, StorageError, StorageHandle},
-};
-
-use super::{
-    codec::{ArrayToBytesCodecTraits, CodecOptions},
-    concurrency::concurrency_chunks_and_codec,
-    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element,
 };
 
 impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {

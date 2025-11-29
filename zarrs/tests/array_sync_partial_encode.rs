@@ -2,6 +2,10 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
+use zarrs::storage::{
+    storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
+    ReadableStorageTraits,
+};
 use zarrs::{
     array::{
         codec::{
@@ -10,10 +14,6 @@ use zarrs::{
         ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
-};
-use zarrs_storage::{
-    storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
-    ReadableStorageTraits,
 };
 
 /// Test sync partial encoding for array-to-array codecs in isolation
@@ -333,7 +333,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
 #[test]
 fn test_bitround_sync_partial_encoding() {
     use zarrs::array::codec::BitroundCodec;
-    use zarrs_metadata_ext::codec::bitround::BitroundCodecConfiguration;
+    use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 
     let config: BitroundCodecConfiguration = serde_json::from_str(r#"{"keepbits": 8}"#).unwrap();
     let codec = Arc::new(BitroundCodec::new_with_configuration(&config).unwrap());
@@ -346,7 +346,7 @@ fn test_bitround_sync_partial_encoding() {
 #[test]
 fn test_transpose_sync_partial_encoding() {
     use zarrs::array::codec::TransposeCodec;
-    use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+    use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 
     let order = TransposeOrder::new(&[1, 0]).unwrap();
     let codec = Arc::new(TransposeCodec::new(order));
@@ -359,7 +359,7 @@ fn test_transpose_sync_partial_encoding() {
 #[ignore = "partial encoding with reshape is not yet supported"] // FIXME
 fn test_reshape_sync_partial_encoding() {
     use zarrs::array::codec::ReshapeCodec;
-    use zarrs_metadata_ext::codec::reshape::ReshapeShape;
+    use zarrs::metadata_ext::codec::reshape::ReshapeShape;
 
     let shape = vec![
         ReshapeDim::from(NonZeroU64::try_from(1).unwrap()),
@@ -386,7 +386,7 @@ fn test_squeeze_sync_partial_encoding() {
 #[ignore = "partial encoding with fixedscaleoffset is not yet supported"] // FIXME
 fn test_fixedscaleoffset_sync_partial_encoding() {
     use zarrs::array::codec::FixedScaleOffsetCodec;
-    use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
+    use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     let config: FixedScaleOffsetCodecConfiguration =
         serde_json::from_str(r#"{"offset": 100.0, "scale": 2, "dtype": "f4", "astype": "f8"}"#)
@@ -424,7 +424,7 @@ fn test_zstd_sync_partial_encoding() {
 #[test]
 fn test_blosc_sync_partial_encoding() {
     use zarrs::array::codec::BloscCodec;
-    use zarrs_metadata_ext::codec::blosc::{
+    use zarrs::metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
     };
 
@@ -447,7 +447,7 @@ fn test_blosc_sync_partial_encoding() {
 #[test]
 fn test_bz2_sync_partial_encoding() {
     use zarrs::array::codec::Bz2Codec;
-    use zarrs_metadata_ext::codec::bz2::Bz2CompressionLevel;
+    use zarrs::metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     let codec = Arc::new(Bz2Codec::new(Bz2CompressionLevel::try_from(5u8).unwrap()));
 
@@ -491,7 +491,7 @@ fn test_fletcher32_sync_partial_encoding() {
 #[test]
 fn test_shuffle_sync_partial_encoding() {
     use zarrs::array::codec::ShuffleCodec;
-    use zarrs_metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
+    use zarrs::metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
 
     let config: ShuffleCodecConfiguration = serde_json::from_str(r#"{"elementsize": 2}"#).unwrap();
     let codec = Arc::new(ShuffleCodec::new_with_configuration(&config).unwrap());
@@ -504,8 +504,7 @@ fn test_shuffle_sync_partial_encoding() {
 #[test]
 fn test_zlib_sync_partial_encoding() {
     use zarrs::array::codec::ZlibCodec;
-
-    use zarrs_metadata_ext::codec::zlib::ZlibCompressionLevel;
+    use zarrs::metadata_ext::codec::zlib::ZlibCompressionLevel;
     let codec = Arc::new(ZlibCodec::new(ZlibCompressionLevel::try_from(5u8).unwrap()));
 
     // Zlib does not support partial encoding due to compression
@@ -545,7 +544,7 @@ fn test_codec_chain_sync_partial_encoding() {
     #[cfg(feature = "transpose")]
     {
         use zarrs::array::codec::TransposeCodec;
-        use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+        use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 
         let order = TransposeOrder::new(&[1, 0]).unwrap();
         let transpose_codec = Arc::new(TransposeCodec::new(order));

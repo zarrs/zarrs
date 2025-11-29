@@ -25,7 +25,7 @@
 //!     "endian": "little"
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::bytes::BytesCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::bytes::BytesCodecConfiguration;
 //! # serde_json::from_str::<BytesCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -34,14 +34,12 @@ mod bytes_codec_partial;
 
 use std::sync::Arc;
 
-use crate::metadata::Endianness;
-
-pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
-use zarrs_registry::codec::BYTES;
-
 pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
 
+use crate::metadata::Endianness;
+pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
+use crate::registry::codec::BYTES;
 use crate::{
     array::{
         codec::{Codec, CodecPlugin},
@@ -155,6 +153,7 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
 mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
+    use super::*;
     use crate::{
         array::{
             codec::{
@@ -164,8 +163,6 @@ mod tests {
         },
         array_subset::ArraySubset,
     };
-
-    use super::*;
 
     #[test]
     fn codec_bytes_configuration_big() {

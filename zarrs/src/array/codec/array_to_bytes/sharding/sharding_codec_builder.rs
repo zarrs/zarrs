@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use codec::CodecChain;
 
+use super::{ShardingCodec, ShardingIndexLocation};
 use crate::array::{
     codec::{
         self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
@@ -9,8 +10,6 @@ use crate::array::{
     },
     ChunkShape,
 };
-
-use super::{ShardingCodec, ShardingIndexLocation};
 
 /// A [`ShardingCodec`] builder.
 ///

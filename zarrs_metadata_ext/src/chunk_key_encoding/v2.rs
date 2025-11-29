@@ -1,9 +1,7 @@
 //! `v2` chunk key encoding metadata.
 
-use serde::{Deserialize, Serialize};
-
 use derive_more::Display;
-
+use serde::{Deserialize, Serialize};
 use zarrs_metadata::{ChunkKeySeparator, ConfigurationSerialize};
 
 /// A `v2` chunk key encoding configuration.

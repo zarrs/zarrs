@@ -47,9 +47,26 @@ mod array_sync_sharded_readable_ext;
 
 use std::sync::Arc;
 
+#[cfg(all(feature = "sharding", feature = "async"))]
+pub use array_async_sharded_readable_ext::{
+    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
+};
+#[cfg(feature = "dlpack")]
+pub use array_dlpack_ext::{
+    ArrayDlPackExt, ArrayDlPackExtError, AsyncArrayDlPackExt, RawBytesDlPack,
+};
+#[cfg(feature = "sharding")]
+pub use array_sharded_ext::ArrayShardedExt;
+#[cfg(feature = "sharding")]
+pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
+pub use chunk_cache::{
+    chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder,
+};
+pub use data_type::{DataType, FillValue, NamedDataType};
+
 #[allow(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
-
 pub use self::{
     array_builder::{
         ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
@@ -75,9 +92,7 @@ pub use self::{
     element::{Element, ElementFixedLength, ElementOwned},
     storage_transformer::StorageTransformerChain,
 };
-pub use data_type::{DataType, FillValue, NamedDataType};
-use zarrs_registry::chunk_grid::REGULAR;
-
+use crate::metadata::v2::DataTypeMetadataV2;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
@@ -85,40 +100,20 @@ pub use crate::metadata::v3::{
 pub use crate::metadata::{
     ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
 };
+use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
+use crate::metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 use crate::plugin::PluginCreateError;
+use crate::registry::chunk_grid::REGULAR;
 use crate::{
     array::chunk_grid::{RegularBoundedChunkGridConfiguration, RegularChunkGrid},
     config::global_config,
 };
-use zarrs_metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
-
-pub use chunk_cache::{
-    chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder,
-};
-
-#[cfg(all(feature = "sharding", feature = "async"))]
-pub use array_async_sharded_readable_ext::{
-    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
-};
-#[cfg(feature = "dlpack")]
-pub use array_dlpack_ext::{
-    ArrayDlPackExt, ArrayDlPackExtError, AsyncArrayDlPackExt, RawBytesDlPack,
-};
-#[cfg(feature = "sharding")]
-pub use array_sharded_ext::ArrayShardedExt;
-#[cfg(feature = "sharding")]
-pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
-
-use zarrs_metadata::v2::DataTypeMetadataV2;
-
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     config::MetadataConvertVersion,
     node::{data_key, NodePath},
     storage::StoreKey,
 };
-use zarrs_metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
 
 /// An ND index to an element in an array.
 pub type ArrayIndices = Vec<u64>;
@@ -1170,11 +1165,11 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::store::MemoryStore;
     use zarrs_filesystem::FilesystemStore;
-    use zarrs_metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
 
     use super::*;
+    use crate::metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
+    use crate::storage::store::MemoryStore;
 
     #[test]
     fn test_array_metadata_write_read() {
@@ -1226,7 +1221,7 @@ mod tests {
     #[test]
     fn array_set_shape_and_chunk_grid() {
         use crate::array::chunk_grid::RectangularChunkGridConfiguration;
-        use zarrs_metadata::v3::MetadataV3;
+        use crate::metadata::v3::MetadataV3;
 
         let store = MemoryStore::new();
         let array_path = "/group/array";

@@ -3,6 +3,15 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
+use zarrs::storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
+use zarrs::storage::{
+    storage_adapter::{
+        performance_metrics::PerformanceMetricsStorageAdapter,
+        sync_to_async::SyncToAsyncStorageAdapter,
+    },
+    store::MemoryStore,
+    AsyncReadableStorageTraits,
+};
 use zarrs::{
     array::{
         codec::{
@@ -12,16 +21,6 @@ use zarrs::{
     },
     array_subset::ArraySubset,
 };
-use zarrs_storage::{
-    storage_adapter::{
-        performance_metrics::PerformanceMetricsStorageAdapter,
-        sync_to_async::SyncToAsyncStorageAdapter,
-    },
-    store::MemoryStore,
-    AsyncReadableStorageTraits,
-};
-
-use zarrs_storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
@@ -368,7 +367,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
 #[tokio::test]
 async fn test_bitround_async_partial_encoding() {
     use zarrs::array::codec::BitroundCodec;
-    use zarrs_metadata_ext::codec::bitround::BitroundCodecConfiguration;
+    use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 
     let config: BitroundCodecConfiguration = serde_json::from_str(r#"{"keepbits": 8}"#).unwrap();
     let codec = Arc::new(BitroundCodec::new_with_configuration(&config).unwrap());
@@ -383,7 +382,7 @@ async fn test_bitround_async_partial_encoding() {
 #[tokio::test]
 async fn test_transpose_async_partial_encoding() {
     use zarrs::array::codec::TransposeCodec;
-    use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+    use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 
     let order = TransposeOrder::new(&[1, 0]).unwrap();
     let codec = Arc::new(TransposeCodec::new(order));
@@ -398,7 +397,7 @@ async fn test_transpose_async_partial_encoding() {
 #[ignore = "partial encoding with reshape is not yet supported"] // FIXME
 async fn test_reshape_async_partial_encoding() {
     use zarrs::array::codec::ReshapeCodec;
-    use zarrs_metadata_ext::codec::reshape::ReshapeShape;
+    use zarrs::metadata_ext::codec::reshape::ReshapeShape;
 
     let shape = vec![
         ReshapeDim::from(NonZeroU64::try_from(1).unwrap()),
@@ -429,7 +428,7 @@ async fn test_squeeze_async_partial_encoding() {
 #[ignore = "partial encoding with fixedscaleoffset is not yet supported"] // FIXME
 async fn test_fixedscaleoffset_async_partial_encoding() {
     use zarrs::array::codec::FixedScaleOffsetCodec;
-    use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
+    use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     let config: FixedScaleOffsetCodecConfiguration =
         serde_json::from_str(r#"{"offset": 100.0, "scale": 2, "dtype": "f4", "astype": "f8"}"#)
@@ -473,7 +472,7 @@ async fn test_zstd_async_partial_encoding() {
 #[tokio::test]
 async fn test_blosc_async_partial_encoding() {
     use zarrs::array::codec::BloscCodec;
-    use zarrs_metadata_ext::codec::blosc::{
+    use zarrs::metadata_ext::codec::blosc::{
         BloscCompressionLevel, BloscCompressor, BloscShuffleMode,
     };
 
@@ -498,7 +497,7 @@ async fn test_blosc_async_partial_encoding() {
 #[tokio::test]
 async fn test_bz2_async_partial_encoding() {
     use zarrs::array::codec::Bz2Codec;
-    use zarrs_metadata_ext::codec::bz2::Bz2CompressionLevel;
+    use zarrs::metadata_ext::codec::bz2::Bz2CompressionLevel;
 
     let codec = Arc::new(Bz2Codec::new(Bz2CompressionLevel::try_from(5u8).unwrap()));
 
@@ -550,7 +549,7 @@ async fn test_fletcher32_async_partial_encoding() {
 #[tokio::test]
 async fn test_shuffle_async_partial_encoding() {
     use zarrs::array::codec::ShuffleCodec;
-    use zarrs_metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
+    use zarrs::metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
 
     let config: ShuffleCodecConfiguration = serde_json::from_str(r#"{"elementsize": 2}"#).unwrap();
     let codec = Arc::new(ShuffleCodec::new_with_configuration(&config).unwrap());
@@ -565,7 +564,7 @@ async fn test_shuffle_async_partial_encoding() {
 #[tokio::test]
 async fn test_zlib_async_partial_encoding() {
     use zarrs::array::codec::ZlibCodec;
-    use zarrs_metadata_ext::codec::zlib::ZlibCompressionLevel;
+    use zarrs::metadata_ext::codec::zlib::ZlibCompressionLevel;
 
     let codec = Arc::new(ZlibCodec::new(ZlibCompressionLevel::try_from(5u8).unwrap()));
 
@@ -613,7 +612,7 @@ async fn test_codec_chain_async_partial_encoding() {
     #[cfg(feature = "transpose")]
     {
         use zarrs::array::codec::TransposeCodec;
-        use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+        use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 
         let order = TransposeOrder::new(&[1, 0]).unwrap();
         let transpose_codec = Arc::new(TransposeCodec::new(order));

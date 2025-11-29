@@ -1,7 +1,6 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of Transpose codec configuration parameters.
