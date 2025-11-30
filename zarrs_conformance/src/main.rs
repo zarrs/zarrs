@@ -24,7 +24,7 @@ fn print_elements_as_fill_value_metadata(
 ) -> Result<()> {
     match element_bytes {
         ArrayBytes::Fixed(bytes) => {
-            for byte_slice in bytes.chunks_exact(1) {
+            for byte_slice in bytes.chunks_exact(data_type.fixed_size().unwrap()) {
                 let fill_value = FillValue::from(byte_slice);
                 let fill_value_metadata = data_type.metadata_fill_value(&fill_value).unwrap();
                 println!("{fill_value_metadata}");
