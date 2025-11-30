@@ -55,41 +55,41 @@
 //! ```rust
 //! # let JSON = r#"
 //! {
-//!     "data_codecs": [
-//!             {
-//!                     "name": "bytes"
-//!             },
-//!             {
-//!                     "name": "blosc",
-//!                     "configuration": {
-//!                             "cname": "zstd",
-//!                             "clevel": 5,
-//!                             "shuffle": "bitshuffle",
-//!                             "typesize": 1,
-//!                             "blocksize": 0
-//!                     }
-//!             }
-//!     ],
-//!     "index_codecs": [
-//!             {
-//!                     "name": "bytes",
-//!                     "configuration": {
-//!                             "endian": "little"
-//!                     }
-//!             },
-//!             {
-//!                     "name": "blosc",
-//!                     "configuration": {
-//!                             "cname": "zstd",
-//!                             "clevel": 5,
-//!                             "shuffle": "shuffle",
-//!                             "typesize": 4,
-//!                             "blocksize": 0
-//!                     }
-//!             }
-//!     ],
-//!     "index_data_type": "uint32",
-//!     "index_location": "end"
+//!   "data_codecs": [
+//!     {
+//!       "name": "bytes"
+//!     },
+//!     {
+//!       "name": "blosc",
+//!       "configuration": {
+//!         "cname": "zstd",
+//!         "clevel": 5,
+//!         "shuffle": "bitshuffle",
+//!         "typesize": 1,
+//!         "blocksize": 0
+//!       }
+//!     }
+//!   ],
+//!   "index_codecs": [
+//!     {
+//!       "name": "bytes",
+//!       "configuration": {
+//!         "endian": "little"
+//!       }
+//!     },
+//!     {
+//!       "name": "blosc",
+//!       "configuration": {
+//!         "cname": "zstd",
+//!         "clevel": 5,
+//!         "shuffle": "shuffle",
+//!         "typesize": 4,
+//!         "blocksize": 0
+//!       }
+//!     }
+//!   ],
+//!   "index_data_type": "uint32",
+//!   "index_location": "end"
 //! }
 //! # "#;
 //! # use zarrs::metadata_ext::codec::vlen::VlenCodecConfiguration;
