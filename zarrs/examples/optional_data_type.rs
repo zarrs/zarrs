@@ -13,13 +13,15 @@ use std::sync::Arc;
 
 use zarrs::{
     array::{codec::array_to_bytes::optional::OptionalCodec, ArrayBuilder, DataType, FillValue},
-    storage::store::MemoryStore,
     storage::ReadableStorageTraits,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
-    let store = Arc::new(MemoryStore::new());
+    // let store = Arc::new(zarrs::filesystem::FilesystemStore::new(
+    //     "zarrs/tests/data/v3/array_optional.zarr",
+    // )?);
+    let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 
     // Build the codec chains for the optional codec
     let mask_codecs = Arc::new(zarrs::array::codec::CodecChain::from_metadata(&vec![
@@ -37,7 +39,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .dimension_names(["y", "x"].into())
     .array_to_bytes_codec(Arc::new(OptionalCodec::new(mask_codecs, data_codecs)))
+    .attributes(
+        serde_json::json!({
+            "description": r#"A 4x4 array of optional uint8 values with some missing data.
+X marks missing values:
+ 0  X  2  3 
+ X  5  X  7 
+ 8  9  X  X 
+12  X 14 15"#,
+        })
+        .as_object()
+        .unwrap()
+        .clone(),
+    )
     .build(store.clone(), "/array")?;
+    array.store_metadata()?;
 
     println!("Array metadata:\n{}", array.metadata().to_string_pretty());
 
