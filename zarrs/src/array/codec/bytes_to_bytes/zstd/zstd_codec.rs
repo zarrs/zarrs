@@ -125,8 +125,7 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
             // Bulk decompression
-            let mut result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
-            result.shrink_to_fit();
+            let result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
             Ok(Cow::Owned(result))
         } else {
             // Streaming decompression (slower)

@@ -822,7 +822,6 @@ impl ShardingCodec {
         }
         // SAFETY: all elements have been initialised
         unsafe { shard.set_len(shard_length) };
-        shard.shrink_to_fit();
         Ok(shard)
     }
 
