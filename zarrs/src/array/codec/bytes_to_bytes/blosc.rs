@@ -143,7 +143,6 @@ fn blosc_compress_bytes(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     } else {
         let clevel: u8 = clevel.into();
@@ -224,7 +223,6 @@ fn blosc_decompress_bytes(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     } else {
         Err(BloscError::from("blosc_decompress_ctx failed"))
@@ -258,7 +256,6 @@ fn blosc_decompress_bytes_partial(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     }
 }
