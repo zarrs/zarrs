@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::json!({
             "description": r#"A 4x4 array of optional optional uint8 values with some missing data.
 The fill value is null on the inner optional layer, i.e. Some(None).
-N marks missing (null) values. SN marks Some(None) values:
+N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
   N  SN   2   3 
   N   5   N   7 
  SN  SN   N   N 
@@ -71,7 +71,9 @@ N marks missing (null) values. SN marks Some(None) values:
     assert_eq!(data, data_read);
 
     // Display the data in a grid format
-    println!("Data grid (X marks missing values):");
+    println!(
+        "Data grid. N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values"
+    );
     println!("    0   1   2   3");
     for y in 0..4 {
         print!("{} ", y);
