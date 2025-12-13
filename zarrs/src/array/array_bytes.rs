@@ -130,19 +130,23 @@ impl<'a> ArrayBytes<'a> {
                     FillValue::from(&[])
                 };
                 let mask = vec![0u8; num_elements_usize];
-                return Ok(
-                    ArrayBytes::new_fill_value(inner_data_type, num_elements, &inner_fill_value)?
-                        .with_optional_mask(mask),
-                );
+                return Ok(ArrayBytes::new_fill_value(
+                    inner_data_type,
+                    num_elements,
+                    &inner_fill_value,
+                )?
+                .with_optional_mask(mask));
             }
             // Non-null fill value for optional type: strip suffix and use inner bytes
             let inner_bytes = data_type.fill_value_inner_bytes(fill_value);
             let inner_fill_value = FillValue::new(inner_bytes.to_vec());
             let mask = vec![1u8; num_elements_usize]; // all non-null
-            return Ok(
-                ArrayBytes::new_fill_value(inner_data_type, num_elements, &inner_fill_value)?
-                    .with_optional_mask(mask),
-            );
+            return Ok(ArrayBytes::new_fill_value(
+                inner_data_type,
+                num_elements,
+                &inner_fill_value,
+            )?
+            .with_optional_mask(mask));
         }
 
         match data_type.size() {

@@ -438,6 +438,25 @@ impl DataType {
         matches!(self, Self::Optional(_))
     }
 
+    /// Wrap this data type in an [`Optional`](DataType::Optional).
+    ///
+    /// Can be chained to create nested optional types.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs::array::DataType;
+    /// // Single level optional
+    /// let opt_u8 = DataType::UInt8.optional();
+    /// assert_eq!(opt_u8, DataType::Optional(Box::new(DataType::UInt8)));
+    ///
+    /// // Nested optional
+    /// let opt_opt_u8 = DataType::UInt8.optional().optional();
+    /// ```
+    #[must_use]
+    pub fn optional(self) -> Self {
+        Self::Optional(Box::new(self))
+    }
+
     /// Check if the fill value represents null for this data type.
     ///
     /// For optional data types, a fill value is null if its last byte is `0x00`.
@@ -574,7 +593,7 @@ impl DataType {
 
                     // Recursively parse the inner data type
                     let inner_data_type = Self::from_metadata(&inner_metadata, data_type_aliases)?;
-                    return Ok(Self::Optional(Box::new(inner_data_type)));
+                    return Ok(inner_data_type.optional());
                 }
                 _ => {}
             }
@@ -2513,5 +2532,39 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let result = DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn data_type_optional_method() {
+        // Single level optional
+        let opt_u8 = DataType::UInt8.optional();
+        assert_eq!(opt_u8, DataType::Optional(Box::new(DataType::UInt8)));
+        assert!(opt_u8.is_optional());
+
+        // Nested optional (2 levels)
+        let opt_opt_u8 = DataType::UInt8.optional().optional();
+        assert_eq!(
+            opt_opt_u8,
+            DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::UInt8))))
+        );
+
+        // Nested optional (3 levels)
+        let opt_opt_opt_u16 = DataType::UInt16.optional().optional().optional();
+        assert_eq!(
+            opt_opt_opt_u16,
+            DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Optional(
+                Box::new(DataType::UInt16)
+            )))))
+        );
+
+        // Works with various inner types
+        assert_eq!(
+            DataType::String.optional(),
+            DataType::Optional(Box::new(DataType::String))
+        );
+        assert_eq!(
+            DataType::Float64.optional(),
+            DataType::Optional(Box::new(DataType::Float64))
+        );
     }
 }
