@@ -1022,18 +1022,18 @@ mod tests {
     }
 
     #[test]
-    fn codec_optional_nested_with_varying_fill_values() {
+    fn codec_optional_some_nan_fill_value() {
         use std::num::NonZeroU64;
 
         // Test Option<f32> with a specific fill value (e.g., NaN)
         let data_type = DataType::Float32.into_optional();
         let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
-        // For optional types, fill value must include the suffix byte
-        // NaN value (4 bytes) + non-null suffix (0x01)
-        let mut nan_bytes = f32::NAN.to_le_bytes().to_vec();
-        nan_bytes.push(1); // non-null suffix
         let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(chunk_shape, data_type, FillValue::new(nan_bytes))
+            ChunkRepresentation::new_unchecked(
+                chunk_shape,
+                data_type,
+                FillValue::from(Some(f32::NAN)),
+            )
         };
 
         // Create test data with some valid and some invalid f32 values

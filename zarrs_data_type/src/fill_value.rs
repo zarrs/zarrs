@@ -189,12 +189,8 @@ where
 {
     fn from(value: Option<T>) -> Self {
         match value {
-            None => Self(vec![0]), // null suffix
-            Some(inner) => {
-                let mut bytes = FillValue::from(inner).0;
-                bytes.push(1); // non-null suffix
-                Self(bytes)
-            }
+            None => FillValue::new_optional_none(), // null suffix
+            Some(inner) => FillValue::from(inner).into_optional(),
         }
     }
 }
