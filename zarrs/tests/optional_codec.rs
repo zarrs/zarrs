@@ -27,7 +27,7 @@ fn create_optional_array(data_type: DataType, fill_value: FillValue) -> Array<Me
 fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{array, Array2};
 
-    let array = create_optional_array(DataType::UInt8.optional(), None::<u8>.into());
+    let array = create_optional_array(DataType::UInt8.into_optional(), None::<u8>.into());
 
     // Store different patterns in different chunks
     // Chunk [0,0]: mostly Some values
@@ -135,7 +135,7 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<u8>>
     let array = create_optional_array(
-        DataType::UInt8.optional().optional(),
+        DataType::UInt8.into_optional().into_optional(),
         None::<Option<u8>>.into(),
     );
 
@@ -171,7 +171,10 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<Option<u16>>>
     let array = create_optional_array(
-        DataType::UInt16.optional().optional().optional(),
+        DataType::UInt16
+            .into_optional()
+            .into_optional()
+            .into_optional(),
         None::<Option<Option<u16>>>.into(),
     );
 
@@ -214,7 +217,10 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
     use ndarray::{array, Array2};
 
     // Create an optional array with a non-null fill value
-    let array = create_optional_array(DataType::UInt8.optional(), FillValue::from(Some(255u8)));
+    let array = create_optional_array(
+        DataType::UInt8.into_optional(),
+        FillValue::from(Some(255u8)),
+    );
 
     // Store data in one chunk
     let data = array![
@@ -244,7 +250,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{array, Array2};
 
     // The ArrayBuilder automatically handles optional strings with the correct vlen codec
-    let array = create_optional_array(DataType::String.optional(), None::<String>.into());
+    let array = create_optional_array(DataType::String.into_optional(), None::<String>.into());
 
     // Store chunk with Option<String>
     let data = array![

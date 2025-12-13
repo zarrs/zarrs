@@ -492,14 +492,14 @@ impl DataType {
     /// ```
     /// # use zarrs::array::{DataType, DataTypeOptional};
     /// // Single level optional
-    /// let opt_u8 = DataType::UInt8.optional();
+    /// let opt_u8 = DataType::UInt8.into_optional();
     /// assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8)));
     ///
     /// // Nested optional
-    /// let opt_opt_u8 = DataType::UInt8.optional().optional();
+    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
     /// ```
     #[must_use]
-    pub fn optional(self) -> Self {
+    pub fn into_optional(self) -> Self {
         Self::Optional(DataTypeOptional::new(self))
     }
 
@@ -508,7 +508,7 @@ impl DataType {
     /// # Examples
     /// ```
     /// # use zarrs::array::DataType;
-    /// let opt_u8 = DataType::UInt8.optional();
+    /// let opt_u8 = DataType::UInt8.into_optional();
     /// assert!(opt_u8.as_optional().is_some());
     /// assert!(DataType::UInt8.as_optional().is_none());
     /// ```
@@ -624,7 +624,7 @@ impl DataType {
 
                     // Recursively parse the inner data type
                     let inner_data_type = Self::from_metadata(&inner_metadata, data_type_aliases)?;
-                    return Ok(inner_data_type.optional());
+                    return Ok(inner_data_type.into_optional());
                 }
                 _ => {}
             }
@@ -2570,7 +2570,7 @@ mod tests {
     #[test]
     fn data_type_optional_method() {
         // Single level optional
-        let opt_u8 = DataType::UInt8.optional();
+        let opt_u8 = DataType::UInt8.into_optional();
         assert_eq!(
             opt_u8,
             DataType::Optional(DataTypeOptional::new(DataType::UInt8))
@@ -2578,7 +2578,7 @@ mod tests {
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
-        let opt_opt_u8 = DataType::UInt8.optional().optional();
+        let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
         assert_eq!(
             opt_opt_u8,
             DataType::Optional(DataTypeOptional::new(DataType::Optional(
@@ -2587,7 +2587,10 @@ mod tests {
         );
 
         // Nested optional (3 levels)
-        let opt_opt_opt_u16 = DataType::UInt16.optional().optional().optional();
+        let opt_opt_opt_u16 = DataType::UInt16
+            .into_optional()
+            .into_optional()
+            .into_optional();
         assert_eq!(
             opt_opt_opt_u16,
             DataType::Optional(DataTypeOptional::new(DataType::Optional(
@@ -2597,11 +2600,11 @@ mod tests {
 
         // Works with various inner types
         assert_eq!(
-            DataType::String.optional(),
+            DataType::String.into_optional(),
             DataType::Optional(DataTypeOptional::new(DataType::String))
         );
         assert_eq!(
-            DataType::Float64.optional(),
+            DataType::Float64.into_optional(),
             DataType::Optional(DataTypeOptional::new(DataType::Float64))
         );
     }
@@ -2609,7 +2612,7 @@ mod tests {
     #[test]
     fn data_type_optional_fill_value() {
         // Simple optional: None -> null
-        let data_type = DataType::UInt8.optional();
+        let data_type = DataType::UInt8.into_optional();
         let fill_value = FillValue::new_optional_none();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
@@ -2617,7 +2620,7 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Simple optional: Some(42) -> [42]
-        let fill_value = FillValue::from(42u8).optional();
+        let fill_value = FillValue::from(42u8).into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
@@ -2627,7 +2630,7 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: None -> null
-        let data_type = DataType::UInt8.optional().optional();
+        let data_type = DataType::UInt8.into_optional().into_optional();
         let fill_value = FillValue::new_optional_none();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
@@ -2635,7 +2638,7 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: Some(None) -> [null]
-        let fill_value = FillValue::new_optional_none().optional();
+        let fill_value = FillValue::new_optional_none().into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
@@ -2645,7 +2648,7 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: Some(Some(42)) -> [[42]]
-        let fill_value = FillValue::from(42u8).optional().optional();
+        let fill_value = FillValue::from(42u8).into_optional().into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
@@ -2657,8 +2660,13 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Triple nested: Some(Some(None)) -> [[null]]
-        let data_type = DataType::UInt8.optional().optional().optional();
-        let fill_value = FillValue::new_optional_none().optional().optional();
+        let data_type = DataType::UInt8
+            .into_optional()
+            .into_optional()
+            .into_optional();
+        let fill_value = FillValue::new_optional_none()
+            .into_optional()
+            .into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
@@ -2670,7 +2678,10 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Triple nested: Some(Some(Some(42))) -> [[[42]]]
-        let fill_value = FillValue::from(42u8).optional().optional().optional();
+        let fill_value = FillValue::from(42u8)
+            .into_optional()
+            .into_optional()
+            .into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,

@@ -25,10 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the codec chains for the optional codec
     let array = ArrayBuilder::new(
-        vec![4, 4],                                // 4x4 array
-        vec![2, 2],                                // 2x2 chunks
-        DataType::UInt8.optional().optional(),     // Optional optional uint8 => Option<Option<u8>>
-        FillValue::new_optional_none().optional(), // Fill value => Some(None)
+        vec![4, 4],                                      // 4x4 array
+        vec![2, 2],                                      // 2x2 chunks
+        DataType::UInt8.into_optional().into_optional(), // Optional optional uint8 => Option<Option<u8>>
+        FillValue::new_optional_none().into_optional(),  // Fill value => Some(None)
     )
     .dimension_names(["y", "x"].into())
     .attributes(

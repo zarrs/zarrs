@@ -300,7 +300,7 @@ impl NamedDataType {
                 } else if let Some([inner]) = fill_value.as_array() {
                     // Wrapped value [inner_metadata] -> Some(inner)
                     let inner_fv = opt.fill_value_from_metadata(inner)?;
-                    Ok(inner_fv.optional())
+                    Ok(inner_fv.into_optional())
                 } else {
                     // Invalid format for optional
                     Err(err0())

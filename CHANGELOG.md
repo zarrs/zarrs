@@ -15,9 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ArrayBytesOptional`
 - Add `DataTypeOptional`
 - Add `DataType::Optional` variant holding a `DataTypeOptional`
-- Add `DataType::optional()`
+- Add `DataType::into_optional()` and `FillValue::into_optional()`
 - Add `FillValue::new_optional_none()`
-- Add `FillValue::optional()`
 - Implement `From<Option<T>>` for `FillValue` where `FillValue: From<T>`
 - Implement `Element` for `Option<T>` where `T: Element`
 - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
