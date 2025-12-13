@@ -206,6 +206,27 @@ impl FillValue {
         Self(bytes)
     }
 
+    /// Create a null optional fill value.
+    ///
+    /// Returns a fill value with a single `0x00` byte indicating null.
+    /// Can be chained with [`optional`](Self::optional) to create nested optional fill values.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs_data_type::FillValue;
+    /// // Null fill value for Option<T>
+    /// let null_fill = FillValue::new_optional_none();
+    /// assert_eq!(null_fill.as_ne_bytes(), &[0]);
+    ///
+    /// // Some(None) fill value for Option<Option<T>>
+    /// let some_null = FillValue::new_optional_none().optional();
+    /// assert_eq!(some_null.as_ne_bytes(), &[0, 1]);
+    /// ```
+    #[must_use]
+    pub fn new_optional_none() -> Self {
+        Self(vec![0])
+    }
+
     /// Returns the size in bytes of the fill value.
     #[must_use]
     pub fn size(&self) -> usize {
@@ -293,6 +314,28 @@ impl FillValue {
                 .chunks_exact(fill_value_bytes.len())
                 .all(|element| element == fill_value_bytes.as_slice()),
         }
+    }
+
+    /// Wrap this fill value as a non-null optional fill value.
+    ///
+    /// Appends a `0x01` suffix byte indicating the value is non-null.
+    /// Can be chained to create nested optional fill values.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs_data_type::FillValue;
+    /// // Single level optional (Some(u8))
+    /// let opt_fill = FillValue::from(42u8).optional();
+    /// assert_eq!(opt_fill.as_ne_bytes(), &[42, 1]);
+    ///
+    /// // Double level optional (Some(Some(u8)))
+    /// let nested = FillValue::from(42u8).optional().optional();
+    /// assert_eq!(nested.as_ne_bytes(), &[42, 1, 1]);
+    /// ```
+    #[must_use]
+    pub fn optional(mut self) -> Self {
+        self.0.push(1); // non-null suffix
+        self
     }
 }
 
@@ -459,5 +502,44 @@ mod tests {
         assert_eq!(fill_value.size(), 0);
         assert_eq!(fill_value.as_ne_bytes(), &[] as &[u8]);
         assert!(fill_value.equals_all(&[]));
+    }
+
+    #[test]
+    fn fill_value_optional_some_method() {
+        // Single level optional (non-null)
+        let opt_fill = FillValue::from(42u8).optional();
+        assert_eq!(opt_fill.as_ne_bytes(), &[42, 1]);
+
+        // Equivalent to Some(42u8).into()
+        assert_eq!(opt_fill, FillValue::from(Some(42u8)));
+
+        // Nested optional (2 levels)
+        let nested = FillValue::from(42u8).optional().optional();
+        assert_eq!(nested.as_ne_bytes(), &[42, 1, 1]);
+
+        // Equivalent to Some(Some(42u8)).into()
+        assert_eq!(nested, FillValue::from(Some(Some(42u8))));
+
+        // Nested optional (3 levels)
+        let triple = FillValue::from(100u16).optional().optional().optional();
+        let expected_bytes = [100u16.to_ne_bytes().as_slice(), &[1, 1, 1]].concat();
+        assert_eq!(triple.as_ne_bytes(), expected_bytes);
+    }
+
+    #[test]
+    fn fill_value_optional_null_method() {
+        // FillValue::new_optional_none() creates a null fill value
+        let null_fill = FillValue::new_optional_none();
+        assert_eq!(null_fill.as_ne_bytes(), &[0]);
+
+        // Equivalent to None::<u8>.into()
+        assert_eq!(null_fill, FillValue::from(None::<u8>));
+
+        // Some(None) for Option<Option<T>>
+        let some_null = FillValue::new_optional_none().optional();
+        assert_eq!(some_null.as_ne_bytes(), &[0, 1]);
+
+        // Equivalent to Some(None::<u8>).into()
+        assert_eq!(some_null, FillValue::from(Some(None::<u8>)));
     }
 }

@@ -594,12 +594,25 @@ mod tests {
     }
 
     #[test]
-    fn codec_optional_round_trip_u8() {
+    fn codec_optional_round_trip_u8_null() {
         codec_optional_round_trip_impl(
             DataType::UInt8.optional(),
             FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
+        codec_optional_round_trip_impl(
+            DataType::UInt8.optional(),
+            FillValue::new_optional_none(), // null/missing value: [0]
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn codec_optional_round_trip_u8_nonnull() {
+        codec_optional_round_trip_impl(DataType::UInt8.optional(), FillValue::from(Some(0u8)))
+            .unwrap();
+        codec_optional_round_trip_impl(DataType::UInt8.optional(), FillValue::from(0u8).optional())
+            .unwrap();
     }
 
     #[test]
