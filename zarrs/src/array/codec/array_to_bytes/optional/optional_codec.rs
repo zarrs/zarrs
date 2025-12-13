@@ -223,13 +223,13 @@ impl OptionalCodec {
 
     /// Creates a fill value for the inner type of an optional data type.
     ///
-    /// For nested optional types, returns a null fill value.
+    /// For nested optional types, returns a null fill value (just the `[0]` suffix).
     /// For fixed-size types, returns a zero-filled fill value.
     /// For variable-size types, returns an empty fill value.
     fn create_fill_value_for_inner_type(inner_type: &DataType) -> FillValue {
         if inner_type.is_optional() {
-            // For nested optional types, the fill value is null
-            FillValue::new_null()
+            // For nested optional types, the fill value is null (single 0x00 byte)
+            None::<()>.into()
         } else {
             match inner_type.size() {
                 DataTypeSize::Fixed(size) => {
@@ -597,7 +597,7 @@ mod tests {
     fn codec_optional_round_trip_u8() {
         codec_optional_round_trip_impl(
             DataType::Optional(Box::new(DataType::UInt8)),
-            FillValue::new_null(), // null/missing value
+            FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
     }
@@ -606,7 +606,7 @@ mod tests {
     fn codec_optional_round_trip_i32() {
         codec_optional_round_trip_impl(
             DataType::Optional(Box::new(DataType::Int32)),
-            FillValue::new_null(), // null/missing value
+            FillValue::from(None::<i32>), // null/missing value: [0]
         )
         .unwrap();
     }
@@ -615,7 +615,7 @@ mod tests {
     fn codec_optional_round_trip_f32() {
         codec_optional_round_trip_impl(
             DataType::Optional(Box::new(DataType::Float32)),
-            FillValue::new_null(), // null/missing value
+            FillValue::from(None::<f32>), // null/missing value: [0]
         )
         .unwrap();
     }
@@ -625,7 +625,7 @@ mod tests {
         // Test Option<Option<u8>> with null fill value
         codec_optional_round_trip_impl(
             DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::UInt8)))),
-            FillValue::new_null(), // null/missing value for outer optional
+            FillValue::from(None::<Option<u8>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
     }
@@ -635,7 +635,7 @@ mod tests {
         // Test Option<Option<i32>> with null fill value
         codec_optional_round_trip_impl(
             DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Int32)))),
-            FillValue::new_null(), // null/missing value for outer optional
+            FillValue::from(None::<Option<i32>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
     }
@@ -647,7 +647,7 @@ mod tests {
             DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Optional(
                 Box::new(DataType::UInt8),
             ))))),
-            FillValue::new_null(), // null/missing value for outer optional
+            FillValue::from(None::<Option<Option<u8>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
     }
@@ -659,7 +659,7 @@ mod tests {
             DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Optional(
                 Box::new(DataType::Float64),
             ))))),
-            FillValue::new_null(), // null/missing value for outer optional
+            FillValue::from(None::<Option<Option<f64>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
     }
@@ -672,7 +672,11 @@ mod tests {
         let data_type = DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::UInt8))));
         let chunk_shape = vec![NonZeroU64::new(8).unwrap()];
         let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(chunk_shape, data_type, FillValue::new_null())
+            ChunkRepresentation::new_unchecked(
+                chunk_shape,
+                data_type,
+                FillValue::from(None::<Option<u8>>),
+            )
         };
 
         // Create test data:
@@ -823,7 +827,11 @@ mod tests {
         ))));
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(chunk_shape, data_type, FillValue::new_null())
+            ChunkRepresentation::new_unchecked(
+                chunk_shape,
+                data_type,
+                FillValue::from(None::<Option<Option<u16>>>),
+            )
         };
 
         // Create test data with 3 levels:
@@ -921,7 +929,10 @@ mod tests {
         // Test Option<f32> with a specific fill value (e.g., NaN)
         let data_type = DataType::Optional(Box::new(DataType::Float32));
         let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
-        let nan_bytes = f32::NAN.to_le_bytes().to_vec();
+        // For optional types, fill value must include the suffix byte
+        // NaN value (4 bytes) + non-null suffix (0x01)
+        let mut nan_bytes = f32::NAN.to_le_bytes().to_vec();
+        nan_bytes.push(1); // non-null suffix
         let chunk_representation = unsafe {
             ChunkRepresentation::new_unchecked(chunk_shape, data_type, FillValue::new(nan_bytes))
         };

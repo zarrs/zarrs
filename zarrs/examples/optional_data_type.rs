@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![4, 4],                                    // 4x4 array
         vec![2, 2],                                    // 2x2 chunks
         DataType::Optional(Box::new(DataType::UInt8)), // Optional uint8
-        FillValue::new_null(),                         // Null fill value
+        FillValue::from(None::<u8>),                   // Null fill value: [0]
     )
     .dimension_names(["y", "x"].into())
     .array_to_bytes_codec(Arc::new(OptionalCodec::new(mask_codecs, data_codecs)))

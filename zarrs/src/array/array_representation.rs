@@ -43,8 +43,20 @@ where
         let fill_value = fill_value.into();
         match data_type.size() {
             DataTypeSize::Fixed(size) => {
-                // Allow null fill values ONLY for optional data types
-                if (fill_value.is_null() && data_type.is_optional()) || size == fill_value.size() {
+                // For optional types, fill value has inner bytes + suffix byte
+                let valid = if let DataType::Optional(inner) = &data_type {
+                    // Optional with fixed inner type: size is inner_size + 1
+                    // Null fill value is just [0], non-null is inner_bytes + [1]
+                    if let Some(inner_size) = inner.fixed_size() {
+                        fill_value.size() == 1 || fill_value.size() == inner_size + 1
+                    } else {
+                        // Variable inner type: any size is valid (at least 1 for suffix)
+                        fill_value.size() >= 1
+                    }
+                } else {
+                    size == fill_value.size()
+                };
+                if valid {
                     Ok(Self {
                         array_shape,
                         data_type,
@@ -74,10 +86,18 @@ where
     ) -> Self {
         let fill_value = fill_value.into();
         if let Some(data_type_size) = data_type.fixed_size() {
-            // Allow null fill values ONLY for optional data types
+            // For optional types, fill value has inner bytes + suffix byte
+            let valid = if let DataType::Optional(inner) = &data_type {
+                if let Some(inner_size) = inner.fixed_size() {
+                    fill_value.size() == 1 || fill_value.size() == inner_size + 1
+                } else {
+                    fill_value.size() >= 1
+                }
+            } else {
+                data_type_size == fill_value.size()
+            };
             debug_assert!(
-                (fill_value.is_null() && data_type.is_optional())
-                    || data_type_size == fill_value.size(),
+                valid,
                 "data type size {} does not match fill value size {}",
                 data_type_size,
                 fill_value.size()

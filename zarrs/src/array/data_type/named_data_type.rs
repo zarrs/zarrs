@@ -295,10 +295,16 @@ impl NamedDataType {
             }
             DataType::Optional(inner) => {
                 if fill_value.is_null() {
-                    Ok(FillValue::new_null())
+                    // Null fill value for optional type: single 0x00 byte
+                    Ok(None::<()>.into())
                 } else {
+                    // Non-null fill value: inner bytes + 0x01 suffix
                     let inner_fill_value = inner.fill_value_from_metadata(fill_value)?;
-                    Ok(inner_fill_value)
+                    let bytes = inner_fill_value.as_ne_bytes();
+                    let mut fill_value_with_suffix = Vec::with_capacity(bytes.len() + 1);
+                    fill_value_with_suffix.extend_from_slice(bytes);
+                    fill_value_with_suffix.push(1); // non-null suffix
+                    Ok(FillValue::new(fill_value_with_suffix))
                 }
             }
             DataType::Extension(ext) => ext.fill_value(fill_value),

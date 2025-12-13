@@ -34,118 +34,120 @@ impl DataTypeFillValueError {
 /// A fill value.
 ///
 /// Provides an element value to use for uninitialised portions of the Zarr array.
-/// Can be `None` to represent a null/missing value for optional data types.
+///
+/// For optional data types, the fill value includes an extra trailing byte:
+/// - `0x00` suffix indicates null/missing
+/// - `0x01` suffix indicates non-null (inner bytes precede the suffix)
+///
+/// For nested optional types, each nesting level adds its own suffix byte.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct FillValue(Option<Vec<u8>>);
+pub struct FillValue(Vec<u8>);
 
 impl core::fmt::Display for FillValue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match &self.0 {
-            Some(bytes) => write!(f, "{bytes:?}"),
-            None => write!(f, "null"),
-        }
+        write!(f, "{:?}", self.0)
     }
 }
 
 impl From<&[u8]> for FillValue {
     fn from(value: &[u8]) -> Self {
-        Self(Some(value.to_vec()))
+        Self(value.to_vec())
     }
 }
 
 impl<const N: usize> From<[u8; N]> for FillValue {
     fn from(value: [u8; N]) -> Self {
-        Self(Some(value.to_vec()))
+        Self(value.to_vec())
     }
 }
 
 impl<const N: usize> From<&[u8; N]> for FillValue {
     fn from(value: &[u8; N]) -> Self {
-        Self(Some(value.to_vec()))
+        Self(value.to_vec())
     }
 }
 
 impl From<Vec<u8>> for FillValue {
     fn from(value: Vec<u8>) -> Self {
-        Self(Some(value))
+        Self(value)
     }
 }
 
 impl From<bool> for FillValue {
     fn from(value: bool) -> Self {
-        Self(Some(vec![u8::from(value)]))
+        Self(vec![u8::from(value)])
     }
 }
 
 impl From<u8> for FillValue {
     fn from(value: u8) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<u16> for FillValue {
     fn from(value: u16) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<u32> for FillValue {
     fn from(value: u32) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<u64> for FillValue {
     fn from(value: u64) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<i8> for FillValue {
     fn from(value: i8) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<i16> for FillValue {
     fn from(value: i16) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<i32> for FillValue {
     fn from(value: i32) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<i64> for FillValue {
     fn from(value: i64) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<half::f16> for FillValue {
     fn from(value: half::f16) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<half::bf16> for FillValue {
     fn from(value: half::bf16) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<f32> for FillValue {
     fn from(value: f32) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
 impl From<f64> for FillValue {
     fn from(value: f64) -> Self {
-        Self(Some(value.to_ne_bytes().to_vec()))
+        Self(value.to_ne_bytes().to_vec())
     }
 }
 
@@ -159,19 +161,41 @@ where
         let mut bytes = Vec::with_capacity(std::mem::size_of::<num::complex::Complex<T>>());
         bytes.extend(re.as_ne_bytes());
         bytes.extend(im.as_ne_bytes());
-        Self(Some(bytes))
+        Self(bytes)
     }
 }
 
 impl From<String> for FillValue {
     fn from(value: String) -> Self {
-        Self(Some(value.into_bytes()))
+        Self(value.into_bytes())
     }
 }
 
 impl From<&str> for FillValue {
     fn from(value: &str) -> Self {
-        Self(Some(value.as_bytes().to_vec()))
+        Self(value.as_bytes().to_vec())
+    }
+}
+
+impl From<()> for FillValue {
+    fn from((): ()) -> Self {
+        Self(vec![])
+    }
+}
+
+impl<T> From<Option<T>> for FillValue
+where
+    FillValue: From<T>,
+{
+    fn from(value: Option<T>) -> Self {
+        match value {
+            None => Self(vec![0]), // null suffix
+            Some(inner) => {
+                let mut bytes = FillValue::from(inner).0;
+                bytes.push(1); // non-null suffix
+                Self(bytes)
+            }
+        }
     }
 }
 
@@ -179,44 +203,26 @@ impl FillValue {
     /// Create a new fill value composed of `bytes`.
     #[must_use]
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(Some(bytes))
-    }
-
-    /// Create a new null/missing fill value for optional data types.
-    #[must_use]
-    pub const fn new_null() -> Self {
-        Self(None)
-    }
-
-    /// Check if the fill value is null/missing.
-    #[must_use]
-    pub const fn is_null(&self) -> bool {
-        self.0.is_none()
+        Self(bytes)
     }
 
     /// Returns the size in bytes of the fill value.
-    /// Returns 0 for null/missing values.
     #[must_use]
     pub fn size(&self) -> usize {
-        self.0.as_ref().map_or(0, Vec::len)
+        self.0.len()
     }
 
     /// Return the byte representation of the fill value.
-    /// Returns an empty slice for null/missing values.
     #[must_use]
     pub fn as_ne_bytes(&self) -> &[u8] {
-        self.0.as_deref().unwrap_or(&[])
+        &self.0
     }
 
     /// Check if the bytes are equal to a sequence of the fill value.
-    /// Returns false for null/missing fill values.
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn equals_all(&self, bytes: &[u8]) -> bool {
-        let Some(fill_value_bytes) = &self.0 else {
-            // Null fill values don't match any bytes
-            return false;
-        };
+        let fill_value_bytes = &self.0;
 
         // Special cases for variable length data
         if !num::Integer::is_multiple_of(&bytes.len(), &fill_value_bytes.len())
@@ -417,18 +423,41 @@ mod tests {
     }
 
     #[test]
-    fn fill_value_null() {
-        let null_fill_value = FillValue::new_null();
-        assert!(null_fill_value.is_null());
-        assert_eq!(null_fill_value.size(), 0);
-        assert_eq!(null_fill_value.as_ne_bytes(), &[] as &[u8]);
-        assert!(!null_fill_value.equals_all(&[]));
-        assert_eq!(format!("{}", null_fill_value), "null");
+    fn fill_value_optional() {
+        // None -> [0] (null suffix)
+        let null_fill_value: FillValue = None::<u8>.into();
+        assert_eq!(null_fill_value.size(), 1);
+        assert_eq!(null_fill_value.as_ne_bytes(), &[0u8]);
+        assert!(null_fill_value.equals_all(&[0u8]));
+        assert_eq!(format!("{}", null_fill_value), "[0]");
+
+        // Some(42u8) -> [42, 1] (value + non-null suffix)
+        let some_fill_value: FillValue = Some(42u8).into();
+        assert_eq!(some_fill_value.size(), 2);
+        assert_eq!(some_fill_value.as_ne_bytes(), &[42u8, 1u8]);
+
+        // Nested: None (outer null) -> [0]
+        let nested_null: FillValue = None::<Option<u8>>.into();
+        assert_eq!(nested_null.as_ne_bytes(), &[0u8]);
+
+        // Nested: Some(None) (inner null) -> [0, 1]
+        let nested_some_null: FillValue = Some(None::<u8>).into();
+        assert_eq!(nested_some_null.as_ne_bytes(), &[0u8, 1u8]);
+
+        // Nested: Some(Some(0)) -> [0, 1, 1]
+        let nested_some_some: FillValue = Some(Some(0u8)).into();
+        assert_eq!(nested_some_some.as_ne_bytes(), &[0u8, 1u8, 1u8]);
+
+        // Nested: Some(Some(42)) -> [42, 1, 1]
+        let nested_some_some_42: FillValue = Some(Some(42u8)).into();
+        assert_eq!(nested_some_some_42.as_ne_bytes(), &[42u8, 1u8, 1u8]);
     }
 
     #[test]
-    fn fill_value_not_null() {
-        let fill_value = FillValue::from(42u8);
-        assert!(!fill_value.is_null());
+    fn fill_value_empty() {
+        let fill_value = FillValue::new(vec![]);
+        assert_eq!(fill_value.size(), 0);
+        assert_eq!(fill_value.as_ne_bytes(), &[] as &[u8]);
+        assert!(fill_value.equals_all(&[]));
     }
 }

@@ -29,7 +29,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = create_optional_array(
         DataType::Optional(Box::new(DataType::UInt8)),
-        FillValue::new_null(),
+        None::<u8>.into(),
     );
 
     // Store different patterns in different chunks
@@ -139,7 +139,7 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
     // Test Option<Option<u8>>
     let array = create_optional_array(
         DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::UInt8)))),
-        FillValue::new_null(),
+        None::<Option<u8>>.into(),
     );
 
     // Store nested optional data
@@ -177,7 +177,7 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
         DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Optional(
             Box::new(DataType::UInt16),
         ))))),
-        FillValue::new_null(),
+        None::<Option<Option<u16>>>.into(),
     );
 
     // Store 3-level nested optional data
@@ -221,7 +221,7 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
     // Create an optional array with a non-null fill value
     let array = create_optional_array(
         DataType::Optional(Box::new(DataType::UInt8)),
-        FillValue::new(vec![255u8]),
+        FillValue::from(Some(255u8)),
     );
 
     // Store data in one chunk
@@ -254,7 +254,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     // The ArrayBuilder automatically handles optional strings with the correct vlen codec
     let array = create_optional_array(
         DataType::Optional(Box::new(DataType::String)),
-        FillValue::new_null(),
+        None::<String>.into(),
     );
 
     // Store chunk with Option<String>

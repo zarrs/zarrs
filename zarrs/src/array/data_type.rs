@@ -438,6 +438,39 @@ impl DataType {
         matches!(self, Self::Optional(_))
     }
 
+    /// Check if the fill value represents null for this data type.
+    ///
+    /// For optional data types, a fill value is null if its last byte is `0x00`.
+    /// For non-optional data types, this always returns `false`.
+    #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+        match self {
+            Self::Optional(_) => fill_value.as_ne_bytes().last() == Some(&0),
+            _ => false,
+        }
+    }
+
+    /// Get the inner fill value bytes (without optional suffix).
+    ///
+    /// For optional data types, returns all bytes except the last suffix byte.
+    /// For non-optional data types, returns all bytes.
+    #[must_use]
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        match self {
+            Self::Optional(_) => {
+                let bytes = fill_value.as_ne_bytes();
+                if bytes.is_empty() {
+                    &[]
+                } else {
+                    &bytes[..bytes.len() - 1]
+                }
+            }
+            _ => fill_value.as_ne_bytes(),
+        }
+    }
+
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
@@ -901,10 +934,17 @@ impl DataType {
                 }
             }
             Self::Optional(data_type) => {
-                if fill_value.size() == 0 {
+                let bytes = fill_value.as_ne_bytes();
+                if bytes.is_empty() {
+                    // Invalid: optional fill value must have at least the suffix byte
+                    Err(error())
+                } else if bytes.last() == Some(&0) {
+                    // Null fill value (suffix byte is 0x00)
                     Ok(FillValueMetadataV3::Null)
                 } else {
-                    data_type.metadata_fill_value(fill_value)
+                    // Non-null fill value: strip the suffix byte and recurse
+                    let inner_fill_value = FillValue::new(bytes[..bytes.len() - 1].to_vec());
+                    data_type.metadata_fill_value(&inner_fill_value)
                 }
             }
             Self::Extension(extension) => extension.metadata_fill_value(fill_value),

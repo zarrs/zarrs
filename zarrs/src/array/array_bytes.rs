@@ -120,20 +120,29 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
-        if fill_value.is_null() {
-            if let DataType::Optional(data_type) = data_type {
-                let fill_value = if data_type.is_fixed() {
-                    FillValue::from(vec![0u8; data_type.fixed_size().unwrap()])
+        if let DataType::Optional(inner_data_type) = data_type {
+            let num_elements_usize = usize::try_from(num_elements).unwrap();
+            if data_type.is_fill_value_null(fill_value) {
+                // Null fill value for optional type: create mask of all zeros
+                let inner_fill_value = if inner_data_type.is_fixed() {
+                    FillValue::from(vec![0u8; inner_data_type.fixed_size().unwrap()])
                 } else {
                     FillValue::from(&[])
                 };
-                let num_elements_usize = usize::try_from(num_elements).unwrap();
                 let mask = vec![0u8; num_elements_usize];
                 return Ok(
-                    ArrayBytes::new_fill_value(data_type, num_elements, &fill_value)?
+                    ArrayBytes::new_fill_value(inner_data_type, num_elements, &inner_fill_value)?
                         .with_optional_mask(mask),
                 );
             }
+            // Non-null fill value for optional type: strip suffix and use inner bytes
+            let inner_bytes = data_type.fill_value_inner_bytes(fill_value);
+            let inner_fill_value = FillValue::new(inner_bytes.to_vec());
+            let mask = vec![1u8; num_elements_usize]; // all non-null
+            return Ok(
+                ArrayBytes::new_fill_value(inner_data_type, num_elements, &inner_fill_value)?
+                    .with_optional_mask(mask),
+            );
         }
 
         match data_type.size() {
@@ -272,16 +281,22 @@ impl<'a> ArrayBytes<'a> {
                 fill_value.equals_all(bytes)
             }
             Self::Optional(optional_bytes) => {
-                if fill_value.is_null() {
+                let bytes = fill_value.as_ne_bytes();
+                // For optional types, check the suffix byte (last byte)
+                let is_null = bytes.last() == Some(&0);
+                if is_null {
                     // For optional arrays with null fill value, check if mask is all zeros
                     optional_bytes.mask().iter().all(|&b| b == 0)
-                } else if !fill_value.is_null() {
-                    // For optional arrays with non-null fill value, check if mask is all ones and data is fill value
-                    optional_bytes.mask().iter().all(|&b| b == 1)
-                        && optional_bytes.data().is_fill_value(fill_value)
                 } else {
-                    // Otherwise, the array cannot be all fill value
-                    false
+                    // For optional arrays with non-null fill value, check if mask is all ones
+                    // and data matches inner fill value (fill value without suffix)
+                    let inner_fill_value = if bytes.is_empty() {
+                        FillValue::new(vec![])
+                    } else {
+                        FillValue::new(bytes[..bytes.len() - 1].to_vec())
+                    };
+                    optional_bytes.mask().iter().all(|&b| b == 1)
+                        && optional_bytes.data().is_fill_value(&inner_fill_value)
                 }
             }
         }
