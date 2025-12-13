@@ -296,7 +296,7 @@ impl NamedDataType {
             DataType::Optional(inner) => {
                 if fill_value.is_null() {
                     // Null fill value for optional type: single 0x00 byte
-                    Ok(None::<()>.into())
+                    Ok(FillValue::new_optional_none())
                 } else {
                     // Non-null fill value: inner bytes + 0x01 suffix
                     let inner_fill_value = inner.fill_value_from_metadata(fill_value)?;

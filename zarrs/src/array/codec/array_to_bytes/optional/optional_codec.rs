@@ -229,7 +229,7 @@ impl OptionalCodec {
     fn create_fill_value_for_inner_type(inner_type: &DataType) -> FillValue {
         if inner_type.is_optional() {
             // For nested optional types, the fill value is null (single 0x00 byte)
-            None::<()>.into()
+            FillValue::new_optional_none()
         } else {
             match inner_type.size() {
                 DataTypeSize::Fixed(size) => {

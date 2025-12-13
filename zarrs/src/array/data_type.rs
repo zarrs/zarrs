@@ -463,7 +463,7 @@ impl DataType {
     /// For non-optional data types, this always returns `false`.
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
-    pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+    pub fn is_fill_value_optional_null(&self, fill_value: &FillValue) -> bool {
         match self {
             Self::Optional(_) => fill_value.as_ne_bytes().last() == Some(&0),
             _ => false,
@@ -476,7 +476,7 @@ impl DataType {
     /// For non-optional data types, returns all bytes.
     #[must_use]
     #[allow(clippy::wildcard_enum_match_arm)]
-    pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+    pub fn fill_value_optional_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
         match self {
             Self::Optional(_) => {
                 let bytes = fill_value.as_ne_bytes();

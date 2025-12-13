@@ -122,7 +122,7 @@ impl<'a> ArrayBytes<'a> {
     ) -> Result<Self, DataTypeFillValueError> {
         if let DataType::Optional(inner_data_type) = data_type {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
-            if data_type.is_fill_value_null(fill_value) {
+            if data_type.is_fill_value_optional_null(fill_value) {
                 // Null fill value for optional type: create mask of all zeros
                 let inner_fill_value = if inner_data_type.is_fixed() {
                     FillValue::from(vec![0u8; inner_data_type.fixed_size().unwrap()])
@@ -138,7 +138,7 @@ impl<'a> ArrayBytes<'a> {
                 .with_optional_mask(mask));
             }
             // Non-null fill value for optional type: strip suffix and use inner bytes
-            let inner_bytes = data_type.fill_value_inner_bytes(fill_value);
+            let inner_bytes = data_type.fill_value_optional_inner_bytes(fill_value);
             let inner_fill_value = FillValue::new(inner_bytes.to_vec());
             let mask = vec![1u8; num_elements_usize]; // all non-null
             return Ok(ArrayBytes::new_fill_value(
