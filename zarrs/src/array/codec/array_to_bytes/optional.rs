@@ -13,7 +13,7 @@
 //! ### Specification
 //! - <https://codec.zarrs.dev/array_to_bytes/optional>
 //!
-//! The `optional` codec separates encoding of the mask (flattened bool array)
+//! The `optional` codec separates encoding of the mask (bool array)
 //! and the data (flattened bytes, excluding missing elements).
 //! This allows for efficient storage when many elements are missing, and enables
 //! independent compression strategies for mask and data.
@@ -27,6 +27,24 @@
 //! - 8 bytes: data length (u64 little-endian)
 //! - N bytes: encoded mask
 //! - M bytes: encoded data (only valid elements)
+//!
+//! #### Fill Value Encoding
+//!
+//! The `"fill_value"` metadata for optional types is encoded as follows:
+//! - A `null` fill value (`None`) is represented as `null`.
+//! - A non-null fill value (`Some(value)`) is represented as a single-element array containing the inner fill value.
+//!
+//! For nested optional types, this representation is applied recursively.
+//!
+//! | Rust Type | Fill Value | `"fill_value"` JSON | Fill Value Bytes |
+//! |------|-------|------|-------|
+//! | `Option<UInt8>` | `None` | `null` | `[0]` |
+//! | `Option<UInt8>` | `Some(42)` | `[42]` | `[42, 1]` |
+//! | `Option<Option<UInt8>>` | `None` | `null` | `[0]` |
+//! | `Option<Option<UInt8>>` | `Some(None)` | `[null]` | `[0, 1]` |
+//! | `Option<Option<UInt8>>` | `Some(Some(42))` | `[[42]]` | `[42, 1, 1]` |
+//!
+//! The fill value bytes are an implementation detail of `zarrs` to support nested fill values.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `optional`
