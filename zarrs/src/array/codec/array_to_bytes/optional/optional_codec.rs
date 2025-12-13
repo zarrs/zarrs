@@ -700,7 +700,7 @@ mod tests {
     }
 
     #[test]
-    fn codec_optional_round_trip_nested_3_level_f64() {
+    fn codec_optional_round_trip_nested_3_level_f64_none() {
         // Test Option<Option<Option<f64>>> with null fill value
         codec_optional_round_trip_impl(
             DataType::Float64
@@ -710,15 +710,54 @@ mod tests {
             FillValue::from(None::<Option<Option<f64>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
+    }
+
+    #[test]
+    fn codec_optional_round_trip_nested_3_level_f64_some_some_none() {
         codec_optional_round_trip_impl(
             DataType::Float64
                 .into_optional()
                 .into_optional()
                 .into_optional(),
-            FillValue::from(())
+            Some(Some(None::<f64>)),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn codec_optional_round_trip_nested_3_level_f64_some_some_none_alt() {
+        codec_optional_round_trip_impl(
+            DataType::Float64
                 .into_optional()
+                .into_optional()
+                .into_optional(),
+            FillValue::new_optional_none()
                 .into_optional()
                 .into_optional(), // null/missing value for outer optional: [0]
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn codec_optional_round_trip_nested_3_level_f64_some_none() {
+        codec_optional_round_trip_impl(
+            DataType::Float64
+                .into_optional()
+                .into_optional()
+                .into_optional(),
+            Some(None::<Option<f64>>),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn codec_optional_round_trip_nested_3_level_f64_some_some_some() {
+        codec_optional_round_trip_impl(
+            DataType::Float64
+                .into_optional()
+                .into_optional()
+                .into_optional(),
+            Some(Some(Some(0.0f64))),
         )
         .unwrap();
     }

@@ -2,8 +2,51 @@ use std::num::NonZeroU64;
 
 use derive_more::Display;
 
-use super::{ArrayShape, DataType, DataTypeSize, FillValue};
+use super::{ArrayShape, DataType, DataTypeOptional, DataTypeSize, FillValue};
 use crate::array::data_type::DataTypeFillValueError;
+
+/// Count the nesting depth of an optional type and return the innermost type's fixed size.
+///
+/// For `Option<Option<Option<f64>>>`:
+/// - `nesting_depth` = 3
+/// - `innermost_size` = Some(8)
+fn count_optional_nesting(opt: &DataTypeOptional) -> (usize, Option<usize>) {
+    let mut depth = 1;
+    let mut current: &DataType = opt;
+    while let DataType::Optional(inner) = current {
+        depth += 1;
+        current = inner;
+    }
+    (depth, current.fixed_size())
+}
+
+/// Check if a fill value size is valid for a nested optional type.
+///
+/// Valid sizes for an n-level nested optional with innermost fixed type of size S:
+/// - 1: outermost null `[0]`
+/// - 2 to n: intermediate nulls `[0, 1, ...]` (Some(...Some(None)))
+/// - S + n: full non-null value (innermost data + n suffix bytes)
+fn is_valid_optional_fill_value_size(
+    fill_value_size: usize,
+    nesting_depth: usize,
+    innermost_fixed_size: Option<usize>,
+) -> bool {
+    // Size 1 is always valid (outermost null)
+    if fill_value_size == 1 {
+        return true;
+    }
+    // Sizes 2 to nesting_depth are intermediate nulls
+    if fill_value_size > 1 && fill_value_size <= nesting_depth {
+        return true;
+    }
+    // Full size: innermost_size + nesting_depth
+    if let Some(inner_size) = innermost_fixed_size {
+        if fill_value_size == inner_size + nesting_depth {
+            return true;
+        }
+    }
+    false
+}
 
 /// The shape, data type, and fill value of an `array`.
 #[derive(Clone, Debug, Display)]
@@ -43,12 +86,15 @@ where
         let fill_value = fill_value.into();
         match data_type.size() {
             DataTypeSize::Fixed(size) => {
-                // For optional types, fill value has inner bytes + suffix byte
+                // For optional types, fill value has inner bytes + suffix byte(s)
                 let valid = if let Some(opt) = data_type.as_optional() {
-                    // Optional with fixed inner type: size is inner_size + 1
-                    // Null fill value is just [0], non-null is inner_bytes + [1]
-                    if let Some(inner_size) = opt.fixed_size() {
-                        fill_value.size() == 1 || fill_value.size() == inner_size + 1
+                    let (nesting_depth, innermost_size) = count_optional_nesting(opt);
+                    if innermost_size.is_some() {
+                        is_valid_optional_fill_value_size(
+                            fill_value.size(),
+                            nesting_depth,
+                            innermost_size,
+                        )
                     } else {
                         // Variable inner type: any size is valid (at least 1 for suffix)
                         fill_value.size() >= 1
@@ -86,10 +132,15 @@ where
     ) -> Self {
         let fill_value = fill_value.into();
         if let Some(data_type_size) = data_type.fixed_size() {
-            // For optional types, fill value has inner bytes + suffix byte
+            // For optional types, fill value has inner bytes + suffix byte(s)
             let valid = if let Some(opt) = data_type.as_optional() {
-                if let Some(inner_size) = opt.fixed_size() {
-                    fill_value.size() == 1 || fill_value.size() == inner_size + 1
+                let (nesting_depth, innermost_size) = count_optional_nesting(opt);
+                if innermost_size.is_some() {
+                    is_valid_optional_fill_value_size(
+                        fill_value.size(),
+                        nesting_depth,
+                        innermost_size,
+                    )
                 } else {
                     fill_value.size() >= 1
                 }
