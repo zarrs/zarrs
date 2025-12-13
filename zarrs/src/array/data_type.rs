@@ -10,7 +10,7 @@
 #![doc = include_str!("../../doc/status/data_types.md")]
 
 mod named_data_type;
-use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
+use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, ops::Deref, sync::Arc};
 
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
@@ -29,6 +29,51 @@ use crate::metadata_ext::data_type::{
     numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1, NumpyTimeUnit,
 };
 use crate::registry::ExtensionAliasesDataTypeV3;
+
+/// A newtype wrapper for optional data types.
+///
+/// This wraps the inner [`DataType`] and provides methods specific to optional types,
+/// such as checking if a fill value represents null and extracting inner fill value bytes.
+///
+/// The newtype implements [`Deref`] to the inner [`DataType`], so methods on the inner
+/// type can be called directly.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DataTypeOptional(Box<DataType>);
+
+impl DataTypeOptional {
+    /// Create a new optional data type wrapper.
+    #[must_use]
+    pub fn new(inner: DataType) -> Self {
+        Self(Box::new(inner))
+    }
+
+    /// Check if the fill value represents null (last byte is `0x00`).
+    #[must_use]
+    pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+        fill_value.as_ne_bytes().last() == Some(&0)
+    }
+
+    /// Get the inner fill value bytes (without optional suffix).
+    ///
+    /// For optional data types, returns all bytes except the last suffix byte.
+    #[must_use]
+    pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        let bytes = fill_value.as_ne_bytes();
+        if bytes.is_empty() {
+            &[]
+        } else {
+            &bytes[..bytes.len() - 1]
+        }
+    }
+}
+
+impl Deref for DataTypeOptional {
+    type Target = DataType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// A data type.
 #[derive(Clone, Debug)]
@@ -166,7 +211,7 @@ pub enum DataType {
         scale_factor: NonZeroU32,
     },
     /// An optional data type.
-    Optional(Box<DataType>),
+    Optional(DataTypeOptional),
     /// An extension data type.
     Extension(Arc<dyn DataTypeExtension>),
 }
@@ -175,6 +220,7 @@ impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (&self, other) {
             (DataType::RawBits(a), DataType::RawBits(b)) => a == b,
+            (DataType::Optional(a), DataType::Optional(b)) => a == b,
             (DataType::Extension(a), DataType::Extension(b)) => {
                 a.name() == b.name() && a.configuration() == b.configuration()
             }
@@ -444,49 +490,34 @@ impl DataType {
     ///
     /// # Examples
     /// ```
-    /// # use zarrs::array::DataType;
+    /// # use zarrs::array::{DataType, DataTypeOptional};
     /// // Single level optional
     /// let opt_u8 = DataType::UInt8.optional();
-    /// assert_eq!(opt_u8, DataType::Optional(Box::new(DataType::UInt8)));
+    /// assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8)));
     ///
     /// // Nested optional
     /// let opt_opt_u8 = DataType::UInt8.optional().optional();
     /// ```
     #[must_use]
     pub fn optional(self) -> Self {
-        Self::Optional(Box::new(self))
+        Self::Optional(DataTypeOptional::new(self))
     }
 
-    /// Check if the fill value represents null for this data type.
+    /// Returns the optional type wrapper if this is an optional data type.
     ///
-    /// For optional data types, a fill value is null if its last byte is `0x00`.
-    /// For non-optional data types, this always returns `false`.
+    /// # Examples
+    /// ```
+    /// # use zarrs::array::DataType;
+    /// let opt_u8 = DataType::UInt8.optional();
+    /// assert!(opt_u8.as_optional().is_some());
+    /// assert!(DataType::UInt8.as_optional().is_none());
+    /// ```
     #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)]
-    pub fn is_fill_value_optional_null(&self, fill_value: &FillValue) -> bool {
-        match self {
-            Self::Optional(_) => fill_value.as_ne_bytes().last() == Some(&0),
-            _ => false,
-        }
-    }
-
-    /// Get the inner fill value bytes (without optional suffix).
-    ///
-    /// For optional data types, returns all bytes except the last suffix byte.
-    /// For non-optional data types, returns all bytes.
-    #[must_use]
-    #[allow(clippy::wildcard_enum_match_arm)]
-    pub fn fill_value_optional_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
-        match self {
-            Self::Optional(_) => {
-                let bytes = fill_value.as_ne_bytes();
-                if bytes.is_empty() {
-                    &[]
-                } else {
-                    &bytes[..bytes.len() - 1]
-                }
-            }
-            _ => fill_value.as_ne_bytes(),
+    pub fn as_optional(&self) -> Option<&DataTypeOptional> {
+        if let Self::Optional(opt) = self {
+            Some(opt)
+        } else {
+            None
         }
     }
 
@@ -2465,9 +2496,9 @@ mod tests {
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
         assert_eq!(data_type.name(), "optional");
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "int32");
-            assert_eq!(inner.size(), DataTypeSize::Fixed(4));
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "int32");
+            assert_eq!(opt.size(), DataTypeSize::Fixed(4));
         } else {
             panic!("Expected Optional data type");
         }
@@ -2479,9 +2510,9 @@ mod tests {
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
         assert_eq!(data_type.name(), "optional");
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "numpy.datetime64");
-            if let DataType::NumpyDateTime64 { unit, scale_factor } = inner.as_ref() {
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "numpy.datetime64");
+            if let DataType::NumpyDateTime64 { unit, scale_factor } = &**opt {
                 assert_eq!(*unit, NumpyTimeUnit::Second);
                 assert_eq!(scale_factor.get(), 1);
             } else {
@@ -2496,9 +2527,9 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "string");
-            assert_eq!(inner.size(), DataTypeSize::Variable);
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "string");
+            assert_eq!(opt.size(), DataTypeSize::Variable);
         } else {
             panic!("Expected Optional data type");
         }
@@ -2538,33 +2569,38 @@ mod tests {
     fn data_type_optional_method() {
         // Single level optional
         let opt_u8 = DataType::UInt8.optional();
-        assert_eq!(opt_u8, DataType::Optional(Box::new(DataType::UInt8)));
+        assert_eq!(
+            opt_u8,
+            DataType::Optional(DataTypeOptional::new(DataType::UInt8))
+        );
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
         let opt_opt_u8 = DataType::UInt8.optional().optional();
         assert_eq!(
             opt_opt_u8,
-            DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::UInt8))))
+            DataType::Optional(DataTypeOptional::new(DataType::Optional(
+                DataTypeOptional::new(DataType::UInt8)
+            )))
         );
 
         // Nested optional (3 levels)
         let opt_opt_opt_u16 = DataType::UInt16.optional().optional().optional();
         assert_eq!(
             opt_opt_opt_u16,
-            DataType::Optional(Box::new(DataType::Optional(Box::new(DataType::Optional(
-                Box::new(DataType::UInt16)
-            )))))
+            DataType::Optional(DataTypeOptional::new(DataType::Optional(
+                DataTypeOptional::new(DataType::Optional(DataTypeOptional::new(DataType::UInt16)))
+            )))
         );
 
         // Works with various inner types
         assert_eq!(
             DataType::String.optional(),
-            DataType::Optional(Box::new(DataType::String))
+            DataType::Optional(DataTypeOptional::new(DataType::String))
         );
         assert_eq!(
             DataType::Float64.optional(),
-            DataType::Optional(Box::new(DataType::Float64))
+            DataType::Optional(DataTypeOptional::new(DataType::Float64))
         );
     }
 }

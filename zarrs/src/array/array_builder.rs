@@ -471,7 +471,8 @@ impl ArrayBuilder {
     }
 
     fn default_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
-        if let DataType::Optional(inner) = data_type {
+        // Special handling for optional types
+        if let Some(opt) = data_type.as_optional() {
             // Create mask codec chain using PackBitsCodec
             let mask_codec_chain = Arc::new(CodecChain::new_named(
                 vec![],
@@ -482,7 +483,7 @@ impl ArrayBuilder {
             // For data codec chain, recursively handle nested data types
             let data_codec_chain = Arc::new(CodecChain::new_named(
                 vec![],
-                Self::default_codec(inner), // Recursive call handles nested Optional types
+                Self::default_codec(opt), // Recursive call handles nested Optional types
                 vec![],
             ));
 

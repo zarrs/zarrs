@@ -109,17 +109,13 @@ impl OptionalCodec {
                 }
 
                 // Get the inner-inner type (unwrap the Optional)
-                let inner_inner_type = if let DataType::Optional(t) = inner_type {
-                    t.as_ref()
-                } else {
-                    return Err(CodecError::Other(
-                        "nested optional ArrayBytes requires nested optional DataType".to_string(),
-                    ));
-                };
+                let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
+                    "nested optional ArrayBytes requires nested optional DataType".to_string(),
+                ))?;
 
                 // Recursively extract sparse data from the inner data
                 let sparse_inner_data =
-                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_inner_type)?;
+                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt)?;
 
                 Ok(sparse_inner_data.with_optional_mask(sparse_inner_mask))
             }
@@ -188,9 +184,7 @@ impl OptionalCodec {
                 // Nested optional: Expand the inner data and then expand the inner mask
 
                 // Get the inner-inner type (unwrap the Optional)
-                let inner_inner_type = if let DataType::Optional(t) = inner_type {
-                    t.as_ref()
-                } else {
+                let DataType::Optional(inner_opt) = inner_type else {
                     return Err(CodecError::Other(
                         "nested optional ArrayBytes requires nested optional DataType".to_string(),
                     ));
@@ -200,8 +194,7 @@ impl OptionalCodec {
                 let (sparse_inner_data, sparse_inner_mask) = sparse_optional_bytes.into_parts();
 
                 // Recursively expand the inner data
-                let dense_inner_data =
-                    Self::expand_to_dense(*sparse_inner_data, mask, inner_inner_type)?;
+                let dense_inner_data = Self::expand_to_dense(*sparse_inner_data, mask, inner_opt)?;
 
                 // Expand the sparse inner mask to dense format
                 let num_elements = mask.len();
@@ -326,7 +319,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let mask_representation =
             ChunkRepresentation::new(decoded_representation.shape().to_vec(), DataType::Bool, 0u8)?;
 
-        let DataType::Optional(inner_type) = decoded_representation.data_type() else {
+        let DataType::Optional(opt) = decoded_representation.data_type() else {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
@@ -341,16 +334,16 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, inner_type)?;
+        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt)?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(inner_type);
+            let fill_value = Self::create_fill_value_for_inner_type(opt);
             self.data_codecs.encode(
                 sparse_data,
-                &ChunkRepresentation::new(data_shape, (**inner_type).clone(), fill_value)?,
+                &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
                 options,
             )?
         } else {
@@ -398,7 +391,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let mask = decoded_mask.into_fixed()?.into_owned();
 
         // Decode data
-        let DataType::Optional(inner_type) = decoded_representation.data_type() else {
+        let DataType::Optional(opt) = decoded_representation.data_type() else {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
@@ -408,18 +401,18 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let sparse_data = {
             let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(inner_type);
+            let fill_value = Self::create_fill_value_for_inner_type(opt);
             self.data_codecs
                 .decode(
                     encoded_data.into(),
-                    &ChunkRepresentation::new(data_shape, (**inner_type).clone(), fill_value)?,
+                    &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
                     options,
                 )?
                 .into_owned()
         };
 
         // Expand sparse data to dense format (supports nested optional types)
-        let dense_data = Self::expand_to_dense(sparse_data, &mask, inner_type)?;
+        let dense_data = Self::expand_to_dense(sparse_data, &mask, opt)?;
 
         // Return ArrayBytes with mask and dense data
         Ok(dense_data.with_optional_mask(mask))
@@ -482,9 +475,9 @@ mod tests {
     /// Helper to build codec config recursively for nested optional types
     fn build_codec_config_for_type(data_type: &DataType) -> String {
         match data_type {
-            DataType::Optional(inner) if inner.is_optional() => {
+            DataType::Optional(opt) if opt.is_optional() => {
                 // Nested optional - need another optional codec
-                let inner_config = build_codec_config_for_type(inner.as_ref());
+                let inner_config = build_codec_config_for_type(opt);
                 format!(
                     r#"[{{"name": "optional", "configuration": {{
                         "mask_codecs": [{{"name": "packbits", "configuration": {{}}}}],
@@ -493,9 +486,9 @@ mod tests {
                     inner_config
                 )
             }
-            DataType::Optional(inner) => {
+            DataType::Optional(opt) => {
                 // Non-nested optional inner type - use bytes codec
-                if inner.fixed_size().unwrap() > 1 {
+                if opt.fixed_size().unwrap() > 1 {
                     r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
                 } else {
                     r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
@@ -515,18 +508,18 @@ mod tests {
     /// Helper to build nested ArrayBytes for testing
     fn build_nested_array_bytes(data_type: &DataType, num_elements: usize) -> ArrayBytes<'_> {
         match data_type {
-            DataType::Optional(inner) if inner.is_optional() => {
+            DataType::Optional(opt) if opt.is_optional() => {
                 // Build nested optional structure
-                let inner_array_bytes = build_nested_array_bytes(inner.as_ref(), num_elements);
+                let inner_array_bytes = build_nested_array_bytes(opt, num_elements);
 
                 // Create outer mask (every third element is invalid at this level)
                 let outer_mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 3 != 0)).collect();
 
                 inner_array_bytes.with_optional_mask(outer_mask)
             }
-            DataType::Optional(inner) => {
+            DataType::Optional(opt) => {
                 // Innermost optional level - create data and mask
-                let inner_size = inner.fixed_size().unwrap();
+                let inner_size = opt.fixed_size().unwrap();
                 let mut mask = Vec::new();
                 let mut data = Vec::new();
 

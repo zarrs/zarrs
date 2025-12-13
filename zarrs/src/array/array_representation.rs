@@ -44,10 +44,10 @@ where
         match data_type.size() {
             DataTypeSize::Fixed(size) => {
                 // For optional types, fill value has inner bytes + suffix byte
-                let valid = if let DataType::Optional(inner) = &data_type {
+                let valid = if let Some(opt) = data_type.as_optional() {
                     // Optional with fixed inner type: size is inner_size + 1
                     // Null fill value is just [0], non-null is inner_bytes + [1]
-                    if let Some(inner_size) = inner.fixed_size() {
+                    if let Some(inner_size) = opt.fixed_size() {
                         fill_value.size() == 1 || fill_value.size() == inner_size + 1
                     } else {
                         // Variable inner type: any size is valid (at least 1 for suffix)
@@ -87,8 +87,8 @@ where
         let fill_value = fill_value.into();
         if let Some(data_type_size) = data_type.fixed_size() {
             // For optional types, fill value has inner bytes + suffix byte
-            let valid = if let DataType::Optional(inner) = &data_type {
-                if let Some(inner_size) = inner.fixed_size() {
+            let valid = if let Some(opt) = data_type.as_optional() {
+                if let Some(inner_size) = opt.fixed_size() {
                     fill_value.size() == 1 || fill_value.size() == inner_size + 1
                 } else {
                     fill_value.size() >= 1

@@ -120,33 +120,29 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
-        if let DataType::Optional(inner_data_type) = data_type {
+        if let Some(opt) = data_type.as_optional() {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
-            if data_type.is_fill_value_optional_null(fill_value) {
+            if opt.is_fill_value_null(fill_value) {
                 // Null fill value for optional type: create mask of all zeros
-                let inner_fill_value = if inner_data_type.is_fixed() {
-                    FillValue::from(vec![0u8; inner_data_type.fixed_size().unwrap()])
+                let inner_fill_value = if opt.is_fixed() {
+                    FillValue::from(vec![0u8; opt.fixed_size().unwrap()])
                 } else {
                     FillValue::from(&[])
                 };
                 let mask = vec![0u8; num_elements_usize];
-                return Ok(ArrayBytes::new_fill_value(
-                    inner_data_type,
-                    num_elements,
-                    &inner_fill_value,
-                )?
-                .with_optional_mask(mask));
+                return Ok(
+                    ArrayBytes::new_fill_value(opt, num_elements, &inner_fill_value)?
+                        .with_optional_mask(mask),
+                );
             }
             // Non-null fill value for optional type: strip suffix and use inner bytes
-            let inner_bytes = data_type.fill_value_optional_inner_bytes(fill_value);
+            let inner_bytes = opt.fill_value_inner_bytes(fill_value);
             let inner_fill_value = FillValue::new(inner_bytes.to_vec());
             let mask = vec![1u8; num_elements_usize]; // all non-null
-            return Ok(ArrayBytes::new_fill_value(
-                inner_data_type,
-                num_elements,
-                &inner_fill_value,
-            )?
-            .with_optional_mask(mask));
+            return Ok(
+                ArrayBytes::new_fill_value(opt, num_elements, &inner_fill_value)?
+                    .with_optional_mask(mask),
+            );
         }
 
         match data_type.size() {
@@ -359,20 +355,17 @@ impl<'a> ArrayBytes<'a> {
             }
             ArrayBytes::Optional(optional_bytes) => {
                 // Extract the inner data type from the optional data type
-                let inner_data_type = if let DataType::Optional(inner) = data_type {
-                    inner.as_ref()
-                } else {
+                let DataType::Optional(opt) = data_type else {
                     return Err(CodecError::Other(
                         "Optional array bytes requires an optional data type".to_string(),
                     ));
                 };
 
                 // Extract subset of the inner data recursively
-                let subset_data = optional_bytes.data().extract_array_subset(
-                    indexer,
-                    array_shape,
-                    inner_data_type,
-                )?;
+                let subset_data =
+                    optional_bytes
+                        .data()
+                        .extract_array_subset(indexer, array_shape, opt)?;
 
                 // Extract subset of the mask (1 byte per element)
                 let byte_ranges = indexer.iter_contiguous_byte_ranges(array_shape, 1)?; // mask is 1 byte per element
