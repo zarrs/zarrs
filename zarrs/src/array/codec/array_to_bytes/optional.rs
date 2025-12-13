@@ -44,7 +44,8 @@
 //! | `Option<Option<UInt8>>` | `Some(None)` | `[null]` | `[0, 1]` |
 //! | `Option<Option<UInt8>>` | `Some(Some(42))` | `[[42]]` | `[42, 1, 1]` |
 //!
-//! The fill value bytes are an implementation detail of `zarrs` to support nested fill values.
+//! The fill value bytes are the in-memory representation in `zarrs`.
+//! This is an implementation detail.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `optional`
