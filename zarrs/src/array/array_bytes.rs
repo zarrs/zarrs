@@ -17,6 +17,33 @@ use crate::{
     storage::byte_range::extract_byte_ranges_concat,
 };
 
+/// Count the nesting depth of optional types.
+/// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
+pub(super) fn optional_nesting_depth(data_type: &DataType) -> usize {
+    if let DataType::Optional(inner) = data_type {
+        1 + optional_nesting_depth(inner)
+    } else {
+        0
+    }
+}
+
+/// Build a nested `ArrayBytesDecodeIntoTarget` for optional types.
+/// The `mask_views` slice should be ordered from outermost to innermost mask.
+pub(super) fn build_nested_optional_target<'a>(
+    data_view: &'a mut ArrayBytesFixedDisjointView<'a>,
+    mask_views: &'a mut [ArrayBytesFixedDisjointView<'a>],
+) -> ArrayBytesDecodeIntoTarget<'a> {
+    if mask_views.is_empty() {
+        ArrayBytesDecodeIntoTarget::Fixed(data_view)
+    } else {
+        let (first_mask, rest_masks) = mask_views.split_first_mut().unwrap();
+        ArrayBytesDecodeIntoTarget::Optional(
+            Box::new(build_nested_optional_target(data_view, rest_masks)),
+            first_mask,
+        )
+    }
+}
+
 mod array_bytes_offsets;
 pub use array_bytes_offsets::{ArrayBytesOffsets, RawBytesOffsetsCreateError};
 

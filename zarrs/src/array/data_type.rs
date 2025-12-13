@@ -994,7 +994,9 @@ impl DataType {
                 } else {
                     // Non-null fill value: strip the suffix byte and recurse
                     let inner_fill_value = FillValue::new(bytes[..bytes.len() - 1].to_vec());
-                    data_type.metadata_fill_value(&inner_fill_value)
+                    let inner_metadata = data_type.metadata_fill_value(&inner_fill_value)?;
+                    // Wrap in single-element array for Some(x)
+                    Ok(FillValueMetadataV3::Array(vec![inner_metadata]))
                 }
             }
             Self::Extension(extension) => extension.metadata_fill_value(fill_value),
@@ -2602,5 +2604,81 @@ mod tests {
             DataType::Float64.optional(),
             DataType::Optional(DataTypeOptional::new(DataType::Float64))
         );
+    }
+
+    #[test]
+    fn data_type_optional_fill_value() {
+        // Simple optional: None -> null
+        let data_type = DataType::UInt8.optional();
+        let fill_value = FillValue::new_optional_none();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(metadata, FillValueMetadataV3::Null);
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Simple optional: Some(42) -> [42]
+        let fill_value = FillValue::from(42u8).optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: None -> null
+        let data_type = DataType::UInt8.optional().optional();
+        let fill_value = FillValue::new_optional_none();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(metadata, FillValueMetadataV3::Null);
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: Some(None) -> [null]
+        let fill_value = FillValue::new_optional_none().optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Null])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: Some(Some(42)) -> [[42]]
+        let fill_value = FillValue::from(42u8).optional().optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::from(42u8)
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Triple nested: Some(Some(None)) -> [[null]]
+        let data_type = DataType::UInt8.optional().optional().optional();
+        let fill_value = FillValue::new_optional_none().optional().optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::Null
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Triple nested: Some(Some(Some(42))) -> [[[42]]]
+        let fill_value = FillValue::from(42u8).optional().optional().optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
     }
 }

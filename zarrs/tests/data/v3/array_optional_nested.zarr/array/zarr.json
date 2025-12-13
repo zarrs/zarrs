@@ -8,8 +8,11 @@
   "data_type": {
     "name": "optional",
     "configuration": {
-      "name": "uint8",
-      "configuration": {}
+      "name": "optional",
+      "configuration": {
+        "name": "uint8",
+        "configuration": {}
+      }
     }
   },
   "chunk_grid": {
@@ -27,7 +30,9 @@
       "separator": "/"
     }
   },
-  "fill_value": null,
+  "fill_value": [
+    null
+  ],
   "codecs": [
     {
       "name": "optional",
@@ -39,9 +44,21 @@
         ],
         "data_codecs": [
           {
-            "name": "bytes",
+            "name": "optional",
             "configuration": {
-              "endian": "little"
+              "mask_codecs": [
+                {
+                  "name": "packbits"
+                }
+              ],
+              "data_codecs": [
+                {
+                  "name": "bytes",
+                  "configuration": {
+                    "endian": "little"
+                  }
+                }
+              ]
             }
           }
         ]
@@ -49,7 +66,7 @@
     }
   ],
   "attributes": {
-    "description": "A 4x4 array of optional uint8 values with some missing data.\nN marks missing (null) values:\n 0  N  2  3 \n N  5  N  7 \n 8  9  N  N \n12  N  N  N",
+    "description": "A 4x4 array of optional optional uint8 values with some missing data.\nThe fill value is null on the inner optional layer, i.e. Some(None).\nN marks missing (null) values. SN marks Some(None) values:\n  N  SN   2   3 \n  N   5   N   7 \n SN  SN   N   N \n SN  SN   N   N",
     "_zarrs": {
       "description": "This array was created with zarrs",
       "repository": "https://github.com/zarrs/zarrs",

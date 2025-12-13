@@ -236,6 +236,38 @@ impl OptionalCodec {
             }
         }
     }
+
+    /// Creates empty dense data when there are no valid elements.
+    /// The mask contains all zeros, so all elements are invalid/null.
+    fn create_empty_dense_data(
+        mask: &[u8],
+        inner_type: &DataType,
+    ) -> Result<ArrayBytes<'static>, CodecError> {
+        let num_elements = mask.len();
+
+        if inner_type.is_optional() {
+            // Nested optional: create nested structure with all-zero inner mask
+            let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
+                "nested optional requires nested optional DataType".to_string(),
+            ))?;
+            let inner_data = Self::create_empty_dense_data(mask, inner_opt)?;
+            let inner_mask = vec![0u8; num_elements];
+            Ok(inner_data.with_optional_mask(inner_mask))
+        } else {
+            match inner_type.size() {
+                DataTypeSize::Fixed(size) => {
+                    // Fixed-size: create zero-filled buffer
+                    Ok(ArrayBytes::new_flen(vec![0u8; num_elements * size]))
+                }
+                DataTypeSize::Variable => {
+                    // Variable-size: create empty offsets (all elements have zero length)
+                    let offsets = vec![0usize; num_elements + 1];
+                    let offsets = unsafe { ArrayBytesOffsets::new_unchecked(offsets) };
+                    Ok(unsafe { ArrayBytes::new_vlen_unchecked(vec![], offsets) })
+                }
+            }
+        }
+    }
 }
 
 impl CodecTraits for OptionalCodec {
@@ -399,20 +431,25 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 
         // Decode sparse data (only valid elements)
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
-        let sparse_data = {
-            let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(opt);
-            self.data_codecs
-                .decode(
-                    encoded_data.into(),
-                    &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
-                    options,
-                )?
-                .into_owned()
-        };
+        let dense_data = if valid_count > 0 {
+            let sparse_data = {
+                let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
+                let fill_value = Self::create_fill_value_for_inner_type(opt);
+                self.data_codecs
+                    .decode(
+                        encoded_data.into(),
+                        &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
+                        options,
+                    )?
+                    .into_owned()
+            };
 
-        // Expand sparse data to dense format (supports nested optional types)
-        let dense_data = Self::expand_to_dense(sparse_data, &mask, opt)?;
+            // Expand sparse data to dense format (supports nested optional types)
+            Self::expand_to_dense(sparse_data, &mask, opt)?
+        } else {
+            // No valid elements - create empty dense data of the right type/size
+            Self::create_empty_dense_data(&mask, opt)?
+        };
 
         // Return ArrayBytes with mask and dense data
         Ok(dense_data.with_optional_mask(mask))
