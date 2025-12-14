@@ -7,7 +7,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 #[cfg(feature = "ndarray")]
 use super::elements_to_ndarray;
 use super::{
-    array_bytes::{copy_fill_value_into, merge_chunks_vlen},
+    array_bytes::{
+        build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
+        optional_nesting_depth,
+    },
     codec::{
         ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
         CodecOptions, StoragePartialDecoder,
@@ -657,7 +660,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types.
-    /// Also handles optional data types with fixed-length inner types.
+    /// Also handles optional data types with fixed-length inner types (including nested optionals).
     fn retrieve_multi_chunk_fixed(
         &self,
         array_subset: &ArraySubset,
@@ -666,26 +669,25 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        // Allocate data buffer and optional mask buffer
+        // Allocate data buffer and mask buffers for each level of optional nesting
         let data_type_size = data_type
             .fixed_size()
             .expect("data_type must have fixed size");
         let num_elements = array_subset.num_elements_usize();
         let size_output = num_elements * data_type_size;
-        let is_optional = data_type.is_optional();
+        let nesting_depth = optional_nesting_depth(data_type);
         let mut data_output = Vec::with_capacity(size_output);
-        let mut mask_output = if is_optional {
-            Some(Vec::with_capacity(num_elements))
-        } else {
-            None
-        };
+        let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
+            .map(|_| Vec::with_capacity(num_elements))
+            .collect();
 
         {
             let data_output_slice =
                 UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
-            let mask_output_slice = mask_output
-                .as_mut()
-                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
+            let mask_output_slices: Vec<_> = mask_outputs
+                .iter_mut()
+                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+                .collect();
 
             let retrieve_chunk = |chunk_indices: Vec<u64>| {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
@@ -703,28 +705,28 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     )?
                 };
 
-                let mut mask_view = mask_output_slice
+                // Create mask views for each nesting level
+                let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
+                    .iter()
                     .map(|mask_slice| unsafe {
                         // SAFETY: chunks represent disjoint array subsets
                         ArrayBytesFixedDisjointView::new(
-                            mask_slice,
+                            *mask_slice,
                             1, // 1 byte per element for mask
                             array_subset.shape(),
                             chunk_subset_in_array.clone(),
                         )
                     })
-                    .transpose()?;
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Build the nested decode target
+                let target =
+                    build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
 
                 self.retrieve_chunk_subset_into(
                     &chunk_indices,
                     &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                    match mask_view.as_mut() {
-                        Some(mask) => ArrayBytesDecodeIntoTarget::Optional(
-                            Box::new(ArrayBytesDecodeIntoTarget::Fixed(&mut data_view)),
-                            mask,
-                        ),
-                        None => ArrayBytesDecodeIntoTarget::Fixed(&mut data_view),
-                    },
+                    target,
                     options,
                 )?;
                 Ok::<_, ArrayError>(())
@@ -740,16 +742,16 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         }
 
         unsafe { data_output.set_len(size_output) };
-        if let Some(ref mut mask) = mask_output {
+        for mask in &mut mask_outputs {
             unsafe { mask.set_len(num_elements) };
         }
 
-        let array_bytes = ArrayBytes::new_flen(data_output);
-        Ok(if let Some(mask) = mask_output {
-            array_bytes.with_optional_mask(mask)
-        } else {
-            array_bytes
-        })
+        // Build nested ArrayBytes with masks (innermost first, so reverse order)
+        let mut array_bytes = ArrayBytes::new_flen(data_output);
+        for mask in mask_outputs.into_iter().rev() {
+            array_bytes = array_bytes.with_optional_mask(mask);
+        }
+        Ok(array_bytes)
     }
 
     /// Explicit options version of [`retrieve_array_subset`](Array::retrieve_array_subset).

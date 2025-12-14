@@ -11,21 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `ArrayBytesVariableLength`
 - Add `ArrayBytesDecodeIntoTarget`
-- Add `OptionalCodec`
-- Add `ArrayBytesOptional`
-- Add `DataType::Optional`
-- Implement `Element` for `Option<T>` where `T: Element`
-- Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
-- Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
+- Add support for the `optional` data type and codec:
+  - Add `OptionalCodec`
+  - Add `ArrayBytesOptional`
+  - Add `DataTypeOptional`
+  - Add `DataType::Optional` variant holding a `DataTypeOptional`
+  - Add `DataType::into_optional()`
+  - Implement `Element` for `Option<T>` where `T: Element`
+  - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
+  - Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
+  - Add examples:
+    - `data_type_optional`
+    - `data_type_optional_nested`
 - Add chunk compaction API to remove extraneous bytes from encoded chunks
   - Add `Array::[async_]compact_chunk()`
   - Add `ArrayToBytesCodecTraits::compact()` with a default implementation
   - Implement `ArrayToBytesCodecTraits` for `ShardingCodec` and `CodecChain`
 
+
 ### Changed
 
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
-- **Breaking**: bump `zarrs_metadata` to 0.7.0
+- **Breaking**: Bump `zarrs_metadata` to 0.7.0
+- **Breaking**: Bump `zarrs_data_type` to 0.5.0
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
 - **Breaking**: The `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets

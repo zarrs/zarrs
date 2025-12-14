@@ -349,11 +349,7 @@ where
     T: Element + Default,
 {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if let DataType::Optional(inner_data_type) = data_type {
-            T::validate_data_type(inner_data_type)
-        } else {
-            Err(IET)
-        }
+        T::validate_data_type(data_type.as_optional().ok_or(IET)?)
     }
 
     fn into_array_bytes<'a>(
@@ -362,9 +358,7 @@ where
     ) -> Result<ArrayBytes<'a>, ArrayError> {
         Self::validate_data_type(data_type)?;
 
-        let DataType::Optional(inner_data_type) = data_type else {
-            return Err(IET);
-        };
+        let opt = data_type.as_optional().ok_or(IET)?;
 
         let num_elements = elements.len();
 
@@ -387,7 +381,7 @@ where
         }
 
         // Convert all elements (dense) to ArrayBytes
-        let data = T::into_array_bytes(inner_data_type, &dense_elements)?.into_owned();
+        let data = T::into_array_bytes(opt, &dense_elements)?.into_owned();
 
         // Create optional ArrayBytes by adding mask to the data
         Ok(data.with_optional_mask(mask))
@@ -404,9 +398,7 @@ where
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
 
-        let DataType::Optional(inner_data_type) = data_type else {
-            return Err(IET);
-        };
+        let opt = data_type.as_optional().ok_or(IET)?;
 
         // Extract mask and dense data from optional ArrayBytes
         let optional_bytes = bytes.into_optional().map_err(|e| {
@@ -417,7 +409,7 @@ where
         let (data, mask) = optional_bytes.into_parts();
 
         // Convert the dense inner data to a Vec<T>
-        let dense_values = T::from_array_bytes(inner_data_type, *data)?;
+        let dense_values = T::from_array_bytes(opt, *data)?;
 
         // Build the result vector using mask to determine Some vs None
         let mut elements = Vec::with_capacity(mask.len());

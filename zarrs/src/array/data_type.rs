@@ -10,7 +10,7 @@
 #![doc = include_str!("../../doc/status/data_types.md")]
 
 mod named_data_type;
-use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
+use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, ops::Deref, sync::Arc};
 
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
@@ -29,6 +29,51 @@ use crate::metadata_ext::data_type::{
     numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1, NumpyTimeUnit,
 };
 use crate::registry::ExtensionAliasesDataTypeV3;
+
+/// A newtype wrapper for optional data types.
+///
+/// This wraps the inner [`DataType`] and provides methods specific to optional types,
+/// such as checking if a fill value represents null and extracting inner fill value bytes.
+///
+/// The newtype implements [`Deref`] to the inner [`DataType`], so methods on the inner
+/// type can be called directly.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DataTypeOptional(Box<DataType>);
+
+impl DataTypeOptional {
+    /// Create a new optional data type wrapper.
+    #[must_use]
+    pub fn new(inner: DataType) -> Self {
+        Self(Box::new(inner))
+    }
+
+    /// Check if the fill value represents null (last byte is `0x00`).
+    #[must_use]
+    pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+        fill_value.as_ne_bytes().last() == Some(&0)
+    }
+
+    /// Get the inner fill value bytes (without optional suffix).
+    ///
+    /// For optional data types, returns all bytes except the last suffix byte.
+    #[must_use]
+    pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        let bytes = fill_value.as_ne_bytes();
+        if bytes.is_empty() {
+            &[]
+        } else {
+            &bytes[..bytes.len() - 1]
+        }
+    }
+}
+
+impl Deref for DataTypeOptional {
+    type Target = DataType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// A data type.
 #[derive(Clone, Debug)]
@@ -166,7 +211,7 @@ pub enum DataType {
         scale_factor: NonZeroU32,
     },
     /// An optional data type.
-    Optional(Box<DataType>),
+    Optional(DataTypeOptional),
     /// An extension data type.
     Extension(Arc<dyn DataTypeExtension>),
 }
@@ -175,6 +220,7 @@ impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (&self, other) {
             (DataType::RawBits(a), DataType::RawBits(b)) => a == b,
+            (DataType::Optional(a), DataType::Optional(b)) => a == b,
             (DataType::Extension(a), DataType::Extension(b)) => {
                 a.name() == b.name() && a.configuration() == b.configuration()
             }
@@ -438,6 +484,43 @@ impl DataType {
         matches!(self, Self::Optional(_))
     }
 
+    /// Wrap this data type in an [`Optional`](DataType::Optional).
+    ///
+    /// Can be chained to create nested optional types.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs::array::{DataType, DataTypeOptional};
+    /// // Single level optional
+    /// let opt_u8 = DataType::UInt8.into_optional();
+    /// assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8)));
+    ///
+    /// // Nested optional
+    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
+    /// ```
+    #[must_use]
+    pub fn into_optional(self) -> Self {
+        Self::Optional(DataTypeOptional::new(self))
+    }
+
+    /// Returns the optional type wrapper if this is an optional data type.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs::array::DataType;
+    /// let opt_u8 = DataType::UInt8.into_optional();
+    /// assert!(opt_u8.as_optional().is_some());
+    /// assert!(DataType::UInt8.as_optional().is_none());
+    /// ```
+    #[must_use]
+    pub fn as_optional(&self) -> Option<&DataTypeOptional> {
+        if let Self::Optional(opt) = self {
+            Some(opt)
+        } else {
+            None
+        }
+    }
+
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
@@ -541,7 +624,7 @@ impl DataType {
 
                     // Recursively parse the inner data type
                     let inner_data_type = Self::from_metadata(&inner_metadata, data_type_aliases)?;
-                    return Ok(Self::Optional(Box::new(inner_data_type)));
+                    return Ok(inner_data_type.into_optional());
                 }
                 _ => {}
             }
@@ -901,10 +984,19 @@ impl DataType {
                 }
             }
             Self::Optional(data_type) => {
-                if fill_value.size() == 0 {
+                let bytes = fill_value.as_ne_bytes();
+                if bytes.is_empty() {
+                    // Invalid: optional fill value must have at least the suffix byte
+                    Err(error())
+                } else if bytes.last() == Some(&0) {
+                    // Null fill value (suffix byte is 0x00)
                     Ok(FillValueMetadataV3::Null)
                 } else {
-                    data_type.metadata_fill_value(fill_value)
+                    // Non-null fill value: strip the suffix byte and recurse
+                    let inner_fill_value = FillValue::new(bytes[..bytes.len() - 1].to_vec());
+                    let inner_metadata = data_type.metadata_fill_value(&inner_fill_value)?;
+                    // Wrap in single-element array for Some(x)
+                    Ok(FillValueMetadataV3::Array(vec![inner_metadata]))
                 }
             }
             Self::Extension(extension) => extension.metadata_fill_value(fill_value),
@@ -2406,9 +2498,9 @@ mod tests {
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
         assert_eq!(data_type.name(), "optional");
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "int32");
-            assert_eq!(inner.size(), DataTypeSize::Fixed(4));
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "int32");
+            assert_eq!(opt.size(), DataTypeSize::Fixed(4));
         } else {
             panic!("Expected Optional data type");
         }
@@ -2420,9 +2512,9 @@ mod tests {
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
         assert_eq!(data_type.name(), "optional");
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "numpy.datetime64");
-            if let DataType::NumpyDateTime64 { unit, scale_factor } = inner.as_ref() {
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "numpy.datetime64");
+            if let DataType::NumpyDateTime64 { unit, scale_factor } = &**opt {
                 assert_eq!(*unit, NumpyTimeUnit::Second);
                 assert_eq!(scale_factor.get(), 1);
             } else {
@@ -2437,9 +2529,9 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let data_type =
             DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default()).unwrap();
-        if let DataType::Optional(inner) = &data_type {
-            assert_eq!(inner.name(), "string");
-            assert_eq!(inner.size(), DataTypeSize::Variable);
+        if let Some(opt) = data_type.as_optional() {
+            assert_eq!(opt.name(), "string");
+            assert_eq!(opt.size(), DataTypeSize::Variable);
         } else {
             panic!("Expected Optional data type");
         }
@@ -2473,5 +2565,131 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let result = DataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn data_type_optional_method() {
+        // Single level optional
+        let opt_u8 = DataType::UInt8.into_optional();
+        assert_eq!(
+            opt_u8,
+            DataType::Optional(DataTypeOptional::new(DataType::UInt8))
+        );
+        assert!(opt_u8.is_optional());
+
+        // Nested optional (2 levels)
+        let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
+        assert_eq!(
+            opt_opt_u8,
+            DataType::Optional(DataTypeOptional::new(DataType::Optional(
+                DataTypeOptional::new(DataType::UInt8)
+            )))
+        );
+
+        // Nested optional (3 levels)
+        let opt_opt_opt_u16 = DataType::UInt16
+            .into_optional()
+            .into_optional()
+            .into_optional();
+        assert_eq!(
+            opt_opt_opt_u16,
+            DataType::Optional(DataTypeOptional::new(DataType::Optional(
+                DataTypeOptional::new(DataType::Optional(DataTypeOptional::new(DataType::UInt16)))
+            )))
+        );
+
+        // Works with various inner types
+        assert_eq!(
+            DataType::String.into_optional(),
+            DataType::Optional(DataTypeOptional::new(DataType::String))
+        );
+        assert_eq!(
+            DataType::Float64.into_optional(),
+            DataType::Optional(DataTypeOptional::new(DataType::Float64))
+        );
+    }
+
+    #[test]
+    fn data_type_optional_fill_value() {
+        // Simple optional: None -> null
+        let data_type = DataType::UInt8.into_optional();
+        let fill_value = FillValue::new_optional_null();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(metadata, FillValueMetadataV3::Null);
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Simple optional: Some(42) -> [42]
+        let fill_value = FillValue::from(42u8).into_optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: None -> null
+        let data_type = DataType::UInt8.into_optional().into_optional();
+        let fill_value = FillValue::new_optional_null();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(metadata, FillValueMetadataV3::Null);
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: Some(None) -> [null]
+        let fill_value = FillValue::new_optional_null().into_optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Null])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Nested optional: Some(Some(42)) -> [[42]]
+        let fill_value = FillValue::from(42u8).into_optional().into_optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::from(42u8)
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Triple nested: Some(Some(None)) -> [[null]]
+        let data_type = DataType::UInt8
+            .into_optional()
+            .into_optional()
+            .into_optional();
+        let fill_value = FillValue::new_optional_null()
+            .into_optional()
+            .into_optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::Null
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
+
+        // Triple nested: Some(Some(Some(42))) -> [[[42]]]
+        let fill_value = FillValue::from(42u8)
+            .into_optional()
+            .into_optional()
+            .into_optional();
+        let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
+        assert_eq!(
+            metadata,
+            FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
+                FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
+            ])])
+        );
+        let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
+        assert_eq!(fill_value, roundtrip);
     }
 }

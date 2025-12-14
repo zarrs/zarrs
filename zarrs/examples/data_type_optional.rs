@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use zarrs::{
-    array::{codec::array_to_bytes::optional::OptionalCodec, ArrayBuilder, DataType, FillValue},
+    array::{ArrayBuilder, DataType, FillValue},
     storage::ReadableStorageTraits,
 };
 
@@ -24,29 +24,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = Arc::new(zarrs::storage::store::MemoryStore::new());
 
     // Build the codec chains for the optional codec
-    let mask_codecs = Arc::new(zarrs::array::codec::CodecChain::from_metadata(&vec![
-        serde_json::from_str(r#"{"name": "packbits", "configuration": {}}"#)?,
-    ])?);
-    let data_codecs = Arc::new(zarrs::array::codec::CodecChain::from_metadata(&vec![
-        serde_json::from_str(r#"{"name": "bytes", "configuration": {"endian": "little"}}"#)?,
-    ])?);
-
     let array = ArrayBuilder::new(
-        vec![4, 4],                                    // 4x4 array
-        vec![2, 2],                                    // 2x2 chunks
-        DataType::Optional(Box::new(DataType::UInt8)), // Optional uint8
-        FillValue::new_null(),                         // Null fill value
+        vec![4, 4],                      // 4x4 array
+        vec![2, 2],                      // 2x2 chunks
+        DataType::UInt8.into_optional(), // Optional uint8
+        FillValue::new_optional_null(),  // Null fill value: [0]
     )
     .dimension_names(["y", "x"].into())
-    .array_to_bytes_codec(Arc::new(OptionalCodec::new(mask_codecs, data_codecs)))
     .attributes(
         serde_json::json!({
             "description": r#"A 4x4 array of optional uint8 values with some missing data.
-X marks missing values:
- 0  X  2  3 
- X  5  X  7 
- 8  9  X  X 
-12  X 14 15"#,
+N marks missing (`None`=`null`) values:
+ 0  N  2  3 
+ N  5  N  7 
+ 8  9  N  N 
+12  N  N  N"#,
         })
         .as_object()
         .unwrap()
@@ -58,44 +50,32 @@ X marks missing values:
     println!("Array metadata:\n{}", array.metadata().to_string_pretty());
 
     // Create some data with missing values
-    let data = vec![
-        Some(0u8),
-        None,
-        Some(2u8),
-        Some(3u8), // Row 0
-        None,
-        Some(5u8),
-        None,
-        Some(7u8), // Row 1
-        Some(8u8),
-        Some(9u8),
-        None,
-        None, // Row 2
-        Some(12u8),
-        None,
-        Some(14u8),
-        Some(15u8), // Row 3
-    ];
+    let data = ndarray::array![
+        [Some(0u8), None, Some(2u8), Some(3u8)],
+        [None, Some(5u8), None, Some(7u8)],
+        [Some(8u8), Some(9u8), None, None],
+        [Some(12u8), None, None, None],
+    ]
+    .into_dyn();
 
     // Write the data
-    array.store_array_subset_elements(&array.subset_all(), &data)?;
+    array.store_array_subset_ndarray(array.subset_all().start(), data.clone())?;
 
     // Read back the data
-    let data_read = array.retrieve_array_subset_elements::<Option<u8>>(&array.subset_all())?;
+    let data_read = array.retrieve_array_subset_ndarray::<Option<u8>>(&array.subset_all())?;
 
     // Verify data integrity
     assert_eq!(data, data_read);
 
     // Display the data in a grid format
-    println!("Data grid (X marks missing values):");
+    println!("Data grid, N marks missing (`None`=`null`) values");
     println!("   0  1  2  3");
     for y in 0..4 {
         print!("{} ", y);
         for x in 0..4 {
-            let index = y * 4 + x;
-            match data_read[index] {
+            match data_read[[y, x]] {
                 Some(value) => print!("{:2} ", value),
-                None => print!(" X "),
+                None => print!(" N "),
             }
         }
         println!();
@@ -178,10 +158,10 @@ X marks missing values:
                         }
                     }
                 } else {
-                    println!("    Chunk too small to parse headers");
+                    panic!("    Chunk too small to parse headers");
                 }
             } else {
-                println!("    Chunk not found in store");
+                println!("    Chunk missing (fill value chunk)");
             }
         }
     }

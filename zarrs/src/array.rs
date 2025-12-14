@@ -63,7 +63,7 @@ pub use chunk_cache::{
     chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
-pub use data_type::{DataType, FillValue, NamedDataType};
+pub use data_type::{DataType, DataTypeOptional, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::ArrayIndices;
 
 #[allow(deprecated)]

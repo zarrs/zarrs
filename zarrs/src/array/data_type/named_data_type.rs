@@ -293,12 +293,17 @@ impl NamedDataType {
                     Err(err0())?
                 }
             }
-            DataType::Optional(inner) => {
+            DataType::Optional(opt) => {
                 if fill_value.is_null() {
-                    Ok(FillValue::new_null())
+                    // Null fill value for optional type: single 0x00 byte
+                    Ok(FillValue::new_optional_null())
+                } else if let Some([inner]) = fill_value.as_array() {
+                    // Wrapped value [inner_metadata] -> Some(inner)
+                    let inner_fv = opt.fill_value_from_metadata(inner)?;
+                    Ok(inner_fv.into_optional())
                 } else {
-                    let inner_fill_value = inner.fill_value_from_metadata(fill_value)?;
-                    Ok(inner_fill_value)
+                    // Invalid format for optional
+                    Err(err0())
                 }
             }
             DataType::Extension(ext) => ext.fill_value(fill_value),
