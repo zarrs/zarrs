@@ -8,15 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `FillValue::new_optional_null()`
 - Add `FillValue::into_optional()`
 - Implement `From<Option<T>>` for `FillValue` where `FillValue: From<T>`
 
 ### Changed
+- **Breaking**: Rename `FillValue::new_null()` to `new_optional_null()`
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
 
 ### Removed
-- **Breaking**: Remove `FillValue::new_null()` and `is_null()`
+- **Breaking**: Remove `FillValue::is_null()`
 
 ## [0.4.2] - 2025-10-31
 
