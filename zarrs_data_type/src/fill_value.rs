@@ -189,7 +189,7 @@ where
 {
     fn from(value: Option<T>) -> Self {
         match value {
-            None => FillValue::new_optional_none(), // null suffix
+            None => FillValue::new_optional_null(), // null suffix
             Some(inner) => FillValue::from(inner).into_optional(),
         }
     }
@@ -211,15 +211,15 @@ impl FillValue {
     /// ```
     /// # use zarrs_data_type::FillValue;
     /// // Null fill value for Option<T>
-    /// let null_fill = FillValue::new_optional_none();
+    /// let null_fill = FillValue::new_optional_null();
     /// assert_eq!(null_fill.as_ne_bytes(), &[0]);
     ///
     /// // Some(None) fill value for Option<Option<T>>
-    /// let some_null = FillValue::new_optional_none().into_optional();
+    /// let some_null = FillValue::new_optional_null().into_optional();
     /// assert_eq!(some_null.as_ne_bytes(), &[0, 1]);
     /// ```
     #[must_use]
-    pub fn new_optional_none() -> Self {
+    pub fn new_optional_null() -> Self {
         Self(vec![0])
     }
 
@@ -527,15 +527,15 @@ mod tests {
 
     #[test]
     fn fill_value_optional_null_method() {
-        // FillValue::new_optional_none() creates a null fill value
-        let null_fill = FillValue::new_optional_none();
+        // FillValue::new_optional_null() creates a null fill value
+        let null_fill = FillValue::new_optional_null();
         assert_eq!(null_fill.as_ne_bytes(), &[0]);
 
         // Equivalent to None::<u8>.into()
         assert_eq!(null_fill, FillValue::from(None::<u8>));
 
         // Some(None) for Option<Option<T>>
-        let some_null = FillValue::new_optional_none().into_optional();
+        let some_null = FillValue::new_optional_null().into_optional();
         assert_eq!(some_null.as_ne_bytes(), &[0, 1]);
 
         // Equivalent to Some(None::<u8>).into()

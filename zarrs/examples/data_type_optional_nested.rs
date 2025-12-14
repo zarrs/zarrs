@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![4, 4],                                      // 4x4 array
         vec![2, 2],                                      // 2x2 chunks
         DataType::UInt8.into_optional().into_optional(), // Optional optional uint8 => Option<Option<u8>>
-        FillValue::new_optional_none().into_optional(),  // Fill value => Some(None)
+        FillValue::new_optional_null().into_optional(),  // Fill value => Some(None)
     )
     .dimension_names(["y", "x"].into())
     .attributes(

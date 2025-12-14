@@ -222,7 +222,7 @@ impl OptionalCodec {
     fn create_fill_value_for_inner_type(inner_type: &DataType) -> FillValue {
         if inner_type.is_optional() {
             // For nested optional types, the fill value is null (single 0x00 byte)
-            FillValue::new_optional_none()
+            FillValue::new_optional_null()
         } else {
             match inner_type.size() {
                 DataTypeSize::Fixed(size) => {
@@ -632,7 +632,7 @@ mod tests {
         .unwrap();
         codec_optional_round_trip_impl(
             DataType::UInt8.into_optional(),
-            FillValue::new_optional_none(), // null/missing value: [0]
+            FillValue::new_optional_null(), // null/missing value: [0]
         )
         .unwrap();
     }
@@ -731,7 +731,7 @@ mod tests {
                 .into_optional()
                 .into_optional()
                 .into_optional(),
-            FillValue::new_optional_none()
+            FillValue::new_optional_null()
                 .into_optional()
                 .into_optional(), // null/missing value for outer optional: [0]
         )

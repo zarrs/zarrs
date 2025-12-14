@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `FillValue::new_optional_none()`
+- Add `FillValue::new_optional_null()`
 - Add `FillValue::into_optional()`
 - Implement `From<Option<T>>` for `FillValue` where `FillValue: From<T>`
 

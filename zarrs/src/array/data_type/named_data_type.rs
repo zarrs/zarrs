@@ -296,7 +296,7 @@ impl NamedDataType {
             DataType::Optional(opt) => {
                 if fill_value.is_null() {
                     // Null fill value for optional type: single 0x00 byte
-                    Ok(FillValue::new_optional_none())
+                    Ok(FillValue::new_optional_null())
                 } else if let Some([inner]) = fill_value.as_array() {
                     // Wrapped value [inner_metadata] -> Some(inner)
                     let inner_fv = opt.fill_value_from_metadata(inner)?;

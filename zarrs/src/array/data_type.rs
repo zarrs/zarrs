@@ -2613,7 +2613,7 @@ mod tests {
     fn data_type_optional_fill_value() {
         // Simple optional: None -> null
         let data_type = DataType::UInt8.into_optional();
-        let fill_value = FillValue::new_optional_none();
+        let fill_value = FillValue::new_optional_null();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
         let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -2631,14 +2631,14 @@ mod tests {
 
         // Nested optional: None -> null
         let data_type = DataType::UInt8.into_optional().into_optional();
-        let fill_value = FillValue::new_optional_none();
+        let fill_value = FillValue::new_optional_null();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
         let roundtrip = data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: Some(None) -> [null]
-        let fill_value = FillValue::new_optional_none().into_optional();
+        let fill_value = FillValue::new_optional_null().into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
@@ -2664,7 +2664,7 @@ mod tests {
             .into_optional()
             .into_optional()
             .into_optional();
-        let fill_value = FillValue::new_optional_none()
+        let fill_value = FillValue::new_optional_null()
             .into_optional()
             .into_optional();
         let metadata = data_type.metadata_fill_value(&fill_value).unwrap();
