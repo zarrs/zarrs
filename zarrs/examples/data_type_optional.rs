@@ -45,7 +45,9 @@ N marks missing (`None`=`null`) values:
         .clone(),
     )
     .build(store.clone(), "/array")?;
-    array.store_metadata()?;
+    array.store_metadata_opt(
+        &zarrs::array::ArrayMetadataOptions::default().with_include_zarrs_metadata(false),
+    )?;
 
     println!("Array metadata:\n{}", array.metadata().to_string_pretty());
 

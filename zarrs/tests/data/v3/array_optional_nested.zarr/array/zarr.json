@@ -66,12 +66,7 @@
     }
   ],
   "attributes": {
-    "description": "A 4x4 array of optional optional uint8 values with some missing data.\nThe fill value is null on the inner optional layer, i.e. Some(None).\nN marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:\n  N  SN   2   3 \n  N   5   N   7 \n SN  SN   N   N \n SN  SN   N   N",
-    "_zarrs": {
-      "description": "This array was created with zarrs",
-      "repository": "https://github.com/zarrs/zarrs",
-      "version": "0.23.0-dev"
-    }
+    "description": "A 4x4 array of optional optional uint8 values with some missing data.\nThe fill value is null on the inner optional layer, i.e. Some(None).\nN marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:\n  N  SN   2   3 \n  N   5   N   7 \n SN  SN   N   N \n SN  SN   N   N"
   },
   "dimension_names": [
     "y",
