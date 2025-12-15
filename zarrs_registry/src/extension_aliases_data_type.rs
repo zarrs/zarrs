@@ -22,7 +22,9 @@ impl Default for ExtensionAliasesDataTypeV3 {
                 ("variable_length_bytes".into(), data_type::BYTES), // zarr-python 3.1 uses variable_length_bytes
             ]),
             // `name` aliases (regex match)
-            vec![],
+            vec![
+                (Regex::new(r"^r\d+$").expect("valid"), data_type::RAWBITS),
+            ],
         )
     }
 }
