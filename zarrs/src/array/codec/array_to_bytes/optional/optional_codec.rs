@@ -480,10 +480,49 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 
     fn encoded_representation(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        decoded_representation: &ChunkRepresentation,
     ) -> Result<BytesRepresentation, CodecError> {
-        // Variable size representation
-        Ok(BytesRepresentation::BoundedSize(u64::MAX))
+        // Header: mask_len (u64) + data_len (u64) = 16 bytes
+        const HEADER_SIZE: u64 = 16;
+
+        // Get the inner data type (unwrap Optional)
+        let DataType::Optional(inner_type) = decoded_representation.data_type() else {
+            return Err(CodecError::Other(
+                "optional codec requires an optional data type".to_string(),
+            ));
+        };
+
+        // Compute mask representation: bool array with same shape
+        let mask_representation = ChunkRepresentation::new(
+            decoded_representation.shape().to_vec(),
+            DataType::Bool,
+            0u8,
+        )?;
+        let mask_bytes_repr = self.mask_codecs.encoded_representation(&mask_representation)?;
+
+        // Compute data representation: inner type array with same shape (worst case: all elements valid)
+        let fill_value = Self::create_fill_value_for_inner_type(inner_type);
+        let data_representation = ChunkRepresentation::new(
+            decoded_representation.shape().to_vec(),
+            (**inner_type).clone(),
+            fill_value,
+        )?;
+        let data_bytes_repr = self.data_codecs.encoded_representation(&data_representation)?;
+
+        // Combine sizes: if either is unbounded, result is unbounded
+        match (mask_bytes_repr.size(), data_bytes_repr.size()) {
+            (Some(mask_size), Some(data_size)) => {
+                // Use checked arithmetic to avoid overflow
+                HEADER_SIZE
+                    .checked_add(mask_size)
+                    .and_then(|s| s.checked_add(data_size))
+                    .map_or(
+                        Ok(BytesRepresentation::UnboundedSize),
+                        |total| Ok(BytesRepresentation::BoundedSize(total)),
+                    )
+            }
+            _ => Ok(BytesRepresentation::UnboundedSize),
+        }
     }
 }
 
