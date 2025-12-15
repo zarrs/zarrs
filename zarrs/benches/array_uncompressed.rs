@@ -39,8 +39,13 @@ fn array_write_all_sharded(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
                 let store = zarrs::storage::store::MemoryStore::new();
-                let sharding_codec =
-                    Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
+                let sharding_codec = Arc::new(
+                    ShardingCodecBuilder::new(
+                        vec![32; 3].try_into().unwrap(),
+                        &zarrs::array::DataType::UInt16,
+                    )
+                    .build(),
+                );
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![size; 3],
@@ -96,8 +101,13 @@ fn array_read_all_sharded(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             // Write the data
             let store = zarrs::storage::store::MemoryStore::new();
-            let sharding_codec =
-                Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
+            let sharding_codec = Arc::new(
+                ShardingCodecBuilder::new(
+                    vec![32; 3].try_into().unwrap(),
+                    &zarrs::array::DataType::UInt8,
+                )
+                .build(),
+            );
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![size; 3],

@@ -147,6 +147,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
             vec![1, 1].try_into().unwrap(),
+            &DataType::UInt8,
         )
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
@@ -315,6 +316,7 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
             vec![2, 1].try_into().unwrap(),
+            &DataType::String,
         )
         .array_to_bytes_codec(Arc::<VlenCodec>::default())
         .build(),

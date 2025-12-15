@@ -406,7 +406,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()))
         }
-        let codec = ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap())
+        let codec = ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt16)
             .index_location(if index_at_end {
                 ShardingIndexLocation::End
             } else {
@@ -501,7 +501,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()))
         }
-        let codec = ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap())
+        let codec = ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt16)
             .index_location(if index_at_end {
                 ShardingIndexLocation::End
             } else {
@@ -572,7 +572,7 @@ mod tests {
             vec![]
         };
         let codec = Arc::new(
-            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap())
+            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt8)
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {
@@ -652,7 +652,7 @@ mod tests {
             vec![]
         };
         let codec = Arc::new(
-            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap())
+            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt8)
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {

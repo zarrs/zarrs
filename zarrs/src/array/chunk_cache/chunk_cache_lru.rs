@@ -442,7 +442,7 @@ mod tests {
             0u8,
         )
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap()).build(),
+            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt8).build(),
         ))
         .build_arc(store.clone(), "/")
         .unwrap();

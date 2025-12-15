@@ -759,7 +759,7 @@ mod tests {
         );
         if sharded {
             builder.array_to_bytes_codec(Arc::new(
-                ShardingCodecBuilder::new(vec![2, 2].try_into()?)
+                ShardingCodecBuilder::new(vec![2, 2].try_into()?, &DataType::UInt16)
                     .bytes_to_bytes_codecs(vec![
                         #[cfg(feature = "gzip")]
                         Arc::new(crate::array::codec::GzipCodec::new(5)?),
@@ -976,6 +976,7 @@ mod tests {
         builder.array_to_bytes_codec(Arc::new(
             ShardingCodecBuilder::new(
                 vec![1, if valid_inner_chunk_shape { 2 } else { 3 }, 3].try_into()?,
+                &DataType::UInt32,
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]

@@ -414,6 +414,7 @@ async fn async_indexer_array_subsets_fixed() {
                 ],
                 ShardingCodecBuilder::new(
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
+                    &DataType::Float32,
                 )
                 .build_arc(),
                 vec![],
@@ -542,6 +543,7 @@ async fn async_indexer_array_subsets_variable() {
                 ],
                 ShardingCodecBuilder::new(
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
+                    &DataType::String,
                 )
                 .array_to_bytes_codec(Arc::new(VlenCodec::default()))
                 .build_arc(),

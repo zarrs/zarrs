@@ -61,7 +61,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let shard_shape = vec![4, 8];
     let inner_chunk_shape = vec![4, 4];
     let mut sharding_codec_builder =
-        ShardingCodecBuilder::new(inner_chunk_shape.as_slice().try_into()?);
+        ShardingCodecBuilder::new(inner_chunk_shape.as_slice().try_into()?, &DataType::UInt16);
     sharding_codec_builder.bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
         Arc::new(codec::GzipCodec::new(5)?),

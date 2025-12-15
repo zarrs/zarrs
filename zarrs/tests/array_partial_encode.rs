@@ -51,7 +51,7 @@ fn array_partial_encode_sharding(
     );
     builder
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![1, 1].try_into().unwrap())
+            ShardingCodecBuilder::new(vec![1, 1].try_into().unwrap(), &DataType::UInt16)
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
                 .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
@@ -283,7 +283,7 @@ fn array_partial_encode_sharding_compact(
     );
     builder
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap()) // 2x2 inner chunks
+            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt16) // 2x2 inner chunks
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
                 .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())

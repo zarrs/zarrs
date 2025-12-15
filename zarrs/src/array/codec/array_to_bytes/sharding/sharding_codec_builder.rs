@@ -5,16 +5,17 @@ use codec::CodecChain;
 use super::{ShardingCodec, ShardingIndexLocation};
 use crate::array::{
     codec::{
-        self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-        NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
+        self, default_array_to_bytes_codec, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+        BytesToBytesCodecTraits, NamedArrayToArrayCodec, NamedArrayToBytesCodec,
+        NamedBytesToBytesCodec,
     },
-    ChunkShape,
+    ChunkShape, DataType,
 };
 
 /// A [`ShardingCodec`] builder.
 ///
-/// By default, both the inner chunks and the index are encoded with the `bytes` codec with native endian encoding.
-/// The index is additionally encoded with the `crc32c checksum` codec (if supported).
+/// By default, the inner chunks are encoded with the default codec for the data type (see [`default_array_to_bytes_codec`]).
+/// The index is encoded with the `bytes` codec with native endian encoding, additionally with the `crc32c checksum` codec (if the `crc32c` feature is enabled).
 ///
 /// Use the methods in the `sharding` codec builder to change the configuration away from these defaults, and then build the `sharding` codec with [`build`](ShardingCodecBuilder::build).
 #[derive(Debug)]
@@ -30,8 +31,11 @@ pub struct ShardingCodecBuilder {
 
 impl ShardingCodecBuilder {
     /// Create a new `sharding` codec builder.
+    ///
+    /// The default inner chunk array-to-bytes codec is chosen based on the data type
+    /// (see [`default_array_to_bytes_codec`]).
     #[must_use]
-    pub fn new(inner_chunk_shape: ChunkShape) -> Self {
+    pub fn new(inner_chunk_shape: ChunkShape, data_type: &DataType) -> Self {
         Self {
             inner_chunk_shape,
             index_array_to_bytes_codec: Arc::<codec::BytesCodec>::default().into(),
@@ -40,7 +44,7 @@ impl ShardingCodecBuilder {
                 Arc::new(codec::Crc32cCodec::new()).into(),
             ],
             array_to_array_codecs: Vec::default(),
-            array_to_bytes_codec: Arc::<codec::BytesCodec>::default().into(),
+            array_to_bytes_codec: default_array_to_bytes_codec(data_type),
             bytes_to_bytes_codecs: Vec::default(),
             index_location: ShardingIndexLocation::default(),
         }
@@ -109,7 +113,8 @@ impl ShardingCodecBuilder {
 
     /// Set the inner chunk array to bytes codec.
     ///
-    /// If left unmodified, the inner chunks will be encoded with the `bytes` codec with native endian encoding.
+    /// If left unmodified, the inner chunks will be encoded with the default codec for the data type
+    /// (see [`default_array_to_bytes_codec`]).
     pub fn array_to_bytes_codec(
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
@@ -129,9 +134,10 @@ impl ShardingCodecBuilder {
         self
     }
 
-    /// Set the inner chunk array to bytes codec.
+    /// Set the inner chunk array to bytes codec with a non-default name.
     ///
-    /// If left unmodified, the inner chunks will be encoded with the `bytes` codec with native endian encoding.
+    /// If left unmodified, the inner chunks will be encoded with the default codec for the data type
+    /// (see [`default_array_to_bytes_codec`]).
     pub fn array_to_bytes_codec_named(
         &mut self,
         array_to_bytes_codec: impl Into<NamedArrayToBytesCodec>,

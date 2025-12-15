@@ -1839,3 +1839,113 @@ impl From<String> for CodecError {
         Self::Other(err)
     }
 }
+
+/// Returns the default array-to-bytes codec for a given data type.
+///
+/// The default codec is dependent on the data type:
+///  - [`bytes`](array_to_bytes::bytes) for fixed-length data types,
+///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`String`](DataType::String) variable-length data type,
+///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`Bytes`](DataType::Bytes) variable-length data type,
+///  - [`vlen`](array_to_bytes::vlen) for any other variable-length data type, and
+///  - [`optional`](array_to_bytes::optional) wrapping the appropriate inner codec for optional data types.
+#[must_use]
+pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
+    // Special handling for optional types
+    if let Some(opt) = data_type.as_optional() {
+        // Create mask codec chain using PackBitsCodec
+        let mask_codec_chain = Arc::new(CodecChain::new_named(
+            vec![],
+            Arc::new(PackBitsCodec::default()).into(),
+            vec![],
+        ));
+
+        // For data codec chain, recursively handle nested data types
+        let data_codec_chain = Arc::new(CodecChain::new_named(
+            vec![],
+            default_array_to_bytes_codec(opt), // Recursive call handles nested Optional types
+            vec![],
+        ));
+
+        return NamedArrayToBytesCodec::new(
+            zarrs_registry::codec::OPTIONAL.to_string(),
+            Arc::new(array_to_bytes::optional::OptionalCodec::new(
+                mask_codec_chain,
+                data_codec_chain,
+            )),
+        );
+    }
+
+    // Handle non-optional types based on size
+    if data_type.fixed_size().is_some() {
+        Arc::<BytesCodec>::default().into()
+    } else {
+        // FIXME: Default to VlenCodec if ever stabilised
+        match data_type {
+            DataType::String => NamedArrayToBytesCodec::new(
+                zarrs_registry::codec::VLEN_UTF8.to_string(),
+                Arc::new(VlenV2Codec::new()),
+            ),
+            DataType::Bytes => NamedArrayToBytesCodec::new(
+                zarrs_registry::codec::VLEN_BYTES.to_string(),
+                Arc::new(VlenV2Codec::new()),
+            ),
+            DataType::Extension(_) => Arc::new(VlenCodec::default()).into(),
+            // Fixed size data types
+            DataType::Bool
+            | DataType::Int2
+            | DataType::Int4
+            | DataType::Int8
+            | DataType::Int16
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::UInt2
+            | DataType::UInt4
+            | DataType::UInt8
+            | DataType::UInt16
+            | DataType::UInt32
+            | DataType::UInt64
+            | DataType::Float4E2M1FN
+            | DataType::Float6E2M3FN
+            | DataType::Float6E3M2FN
+            | DataType::Float8E3M4
+            | DataType::Float8E4M3
+            | DataType::Float8E4M3B11FNUZ
+            | DataType::Float8E4M3FNUZ
+            | DataType::Float8E5M2
+            | DataType::Float8E5M2FNUZ
+            | DataType::Float8E8M0FNU
+            | DataType::BFloat16
+            | DataType::Float16
+            | DataType::Float32
+            | DataType::Float64
+            | DataType::ComplexBFloat16
+            | DataType::ComplexFloat16
+            | DataType::ComplexFloat32
+            | DataType::ComplexFloat64
+            | DataType::ComplexFloat4E2M1FN
+            | DataType::ComplexFloat6E2M3FN
+            | DataType::ComplexFloat6E3M2FN
+            | DataType::ComplexFloat8E3M4
+            | DataType::ComplexFloat8E4M3
+            | DataType::ComplexFloat8E4M3B11FNUZ
+            | DataType::ComplexFloat8E4M3FNUZ
+            | DataType::ComplexFloat8E5M2
+            | DataType::ComplexFloat8E5M2FNUZ
+            | DataType::ComplexFloat8E8M0FNU
+            | DataType::Complex64
+            | DataType::Complex128
+            | DataType::NumpyDateTime64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::NumpyTimeDelta64 {
+                unit: _,
+                scale_factor: _,
+            }
+            | DataType::RawBits(_) => unreachable!("fixed size data types handled above"),
+            DataType::Optional(_) => {
+                unreachable!("optional data types handled above")
+            }
+        }
+    }
+}

@@ -26,7 +26,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     if shard {
         #[cfg(feature = "sharding")]
         builder.array_to_bytes_codec(Arc::new(
-            zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(vec![1, 1].try_into().unwrap())
+            zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(vec![1, 1].try_into().unwrap(), &DataType::UInt8)
                 .bytes_to_bytes_codecs(vec![
                     #[cfg(feature = "gzip")]
                     Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
@@ -306,6 +306,7 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         builder.array_to_bytes_codec(Arc::new(
             zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
                 vec![2, 1].try_into().unwrap(),
+                &DataType::String,
             )
             .array_to_bytes_codec(Arc::new(
                 VlenCodec::default().with_index_location(index_location),

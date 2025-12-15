@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `Array::[async_]compact_chunk()`
   - Add `ArrayToBytesCodecTraits::compact()` with a default implementation
   - Implement `ArrayToBytesCodecTraits` for `ShardingCodec` and `CodecChain`
-
+- Add `zarrs::array::codec::default_array_to_bytes_codec()`
 
 ### Changed
 
@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
 - **Breaking**: Bump `ndarray` to 0.17.1
 - **Breaking**: Switch to `&ndarray::ArrayRef` from `impl Into<ndarray::Array<T, D>>` in `Array::store_*_ndarray` methods
+- **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()`
+  - This is necessary to choose an appropriate default array-to-bytes codec
 
 ### Removed
 

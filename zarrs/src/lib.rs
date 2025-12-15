@@ -126,7 +126,8 @@
 //! .array_to_bytes_codec(Arc::new(
 //!     // The sharding codec requires the sharding feature
 //!     zarrs::array::codec::ShardingCodecBuilder::new(
-//!         [2, 1].try_into()? // inner chunk shape
+//!         [2, 1].try_into()?, // inner chunk shape
+//!         &zarrs::array::DataType::Float32,
 //!     )
 //!     .bytes_to_bytes_codecs(vec![
 //!         // GzipCodec requires the gzip feature

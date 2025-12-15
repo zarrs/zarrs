@@ -56,6 +56,7 @@ fn cities_impl(
         builder.array_to_bytes_codec(Arc::new(
             ShardingCodecBuilder::new(
                 vec![shard_size].try_into()?, // inner chunk chape
+                &DataType::String,
             )
             .array_to_bytes_codec(vlen_codec)
             .build(),
