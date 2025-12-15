@@ -4,7 +4,16 @@ use crate::array::{ArrayBytes, ArrayBytesRaw};
 ///
 /// The mask is 1 byte per element where 0 = invalid/missing, non-zero = valid/present.
 /// The mask length is validated at construction to ensure it matches the number of elements.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// # Equality Semantics
+///
+/// Two `ArrayBytesOptional` values are considered equal if:
+/// - Their masks are equal
+/// - Their valid (non-null) elements are equal
+///
+/// Invalid (null) element bytes are **not** compared, since they may differ after
+/// round-trip encoding/decoding (e.g., fill value vs original bytes).
+#[derive(Clone, Debug)]
 pub struct ArrayBytesOptional<'a> {
     data: Box<ArrayBytes<'a>>,
     mask: ArrayBytesRaw<'a>,
@@ -52,3 +61,63 @@ impl<'a> ArrayBytesOptional<'a> {
         }
     }
 }
+
+impl PartialEq for ArrayBytesOptional<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        // Masks must match
+        if self.mask != other.mask {
+            return false;
+        }
+
+        // Compare only valid (non-null) elements
+        match (self.data.as_ref(), other.data.as_ref()) {
+            (ArrayBytes::Fixed(a_data), ArrayBytes::Fixed(b_data)) => {
+                // Compute element size on demand
+                let num_elements = self.mask.len();
+                if num_elements == 0 {
+                    return a_data == b_data;
+                }
+                let elem_size = a_data.len() / num_elements;
+                if elem_size == 0 {
+                    return a_data == b_data;
+                }
+                for (i, &mask_val) in self.mask.iter().enumerate() {
+                    if mask_val != 0 {
+                        let start = i * elem_size;
+                        let end = start + elem_size;
+                        if a_data.get(start..end) != b_data.get(start..end) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
+            (ArrayBytes::Variable(a_var), ArrayBytes::Variable(b_var)) => {
+                // For variable length, compare element by element for valid positions
+                let a_offsets = a_var.offsets();
+                let b_offsets = b_var.offsets();
+                for (i, &mask_val) in self.mask.iter().enumerate() {
+                    if mask_val != 0 {
+                        let a_start = a_offsets[i];
+                        let a_end = a_offsets[i + 1];
+                        let b_start = b_offsets[i];
+                        let b_end = b_offsets[i + 1];
+                        if a_var.bytes().get(a_start..a_end) != b_var.bytes().get(b_start..b_end) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
+            (ArrayBytes::Optional(a_inner), ArrayBytes::Optional(b_inner)) => {
+                // Nested optional - delegate to inner PartialEq
+                a_inner == b_inner
+            }
+            (ArrayBytes::Fixed(_) | ArrayBytes::Optional(_), ArrayBytes::Variable(_))
+            | (ArrayBytes::Fixed(_) | ArrayBytes::Variable(_), ArrayBytes::Optional(_))
+            | (ArrayBytes::Variable(_) | ArrayBytes::Optional(_), ArrayBytes::Fixed(_)) => false,
+        }
+    }
+}
+
+impl Eq for ArrayBytesOptional<'_> {}
