@@ -1025,15 +1025,20 @@ impl<TStorage: ?Sized> Array<TStorage> {
 }
 
 #[cfg(feature = "ndarray")]
-/// Convert an ndarray into a vec with standard layout
-fn ndarray_into_vec<T: Clone, D: ndarray::Dimension>(array: ndarray::Array<T, D>) -> Vec<T> {
-    #[allow(deprecated)]
-    if array.is_standard_layout() {
-        array
+/// Extract a contiguous slice from an [`ndarray::ArrayRef`].
+///
+/// If the array is in standard layout, a borrowed slice is returned.
+/// Otherwise, the array is cloned into standard layout.
+fn ndarray_to_cow<T: Clone, D: ndarray::Dimension>(
+    array: &ndarray::ArrayRef<T, D>,
+) -> std::borrow::Cow<'_, [T]> {
+    if let Some(slice) = array.as_slice() {
+        std::borrow::Cow::Borrowed(slice)
     } else {
-        array.as_standard_layout().into_owned()
+        let array = array.as_standard_layout().into_owned();
+        let data = array.into_raw_vec_and_offset().0;
+        std::borrow::Cow::Owned(data)
     }
-    .into_raw_vec()
 }
 
 mod array_sync_readable;

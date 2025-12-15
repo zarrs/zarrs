@@ -91,7 +91,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                     .collect::<Vec<_>>(),
                 i as f32,
             );
-            array.store_chunk_ndarray(&chunk_indices, chunk_array)
+            array.store_chunk_ndarray(&chunk_indices, &chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -107,7 +107,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Write a subset spanning multiple chunks, including updating chunks already written
     array.store_array_subset_ndarray(
         &[3, 3], // start
-        ndarray::ArrayD::<f32>::from_shape_vec(
+        &ndarray::ArrayD::<f32>::from_shape_vec(
             vec![3, 3],
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         )?,

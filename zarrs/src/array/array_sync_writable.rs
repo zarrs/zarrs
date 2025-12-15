@@ -124,7 +124,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     pub fn store_chunk_ndarray<T: Element, D: ndarray::Dimension>(
         &self,
         chunk_indices: &[u64],
-        chunk_array: impl Into<ndarray::Array<T, D>>,
+        chunk_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.store_chunk_ndarray_opt(chunk_indices, chunk_array, &CodecOptions::default())
     }
@@ -176,7 +176,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     pub fn store_chunks_ndarray<T: Element, D: ndarray::Dimension>(
         &self,
         chunks: &ArraySubset,
-        chunks_array: impl Into<ndarray::Array<T, D>>,
+        chunks_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.store_chunks_ndarray_opt(chunks, chunks_array, &CodecOptions::default())
     }
@@ -330,14 +330,13 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     pub fn store_chunk_ndarray_opt<T: Element, D: ndarray::Dimension>(
         &self,
         chunk_indices: &[u64],
-        chunk_array: impl Into<ndarray::Array<T, D>>,
+        chunk_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_array: ndarray::Array<T, D> = chunk_array.into();
         let chunk_shape = self.chunk_shape_usize(chunk_indices)?;
         if chunk_array.shape() == chunk_shape {
-            let chunk_array = super::ndarray_into_vec(chunk_array);
-            self.store_chunk_elements_opt(chunk_indices, chunk_array.as_slice(), options)
+            let chunk_array = super::ndarray_to_cow(chunk_array);
+            self.store_chunk_elements_opt(chunk_indices, &chunk_array, options)
         } else {
             Err(ArrayError::InvalidDataShape(
                 chunk_array.shape().to_vec(),
@@ -418,15 +417,14 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     pub fn store_chunks_ndarray_opt<T: Element, D: ndarray::Dimension>(
         &self,
         chunks: &ArraySubset,
-        chunks_array: impl Into<ndarray::Array<T, D>>,
+        chunks_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunks_array: ndarray::Array<T, D> = chunks_array.into();
         let chunks_subset = self.chunks_subset(chunks)?;
         let chunks_shape = chunks_subset.shape_usize();
         if chunks_array.shape() == chunks_shape {
-            let chunks_array = super::ndarray_into_vec(chunks_array);
-            self.store_chunks_elements_opt(chunks, chunks_array.as_slice(), options)
+            let chunks_array = super::ndarray_to_cow(chunks_array);
+            self.store_chunks_elements_opt(chunks, &chunks_array, options)
         } else {
             Err(ArrayError::InvalidDataShape(
                 chunks_array.shape().to_vec(),

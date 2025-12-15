@@ -48,12 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets` and add deprecated alias
 - **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 - Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
+- **Breaking**: Bump `ndarray` to 0.17.1
+- **Breaking**: Switch to `&ndarray::ArrayRef` from `impl Into<ndarray::Array<T, D>>` in `Array::store_*_ndarray` methods
 
 ### Removed
 
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
+- Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 

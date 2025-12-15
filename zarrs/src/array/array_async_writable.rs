@@ -104,7 +104,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunk_indices: &[u64],
-        chunk_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunk_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.async_store_chunk_ndarray_opt(chunk_indices, chunk_array, &CodecOptions::default())
             .await
@@ -142,7 +142,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunks: &ArraySubset,
-        chunks_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunks_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.async_store_chunks_ndarray_opt(chunks, chunks_array, &CodecOptions::default())
             .await
@@ -306,13 +306,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunk_indices: &[u64],
-        chunk_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunk_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_array: ndarray::Array<T, D> = chunk_array.into();
         let chunk_shape = self.chunk_shape_usize(chunk_indices)?;
         if chunk_array.shape() == chunk_shape {
-            let chunk_array = super::ndarray_into_vec(chunk_array);
+            let chunk_array = super::ndarray_to_cow(chunk_array);
             self.async_store_chunk_elements_opt(chunk_indices, &chunk_array, options)
                 .await
         } else {
@@ -407,14 +406,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunks: &ArraySubset,
-        chunks_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunks_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunks_array: ndarray::Array<T, D> = chunks_array.into();
         let chunks_subset = self.chunks_subset(chunks)?;
         let chunks_shape = chunks_subset.shape_usize();
         if chunks_array.shape() == chunks_shape {
-            let chunks_array = super::ndarray_into_vec(chunks_array);
+            let chunks_array = super::ndarray_to_cow(chunks_array);
             self.async_store_chunks_elements_opt(chunks, &chunks_array, options)
                 .await
         } else {
