@@ -53,7 +53,7 @@ N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
     .into_dyn();
 
     // Write the data
-    array.store_array_subset_ndarray(&array.subset_all().start(), data.clone())?; // FIXME: Borrow data
+    array.store_array_subset_ndarray(&array.subset_all().start(), &data)?;
     println!("Data written to array.");
 
     // Read back the data

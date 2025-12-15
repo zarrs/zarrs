@@ -66,7 +66,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         &self,
         chunk_indices: &[u64],
         chunk_subset_start: &[u64],
-        chunk_subset_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunk_subset_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.async_store_chunk_subset_ndarray_opt(
             chunk_indices,
@@ -112,7 +112,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     >(
         &self,
         subset_start: &[u64],
-        subset_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        subset_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.async_store_array_subset_ndarray_opt(
             subset_start,
@@ -252,10 +252,9 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         &self,
         chunk_indices: &[u64],
         chunk_subset_start: &[u64],
-        chunk_subset_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        chunk_subset_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_subset_array: ndarray::Array<T, D> = chunk_subset_array.into();
         let subset = ArraySubset::new_with_start_shape(
             chunk_subset_start.to_vec(),
             chunk_subset_array
@@ -264,7 +263,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 .map(|u| *u as u64)
                 .collect(),
         )?;
-        let chunk_subset_array = super::ndarray_into_vec(chunk_subset_array);
+        let chunk_subset_array = super::ndarray_to_cow(chunk_subset_array);
         self.async_store_chunk_subset_elements_opt(
             chunk_indices,
             &subset,
@@ -389,15 +388,14 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     >(
         &self,
         subset_start: &[u64],
-        subset_array: impl Into<ndarray::Array<T, D>> + MaybeSend,
+        subset_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let subset_array: ndarray::Array<T, D> = subset_array.into();
         let subset = ArraySubset::new_with_start_shape(
             subset_start.to_vec(),
             subset_array.shape().iter().map(|u| *u as u64).collect(),
         )?;
-        let subset_array = super::ndarray_into_vec(subset_array);
+        let subset_array = super::ndarray_to_cow(subset_array);
         self.async_store_array_subset_elements_opt(&subset, &subset_array, options)
             .await
     }

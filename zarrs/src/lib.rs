@@ -155,7 +155,7 @@
 //! )?;
 //! array.store_array_subset_ndarray::<f32, _>(
 //!     &[1, 1], // array index (start of subset)
-//!     ndarray::array![[-1.1, -1.2], [-2.1, -2.2]]
+//!     &ndarray::array![[-1.1, -1.2], [-2.1, -2.2]]
 //! )?;
 //! array.erase_chunk(&[1, 1])?;
 //!

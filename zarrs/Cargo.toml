@@ -63,7 +63,7 @@ inventory.workspace = true
 itertools = "0.14.0"
 lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
-ndarray = { version = ">=0.15.4,<0.17", optional = true }
+ndarray = { version = "0.17.1", optional = true }
 num.workspace = true
 pco = { version = ">=0.4.0,<0.4.7", optional = true }
 rayon = "1.10.0"

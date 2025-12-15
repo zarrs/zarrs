@@ -89,7 +89,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         &self,
         chunk_indices: &[u64],
         chunk_subset_start: &[u64],
-        chunk_subset_array: impl Into<ndarray::Array<T, D>>,
+        chunk_subset_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.store_chunk_subset_ndarray_opt(
             chunk_indices,
@@ -153,7 +153,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_array_subset_ndarray<T: Element, D: ndarray::Dimension>(
         &self,
         subset_start: &[u64],
-        subset_array: impl Into<ndarray::Array<T, D>>,
+        subset_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.store_array_subset_ndarray_opt(subset_start, subset_array, &CodecOptions::default())
     }
@@ -283,10 +283,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         &self,
         chunk_indices: &[u64],
         chunk_subset_start: &[u64],
-        chunk_subset_array: impl Into<ndarray::Array<T, D>>,
+        chunk_subset_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_subset_array: ndarray::Array<T, D> = chunk_subset_array.into();
         let subset = ArraySubset::new_with_start_shape(
             chunk_subset_start.to_vec(),
             chunk_subset_array
@@ -295,7 +294,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 .map(|u| *u as u64)
                 .collect(),
         )?;
-        let chunk_subset_array = super::ndarray_into_vec(chunk_subset_array);
+        let chunk_subset_array = super::ndarray_to_cow(chunk_subset_array);
         self.store_chunk_subset_elements_opt(chunk_indices, &subset, &chunk_subset_array, options)
     }
 
@@ -403,15 +402,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_array_subset_ndarray_opt<T: Element, D: ndarray::Dimension>(
         &self,
         subset_start: &[u64],
-        subset_array: impl Into<ndarray::Array<T, D>>,
+        subset_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let subset_array: ndarray::Array<T, D> = subset_array.into();
         let subset = ArraySubset::new_with_start_shape(
             subset_start.to_vec(),
             subset_array.shape().iter().map(|u| *u as u64).collect(),
         )?;
-        let subset_array = super::ndarray_into_vec(subset_array);
+        let subset_array = super::ndarray_to_cow(subset_array);
         self.store_array_subset_elements_opt(&subset, &subset_array, options)
     }
 

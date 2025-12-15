@@ -61,7 +61,7 @@ N marks missing (`None`=`null`) values:
     .into_dyn();
 
     // Write the data
-    array.store_array_subset_ndarray(array.subset_all().start(), data.clone())?;
+    array.store_array_subset_ndarray(array.subset_all().start(), &data)?;
 
     // Read back the data
     let data_read = array.retrieve_array_subset_ndarray::<Option<u8>>(&array.subset_all())?;

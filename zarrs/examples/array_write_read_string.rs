@@ -75,11 +75,11 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Write some chunks
     array.store_chunk_ndarray(
         &[0, 0],
-        ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
+        &ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
     )?;
     array.store_chunk_ndarray(
         &[0, 1],
-        ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
+        &ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
     )?;
     let subset_all = array.subset_all();
     let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
@@ -89,7 +89,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let ndarray_subset: Array2<&str> = array![["!", "@@"], ["###", "$$$$"]];
     array.store_array_subset_ndarray(
         ArraySubset::new_with_ranges(&[1..3, 1..3]).start(),
-        ndarray_subset,
+        &ndarray_subset,
     )?;
     let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
     println!("store_array_subset [1..3, 1..3]:\nndarray::ArrayD<String>\n{data_all}");
