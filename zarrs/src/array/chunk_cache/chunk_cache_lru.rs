@@ -416,9 +416,8 @@ mod tests {
     };
     use crate::{
         array::{
-            chunk_cache::ChunkCache,
-            codec::{CodecOptions, ShardingCodecBuilder},
-            Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+            chunk_cache::ChunkCache, codec::CodecOptions, Array, ArrayBuilder,
+            ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
             ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, DataType,
         },
         array_subset::ArraySubset,
@@ -441,9 +440,7 @@ mod tests {
             DataType::UInt8,
             0u8,
         )
-        .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![2, 2].try_into().unwrap(), &DataType::UInt8).build(),
-        ))
+        .subchunk_shape(vec![2, 2])
         .build_arc(store.clone(), "/")
         .unwrap();
 

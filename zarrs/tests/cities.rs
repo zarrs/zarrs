@@ -11,9 +11,7 @@ use std::{
 use zarrs::{
     array::{
         codec::{
-            array_to_bytes::{
-                sharding::ShardingCodecBuilder, vlen::VlenCodec, vlen_utf8::VlenUtf8Codec,
-            },
+            array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
         },
         ArrayBuilder, ArrayMetadataOptions, DataType,
@@ -52,17 +50,9 @@ fn cities_impl(
         DataType::String,
         "",
     );
+    builder.array_to_bytes_codec(vlen_codec);
     if let Some(shard_size) = shard_size {
-        builder.array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(
-                vec![shard_size].try_into()?, // inner chunk chape
-                &DataType::String,
-            )
-            .array_to_bytes_codec(vlen_codec)
-            .build(),
-        ));
-    } else {
-        builder.array_to_bytes_codec(vlen_codec);
+        builder.subchunk_shape(vec![shard_size]);
     }
     if let Some(compression_level) = compression_level {
         builder.bytes_to_bytes_codecs(vec![

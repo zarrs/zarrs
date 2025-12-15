@@ -14,7 +14,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
         array::{
-            codec::{self, array_to_bytes::sharding::ShardingCodecBuilder},
+            codec::{self},
             DataType,
         },
         array_subset::ArraySubset,
@@ -58,21 +58,18 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an array
     let array_path = "/group/array";
-    let shard_shape = vec![4, 8];
     let inner_chunk_shape = vec![4, 4];
-    let mut sharding_codec_builder =
-        ShardingCodecBuilder::new(inner_chunk_shape.as_slice().try_into()?, &DataType::UInt16);
-    sharding_codec_builder.bytes_to_bytes_codecs(vec![
-        #[cfg(feature = "gzip")]
-        Arc::new(codec::GzipCodec::new(5)?),
-    ]);
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
-        shard_shape,
+        vec![4, 8], // chunk (shard) shape
         DataType::UInt16,
         0u16,
     )
-    .array_to_bytes_codec(Arc::new(sharding_codec_builder.build()))
+    .subchunk_shape(inner_chunk_shape.clone())
+    .bytes_to_bytes_codecs(vec![
+        #[cfg(feature = "gzip")]
+        Arc::new(codec::GzipCodec::new(5)?),
+    ])
     .dimension_names(["y", "x"].into())
     // .storage_transformers(vec![].into())
     .build(store.clone(), array_path)?;

@@ -144,17 +144,12 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
         DataType::UInt8,
         0u8,
     );
-    builder.array_to_bytes_codec(Arc::new(
-        zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
-            vec![1, 1].try_into().unwrap(),
-            &DataType::UInt8,
-        )
+    builder
+        .subchunk_shape(vec![1, 1])
         .bytes_to_bytes_codecs(vec![
             #[cfg(feature = "gzip")]
             Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-        ])
-        .build(),
-    ));
+        ]);
     // .storage_transformers(vec![].into())
 
     let array = builder.build(store, array_path).unwrap();

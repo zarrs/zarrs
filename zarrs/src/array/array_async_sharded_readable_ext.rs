@@ -757,15 +757,12 @@ mod tests {
             DataType::UInt16,
             0u16,
         );
+        builder.bytes_to_bytes_codecs(vec![
+            #[cfg(feature = "gzip")]
+            Arc::new(crate::array::codec::GzipCodec::new(5)?),
+        ]);
         if sharded {
-            builder.array_to_bytes_codec(Arc::new(
-                ShardingCodecBuilder::new(vec![2, 2].try_into()?, &DataType::UInt16)
-                    .bytes_to_bytes_codecs(vec![
-                        #[cfg(feature = "gzip")]
-                        Arc::new(crate::array::codec::GzipCodec::new(5)?),
-                    ])
-                    .build(),
-            ));
+            builder.subchunk_shape(vec![2, 2]);
         }
         let array = builder.build(store, array_path)?;
 

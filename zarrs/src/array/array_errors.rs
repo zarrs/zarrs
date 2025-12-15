@@ -58,6 +58,9 @@ pub enum ArrayCreateError {
     /// The number of dimension names does not match the array dimensionality.
     #[error("the number of dimension names {0} does not match array dimensionality {1}")]
     InvalidDimensionNames(usize, usize),
+    /// Invalid subchunk shape (contains zero).
+    #[error("invalid subchunk shape {0:?}: all elements must be non-zero")]
+    InvalidSubchunkShape(super::ArrayShape),
     /// Storage error.
     #[error(transparent)]
     StorageError(#[from] StorageError),

@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayToBytesCodecTraits::compact()` with a default implementation
   - Implement `ArrayToBytesCodecTraits` for `ShardingCodec` and `CodecChain`
 - Add `zarrs::array::codec::default_array_to_bytes_codec()`
+- Add `ArrayBuilder::subchunk_shape()`
+  - This is recommended over `ShardingCodecBuilder` for most use cases
+    ```diff
+    - array_builder.array_to_bytes_codec(
+    -    ShardingCodecBuilder::new(
+    -        vec![4, 4].try_into()?, // subchunk shape
+    -        &DataType::Float32,
+    -    )
+    -    .build_arc(),
+    -)
+    +.subchunk_shape(vec![4, 4])
+    ```
+- Add `InvalidSubchunkShape` variant to `ArrayCreateError`
 
 ### Changed
 

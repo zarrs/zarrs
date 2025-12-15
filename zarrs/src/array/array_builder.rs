@@ -8,8 +8,8 @@ use super::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
         NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
     },
-    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, CodecChain, DataType,
-    DimensionName, StorageTransformerChain,
+    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
+    DataType, DimensionName, StorageTransformerChain,
 };
 use crate::metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
 use crate::{array::ChunkGrid, node::NodePath};
@@ -113,6 +113,9 @@ pub struct ArrayBuilder {
     dimension_names: Option<Vec<DimensionName>>,
     /// Additional fields.
     additional_fields: AdditionalFieldsV3,
+    /// Subchunk (inner chunk) shape for sharding.
+    #[cfg(feature = "sharding")]
+    subchunk_shape: Option<ArrayShape>,
 }
 
 #[derive(Debug, From)]
@@ -151,6 +154,8 @@ impl ArrayBuilder {
             storage_transformers: StorageTransformerChain::default(),
             dimension_names: None,
             additional_fields: AdditionalFieldsV3::default(),
+            #[cfg(feature = "sharding")]
+            subchunk_shape: None,
         }
     }
 
@@ -177,6 +182,8 @@ impl ArrayBuilder {
             storage_transformers: StorageTransformerChain::default(),
             dimension_names: None,
             additional_fields: AdditionalFieldsV3::default(),
+            #[cfg(feature = "sharding")]
+            subchunk_shape: None,
         }
     }
 
@@ -343,6 +350,51 @@ impl ArrayBuilder {
         self
     }
 
+    /// Set the subchunk (inner chunk) shape for sharding.
+    ///
+    /// When set, the array will use the `sharding` codec.
+    /// The chunk shape is the shard shape, and `subchunk_shape` is the shape of the inner chunks within each shard.
+    ///
+    /// If left unmodified or set to `None`, the array will not use sharding, unless configured manually via [`array_to_bytes_codec`](Self::array_to_bytes_codec).
+    ///
+    /// The subchunk shape must have all non-zero elements (validated during build).
+    ///
+    /// # Sharding Configuration
+    ///
+    /// This method uses a default [`ShardingCodecBuilder`](super::codec::ShardingCodecBuilder) configuration:
+    /// - No array-to-array codecs preceding the sharding codec
+    /// - No bytes-to-bytes codecs following the sharding codec
+    /// - The shard index is encoded with `crc32c` checksum (if the `crc32c` feature is enabled)
+    ///
+    /// The codecs specified via [`array_to_array_codecs`](Self::array_to_array_codecs),
+    /// [`array_to_bytes_codec`](Self::array_to_bytes_codec), and
+    /// [`bytes_to_bytes_codecs`](Self::bytes_to_bytes_codecs) are used internally
+    /// for encoding the inner chunks within each shard.
+    ///
+    /// For more advanced usage (e.g., compressing an entire shard), set
+    /// [`array_to_bytes_codec`](Self::array_to_bytes_codec) explicitly with a sharding codec
+    /// built using [`ShardingCodecBuilder`](super::codec::ShardingCodecBuilder).
+    ///
+    /// # Example
+    /// ```rust
+    /// # use zarrs::array::{ArrayBuilder, DataType};
+    /// # let store = std::sync::Arc::new(zarrs::storage::store::MemoryStore::new());
+    /// let array = ArrayBuilder::new(
+    ///     vec![64, 64],    // array shape
+    ///     vec![16, 16],    // chunk (shard) shape
+    ///     DataType::Float32,
+    ///     0.0f32,
+    /// )
+    /// .subchunk_shape(vec![4, 4])  // inner chunk shape within each shard
+    /// .build(store, "/array")
+    /// .unwrap();
+    /// ```
+    #[cfg(feature = "sharding")]
+    pub fn subchunk_shape(&mut self, subchunk_shape: impl Into<Option<ArrayShape>>) -> &mut Self {
+        self.subchunk_shape = subchunk_shape.into();
+        self
+    }
+
     /// Set the user defined attributes.
     ///
     /// If left unmodified, the user defined attributes of the array will be empty.
@@ -430,6 +482,43 @@ impl ArrayBuilder {
             .clone()
             .unwrap_or_else(|| Self::default_codec(&data_type));
 
+        // If subchunk_shape is set, wrap the codec chain with a sharding codec
+        #[cfg(feature = "sharding")]
+        let codec_chain = if let Some(subchunk_shape) = &self.subchunk_shape {
+            use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+
+            // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
+            let subchunk_shape: ChunkShape = subchunk_shape
+                .clone()
+                .try_into()
+                .map_err(|_| ArrayCreateError::InvalidSubchunkShape(subchunk_shape.clone()))?;
+
+            let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
+            sharding_builder
+                .array_to_array_codecs(
+                    self.array_to_array_codecs
+                        .iter()
+                        .map(|c| c.codec().clone())
+                        .collect(),
+                )
+                .array_to_bytes_codec(array_to_bytes_codec.codec().clone())
+                .bytes_to_bytes_codecs(
+                    self.bytes_to_bytes_codecs
+                        .iter()
+                        .map(|c| c.codec().clone())
+                        .collect(),
+                );
+
+            CodecChain::new_named(vec![], Arc::new(sharding_builder.build()).into(), vec![])
+        } else {
+            CodecChain::new_named(
+                self.array_to_array_codecs.clone(),
+                array_to_bytes_codec,
+                self.bytes_to_bytes_codecs.clone(),
+            )
+        };
+
+        #[cfg(not(feature = "sharding"))]
         let codec_chain = CodecChain::new_named(
             self.array_to_array_codecs.clone(),
             array_to_bytes_codec,

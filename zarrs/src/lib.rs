@@ -123,19 +123,12 @@
 //!     zarrs::array::DataType::Float32,
 //!     0.0f32, // fill value
 //! )
-//! .array_to_bytes_codec(Arc::new(
-//!     // The sharding codec requires the sharding feature
-//!     zarrs::array::codec::ShardingCodecBuilder::new(
-//!         [2, 1].try_into()?, // inner chunk shape
-//!         &zarrs::array::DataType::Float32,
-//!     )
-//!     .bytes_to_bytes_codecs(vec![
-//!         // GzipCodec requires the gzip feature
-//! #       #[cfg(feature = "gzip")]
-//!         Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-//!     ])
-//!     .build()
-//! ))
+//! .subchunk_shape(vec![2, 1]) // inner chunk shape
+//! .bytes_to_bytes_codecs(vec![
+//!     // GzipCodec requires the gzip feature
+//! #   #[cfg(feature = "gzip")]
+//!     Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+//! ])
 //! .dimension_names(["y", "x"].into())
 //! .attributes(serde_json::json!({"Zarr V3": "is great"}).as_object().unwrap().clone())
 //! .build(store.clone(), "/array")?; // /path/to/hierarchy.zarr/array

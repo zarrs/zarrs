@@ -21,18 +21,15 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
         DataType::UInt8,
         0u8,
     );
-    builder.bytes_to_bytes_codecs(vec![]);
     // builder.storage_transformers(vec![].into());
     if shard {
         #[cfg(feature = "sharding")]
-        builder.array_to_bytes_codec(Arc::new(
-            zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(vec![1, 1].try_into().unwrap(), &DataType::UInt8)
-                .bytes_to_bytes_codecs(vec![
-                    #[cfg(feature = "gzip")]
-                    Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-                ])
-                .build(),
-        ));
+        builder
+            .subchunk_shape(vec![1, 1])
+            .bytes_to_bytes_codecs(vec![
+                #[cfg(feature = "gzip")]
+                Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+            ]);
     }
     let array = builder.build(store, array_path).unwrap();
 
