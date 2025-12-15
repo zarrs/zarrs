@@ -56,7 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
+
+### Fixed
+
 - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
+- Add missing complex subfloats to `DataType::from_metadata()`
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 

@@ -668,6 +668,36 @@ impl DataType {
                 zarrs_registry::data_type::COMPLEX_FLOAT64 => return Ok(Self::ComplexFloat64),
                 zarrs_registry::data_type::COMPLEX64 => return Ok(Self::Complex64),
                 zarrs_registry::data_type::COMPLEX128 => return Ok(Self::Complex128),
+                zarrs_registry::data_type::COMPLEX_FLOAT4_E2M1FN => {
+                    return Ok(Self::ComplexFloat4E2M1FN);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT6_E2M3FN => {
+                    return Ok(Self::ComplexFloat6E2M3FN);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT6_E3M2FN => {
+                    return Ok(Self::ComplexFloat6E3M2FN);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E3M4 => {
+                    return Ok(Self::ComplexFloat8E3M4);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3 => {
+                    return Ok(Self::ComplexFloat8E4M3);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3B11FNUZ => {
+                    return Ok(Self::ComplexFloat8E4M3B11FNUZ);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3FNUZ => {
+                    return Ok(Self::ComplexFloat8E4M3FNUZ);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2 => {
+                    return Ok(Self::ComplexFloat8E5M2);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2FNUZ => {
+                    return Ok(Self::ComplexFloat8E5M2FNUZ);
+                }
+                zarrs_registry::data_type::COMPLEX_FLOAT8_E8M0FNU => {
+                    return Ok(Self::ComplexFloat8E8M0FNU);
+                }
                 zarrs_registry::data_type::STRING => return Ok(Self::String),
                 zarrs_registry::data_type::BYTES => return Ok(Self::Bytes),
                 name => {
