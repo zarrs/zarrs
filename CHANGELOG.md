@@ -30,16 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `zarrs::array::codec::default_array_to_bytes_codec()`
 - Add `ArrayBuilder::subchunk_shape()`
   - This is recommended over `ShardingCodecBuilder` for most use cases
-    ```diff
-    - array_builder.array_to_bytes_codec(
-    -    ShardingCodecBuilder::new(
-    -        vec![4, 4].try_into()?, // subchunk shape
-    -        &DataType::Float32,
-    -    )
-    -    .build_arc(),
-    -)
-    +.subchunk_shape(vec![4, 4])
-    ```
+
+  ```diff
+  - array_builder.array_to_bytes_codec(
+  -    ShardingCodecBuilder::new(
+  -        vec![4, 4].try_into()?, // subchunk shape
+  -        &DataType::Float32,
+  -    )
+  -    .build_arc(),
+  -)
+  +.subchunk_shape(vec![4, 4])
+  ```
+
 - Add `InvalidSubchunkShape` variant to `ArrayCreateError`
 
 ### Changed
@@ -76,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
 - Add missing complex subfloats to `DataType::from_metadata()`
+- Fix `transpose` codec decoding with variable-size data types
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
