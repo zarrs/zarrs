@@ -67,22 +67,16 @@ pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, Plu
     Ok(Codec::ArrayToArray(codec))
 }
 
-fn calculate_order_encode(order: &TransposeOrder, array_dimensions: usize) -> Vec<usize> {
-    assert_eq!(order.0.len(), array_dimensions);
-    let mut permutation_encode = Vec::<usize>::with_capacity(array_dimensions + 1);
-    permutation_encode.extend(&order.0);
-    permutation_encode.push(array_dimensions);
-    permutation_encode
-}
-
-fn calculate_order_decode(order: &TransposeOrder, array_dimensions: usize) -> Vec<usize> {
-    assert_eq!(order.0.len(), array_dimensions);
-    let mut permutation_decode = vec![0; array_dimensions + 1];
-    for (i, val) in order.0.iter().enumerate() {
-        permutation_decode[*val] = i;
+/// Compute the inverse permutation order.
+///
+/// For a permutation `p`, returns the inverse permutation `p_inv` such that
+/// `p_inv[p[i]] = i` for all `i`.
+pub(crate) fn inverse_permutation(order: &[usize]) -> Vec<usize> {
+    let mut inverse = vec![0; order.len()];
+    for (i, &val) in order.iter().enumerate() {
+        inverse[val] = i;
     }
-    permutation_decode[array_dimensions] = array_dimensions;
-    permutation_decode
+    inverse
 }
 
 fn transpose_array(
@@ -158,83 +152,89 @@ fn transpose_vlen<'a>(
 }
 
 fn get_transposed_array_subset(
-    order: &TransposeOrder,
+    order: &[usize],
     decoded_region: &ArraySubset,
 ) -> Result<ArraySubset, CodecError> {
-    if decoded_region.dimensionality() != order.0.len() {
+    if decoded_region.dimensionality() != order.len() {
         return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
             decoded_region.dimensionality(),
-            order.0.len(),
+            order.len(),
         )
         .into());
     }
 
-    let start = permute(decoded_region.start(), &order.0).expect("matching dimensionality");
-    let size = permute(decoded_region.shape(), &order.0).expect("matching dimensionality");
+    let start = permute(decoded_region.start(), order).expect("matching dimensionality");
+    let size = permute(decoded_region.shape(), order).expect("matching dimensionality");
     let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
     Ok(ArraySubset::from(ranges))
 }
 
 fn get_transposed_indexer(
-    order: &TransposeOrder,
+    order: &[usize],
     indexer: &dyn Indexer,
 ) -> Result<impl Indexer, CodecError> {
     indexer
         .iter_indices()
-        .map(|indices| permute(&indices, &order.0))
+        .map(|indices| permute(&indices, order))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| {
             IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
-                order.0.len(),
+                order.len(),
             )
             .into()
         })
 }
 
-/// Reverse the transpose on each subset
-fn do_transpose<'a>(
-    encoded_value: &ArrayBytes<'a>,
-    subset: &ArraySubset,
-    order: &TransposeOrder,
+/// Apply a transpose permutation to array bytes.
+///
+/// # Arguments
+/// * `bytes` - The input array bytes to transpose
+/// * `input_shape` - The shape of the input array
+/// * `permutation` - The permutation order to apply
+/// * `data_type` - The data type of the array elements
+///
+/// The output shape will be `permute(input_shape, permutation)`.
+pub(crate) fn apply_permutation<'a>(
+    bytes: &ArrayBytes<'a>,
+    input_shape: &[u64],
+    permutation: &[usize],
     data_type: &DataType,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    if subset.dimensionality() != order.0.len() {
+    if input_shape.len() != permutation.len() {
         return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
-            subset.dimensionality(),
-            order.0.len(),
+            input_shape.len(),
+            permutation.len(),
         )
         .into());
     }
 
-    let order_decode = calculate_order_decode(order, subset.dimensionality());
-    encoded_value.validate(subset.num_elements(), data_type)?;
-    match (encoded_value, data_type.size()) {
+    let num_elements = input_shape.iter().product();
+    bytes.validate(num_elements, data_type)?;
+
+    match (bytes, data_type.size()) {
         (
             ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }),
             DataTypeSize::Variable,
         ) => {
-            let mut order_decode = vec![0; subset.dimensionality()];
-            for (i, val) in order.0.iter().enumerate() {
-                order_decode[*val] = i;
-            }
-            Ok(transpose_vlen(
-                bytes,
-                offsets,
-                &subset.shape_usize(),
-                order_decode,
-            ))
+            let shape: Vec<usize> = input_shape
+                .iter()
+                .map(|s| usize::try_from(*s).unwrap())
+                .collect();
+            Ok(transpose_vlen(bytes, offsets, &shape, permutation.to_vec()))
         }
         (ArrayBytes::Fixed(bytes), DataTypeSize::Fixed(data_type_size)) => {
-            let bytes = transpose_array(
-                &order_decode,
-                &permute(subset.shape(), &order.0).expect("matching dimensionality"),
-                data_type_size,
-                bytes,
-            )
-            .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
+            // For fixed-size types, add an extra dimension for the element bytes
+            let mut order_with_bytes = permutation.to_vec();
+            order_with_bytes.push(permutation.len());
+            let bytes = transpose_array(&order_with_bytes, input_shape, data_type_size, bytes)
+                .map_err(|_| CodecError::Other("transpose_array error".to_string()))?;
             Ok(ArrayBytes::from(bytes))
         }
+        (ArrayBytes::Optional(..), _) => Err(CodecError::UnsupportedDataType(
+            data_type.clone(),
+            TRANSPOSE.to_string(),
+        )),
         (_, _) => Err(CodecError::Other(
             "dev error: transpose data type mismatch".to_string(),
         )),
@@ -315,6 +315,72 @@ mod tests {
             "order": [2, 1, 0]
         }"#;
         codec_transpose_round_trip_impl(JSON, DataType::UInt16, 0u16);
+    }
+
+    #[test]
+    fn codec_transpose_round_trip_vlen_string() {
+        use crate::array::Element;
+
+        // Create a 2x3 array of strings
+        let chunk_representation = ChunkRepresentation::new(
+            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()],
+            DataType::String,
+            "",
+        )
+        .unwrap();
+
+        // Create test data: 6 strings in row-major order
+        let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
+        let bytes = <&str as Element>::into_array_bytes(&DataType::String, &strings).unwrap();
+
+        // Create transpose codec with order [1, 0] (swap axes)
+        let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
+
+        let encoded = codec
+            .encode(
+                bytes.clone(),
+                &chunk_representation,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let decoded = codec
+            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .unwrap();
+
+        assert_eq!(bytes, decoded);
+    }
+
+    #[test]
+    fn apply_permutation_vlen_string() {
+        use crate::array::Element;
+
+        // Test apply_permutation with vlen data (used by partial encode/decode)
+        // This tests a non-square shape to catch shape mismatch bugs
+        // Original shape: 2x3, Transposed shape: 3x2
+        let order = TransposeOrder::new(&[1, 0]).unwrap();
+
+        // Create test data: 6 strings in row-major order for shape [2, 3]
+        // [[s00, s01, s02], [s10, s11, s12]]
+        let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
+        let original = <&str as Element>::into_array_bytes(&DataType::String, &strings).unwrap();
+
+        // Encode: apply transpose order [1, 0] to get shape [3, 2]
+        // Transposed should be: [[s00, s10], [s01, s11], [s02, s12]]
+        let transposed_strings: Vec<&str> =
+            vec!["s00", "s10abc", "s01a", "s11abcd", "s02ab", "s12abcde"];
+        let expected_transposed =
+            <&str as Element>::into_array_bytes(&DataType::String, &transposed_strings).unwrap();
+
+        // Test encoding (forward permutation)
+        let encoded = apply_permutation(&original, &[2, 3], &order.0, &DataType::String).unwrap();
+        assert_eq!(encoded, expected_transposed);
+
+        // Test decoding (inverse permutation)
+        // Inverse of [1, 0] is [1, 0]
+        let order_decode = [1, 0];
+        let decoded =
+            apply_permutation(&encoded, &[3, 2], &order_decode, &DataType::String).unwrap();
+        assert_eq!(decoded, original);
     }
 
     #[test]
