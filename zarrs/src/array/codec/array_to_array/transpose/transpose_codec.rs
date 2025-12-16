@@ -70,7 +70,6 @@ impl TransposeCodec {
         }
         Ok(())
     }
-
 }
 
 impl CodecTraits for TransposeCodec {
@@ -151,8 +150,8 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
             ));
         }
-        let transposed_shape =
-            permute(encoded_shape, &inverse_permutation(&self.order.0)).expect("matching dimensionality");
+        let transposed_shape = permute(encoded_shape, &inverse_permutation(&self.order.0))
+            .expect("matching dimensionality");
         Ok(Some(transposed_shape.into()))
     }
 
