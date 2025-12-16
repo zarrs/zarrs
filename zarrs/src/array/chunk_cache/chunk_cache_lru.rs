@@ -253,7 +253,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             Ok(chunk
                 .extract_array_subset(
                     chunk_subset,
-                    &chunk_representation.shape_u64(),
+                    chunk_representation.shape_u64(),
                     self.array.data_type(),
                 )?
                 .into_owned()

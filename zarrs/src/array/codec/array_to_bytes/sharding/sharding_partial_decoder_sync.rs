@@ -272,7 +272,7 @@ pub(crate) fn partial_decode_fixed_array_subset(
     let out_array_subset_slice = UnsafeCellSlice::new(out_array_subset.as_mut_slice());
 
     let shard_chunk_grid = RegularChunkGrid::new(
-        shard_representation.shape_u64(),
+        shard_representation.shape_u64().to_vec(),
         chunk_representation.shape().into(),
     )
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
@@ -366,7 +366,7 @@ pub(crate) fn partial_decode_variable_array_subset(
     let options = &options;
 
     let shard_chunk_grid = RegularChunkGrid::new(
-        shard_representation.shape_u64(),
+        shard_representation.shape_u64().to_vec(),
         chunk_representation.shape().into(),
     )
     .expect("matching dimensionality");

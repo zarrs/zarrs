@@ -278,7 +278,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 .collect::<Result<Vec<_>, _>>()?;
 
                 // Convert into an array
-                merge_chunks_vlen(chunk_bytes_and_subsets, &shard_representation.shape_u64())
+                merge_chunks_vlen(chunk_bytes_and_subsets, shard_representation.shape_u64())
             }
             DataTypeSize::Fixed(data_type_size) => {
                 // Allocate an array for the output
@@ -301,7 +301,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                             ArrayBytesFixedDisjointView::new(
                                 output,
                                 data_type_size,
-                                &shard_shape,
+                                shard_shape,
                                 chunk_subset,
                             )?
                         };
@@ -760,7 +760,7 @@ impl ShardingCodec {
                         .expect("inbounds chunk");
                     let bytes = decoded_value.extract_array_subset(
                         &chunk_subset,
-                        &shard_shape,
+                        shard_shape,
                         chunk_representation.data_type(),
                     )?;
                     if !bytes.is_fill_value(chunk_representation.fill_value()) {
@@ -877,7 +877,7 @@ impl ShardingCodec {
 
             let bytes = decoded_value.extract_array_subset(
                 &chunk_subset,
-                &shard_shape,
+                shard_shape,
                 chunk_representation.data_type(),
             );
             let bytes = match bytes {

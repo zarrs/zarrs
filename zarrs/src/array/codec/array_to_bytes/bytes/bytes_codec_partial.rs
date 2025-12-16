@@ -80,7 +80,7 @@ where
         let chunk_shape = self.decoded_representation.shape_u64();
         // Get byte ranges
         let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?
+            .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
             .map(ByteRange::new);
 
         // Decode
@@ -155,7 +155,7 @@ where
 
         // Get byte ranges
         let byte_ranges = indexer
-            .iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?
+            .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
             .map(ByteRange::new);
 
         // Decode
@@ -224,7 +224,7 @@ where
         // If the chunk is empty, initialise the chunk with the fill value and update
         if self.input_output_handle.exists()? {
             let chunk_shape = self.decoded_representation.shape_u64();
-            let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
+            let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
             if let Some(endian) = &self.endian {
@@ -259,7 +259,7 @@ where
             )?;
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
-                &self.decoded_representation.shape_u64(),
+                self.decoded_representation.shape_u64(),
                 indexer,
                 bytes,
                 self.decoded_representation.data_type().size(),
@@ -324,7 +324,7 @@ where
         // If the chunk is empty, initialise the chunk with the fill value and update
         if self.input_output_handle.exists().await? {
             let chunk_shape = self.decoded_representation.shape_u64();
-            let byte_ranges = indexer.iter_contiguous_byte_ranges(&chunk_shape, data_type_size)?;
+            let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
             if let Some(endian) = &self.endian {
@@ -360,7 +360,7 @@ where
             )?;
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
-                &self.decoded_representation.shape_u64(),
+                self.decoded_representation.shape_u64(),
                 indexer,
                 bytes,
                 self.decoded_representation.data_type().size(),

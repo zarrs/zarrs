@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 
 use derive_more::Display;
 
-use super::{ArrayShape, DataType, DataTypeOptional, DataTypeSize, FillValue};
+use super::{DataType, DataTypeOptional, DataTypeSize, FillValue};
 use crate::array::data_type::DataTypeFillValueError;
 
 /// Count the nesting depth of an optional type and return the innermost type's fixed size.
@@ -173,15 +173,6 @@ where
         self.array_shape.len()
     }
 
-    /// Return the shape as an [`ArrayShape`] ([`Vec<u64>`]).
-    #[must_use]
-    pub fn shape_u64(&self) -> ArrayShape {
-        self.array_shape
-            .iter()
-            .map(|&i| i.into())
-            .collect::<Vec<u64>>()
-    }
-
     /// Return the data type of the array.
     #[must_use]
     pub const fn data_type(&self) -> &DataType {
@@ -237,5 +228,21 @@ where
             }
             DataTypeSize::Variable => None,
         }
+    }
+}
+
+impl ArrayRepresentation {
+    /// Return the shape as a `&[u64]`.
+    #[must_use]
+    pub fn shape_u64(&self) -> &[u64] {
+        self.shape()
+    }
+}
+
+impl ChunkRepresentation {
+    /// Return the shape as a `&[u64]`.
+    #[must_use]
+    pub fn shape_u64(&self) -> &[u64] {
+        bytemuck::must_cast_slice(self.shape())
     }
 }

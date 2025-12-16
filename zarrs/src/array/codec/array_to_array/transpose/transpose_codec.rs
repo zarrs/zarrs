@@ -166,7 +166,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         // Encode: apply the transpose order to the decoded shape
         apply_permutation(
             &bytes,
-            &decoded_representation.shape_u64(),
+            decoded_representation.shape_u64(),
             &self.order.0,
             decoded_representation.data_type(),
         )
@@ -182,7 +182,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
         let transposed_shape =
-            permute(&decoded_representation.shape_u64(), &self.order.0).expect("validated");
+            permute(decoded_representation.shape_u64(), &self.order.0).expect("validated");
         apply_permutation(
             &bytes,
             &transposed_shape,
