@@ -77,7 +77,7 @@ impl ShardingPartialEncoder {
             vec![u64::MAX; num_chunks * 2]
         });
 
-        let shard_shape = decoded_representation.shape_u64();
+        let shard_shape = decoded_representation.shape_u64().to_vec();
         Ok(Self {
             input_output_handle,
             decoded_representation,
@@ -197,7 +197,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         {
             Err(IncompatibleIndexerError::new_oob(
                 chunk_subset_indexer.end_exc(),
-                self.decoded_representation.shape_u64(),
+                self.decoded_representation.shape_u64().to_vec(),
             ))?;
         }
 
@@ -336,7 +336,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             // Update the inner chunk
             let inner_chunk_updated = update_array_bytes(
                 inner_chunk_decoded,
-                &self.inner_chunk_representation.shape_u64(),
+                self.inner_chunk_representation.shape_u64(),
                 &inner_chunk_subset_overlap
                     .relative_to(inner_chunk_subset.start())
                     .unwrap(),

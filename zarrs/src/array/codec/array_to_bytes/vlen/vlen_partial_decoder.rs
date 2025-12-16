@@ -118,7 +118,7 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
             indexer,
             self.decoded_representation.data_type(),
             self.decoded_representation.fill_value(),
-            &self.decoded_representation.shape_u64(),
+            self.decoded_representation.shape_u64(),
             options,
         )
     }
@@ -193,7 +193,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
             indexer,
             self.decoded_representation.data_type(),
             self.decoded_representation.fill_value(),
-            &self.decoded_representation.shape_u64(),
+            self.decoded_representation.shape_u64(),
             options,
         )
     }

@@ -139,7 +139,7 @@ where
     ) -> Result<(), super::CodecError> {
         // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.clone());
+        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.to_vec());
         let encoded_value = self
             .input_output_handle
             .partial_decode(&array_subset_all, options)?;
@@ -157,7 +157,7 @@ where
 
         decoded_value = update_array_bytes(
             decoded_value,
-            &chunk_shape,
+            chunk_shape,
             indexer,
             bytes,
             self.decoded_representation.data_type().size(),
@@ -221,7 +221,7 @@ where
             bytes_dec
                 .extract_array_subset(
                     indexer,
-                    &chunk_shape,
+                    chunk_shape,
                     self.decoded_representation.data_type(),
                 )
                 .map(ArrayBytes::into_owned)
@@ -286,7 +286,7 @@ where
 
         chunk_bytes = update_array_bytes(
             chunk_bytes,
-            &chunk_shape,
+            chunk_shape,
             indexer,
             bytes,
             self.decoded_representation.data_type().size(),
@@ -504,7 +504,7 @@ where
     ) -> Result<(), super::CodecError> {
         // Read the entire chunk
         let chunk_shape = self.decoded_representation.shape_u64();
-        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.clone());
+        let array_subset_all = ArraySubset::new_with_shape(chunk_shape.to_vec());
         let encoded_value = self
             .input_output_handle
             .partial_decode(&array_subset_all, options)
@@ -523,7 +523,7 @@ where
 
         decoded_value = update_array_bytes(
             decoded_value,
-            &chunk_shape,
+            chunk_shape,
             indexer,
             bytes,
             self.decoded_representation.data_type().size(),
@@ -591,7 +591,7 @@ where
             bytes_dec
                 .extract_array_subset(
                     indexer,
-                    &chunk_shape,
+                    chunk_shape,
                     self.decoded_representation.data_type(),
                 )
                 .map(ArrayBytes::into_owned)
@@ -659,7 +659,7 @@ where
 
         chunk_bytes = update_array_bytes(
             chunk_bytes,
-            &chunk_shape,
+            chunk_shape,
             indexer,
             bytes,
             self.decoded_representation.data_type().size(),

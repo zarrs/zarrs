@@ -24,7 +24,7 @@ impl ArrayPartialDecoderCache {
     ) -> Result<Self, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
+                &ArraySubset::new_with_shape(decoded_representation.shape_u64().to_vec()),
                 options,
             )?
             .into_owned();
@@ -46,7 +46,7 @@ impl ArrayPartialDecoderCache {
     ) -> Result<ArrayPartialDecoderCache, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
+                &ArraySubset::new_with_shape(decoded_representation.shape_u64().to_vec()),
                 options,
             )
             .await?
@@ -79,7 +79,7 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
         let array_shape = self.decoded_representation.shape_u64();
         self.cache.extract_array_subset(
             indexer,
-            &array_shape,
+            array_shape,
             self.decoded_representation.data_type(),
         )
     }

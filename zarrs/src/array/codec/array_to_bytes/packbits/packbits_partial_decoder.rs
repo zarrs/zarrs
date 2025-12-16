@@ -69,7 +69,7 @@ fn partial_decode<'a>(
     let chunk_shape = decoded_representation.shape_u64();
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
-        .iter_contiguous_byte_ranges(&chunk_shape, element_size_bits_usize)?
+        .iter_contiguous_byte_ranges(chunk_shape, element_size_bits_usize)?
         .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte

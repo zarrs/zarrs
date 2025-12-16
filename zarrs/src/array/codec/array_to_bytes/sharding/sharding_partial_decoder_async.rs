@@ -214,7 +214,7 @@ async fn partial_decode_fixed_array_subset(
     .to_array_shape();
 
     let shard_chunk_grid = RegularChunkGrid::new(
-        partial_decoder.shard_representation.shape_u64(),
+        partial_decoder.shard_representation.shape_u64().to_vec(),
         partial_decoder.chunk_representation.shape().into(),
     )
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
@@ -385,7 +385,7 @@ async fn partial_decode_variable_array_subset(
     .to_array_shape();
 
     let shard_chunk_grid = RegularChunkGrid::new(
-        partial_decoder.shard_representation.shape_u64(),
+        partial_decoder.shard_representation.shape_u64().to_vec(),
         partial_decoder.chunk_representation.shape().into(),
     )
     .expect("matching dimensionality");
