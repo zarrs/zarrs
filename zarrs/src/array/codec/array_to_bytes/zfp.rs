@@ -479,7 +479,7 @@ mod tests {
         let elements: Vec<T> = (0..chunk_representation.num_elements())
             .map(|i: u64| i.as_())
             .collect();
-        let bytes = T::into_array_bytes(chunk_representation.data_type(), &elements).unwrap();
+        let bytes = T::to_array_bytes(chunk_representation.data_type(), &elements).unwrap();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(configuration).unwrap();
         let codec = CodecChain::new(

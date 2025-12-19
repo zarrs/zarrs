@@ -274,7 +274,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<bool> = (0..40).map(|i| i % 3 == 0).collect();
-            let bytes = bool::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = bool::into_array_bytes(&data_type, elements)?.into_owned();
             // T F F T F
             // F T F F T
             // F F T F F
@@ -337,7 +337,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<f32> = (0..40).map(|i| i as f32).collect();
-            let bytes = f32::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = f32::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
@@ -392,7 +392,7 @@ mod tests {
                         ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value)
                             .unwrap();
                     let elements: Vec<i16> = (-20..20).map(|i| (i as i16) << first_bit).collect();
-                    let bytes = i16::into_array_bytes(&data_type, &elements)?.into_owned();
+                    let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
 
                     // Encoding
                     let encoded = codec.encode(
@@ -434,7 +434,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<u8> = (0..4).map(|i| i as u8).collect();
-            let bytes = u8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
@@ -472,7 +472,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<u8> = (0..16).map(|i| i as u8).collect();
-            let bytes = u8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
@@ -510,7 +510,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<i8> = (-2..2).map(|i| i as i8).collect();
-            let bytes = i8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
@@ -548,7 +548,7 @@ mod tests {
             let chunk_representation =
                 ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
             let elements: Vec<i8> = (-8..8).map(|i| i as i8).collect();
-            let bytes = i8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(

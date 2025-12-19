@@ -1055,12 +1055,13 @@ mod tests {
 
     #[test]
     fn array_bytes_flen() -> Result<(), Box<dyn Error>> {
-        let data = [0u32, 1, 2, 3, 4];
-        let bytes = Element::into_array_bytes(&DataType::UInt32, &data)?;
+        let data = vec![0u32, 1, 2, 3, 4];
+        let n_elements = data.len();
+        let bytes = Element::into_array_bytes(&DataType::UInt32, data)?;
         let ArrayBytes::Fixed(bytes) = bytes else {
             panic!()
         };
-        assert_eq!(bytes.len(), size_of::<u32>() * data.len());
+        assert_eq!(bytes.len(), size_of::<u32>() * n_elements);
 
         Ok(())
     }
@@ -1078,11 +1079,9 @@ mod tests {
 
     #[test]
     fn array_bytes_str() -> Result<(), Box<dyn Error>> {
-        let data = ["a", "bb", "ccc"];
-        let bytes = Element::into_array_bytes(&DataType::String, &data)?;
-        let ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }) = bytes else {
-            panic!()
-        };
+        let data = vec!["a", "bb", "ccc"];
+        let bytes = Element::into_array_bytes(&DataType::String, data)?;
+        let (bytes, offsets) = bytes.into_variable().unwrap().into_parts();
         assert_eq!(bytes, "abbccc".as_bytes());
         assert_eq!(*offsets, [0, 1, 3, 6]);
 

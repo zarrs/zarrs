@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Switch to `&ndarray::ArrayRef` from `impl Into<ndarray::Array<T, D>>` in `Array::store_*_ndarray` methods
 - **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()`
   - This is necessary to choose an appropriate default array-to-bytes codec
+- **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` to avoid unnecessary copies with some element types
+  - Added `Element::to_array_bytes()` matching the old signature
 
 ### Removed
 

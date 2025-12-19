@@ -169,7 +169,7 @@ impl Element for CustomDataTypeUInt12Element {
             .ok_or(ArrayError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
@@ -180,6 +180,13 @@ impl Element for CustomDataTypeUInt12Element {
             bytes.extend_from_slice(&element.to_le_bytes());
         }
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 

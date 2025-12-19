@@ -331,7 +331,7 @@ mod tests {
 
         // Create test data: 6 strings in row-major order
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let bytes = <&str as Element>::into_array_bytes(&DataType::String, &strings).unwrap();
+        let bytes = Element::into_array_bytes(&DataType::String, strings).unwrap();
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
@@ -362,14 +362,14 @@ mod tests {
         // Create test data: 6 strings in row-major order for shape [2, 3]
         // [[s00, s01, s02], [s10, s11, s12]]
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let original = <&str as Element>::into_array_bytes(&DataType::String, &strings).unwrap();
+        let original = Element::into_array_bytes(&DataType::String, strings).unwrap();
 
         // Encode: apply transpose order [1, 0] to get shape [3, 2]
         // Transposed should be: [[s00, s10], [s01, s11], [s02, s12]]
         let transposed_strings: Vec<&str> =
             vec!["s00", "s10abc", "s01a", "s11abcd", "s02ab", "s12abcde"];
         let expected_transposed =
-            <&str as Element>::into_array_bytes(&DataType::String, &transposed_strings).unwrap();
+            Element::into_array_bytes(&DataType::String, transposed_strings).unwrap();
 
         // Test encoding (forward permutation)
         let encoded = apply_permutation(&original, &[2, 3], &order.0, &DataType::String).unwrap();

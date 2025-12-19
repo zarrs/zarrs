@@ -33,7 +33,7 @@ impl Element for CustomDataTypeVariableSizeElement {
             .ok_or(ArrayError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
@@ -53,6 +53,13 @@ impl Element for CustomDataTypeVariableSizeElement {
             ArrayBytesOffsets::new_unchecked(offsets)
         };
         unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 

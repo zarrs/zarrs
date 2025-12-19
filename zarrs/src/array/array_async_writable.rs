@@ -292,7 +292,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunk_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let bytes = T::into_array_bytes(self.data_type(), chunk_elements)?;
+        let bytes = T::to_array_bytes(self.data_type(), chunk_elements)?;
         self.async_store_chunk_opt(chunk_indices, bytes, options)
             .await
     }
@@ -392,7 +392,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunks_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunks_bytes = T::into_array_bytes(self.data_type(), chunks_elements)?;
+        let chunks_bytes = T::to_array_bytes(self.data_type(), chunks_elements)?;
         self.async_store_chunks_opt(chunks, chunks_bytes, options)
             .await
     }

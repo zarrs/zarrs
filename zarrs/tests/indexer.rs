@@ -258,7 +258,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     let encoded_chunk = Arc::new(
         codec
             .encode(
-                T::into_array_bytes(&data_type, bytes).unwrap(),
+                T::to_array_bytes(&data_type, bytes).unwrap(),
                 &decoded_representation,
                 &CodecOptions::default(),
             )
@@ -315,7 +315,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let encoded_chunk = Arc::new(
         codec
             .encode(
-                T::into_array_bytes(&data_type, bytes).unwrap(),
+                T::to_array_bytes(&data_type, bytes).unwrap(),
                 &decoded_representation,
                 &CodecOptions::default(),
             )
@@ -345,7 +345,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     partial_encoder
         .partial_encode(
             indexer,
-            &T::into_array_bytes(&data_type, elements_partial_encode).unwrap(),
+            &T::to_array_bytes(&data_type, elements_partial_encode).unwrap(),
             &CodecOptions::default(),
         )
         .unwrap();
