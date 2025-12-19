@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 
 use std::{num::NonZeroU64, sync::Arc};
 

@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 
 use std::sync::Arc;
 

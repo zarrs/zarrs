@@ -63,4 +63,12 @@ impl Tensor {
     pub fn into_parts(self) -> (Cow<'static, [u8]>, DataType, Vec<u64>) {
         (self.bytes, self.data_type, self.shape)
     }
+
+    /// Get references to all parts of the tensor.
+    ///
+    /// Returns `(bytes, data_type, shape)` as references.
+    #[must_use]
+    pub fn as_parts(&self) -> (&[u8], &DataType, &[u64]) {
+        (&self.bytes, &self.data_type, &self.shape)
+    }
 }

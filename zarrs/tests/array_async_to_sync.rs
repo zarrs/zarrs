@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 #![cfg(all(feature = "async"))]
 
 use std::sync::Arc;

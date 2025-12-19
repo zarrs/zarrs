@@ -223,6 +223,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_logo_url = "https://zarrs.dev/zarrs-logo-400x400.png")]
 #![warn(clippy::wildcard_enum_match_arm)]
+#![deny(deprecated)]
 
 pub mod array;
 pub mod config;

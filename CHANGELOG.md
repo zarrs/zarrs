@@ -79,13 +79,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `pco` to 0.4.7
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
+- **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
+  - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
+    - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
+    - This is a breaking change for existing code expecting relying on type inference for `ArrayBytes`
+
+  - `Array::store_*` methods are now generic over the input type
+    - Store any array type implementing `IntoArrayBytes`, e.g. `ArrayBytes`, `&[T]`, `Vec<T>`, or `&ndarray::Array<T>` where `T: Element`
+  - **Breaking**: Deprecate `Array::retrieve_*_{ndarray,elements}` in favour of the generic methods
+
+    ```diff
+    - let data = array.retrieve_array_subset(&subset)?;
+    - let data: Vec<f32> = array.retrieve_array_subset_elements(&subset)?;
+    - let data: ndarray::ArrayD<f32> = array.retrieve_array_subset_ndarray(&subset)?;
+    + let data: ArrayBytes = array.retrieve_array_subset(&subset)?;
+    + let data: Vec<f32> = array.retrieve_array_subset(&subset)?;
+    + let data: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset)?;
+    ```
+
+  - **Breaking**: Deprecate `Array::{store,retrieve}*_{ndarray,elements}` in favour of the generic methods
+
+    ```diff
+    - array.store_array_subset_elements(&subset, &data)?;
+    - array.store_array_subset_ndarray(&subset, &data)?;
+    + array.store_array_subset(&subset, &data)?;
+    ```
+
+  - **Breaking**: Remove `Array::store_*_dlpark` and `Array::retrieve_*_dlpark` methods
+    - Use the generic `Array::store_*` and `Array::retrieve_*` methods with the `Tensor` type instead, which implements `dlpark::traits::TensorLike`
+  - Added `ChunkCache::retrieve_*_bytes` methods that return `ChunkCacheTypeDecoded` (`Arc<ArrayBytes<'static>>`) directly
 
 ### Removed
 
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
-- **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError` and `ArrayError::DlPackError`
+- **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError`, `AsyncArrayDlPackExt`, and `ArrayError::DlPackError`
 
 ### Fixed
 

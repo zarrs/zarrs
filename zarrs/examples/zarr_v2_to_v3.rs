@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     array.metadata_opt(&convert_array_metadata_to_v3).to_string_pretty()
     // );
 
-    array.store_chunk_elements::<f32>(&[0, 1], &[0.0; 5 * 5])?;
+    array.store_chunk(&[0, 1], &[0.0f32; 5 * 5])?;
 
     // Print the keys in the store
     println!("The store contains keys:");

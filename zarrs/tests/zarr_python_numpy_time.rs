@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 #![allow(unused)]
 
 use std::{error::Error, sync::Arc};

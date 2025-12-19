@@ -8,6 +8,7 @@ use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
 use super::codec::{CodecError, ShardingCodec};
 use super::element::ElementOwned;
+use super::from_array_bytes::FromArrayBytes;
 use super::{
     Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
     concurrency::concurrency_chunks_and_codec,
@@ -203,13 +204,17 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
     ///
     /// See [`Array::retrieve_chunk_opt`].
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_inner_chunk_opt(
+    fn retrieve_inner_chunk_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<T, ArrayError>;
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_inner_chunk_opt::<Vec<T>>() instead"
+    )]
     /// Read and decode the inner chunk at `chunk_indices` into a vector of its elements.
     ///
     /// See [`Array::retrieve_chunk_elements_opt`].
@@ -222,6 +227,10 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
     ) -> Result<Vec<T>, ArrayError>;
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_inner_chunk_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Read and decode the chunk at `chunk_indices` into an [`ndarray::ArrayD`].
     ///
     /// See [`Array::retrieve_chunk_ndarray_opt`].
@@ -233,17 +242,21 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError>;
 
-    /// Read and decode the chunks at `chunks` into their bytes.
+    /// Read and decode the chunks at `chunks`.
     ///
     /// See [`Array::retrieve_chunks_opt`].
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_inner_chunks_opt(
+    fn retrieve_inner_chunks_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<T, ArrayError>;
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_inner_chunks_opt::<Vec<T>>() instead"
+    )]
     /// Read and decode the inner chunks at `inner_chunks` into a vector of their elements.
     ///
     /// See [`Array::retrieve_chunks_elements_opt`].
@@ -255,10 +268,14 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError>;
 
+    #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_inner_chunks_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Read and decode the inner chunks at `inner_chunks` into an [`ndarray::ArrayD`].
     ///
     /// See [`Array::retrieve_chunks_ndarray_opt`].
-    #[cfg(feature = "ndarray")]
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_inner_chunks_ndarray_opt<T: ElementOwned>(
         &self,
@@ -267,17 +284,21 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError>;
 
-    /// Read and decode the `array_subset` of array into its bytes.
+    /// Read and decode the `array_subset` of array.
     ///
     /// See [`Array::retrieve_array_subset_opt`].
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_array_subset_sharded_opt(
+    fn retrieve_array_subset_sharded_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError>;
+    ) -> Result<T, ArrayError>;
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_array_subset_sharded_opt::<Vec<T>>() instead"
+    )]
     /// Read and decode the `array_subset` of array into a vector of its elements.
     ///
     /// See [`Array::retrieve_array_subset_elements_opt`].
@@ -290,6 +311,10 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
     ) -> Result<Vec<T>, ArrayError>;
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_array_subset_sharded_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Read and decode the `array_subset` of array into an [`ndarray::ArrayD`].
     ///
     /// See [`Array::retrieve_array_subset_ndarray_opt`].
@@ -409,12 +434,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         }
     }
 
-    fn retrieve_inner_chunk_opt(
+    fn retrieve_inner_chunk_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
             let (shard_indices, shard_subset) = inner_chunk_shard_index_and_subset(
                 self,
@@ -425,7 +450,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
             let bytes = partial_decoder
                 .partial_decode(&shard_subset, options)?
                 .into_owned();
-            Ok(bytes)
+            T::from_array_bytes(bytes, shard_subset.shape(), self.data_type())
         } else {
             self.retrieve_chunk_opt(inner_chunk_indices, options)
         }
@@ -437,10 +462,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_inner_chunk_opt(cache, inner_chunk_indices, options)?,
-        )
+        self.retrieve_inner_chunk_opt(cache, inner_chunk_indices, options)
     }
 
     #[cfg(feature = "ndarray")]
@@ -450,22 +472,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         inner_chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        if let Some(inner_chunk_shape) = self.inner_chunk_shape() {
-            super::elements_to_ndarray(
-                &inner_chunk_shape.to_array_shape(),
-                self.retrieve_inner_chunk_elements_opt::<T>(cache, inner_chunk_indices, options)?,
-            )
-        } else {
-            self.retrieve_chunk_ndarray_opt(inner_chunk_indices, options)
-        }
+        self.retrieve_inner_chunk_opt(cache, inner_chunk_indices, options)
     }
 
-    fn retrieve_inner_chunks_opt(
+    fn retrieve_inner_chunks_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
             let inner_chunk_grid = cache.inner_chunk_grid();
             let array_subset = inner_chunk_grid
@@ -488,10 +503,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_inner_chunks_opt(cache, inner_chunks, options)?,
-        )
+        self.retrieve_inner_chunks_opt(cache, inner_chunks, options)
     }
 
     #[cfg(feature = "ndarray")]
@@ -501,27 +513,16 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         inner_chunks: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        let inner_chunk_grid = cache.inner_chunk_grid();
-        let array_subset = inner_chunk_grid
-            .chunks_subset(inner_chunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    inner_chunks.clone(),
-                    inner_chunk_grid.grid_shape().clone(),
-                )
-            })?;
-        let elements =
-            self.retrieve_inner_chunks_elements_opt::<T>(cache, inner_chunks, options)?;
-        super::elements_to_ndarray(array_subset.shape(), elements)
+        self.retrieve_inner_chunks_opt(cache, inner_chunks, options)
     }
 
     #[allow(clippy::too_many_lines)]
-    fn retrieve_array_subset_sharded_opt(
+    fn retrieve_array_subset_sharded_opt<T: FromArrayBytes>(
         &self,
         cache: &ArrayShardedReadableExtCache,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
             // Find the shards intersecting this array subset
             let shards = self.chunks_in_array_subset(array_subset)?;
@@ -534,14 +535,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
 
             // Retrieve chunk bytes
             let num_shards = shards.num_elements_usize();
-            if num_shards == 0 {
+            let bytes = if num_shards == 0 {
                 ArrayBytes::new_fill_value(
                     self.data_type(),
                     array_subset.num_elements(),
                     self.fill_value(),
                 )
                 .map_err(CodecError::from)
-                .map_err(ArrayError::from)
+                .map_err(ArrayError::from)?
             } else {
                 // Calculate chunk/codec concurrency
                 let chunk_representation =
@@ -585,62 +586,59 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                         )
                         .collect::<Result<Vec<_>, _>>()?;
 
-                        Ok(merge_chunks_vlen(
-                            chunk_bytes_and_subsets,
-                            array_subset.shape(),
-                        )?)
+                        merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?
                     }
                     DataTypeSize::Fixed(data_type_size) => {
                         let size_output = array_subset.num_elements_usize() * data_type_size;
                         if size_output == 0 {
-                            return Ok(ArrayBytes::new_flen(vec![]));
-                        }
-                        let mut output = Vec::with_capacity(size_output);
-                        {
-                            let output =
-                                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                            let retrieve_shard_into_slice = |shard_indices: Vec<u64>| {
-                                let shard_subset = self.chunk_subset(&shard_indices)?;
-                                let shard_subset_overlap = shard_subset.overlap(array_subset)?;
-                                // let shard_subset_bytes = self.retrieve_chunk_subset_opt(
-                                //     &shard_indices,
-                                //     &shard_subset_overlap.relative_to(shard_subset.start())?,
-                                //     &options,
-                                // )?;
-                                let bytes = cache
-                                    .retrieve(self, &shard_indices)?
-                                    .partial_decode(
-                                        &shard_subset_overlap.relative_to(shard_subset.start())?,
-                                        &options,
-                                    )?
-                                    .into_owned();
-                                let mut output_view = unsafe {
-                                    // SAFETY: chunks represent disjoint array subsets
-                                    ArrayBytesFixedDisjointView::new(
-                                        output,
-                                        data_type_size,
-                                        array_subset.shape(),
-                                        shard_subset_overlap.relative_to(array_subset.start())?,
-                                    )?
+                            ArrayBytes::new_flen(vec![])
+                        } else {
+                            let mut output = Vec::with_capacity(size_output);
+                            {
+                                let output =
+                                    UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
+                                let retrieve_shard_into_slice = |shard_indices: Vec<u64>| {
+                                    let shard_subset = self.chunk_subset(&shard_indices)?;
+                                    let shard_subset_overlap =
+                                        shard_subset.overlap(array_subset)?;
+                                    let bytes = cache
+                                        .retrieve(self, &shard_indices)?
+                                        .partial_decode(
+                                            &shard_subset_overlap
+                                                .relative_to(shard_subset.start())?,
+                                            &options,
+                                        )?
+                                        .into_owned();
+                                    let mut output_view = unsafe {
+                                        // SAFETY: chunks represent disjoint array subsets
+                                        ArrayBytesFixedDisjointView::new(
+                                            output,
+                                            data_type_size,
+                                            array_subset.shape(),
+                                            shard_subset_overlap
+                                                .relative_to(array_subset.start())?,
+                                        )?
+                                    };
+                                    output_view
+                                        .copy_from_slice(&bytes.into_fixed()?)
+                                        .map_err(CodecError::from)?;
+                                    Ok::<_, ArrayError>(())
                                 };
-                                output_view
-                                    .copy_from_slice(&bytes.into_fixed()?)
-                                    .map_err(CodecError::from)?;
-                                Ok::<_, ArrayError>(())
-                            };
-                            let indices = shards.indices();
-                            iter_concurrent_limit!(
-                                chunk_concurrent_limit,
-                                indices,
-                                try_for_each,
-                                retrieve_shard_into_slice
-                            )?;
+                                let indices = shards.indices();
+                                iter_concurrent_limit!(
+                                    chunk_concurrent_limit,
+                                    indices,
+                                    try_for_each,
+                                    retrieve_shard_into_slice
+                                )?;
+                            }
+                            unsafe { output.set_len(size_output) };
+                            ArrayBytes::from(output)
                         }
-                        unsafe { output.set_len(size_output) };
-                        Ok(ArrayBytes::from(output))
                     }
                 }
-            }
+            };
+            T::from_array_bytes(bytes, array_subset.shape(), self.data_type())
         } else {
             self.retrieve_array_subset_opt(array_subset, options)
         }
@@ -652,10 +650,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         array_subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_array_subset_sharded_opt(cache, array_subset, options)?,
-        )
+        self.retrieve_array_subset_sharded_opt(cache, array_subset, options)
     }
 
     #[cfg(feature = "ndarray")]
@@ -665,9 +660,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
         array_subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        let elements =
-            self.retrieve_array_subset_elements_sharded_opt::<T>(cache, array_subset, options)?;
-        super::elements_to_ndarray(array_subset.shape(), elements)
+        self.retrieve_array_subset_sharded_opt(cache, array_subset, options)
     }
 }
 
@@ -681,6 +674,8 @@ mod private {
 
 #[cfg(test)]
 mod tests {
+    #![expect(deprecated)]
+
     use std::sync::Arc;
 
     use super::*;

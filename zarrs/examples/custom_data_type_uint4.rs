@@ -242,11 +242,10 @@ fn main() {
         CustomDataTypeUInt4Element::try_from(4).unwrap(),
         CustomDataTypeUInt4Element::try_from(5).unwrap(),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeUInt4Element>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for f in &data {
         println!("uint4: {:08b} u8: {}", f.as_u8(), f.as_u8());
@@ -259,10 +258,8 @@ fn main() {
     assert_eq!(data[4], CustomDataTypeUInt4Element::try_from(5).unwrap());
     assert_eq!(data[5], CustomDataTypeUInt4Element::try_from(15).unwrap());
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeUInt4Element>(
-            &ArraySubset::new_with_ranges(&[1..3, 0..1]),
-        )
+    let data: Vec<CustomDataTypeUInt4Element> = array
+        .retrieve_array_subset(&ArraySubset::new_with_ranges(&[1..3, 0..1]))
         .unwrap();
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(2).unwrap());
     assert_eq!(data[1], CustomDataTypeUInt4Element::try_from(3).unwrap());

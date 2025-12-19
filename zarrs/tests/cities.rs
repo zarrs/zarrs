@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 #![cfg(all(feature = "sharding", feature = "zstd"))]
 
 use std::{
@@ -10,7 +11,7 @@ use std::{
 
 use zarrs::{
     array::{
-        ArrayBuilder, ArrayMetadataOptions, DataType,
+        ArrayBuilder, ArrayBytes, ArrayMetadataOptions, DataType,
         codec::{
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
             array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
@@ -70,7 +71,8 @@ fn cities_impl(
     let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
     assert_eq!(cities, cities_out);
 
-    let last_block = array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
+    let last_block: ArrayBytes =
+        array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
     let variable_length_bytes = last_block.into_variable()?;
     assert_eq!(variable_length_bytes.offsets().len() as u64, chunk_size + 1);
 

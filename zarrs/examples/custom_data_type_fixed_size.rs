@@ -304,11 +304,10 @@ fn main() {
         CustomDataTypeFixedSizeElement { x: 3, y: 4.5 },
         CustomDataTypeFixedSizeElement { x: 6, y: 7.8 },
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeFixedSizeElement>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeFixedSizeElement> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     assert_eq!(data[0], CustomDataTypeFixedSizeElement { x: 3, y: 4.5 });
     assert_eq!(data[1], CustomDataTypeFixedSizeElement { x: 6, y: 7.8 });

@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 #![cfg(feature = "bitround")]
 
 use std::{path::PathBuf, sync::Arc};

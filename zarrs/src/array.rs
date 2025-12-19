@@ -30,6 +30,8 @@ mod array_representation;
 mod bytes_representation;
 mod chunk_cache;
 mod element;
+mod from_array_bytes;
+mod into_array_bytes;
 mod tensor;
 
 pub mod chunk_grid;
@@ -52,8 +54,6 @@ use std::sync::Arc;
 pub use array_async_sharded_readable_ext::{
     AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
 };
-#[cfg(feature = "dlpack")]
-pub use array_dlpack_ext::{ArrayDlPackExt, AsyncArrayDlPackExt};
 #[cfg(feature = "sharding")]
 pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
@@ -65,7 +65,7 @@ pub use chunk_cache::{
 pub use data_type::{DataType, DataTypeOptional, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::ArrayIndices;
 
-#[allow(deprecated)]
+#[expect(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
 pub use self::{
     array_builder::{
@@ -90,6 +90,8 @@ pub use self::{
     codec::CodecChain,
     concurrency::RecommendedConcurrency,
     element::{Element, ElementFixedLength, ElementOwned},
+    from_array_bytes::FromArrayBytes,
+    into_array_bytes::IntoArrayBytes,
     storage_transformer::StorageTransformerChain,
     tensor::{Tensor, TensorError},
 };
@@ -189,17 +191,22 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
-/// Many `retrieve` and `store` methods have multiple variants:
-///   - Standard variants store or retrieve data represented as [`ArrayBytes`] (representing fixed or variable length bytes).
-///   - `_elements` suffix variants can store or retrieve chunks with a known type.
-///   - `_ndarray` suffix variants can store or retrieve [`ndarray::Array`]s (requires `ndarray` feature).
-///   - `_opt` suffix variants have a [`CodecOptions`](crate::array::codec::CodecOptions) parameter for fine-grained concurrency control and more.
-///   - Variants without the `_opt` suffix use default [`CodecOptions`](crate::array::codec::CodecOptions).
-///   - **Experimental**: `async_` prefix variants can be used with async stores (requires `async` feature).
+/// Many `retrieve` and `store` methods have a standard and an `_opt` variant.
+/// The latter has an additional [`CodecOptions`](crate::array::codec::CodecOptions) parameter for fine-grained concurrency control and more.
+///
+/// Array `retrieve_*` methods are generic over the return type.
+/// For example, the following variants are available for retrieving chunks or array subsets:
+/// - Raw bytes variants: [`ArrayBytes`]
+/// - Typed element variants: e.g. `Vec<T>` where `T: Element`
+/// - `ndarray` variants: `ndarray::ArrayD<T>` where `T: Element` (requires `ndarray` feature)
+/// - `dlpack` variants: `RawBytesDlPack` where `T: Element` (requires `dlpack` feature)
+///
+/// Similarly, array `store_*` methods are generic over the input type.
+///
+/// `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
 /// Additional [`Array`] methods are offered by extension traits:
 ///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
-///  - [`[Async]ArrayDlPackExt`](ArrayDlPackExt): methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop.
 ///
 /// [`ChunkCache`] implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
 ///
@@ -1024,23 +1031,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 }
 
-#[cfg(feature = "ndarray")]
-/// Extract a contiguous slice from an [`ndarray::ArrayRef`].
-///
-/// If the array is in standard layout, a borrowed slice is returned.
-/// Otherwise, the array is cloned into standard layout.
-fn ndarray_to_cow<T: Clone, D: ndarray::Dimension>(
-    array: &ndarray::ArrayRef<T, D>,
-) -> std::borrow::Cow<'_, [T]> {
-    if let Some(slice) = array.as_slice() {
-        std::borrow::Cow::Borrowed(slice)
-    } else {
-        let array = array.as_standard_layout().into_owned();
-        let data = array.into_raw_vec_and_offset().0;
-        std::borrow::Cow::Owned(data)
-    }
-}
-
 mod array_sync_readable;
 
 mod array_sync_writable;
@@ -1164,6 +1154,7 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
 
 #[cfg(test)]
 mod tests {
+    #![expect(deprecated)]
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
