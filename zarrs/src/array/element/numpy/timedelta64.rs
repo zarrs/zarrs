@@ -6,7 +6,7 @@ use crate::array::{
 
 #[cfg(feature = "chrono")]
 impl Element for chrono::TimeDelta {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -30,6 +30,13 @@ impl Element for chrono::TimeDelta {
             }
         }
         Ok(bytes.into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
@@ -82,7 +89,7 @@ impl ElementOwned for chrono::TimeDelta {
 
 #[cfg(feature = "jiff")]
 impl Element for jiff::SignedDuration {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -105,6 +112,13 @@ impl Element for jiff::SignedDuration {
             }
         }
         Ok(bytes.into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {

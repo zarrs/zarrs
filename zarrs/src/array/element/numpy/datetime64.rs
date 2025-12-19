@@ -6,7 +6,7 @@ use crate::array::{
 
 #[cfg(feature = "chrono")]
 impl Element for chrono::DateTime<chrono::Utc> {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -35,6 +35,13 @@ impl Element for chrono::DateTime<chrono::Utc> {
             }
         }
         Ok(bytes.into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
@@ -92,7 +99,7 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
 
 #[cfg(feature = "jiff")]
 impl Element for jiff::Timestamp {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -119,6 +126,13 @@ impl Element for jiff::Timestamp {
             }
         }
         Ok(bytes.into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {

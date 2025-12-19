@@ -37,7 +37,7 @@ fn codec_bytes(c: &mut Criterion) {
         .unwrap();
 
         let data = vec![0u8; size3.try_into().unwrap()];
-        let bytes = Element::into_array_bytes(&DataType::UInt8, &data).unwrap();
+        let bytes = Element::into_array_bytes(&DataType::UInt8, data).unwrap();
         group.throughput(Throughput::Bytes(size3));
         // encode and decode have the same implementation
         group.bench_function(BenchmarkId::new("encode_decode", size3), |b| {

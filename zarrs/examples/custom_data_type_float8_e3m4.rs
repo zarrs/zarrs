@@ -183,7 +183,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
             .ok_or(ArrayError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
@@ -193,6 +193,13 @@ impl Element for CustomDataTypeFloat8e3m4Element {
             bytes.push(element.0);
         }
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 

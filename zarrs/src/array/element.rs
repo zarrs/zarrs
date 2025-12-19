@@ -4,8 +4,8 @@ use itertools::Itertools;
 use ArrayError::IncompatibleElementType as IET;
 
 use super::{
-    convert_from_bytes_slice, transmute_to_bytes, ArrayBytes, ArrayBytesOffsets, ArrayError,
-    DataType,
+    convert_from_bytes_slice, transmute_to_bytes, transmute_to_bytes_vec, ArrayBytes,
+    ArrayBytesOffsets, ArrayError, DataType,
 };
 
 mod numpy;
@@ -22,10 +22,21 @@ pub trait Element: Sized + Clone {
     ///
     /// # Errors
     /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError>;
+
+    /// Convert a vector of elements into [`ArrayBytes`].
+    ///
+    /// Avoids an extra copy compared to `to_array_bytes` when possible.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError>;
 }
 
 /// A trait representing an owned array element type.
@@ -68,12 +79,20 @@ impl Element for bool {
         (data_type == &DataType::Bool).then_some(()).ok_or(IET)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes(elements).into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        Ok(transmute_to_bytes_vec(elements).into())
     }
 }
 
@@ -109,12 +128,20 @@ macro_rules! impl_element_pod {
                 }
             }
 
-            fn into_array_bytes<'a>(
+            fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
             ) -> Result<ArrayBytes<'a>, ArrayError> {
                 Self::validate_data_type(data_type)?;
                 Ok(transmute_to_bytes(elements).into())
+            }
+
+            fn into_array_bytes(
+                data_type: &DataType,
+                elements: Vec<Self>,
+            ) -> Result<ArrayBytes<'static>, ArrayError> {
+                Self::validate_data_type(data_type)?;
+                Ok(transmute_to_bytes_vec(elements).into())
             }
         }
 
@@ -174,12 +201,21 @@ impl<const N: usize> Element for &[u8; N] {
         }
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
         Self::validate_data_type(data_type)?;
         let bytes: Vec<u8> = elements.iter().flat_map(|i| i.iter()).copied().collect();
+        Ok(bytes.into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        let bytes: Vec<u8> = elements.into_iter().flatten().copied().collect();
         Ok(bytes.into())
     }
 }
@@ -193,12 +229,20 @@ impl<const N: usize> Element for [u8; N] {
         }
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes(elements).into())
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        Ok(transmute_to_bytes_vec(elements).into())
     }
 }
 
@@ -220,7 +264,7 @@ macro_rules! impl_element_string {
                 (data_type == &DataType::String).then_some(()).ok_or(IET)
             }
 
-            fn into_array_bytes<'a>(
+            fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
             ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -249,6 +293,13 @@ macro_rules! impl_element_string {
                     ArrayBytes::new_vlen_unchecked(bytes, offsets)
                 };
                 Ok(array_bytes)
+            }
+
+            fn into_array_bytes(
+                data_type: &DataType,
+                elements: Vec<Self>,
+            ) -> Result<ArrayBytes<'static>, ArrayError> {
+                Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
             }
         }
     };
@@ -282,7 +333,7 @@ macro_rules! impl_element_bytes {
                 (data_type == &DataType::Bytes).then_some(()).ok_or(IET)
             }
 
-            fn into_array_bytes<'a>(
+            fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
             ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -309,6 +360,13 @@ macro_rules! impl_element_bytes {
                     ArrayBytes::new_vlen_unchecked(bytes, offsets)
                 };
                 Ok(array_bytes)
+            }
+
+            fn into_array_bytes(
+                data_type: &DataType,
+                elements: Vec<Self>,
+            ) -> Result<ArrayBytes<'static>, ArrayError> {
+                Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
             }
         }
     };
@@ -352,7 +410,7 @@ where
         T::validate_data_type(data_type.as_optional().ok_or(IET)?)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ArrayError> {
@@ -381,10 +439,17 @@ where
         }
 
         // Convert all elements (dense) to ArrayBytes
-        let data = T::into_array_bytes(opt, &dense_elements)?.into_owned();
+        let data = T::into_array_bytes(opt, dense_elements)?.into_owned();
 
         // Create optional ArrayBytes by adding mask to the data
         Ok(data.with_optional_mask(mask))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 

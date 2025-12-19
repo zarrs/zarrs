@@ -320,7 +320,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         chunk_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = T::into_array_bytes(self.data_type(), chunk_elements)?;
+        let chunk_bytes = T::to_array_bytes(self.data_type(), chunk_elements)?;
         self.store_chunk_opt(chunk_indices, chunk_bytes, options)
     }
 
@@ -407,7 +407,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         chunks_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunks_bytes = T::into_array_bytes(self.data_type(), chunks_elements)?;
+        let chunks_bytes = T::to_array_bytes(self.data_type(), chunks_elements)?;
         self.store_chunks_opt(chunks, chunks_bytes, options)
     }
 

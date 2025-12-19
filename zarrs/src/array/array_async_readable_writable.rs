@@ -238,7 +238,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         chunk_subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_subset_bytes = T::into_array_bytes(self.data_type(), chunk_subset_elements)?;
+        let chunk_subset_bytes = T::to_array_bytes(self.data_type(), chunk_subset_elements)?;
         self.async_store_chunk_subset_opt(chunk_indices, chunk_subset, chunk_subset_bytes, options)
             .await
     }
@@ -374,7 +374,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let subset_bytes = T::into_array_bytes(self.data_type(), subset_elements)?;
+        let subset_bytes = T::to_array_bytes(self.data_type(), subset_elements)?;
         self.async_store_array_subset_opt(array_subset, subset_bytes, options)
             .await
     }
