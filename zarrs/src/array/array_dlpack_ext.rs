@@ -1,33 +1,15 @@
-use std::{ffi::c_void, sync::Arc};
+use std::ffi::c_void;
 
-use derive_more::Display;
 use dlpark::ffi::Device;
 use dlpark::traits::{RowMajorCompactLayout, TensorLike};
-use thiserror::Error;
 
-use super::{ArrayBytesRaw, ChunkRepresentation};
-use crate::array::DataType;
+use super::{DataType, Tensor, TensorError};
 
 mod array_dlpack_ext_async;
 mod array_dlpack_ext_sync;
 
 pub use array_dlpack_ext_async::AsyncArrayDlPackExt;
 pub use array_dlpack_ext_sync::ArrayDlPackExt;
-
-/// [`ArrayBytesRaw`] that implement [`dlpark::traits::TensorLike`].
-pub struct RawBytesDlPack {
-    bytes: Arc<ArrayBytesRaw<'static>>,
-    dtype: dlpark::ffi::DataType,
-    shape: Vec<i64>,
-}
-
-/// Errors related to [`[Async]ArrayDlPackExt`](ArrayDlPackExt) methods.
-#[derive(Clone, Debug, Display, Error)]
-#[non_exhaustive]
-pub enum ArrayDlPackExtError {
-    /// The Zarr data type is not supported by `DLPack`.
-    UnsupportedDataType,
-}
 
 macro_rules! unsupported_dtypes {
     // TODO: Add support for extensions?
@@ -78,56 +60,43 @@ macro_rules! unsupported_dtypes {
     };
 }
 
-impl RawBytesDlPack {
-    /// Create a new [`RawBytesDlPack`].
-    ///
-    /// # Errors
-    /// Returns [`ArrayDlPackExtError::UnsupportedDataType`] if the data type is not supported.
-    ///
-    /// # Panics
-    /// Panics if an element in the shape cannot be encoded in a `i64`.
-    pub fn new(
-        bytes: Arc<ArrayBytesRaw<'static>>,
-        representation: &ChunkRepresentation,
-    ) -> Result<Self, ArrayDlPackExtError> {
-        let dtype = match representation.data_type() {
-            DataType::Bool => dlpark::ffi::DataType::BOOL,
-            DataType::Int8 => dlpark::ffi::DataType::I8,
-            DataType::Int16 => dlpark::ffi::DataType::I16,
-            DataType::Int32 => dlpark::ffi::DataType::I32,
-            DataType::Int64 => dlpark::ffi::DataType::I64,
-            DataType::UInt8 => dlpark::ffi::DataType::U8,
-            DataType::UInt16 => dlpark::ffi::DataType::U16,
-            DataType::UInt32 => dlpark::ffi::DataType::U32,
-            DataType::UInt64 => dlpark::ffi::DataType::U64,
-            DataType::Float16 => dlpark::ffi::DataType::F16,
-            DataType::Float32 => dlpark::ffi::DataType::F32,
-            DataType::Float64 => dlpark::ffi::DataType::F64,
-            DataType::BFloat16 => dlpark::ffi::DataType::BF16,
-            unsupported_dtypes!() => Err(ArrayDlPackExtError::UnsupportedDataType)?,
-        };
-        let shape = representation
-            .shape()
-            .iter()
-            .map(|s| i64::try_from(s.get()).unwrap())
-            .collect();
-        Ok(Self {
-            bytes,
-            dtype,
-            shape,
-        })
+/// Convert a zarrs [`DataType`] to a [`dlpark::ffi::DataType`].
+///
+/// # Errors
+/// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported.
+fn data_type_to_dlpack(data_type: &DataType) -> Result<dlpark::ffi::DataType, TensorError> {
+    match data_type {
+        DataType::Bool => Ok(dlpark::ffi::DataType::BOOL),
+        DataType::Int8 => Ok(dlpark::ffi::DataType::I8),
+        DataType::Int16 => Ok(dlpark::ffi::DataType::I16),
+        DataType::Int32 => Ok(dlpark::ffi::DataType::I32),
+        DataType::Int64 => Ok(dlpark::ffi::DataType::I64),
+        DataType::UInt8 => Ok(dlpark::ffi::DataType::U8),
+        DataType::UInt16 => Ok(dlpark::ffi::DataType::U16),
+        DataType::UInt32 => Ok(dlpark::ffi::DataType::U32),
+        DataType::UInt64 => Ok(dlpark::ffi::DataType::U64),
+        DataType::Float16 => Ok(dlpark::ffi::DataType::F16),
+        DataType::Float32 => Ok(dlpark::ffi::DataType::F32),
+        DataType::Float64 => Ok(dlpark::ffi::DataType::F64),
+        DataType::BFloat16 => Ok(dlpark::ffi::DataType::BF16),
+        unsupported_dtypes!() => Err(TensorError::UnsupportedDataType(data_type.clone())),
     }
 }
 
-impl TensorLike<RowMajorCompactLayout> for RawBytesDlPack {
-    type Error = ();
+impl TensorLike<RowMajorCompactLayout> for Tensor {
+    type Error = TensorError;
 
     fn data_ptr(&self) -> *mut c_void {
-        self.bytes.as_ptr().cast::<c_void>().cast_mut()
+        self.bytes().as_ptr().cast::<c_void>().cast_mut()
     }
 
     fn memory_layout(&self) -> RowMajorCompactLayout {
-        RowMajorCompactLayout::new(self.shape.clone())
+        let shape: Vec<i64> = self
+            .shape()
+            .iter()
+            .map(|s| i64::try_from(*s).unwrap())
+            .collect();
+        RowMajorCompactLayout::new(shape)
     }
 
     fn byte_offset(&self) -> u64 {
@@ -139,7 +108,7 @@ impl TensorLike<RowMajorCompactLayout> for RawBytesDlPack {
     }
 
     fn data_type(&self) -> Result<dlpark::ffi::DataType, Self::Error> {
-        Ok(self.dtype)
+        data_type_to_dlpack(self.data_type())
     }
 }
 

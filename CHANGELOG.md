@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 - Add `InvalidSubchunkShape` variant to `ArrayCreateError`
+- Add `Tensor` type representing raw bytes with a data type and shape intended for interop with tensor libraries
+  - Implements `dlpack::traits::TensorLike`
+- Add `TensorError` type and `ArrayError::TensorError` variant
 
 ### Changed
 
@@ -81,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
+- **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError` and `ArrayError::DlPackError`
 
 ### Fixed
 

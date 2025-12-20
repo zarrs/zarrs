@@ -30,6 +30,7 @@ mod array_representation;
 mod bytes_representation;
 mod chunk_cache;
 mod element;
+mod tensor;
 
 pub mod chunk_grid;
 pub mod chunk_key_encoding;
@@ -52,9 +53,7 @@ pub use array_async_sharded_readable_ext::{
     AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
 };
 #[cfg(feature = "dlpack")]
-pub use array_dlpack_ext::{
-    ArrayDlPackExt, ArrayDlPackExtError, AsyncArrayDlPackExt, RawBytesDlPack,
-};
+pub use array_dlpack_ext::{ArrayDlPackExt, AsyncArrayDlPackExt};
 #[cfg(feature = "sharding")]
 pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
@@ -92,6 +91,7 @@ pub use self::{
     concurrency::RecommendedConcurrency,
     element::{Element, ElementFixedLength, ElementOwned},
     storage_transformer::StorageTransformerChain,
+    tensor::{Tensor, TensorError},
 };
 use crate::metadata::v2::DataTypeMetadataV2;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};

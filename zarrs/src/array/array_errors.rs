@@ -132,9 +132,9 @@ pub enum ArrayError {
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),
     #[cfg(feature = "dlpack")]
-    /// A `DLPack` error
+    /// A [`TensorError`](super::TensorError).
     #[error(transparent)]
-    DlPackError(#[from] super::array_dlpack_ext::ArrayDlPackExtError),
+    TensorError(#[from] super::TensorError),
     /// Any other error.
     #[error("{_0}")]
     Other(String),
