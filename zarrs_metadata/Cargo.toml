@@ -18,7 +18,7 @@ workspace = true
 [dependencies]
 derive_more = { version = "2.0.0", features = ["deref", "display", "from", "into"] }
 half.workspace = true
-monostate = "0.1.0"
+monostate = "1.0.2"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_order"] }
 thiserror.workspace = true

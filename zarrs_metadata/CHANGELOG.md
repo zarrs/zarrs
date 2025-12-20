@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: Replace `FillValueMetadataV2` struct with `FillValueMetadataV3` alias
+- Bump `monostate` to 1.0.2
 
 ### Fixed
 - Fix `FillValueMetadataV2` not supporting bool fill values

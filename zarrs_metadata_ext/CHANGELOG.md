@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
+- Bump `monostate` to 1.0.2
 
 ## [0.2.2] - 2025-10-26
 
