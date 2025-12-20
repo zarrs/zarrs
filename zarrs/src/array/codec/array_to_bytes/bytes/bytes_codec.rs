@@ -6,8 +6,8 @@ use zarrs_data_type::DataTypeExtensionError;
 use zarrs_plugin::PluginCreateError;
 
 use super::{
-    bytes_codec_partial, reverse_endianness, BytesCodecConfiguration, BytesCodecConfigurationV1,
-    Endianness,
+    BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial,
+    reverse_endianness,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{
@@ -15,16 +15,16 @@ use crate::array::codec::{
     AsyncBytesPartialEncoderTraits,
 };
 use crate::array::{
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         InvalidBytesLengthError, PartialDecoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
 };
 use crate::array::{
-    codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
     DataType,
+    codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::BYTES;

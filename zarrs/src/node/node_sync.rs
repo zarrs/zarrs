@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use super::{
-    meta_key_v2_array, meta_key_v2_group, meta_key_v3, Node, NodeCreateError, NodeMetadata,
-    NodePath, NodePathError,
+    Node, NodeCreateError, NodeMetadata, NodePath, NodePathError, meta_key_v2_array,
+    meta_key_v2_group, meta_key_v3,
 };
 use crate::{
     config::MetadataRetrieveVersion,
     storage::{
-        discover_children, ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix,
+        ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix, discover_children,
     },
 };
 
@@ -117,7 +117,7 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{store::MemoryStore, StoreKey, WritableStorageTraits};
+    use crate::storage::{StoreKey, WritableStorageTraits, store::MemoryStore};
 
     #[test]
     fn warning_get_child_nodes() {

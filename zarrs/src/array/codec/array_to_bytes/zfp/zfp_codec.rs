@@ -11,16 +11,17 @@ use zfp_sys::{
 };
 
 use super::{
-    promote_before_zfp_encoding, zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode,
-    zfp_field::ZfpField, zfp_stream::ZfpStream, ZfpCodecConfiguration, ZfpCodecConfigurationV1,
+    ZfpCodecConfiguration, ZfpCodecConfigurationV1, promote_before_zfp_encoding,
+    zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode, zfp_field::ZfpField,
+    zfp_stream::ZfpStream,
 };
 use crate::array::{
+    BytesRepresentation, ChunkRepresentation, DataType,
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
         CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    BytesRepresentation, ChunkRepresentation, DataType,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::{

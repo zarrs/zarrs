@@ -12,11 +12,11 @@ use super::{
     GzipCompressionLevelError,
 };
 use crate::array::{
+    ArrayBytesRaw, BytesRepresentation,
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytesRaw, BytesRepresentation,
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::GZIP;

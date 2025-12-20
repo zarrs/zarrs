@@ -3,15 +3,15 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use zarrs::storage::{
-    storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
-    ReadableStorageTraits,
+    ReadableStorageTraits, storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
+    store::MemoryStore,
 };
 use zarrs::{
     array::{
+        ArrayBuilder, DataType,
         codec::{
             ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptionsBuilder, ReshapeDim,
         },
-        ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
 };

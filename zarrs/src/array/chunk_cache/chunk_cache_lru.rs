@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::{atomic, Arc};
+use std::sync::{Arc, atomic};
 
 use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
@@ -416,9 +416,9 @@ mod tests {
     };
     use crate::{
         array::{
-            chunk_cache::ChunkCache, codec::CodecOptions, Array, ArrayBuilder,
-            ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+            Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
             ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, DataType,
+            chunk_cache::ChunkCache, codec::CodecOptions,
         },
         array_subset::ArraySubset,
         storage::{

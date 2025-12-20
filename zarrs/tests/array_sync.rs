@@ -262,12 +262,16 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
     );
 
     // Incompatible chunks / bytes
-    assert!(array
-        .store_chunks_elements(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
-        .is_err());
-    assert!(array
-        .store_chunks_elements(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
-        .is_err());
+    assert!(
+        array
+            .store_chunks_elements(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
+            .is_err()
+    );
+    assert!(
+        array
+            .store_chunks_elements(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
+            .is_err()
+    );
 
     Ok(())
 }
@@ -295,7 +299,7 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "sharding")]
 #[test]
 fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::array::codec::{array_to_bytes::vlen::VlenCodec, TransposeCodec, TransposeOrder};
+    use zarrs::array::codec::{TransposeCodec, TransposeOrder, array_to_bytes::vlen::VlenCodec};
 
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";

@@ -1,19 +1,20 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use super::{vlen_partial_decoder, VlenCodecConfiguration, VlenCodecConfigurationV0_1};
+use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+        CodecChain, DataType, DataTypeSize, Endianness,
         codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
             BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
-        transmute_to_bytes_vec, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation,
-        ChunkRepresentation, CodecChain, DataType, DataTypeSize, Endianness,
+        transmute_to_bytes_vec,
     },
     plugin::PluginCreateError,
 };

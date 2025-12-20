@@ -121,8 +121,8 @@ mod tests {
 
     use super::*;
     use crate::array::{
-        codec::{ArrayToArrayCodecTraits, CodecOptions},
         ArrayBytes, ChunkRepresentation, DataType, FillValue,
+        codec::{ArrayToArrayCodecTraits, CodecOptions},
     };
 
     fn codec_reshape_round_trip_impl(
@@ -173,13 +173,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -192,13 +194,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -207,13 +211,15 @@ mod tests {
             "shape": [[0, 1, 2], 3]
         }"#;
         let output_shape = vec![NonZeroU64::new(80).unwrap(), NonZeroU64::new(3).unwrap()];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -226,13 +232,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(12).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -245,13 +253,15 @@ mod tests {
             NonZeroU64::new(16).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -265,13 +275,15 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -285,13 +297,15 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_err());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -305,12 +319,14 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_err());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                DataType::UInt32,
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_err()
+        );
     }
 }

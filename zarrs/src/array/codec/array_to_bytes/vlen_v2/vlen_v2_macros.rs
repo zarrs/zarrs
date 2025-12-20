@@ -43,14 +43,14 @@ macro_rules! vlen_v2_codec {
         #[cfg(feature = "async")]
         use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use crate::array::{
-            codec::{
-                array_to_bytes::vlen_v2::VlenV2Codec, ArrayPartialDecoderTraits,
-                ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-                BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
-                CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-            },
             ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
             RecommendedConcurrency,
+            codec::{
+                ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+                BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+                CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+                PartialEncoderCapability, array_to_bytes::vlen_v2::VlenV2Codec,
+            },
         };
         use crate::metadata::Configuration;
 

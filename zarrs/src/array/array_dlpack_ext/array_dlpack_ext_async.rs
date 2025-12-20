@@ -5,7 +5,7 @@ use dlpark::ManagerCtx;
 #[cfg(doc)]
 use super::ArrayDlPackExtError;
 use super::RawBytesDlPack;
-use crate::array::{codec::CodecOptions, Array, ArrayError, ChunkRepresentation};
+use crate::array::{Array, ArrayError, ChunkRepresentation, codec::CodecOptions};
 use crate::array_subset::ArraySubset;
 use crate::storage::AsyncReadableStorageTraits;
 

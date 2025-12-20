@@ -5,11 +5,11 @@ use std::{num::NonZeroU64, sync::Arc};
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncArrayPartialDecoderTraits;
 use crate::array::{
+    DataType, FillValue,
     codec::{
         ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, PartialDecoderCapability,
         PartialEncoderCapability,
     },
-    DataType, FillValue,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::reshape::{
@@ -18,11 +18,11 @@ use crate::metadata_ext::codec::reshape::{
 use crate::registry::codec::RESHAPE;
 use crate::{
     array::{
+        ChunkRepresentation, ChunkShape,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
         },
-        ChunkRepresentation, ChunkShape,
     },
     plugin::PluginCreateError,
 };

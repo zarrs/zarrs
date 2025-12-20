@@ -114,8 +114,9 @@ pub use crate::metadata_ext::codec::zfp::{
 use crate::registry::codec::ZFP;
 use crate::{
     array::{
+        ChunkRepresentation, DataType,
         codec::{Codec, CodecError, CodecPlugin},
-        convert_from_bytes_slice, transmute_to_bytes_vec, ChunkRepresentation, DataType,
+        convert_from_bytes_slice, transmute_to_bytes_vec,
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -434,12 +435,12 @@ mod tests {
     use super::*;
     use crate::{
         array::{
+            ArrayBytes, CodecChain,
             codec::{
-                array_to_array::squeeze::SqueezeCodec, ArrayToBytesCodecTraits,
-                BytesPartialDecoderTraits, CodecOptions,
+                ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
+                array_to_array::squeeze::SqueezeCodec,
             },
             element::ElementOwned,
-            ArrayBytes, CodecChain,
         },
         array_subset::ArraySubset,
     };

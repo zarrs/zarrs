@@ -10,13 +10,13 @@ use std::{
 
 use zarrs::{
     array::{
-        codec::{
-            array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
-            ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
-        },
         ArrayBuilder, ArrayMetadataOptions, DataType,
+        codec::{
+            ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
+            array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
+        },
     },
-    storage::{store::MemoryStore, ReadableWritableListableStorage},
+    storage::{ReadableWritableListableStorage, store::MemoryStore},
 };
 use zarrs_filesystem::FilesystemStore;
 

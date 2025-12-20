@@ -8,11 +8,11 @@ use zarrs_plugin::PluginCreateError;
 
 use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
 use crate::array::{
+    ArrayBytesRaw, BytesRepresentation,
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytesRaw, BytesRepresentation,
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::BZ2;

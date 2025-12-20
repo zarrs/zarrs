@@ -2,8 +2,8 @@
 name = "zarrs"
 version = "0.23.0-dev"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
-edition = "2021"
-rust-version = "1.82"
+edition = "2024"
+rust-version = "1.86"
 description = "A library for the Zarr storage format for multidimensional arrays and metadata"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs"

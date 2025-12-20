@@ -5,13 +5,13 @@ use itertools::Itertools;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+    DataTypeSize,
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
-    DataTypeSize,
 };
 use crate::metadata::Configuration;
 

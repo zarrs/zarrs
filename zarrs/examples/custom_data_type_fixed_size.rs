@@ -20,7 +20,7 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
 };
-use zarrs::metadata::{v3::MetadataV3, Configuration, Endianness};
+use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,

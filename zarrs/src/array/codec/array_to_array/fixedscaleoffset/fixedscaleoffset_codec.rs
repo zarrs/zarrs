@@ -3,17 +3,17 @@ use std::sync::Arc;
 use zarrs_plugin::PluginCreateError;
 
 use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
-use crate::metadata::{v2::DataTypeMetadataV2, Configuration};
+use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use crate::metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
 use crate::registry::codec::FIXEDSCALEOFFSET;
 use crate::{
     array::{
+        ChunkRepresentation, DataType,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
             PartialEncoderCapability, RecommendedConcurrency,
         },
-        ChunkRepresentation, DataType,
     },
     config::global_config,
 };

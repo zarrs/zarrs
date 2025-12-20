@@ -4,7 +4,7 @@ use itertools::Itertools;
 use zarrs::{
     array::{bytes_to_ndarray, codec::CodecOptions},
     storage::{
-        storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
+        ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
     },
 };
 
@@ -14,8 +14,8 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
         array::{
-            codec::{self},
             DataType,
+            codec::{self},
         },
         array_subset::ArraySubset,
         node::Node,

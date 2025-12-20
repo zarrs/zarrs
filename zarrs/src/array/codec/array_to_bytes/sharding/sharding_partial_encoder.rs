@@ -9,19 +9,19 @@ use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use super::{sharding_index_decoded_representation, ShardingIndexLocation};
+use super::{ShardingIndexLocation, sharding_index_decoded_representation};
 use crate::storage::StorageError;
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesRaw, ChunkRepresentation, ChunkShape, CodecChain, DataType,
         array_bytes::update_array_bytes,
         chunk_grid::RegularChunkGrid,
         codec::{
-            array_to_bytes::sharding::{calculate_chunks_per_shard, compute_index_encoded_size},
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
+            array_to_bytes::sharding::{calculate_chunks_per_shard, compute_index_encoded_size},
         },
-        ravel_indices, transmute_to_bytes, ArrayBytes, ArrayBytesRaw, ChunkRepresentation,
-        ChunkShape, CodecChain, DataType,
+        ravel_indices, transmute_to_bytes,
     },
     indexer::IncompatibleIndexerError,
     storage::byte_range::ByteRange,

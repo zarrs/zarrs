@@ -90,16 +90,16 @@ use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue}
 use zarrs_plugin::PluginUnsupportedError;
 
 use super::{
-    array_bytes::RawBytesOffsetsCreateError, concurrency::RecommendedConcurrency, ArrayBytes,
-    ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
-    ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation,
+    ChunkRepresentation, ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError,
+    array_bytes::RawBytesOffsetsCreateError, concurrency::RecommendedConcurrency,
 };
 use crate::config::global_config;
 use crate::metadata::Configuration;
-use crate::metadata::{v3::MetadataV3, ArrayShape};
+use crate::metadata::{ArrayShape, v3::MetadataV3};
 use crate::registry::ExtensionAliasesCodecV3;
-use crate::storage::byte_range::extract_byte_ranges;
 use crate::storage::OffsetBytesIterator;
+use crate::storage::byte_range::extract_byte_ranges;
 #[cfg(feature = "async")]
 use crate::storage::{AsyncReadableStorage, AsyncReadableWritableStorage};
 use crate::storage::{MaybeSend, MaybeSync};

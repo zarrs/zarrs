@@ -6,8 +6,8 @@ use std::sync::Arc;
 use zarrs::registry::codec::BZ2;
 use zarrs::{
     array::{
-        codec::{Bz2Codec, CodecTraits},
         Array, ArrayMetadataOptions,
+        codec::{Bz2Codec, CodecTraits},
     },
     config::global_config_mut,
 };
@@ -57,10 +57,12 @@ fn array_future_stabilisation_bz2() {
     );
 
     let mut options = ArrayMetadataOptions::default();
-    assert!(array
-        .metadata_opt(&options)
-        .to_string()
-        .contains(r#""numcodecs.bz2"#));
+    assert!(
+        array
+            .metadata_opt(&options)
+            .to_string()
+            .contains(r#""numcodecs.bz2"#)
+    );
     assert!(!array.metadata_opt(&options).to_string().contains(r#""bz2"#));
 
     options.set_convert_aliased_extension_names(true);

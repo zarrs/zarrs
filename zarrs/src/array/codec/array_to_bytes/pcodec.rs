@@ -120,9 +120,9 @@ mod tests {
     use super::*;
     use crate::{
         array::{
+            ArrayBytes, ChunkRepresentation, ChunkShape, DataType, FillValue,
             codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
-            transmute_to_bytes_vec, ArrayBytes, ChunkRepresentation, ChunkShape, DataType,
-            FillValue,
+            transmute_to_bytes_vec,
         },
         array_subset::ArraySubset,
     };
@@ -327,13 +327,15 @@ mod tests {
 
     #[test]
     fn codec_pcodec_round_trip_u8() {
-        assert!(codec_pcodec_round_trip_impl(
-            &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
-                .unwrap(),
-            DataType::UInt8,
-            0u8,
-        )
-        .is_err());
+        assert!(
+            codec_pcodec_round_trip_impl(
+                &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
+                    .unwrap(),
+                DataType::UInt8,
+                0u8,
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -255,14 +255,18 @@ async fn array_str_impl(
     );
 
     // Incompatible chunks / bytes
-    assert!(array
-        .async_store_chunks_elements(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
-        .await
-        .is_err());
-    assert!(array
-        .async_store_chunks_elements(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
-        .await
-        .is_err());
+    assert!(
+        array
+            .async_store_chunks_elements(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
+            .await
+            .is_err()
+    );
+    assert!(
+        array
+            .async_store_chunks_elements(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
+            .await
+            .is_err()
+    );
 
     Ok(())
 }

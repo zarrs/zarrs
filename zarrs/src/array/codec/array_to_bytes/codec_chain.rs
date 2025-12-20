@@ -9,6 +9,7 @@ use crate::array::codec::{
 };
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, ChunkShape,
         codec::{
             ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
@@ -19,10 +20,9 @@ use crate::{
             PartialEncoderCapability,
         },
         concurrency::RecommendedConcurrency,
-        ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, ChunkShape,
     },
     config::global_config,
-    metadata::{v3::MetadataV3, Configuration},
+    metadata::{Configuration, v3::MetadataV3},
     plugin::PluginCreateError,
 };
 

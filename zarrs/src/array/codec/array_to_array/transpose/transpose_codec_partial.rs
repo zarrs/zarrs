@@ -8,8 +8,8 @@ use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
-    codec::{CodecError, CodecOptions},
     ArrayBytes, ChunkRepresentation, DataType,
+    codec::{CodecError, CodecOptions},
 };
 use crate::array_subset::ArraySubset;
 use crate::storage::StorageError;

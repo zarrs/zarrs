@@ -4,10 +4,10 @@ use super::{get_squeezed_array_subset, get_squeezed_indexer};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
+    ChunkRepresentation, DataType,
     codec::{
         ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
     },
-    ChunkRepresentation, DataType,
 };
 use crate::storage::StorageError;
 

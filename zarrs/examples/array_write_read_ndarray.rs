@@ -1,9 +1,9 @@
 #![allow(missing_docs)]
 
-use ndarray::{array, Array2, ArrayD};
+use ndarray::{Array2, ArrayD, array};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::storage::{
-    storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
+    ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
 };
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {

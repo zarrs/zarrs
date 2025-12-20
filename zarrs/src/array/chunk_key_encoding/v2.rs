@@ -110,7 +110,7 @@ impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{data_key, NodePath};
+    use crate::node::{NodePath, data_key};
 
     #[test]
     fn slash_nd() {

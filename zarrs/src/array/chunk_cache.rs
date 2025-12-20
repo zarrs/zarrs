@@ -4,16 +4,16 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{codec::CodecOptions, ArrayBytes, ArrayBytesRaw, ArrayError};
+use super::{ArrayBytes, ArrayBytesRaw, ArrayError, codec::CodecOptions};
 use crate::iter_concurrent_limit;
 use crate::storage::ReadableStorageTraits;
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{
+        Array, ArrayBytesFixedDisjointView, ElementOwned,
         array_bytes::merge_chunks_vlen,
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
-        Array, ArrayBytesFixedDisjointView, ElementOwned,
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };

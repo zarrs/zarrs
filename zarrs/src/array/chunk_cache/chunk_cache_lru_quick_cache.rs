@@ -6,8 +6,8 @@ use std::{
 use lru::LruCache;
 
 use super::{
-    atomic, Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits,
-    ChunkCacheType, ChunkIndices,
+    Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
+    ChunkIndices, atomic,
 };
 
 pub(super) struct CacheChunkLimit<CT: ChunkCacheType> {

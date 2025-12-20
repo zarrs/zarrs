@@ -5,7 +5,7 @@ use std::sync::Arc;
 use zarrs::{
     array::Array,
     array_subset::ArraySubset,
-    storage::{storage_adapter::usage_log::UsageLogStorageAdapter, AsyncReadableStorage},
+    storage::{AsyncReadableStorage, storage_adapter::usage_log::UsageLogStorageAdapter},
 };
 
 enum Backend {

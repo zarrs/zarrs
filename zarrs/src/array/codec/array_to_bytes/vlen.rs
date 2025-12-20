@@ -105,8 +105,9 @@ pub use vlen_codec::VlenCodec;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
+    ArrayBytesRaw, ChunkRepresentation, CodecChain, DataType, Endianness,
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice, ArrayBytesRaw, ChunkRepresentation, CodecChain, DataType, Endianness,
+    convert_from_bytes_slice,
 };
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{

@@ -4,13 +4,15 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{calculate_chunks_per_shard, ShardingIndexLocation};
+use super::{ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::storage::{
-    byte_range::{ByteLength, ByteOffset, ByteRange},
     StorageError,
+    byte_range::{ByteLength, ByteOffset, ByteRange},
 };
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
+        ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
         array_bytes::merge_chunks_vlen,
         chunk_grid::RegularChunkGrid,
         codec::{
@@ -18,8 +20,7 @@ use crate::{
             ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecChain, CodecError,
             CodecOptions,
         },
-        ravel_indices, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw,
-        ArrayIndices, ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
+        ravel_indices,
     },
     array_subset::IncompatibleDimensionalityError,
     indexer::{IncompatibleIndexerError, Indexer},

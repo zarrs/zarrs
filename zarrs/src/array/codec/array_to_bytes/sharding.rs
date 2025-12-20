@@ -73,13 +73,14 @@ pub use crate::metadata_ext::codec::sharding::{
 use crate::registry::codec::SHARDING;
 use crate::{
     array::{
+        ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation, ChunkShape,
+        CodecChain, DataType, RecommendedConcurrency,
         codec::{
             ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
             CodecPlugin,
         },
         concurrency::calc_concurrency_outer_inner,
-        ravel_indices, ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
-        ChunkShape, CodecChain, DataType, RecommendedConcurrency,
+        ravel_indices,
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -316,11 +317,11 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            codec::{
-                bytes_to_bytes::test_unbounded::TestUnboundedCodec, BytesToBytesCodecTraits,
-                CodecOptionsBuilder,
-            },
             ArrayBytes,
+            codec::{
+                BytesToBytesCodecTraits, CodecOptionsBuilder,
+                bytes_to_bytes::test_unbounded::TestUnboundedCodec,
+            },
         },
         array_subset::ArraySubset,
         config::global_config,

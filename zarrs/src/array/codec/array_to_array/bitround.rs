@@ -46,8 +46,8 @@ pub use crate::metadata_ext::codec::bitround::{
 use crate::registry::codec::BITROUND;
 use crate::{
     array::{
-        codec::{Codec, CodecError, CodecPlugin},
         DataType,
+        codec::{Codec, CodecError, CodecPlugin},
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -287,9 +287,8 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            array_representation,
+            ArrayBytes, array_representation,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
-            ArrayBytes,
         },
         array_subset::ArraySubset,
     };

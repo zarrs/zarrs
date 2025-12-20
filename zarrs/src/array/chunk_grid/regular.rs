@@ -28,8 +28,8 @@ pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::registry::chunk_grid::REGULAR;
 use crate::{
     array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
         ArrayIndices, ArrayShape, ChunkShape,
+        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
@@ -370,15 +370,19 @@ mod tests {
                 Some(ArraySubset::new_with_ranges(&[1..3, 2..4, 15..24]))
             );
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
-                .is_err());
+            assert!(
+                chunk_grid
+                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
+                    .is_err()
+            );
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
-                .unwrap()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_grid
+                    .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
+                    .unwrap()
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());

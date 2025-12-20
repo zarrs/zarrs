@@ -60,8 +60,8 @@ pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
 pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
 pub use chunk_cache::{
-    chunk_cache_lru::*, ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder,
+    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
 };
 pub use data_type::{DataType, DataTypeOptional, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::ArrayIndices;
@@ -74,9 +74,9 @@ pub use self::{
         ArrayBuilderFillValue,
     },
     array_bytes::{
-        copy_fill_value_into, update_array_bytes, ArrayBytes, ArrayBytesError, ArrayBytesOffsets,
-        ArrayBytesOptional, ArrayBytesRaw, ArrayBytesVariableLength, RawBytesOffsetsCreateError,
-        RawBytesOffsetsOutOfBoundsError,
+        ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+        ArrayBytesVariableLength, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
+        copy_fill_value_into, update_array_bytes,
     },
     array_bytes_fixed_disjoint_view::{
         ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError,
@@ -101,8 +101,8 @@ pub use crate::metadata::v3::{
 pub use crate::metadata::{
     ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
 };
-use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
 use crate::metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
+use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
 use crate::plugin::PluginCreateError;
 use crate::registry::chunk_grid::REGULAR;
 use crate::{
@@ -112,7 +112,7 @@ use crate::{
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     config::MetadataConvertVersion,
-    node::{data_key, NodePath},
+    node::{NodePath, data_key},
     storage::StoreKey,
 };
 
@@ -1104,11 +1104,7 @@ pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
         index /= dim;
     }
     unsafe { indices.set_len(len) };
-    if index == 0 {
-        Some(indices)
-    } else {
-        None
-    }
+    if index == 0 { Some(indices) } else { None }
 }
 
 /// Ravel ND indices to a linearised index.
@@ -1320,15 +1316,19 @@ mod tests {
                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, // 7
             ]
         );
-        assert!(array
-            .retrieve_chunk_elements_if_exists::<f32>(&[0; 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            array
+                .retrieve_chunk_elements_if_exists::<f32>(&[0; 2])
+                .unwrap()
+                .is_none()
+        );
         #[cfg(feature = "ndarray")]
-        assert!(array
-            .retrieve_chunk_ndarray_if_exists::<f32>(&[0; 2])
-            .unwrap()
-            .is_none());
+        assert!(
+            array
+                .retrieve_chunk_ndarray_if_exists::<f32>(&[0; 2])
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[allow(dead_code)]

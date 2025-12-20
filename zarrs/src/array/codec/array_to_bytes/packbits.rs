@@ -32,8 +32,8 @@ use std::sync::Arc;
 use num::Integer;
 pub use packbits_codec::PackBitsCodec;
 
-use crate::array::codec::CodecError;
 use crate::array::DataType;
+use crate::array::codec::CodecError;
 pub use crate::metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
@@ -227,9 +227,9 @@ mod tests {
     use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
     use crate::{
         array::{
+            ArrayBytes, ChunkRepresentation, DataType,
             codec::{ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions},
             element::{Element, ElementOwned},
-            ArrayBytes, ChunkRepresentation, DataType,
         },
         array_subset::ArraySubset,
     };

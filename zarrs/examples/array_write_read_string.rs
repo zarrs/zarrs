@@ -1,10 +1,10 @@
 #![allow(missing_docs)]
 
 use itertools::Itertools;
-use ndarray::{array, Array2, ArrayD};
+use ndarray::{Array2, ArrayD, array};
 use zarrs::{
-    storage::storage_adapter::usage_log::UsageLogStorageAdapter,
     storage::ReadableWritableListableStorage,
+    storage::storage_adapter::usage_log::UsageLogStorageAdapter,
 };
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {

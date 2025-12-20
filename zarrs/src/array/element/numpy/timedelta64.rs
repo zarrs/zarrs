@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use crate::array::{
-    convert_from_bytes_slice, ArrayBytes, ArrayError, DataType, Element, ElementOwned,
+    ArrayBytes, ArrayError, DataType, Element, ElementOwned, convert_from_bytes_slice,
 };
 
 #[cfg(feature = "chrono")]

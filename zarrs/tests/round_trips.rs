@@ -4,11 +4,11 @@ use std::{error::Error, path::Path};
 
 use zarrs::{
     array::{
-        chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncoding},
         ChunkKeyEncoding,
+        chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncoding},
     },
     node::{data_key, meta_key_v3},
-    storage::{store::MemoryStore, ReadableStorageTraits, WritableStorageTraits},
+    storage::{ReadableStorageTraits, WritableStorageTraits, store::MemoryStore},
 };
 use zarrs_filesystem::FilesystemStore;
 
