@@ -1,7 +1,5 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use dlpark::ManagerCtx;
-
 #[cfg(doc)]
 use super::ArrayDlPackExtError;
 use super::RawBytesDlPack;
@@ -24,7 +22,7 @@ pub trait ArrayDlPackExt<TStorage: ?Sized + ReadableStorageTraits + 'static>:
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 
     /// Read and decode the chunk at `chunk_indices` into a `DLPack` tensor if it exists.
     ///
@@ -37,7 +35,7 @@ pub trait ArrayDlPackExt<TStorage: ?Sized + ReadableStorageTraits + 'static>:
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ManagerCtx<RawBytesDlPack>>, ArrayError>;
+    ) -> Result<Option<RawBytesDlPack>, ArrayError>;
 
     /// Read and decode the chunk at `chunk_indices` into a `DLPack` tensor.
     ///
@@ -50,7 +48,7 @@ pub trait ArrayDlPackExt<TStorage: ?Sized + ReadableStorageTraits + 'static>:
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 
     /// Read and decode the chunks at `chunks` into a `DLPack` tensor.
     ///
@@ -63,7 +61,7 @@ pub trait ArrayDlPackExt<TStorage: ?Sized + ReadableStorageTraits + 'static>:
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 }
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayDlPackExt<TStorage>
@@ -73,7 +71,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayDlPackExt<TStorage
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let bytes = self
             .retrieve_array_subset_opt(array_subset, options)?
             .into_owned();
@@ -96,47 +94,43 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayDlPackExt<TStorage
             )
         };
 
-        Ok(ManagerCtx::new(
-            RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        ))
+        RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)
     }
 
     fn retrieve_chunk_if_exists_dlpack(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ManagerCtx<RawBytesDlPack>>, ArrayError> {
+    ) -> Result<Option<RawBytesDlPack>, ArrayError> {
         let Some(bytes) = self.retrieve_chunk_if_exists_opt(chunk_indices, options)? else {
             return Ok(None);
         };
         let bytes = bytes.into_owned();
         let bytes = Arc::new(bytes.into_fixed()?);
         let representation = self.chunk_array_representation(chunk_indices)?;
-        Ok(Some(ManagerCtx::new(
+        Ok(Some(
             RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        )))
+        ))
     }
 
     fn retrieve_chunk_dlpack(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let bytes = self
             .retrieve_chunk_opt(chunk_indices, options)?
             .into_owned();
         let bytes = Arc::new(bytes.into_fixed()?);
         let representation = self.chunk_array_representation(chunk_indices)?;
-        Ok(ManagerCtx::new(
-            RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        ))
+        RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)
     }
 
     fn retrieve_chunks_dlpack(
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let array_subset = self.chunks_subset(chunks)?;
         self.retrieve_array_subset_dlpack(&array_subset, options)
     }

@@ -1,7 +1,8 @@
 use std::{ffi::c_void, sync::Arc};
 
 use derive_more::Display;
-use dlpark::{ShapeAndStrides, ToTensor, ffi::Device};
+use dlpark::ffi::Device;
+use dlpark::traits::{RowMajorCompactLayout, TensorLike};
 use thiserror::Error;
 
 use super::{ArrayBytesRaw, ChunkRepresentation};
@@ -13,7 +14,7 @@ mod array_dlpack_ext_sync;
 pub use array_dlpack_ext_async::AsyncArrayDlPackExt;
 pub use array_dlpack_ext_sync::ArrayDlPackExt;
 
-/// [`ArrayBytesRaw`] for use in a [`dlpark::ManagerCtx`].
+/// [`ArrayBytesRaw`] that implement [`dlpark::traits::TensorLike`].
 pub struct RawBytesDlPack {
     bytes: Arc<ArrayBytesRaw<'static>>,
     dtype: dlpark::ffi::DataType,
@@ -118,32 +119,35 @@ impl RawBytesDlPack {
     }
 }
 
-impl ToTensor for RawBytesDlPack {
+impl TensorLike<RowMajorCompactLayout> for RawBytesDlPack {
+    type Error = ();
+
     fn data_ptr(&self) -> *mut c_void {
         self.bytes.as_ptr().cast::<c_void>().cast_mut()
+    }
+
+    fn memory_layout(&self) -> RowMajorCompactLayout {
+        RowMajorCompactLayout::new(self.shape.clone())
     }
 
     fn byte_offset(&self) -> u64 {
         0
     }
 
-    fn device(&self) -> Device {
-        Device::CPU
+    fn device(&self) -> Result<Device, Self::Error> {
+        Ok(Device::CPU)
     }
 
-    fn dtype(&self) -> dlpark::ffi::DataType {
-        self.dtype
-    }
-
-    fn shape_and_strides(&self) -> ShapeAndStrides {
-        ShapeAndStrides::new_contiguous(&self.shape)
+    fn data_type(&self) -> Result<dlpark::ffi::DataType, Self::Error> {
+        Ok(self.dtype)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use dlpark::{IntoDLPack, ManagedTensor};
+    // use dlpark::{IntoDLPack, ManagedTensor};
 
+    use crate::array::transmute_to_bytes;
     use crate::storage::store::MemoryStore;
     use crate::{
         array::{ArrayBuilder, ArrayDlPackExt, DataType, codec::CodecOptions},
@@ -166,9 +170,12 @@ mod tests {
             )
             .unwrap();
 
+        let managed_tensor = dlpark::versioned::SafeManagedTensorVersioned::new(tensor).unwrap();
+        let bytes: &[u8] = &managed_tensor;
+
         assert_eq!(
-            ManagedTensor::new(tensor.into_dlpack()).as_slice::<f32>(),
-            &[0.0, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0]
+            bytes,
+            transmute_to_bytes(&[0.0f32, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0])
         );
     }
 }

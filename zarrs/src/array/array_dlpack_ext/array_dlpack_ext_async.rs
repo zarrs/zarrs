@@ -1,7 +1,5 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use dlpark::ManagerCtx;
-
 #[cfg(doc)]
 use super::ArrayDlPackExtError;
 use super::RawBytesDlPack;
@@ -29,7 +27,7 @@ pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 's
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 
     /// Read and decode the chunk at `chunk_indices` into a `DLPack` tensor if it exists.
     ///
@@ -42,7 +40,7 @@ pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 's
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ManagerCtx<RawBytesDlPack>>, ArrayError>;
+    ) -> Result<Option<RawBytesDlPack>, ArrayError>;
 
     /// Read and decode the chunk at `chunk_indices` into a `DLPack` tensor.
     ///
@@ -55,7 +53,7 @@ pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 's
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 
     /// Read and decode the chunks at `chunks` into a `DLPack` tensor.
     ///
@@ -68,7 +66,7 @@ pub trait AsyncArrayDlPackExt<TStorage: ?Sized + AsyncReadableStorageTraits + 's
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError>;
+    ) -> Result<RawBytesDlPack, ArrayError>;
 }
 
 #[cfg_attr(
@@ -83,7 +81,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayDlPackEx
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let bytes = self
             .async_retrieve_array_subset_opt(array_subset, options)
             .await?
@@ -107,16 +105,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayDlPackEx
             )
         };
 
-        Ok(ManagerCtx::new(
-            RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        ))
+        Ok(RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?)
     }
 
     async fn retrieve_chunk_if_exists_dlpack(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ManagerCtx<RawBytesDlPack>>, ArrayError> {
+    ) -> Result<Option<RawBytesDlPack>, ArrayError> {
         let Some(bytes) = self
             .async_retrieve_chunk_if_exists_opt(chunk_indices, options)
             .await?
@@ -126,32 +122,30 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayDlPackEx
         let bytes = bytes.into_owned();
         let bytes = Arc::new(bytes.into_fixed()?);
         let representation = self.chunk_array_representation(chunk_indices)?;
-        Ok(Some(ManagerCtx::new(
+        Ok(Some(
             RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        )))
+        ))
     }
 
     async fn retrieve_chunk_dlpack(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let bytes = self
             .async_retrieve_chunk_opt(chunk_indices, options)
             .await?
             .into_owned();
         let bytes = Arc::new(bytes.into_fixed()?);
         let representation = self.chunk_array_representation(chunk_indices)?;
-        Ok(ManagerCtx::new(
-            RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?,
-        ))
+        Ok(RawBytesDlPack::new(bytes, &representation).map_err(ArrayError::DlPackError)?)
     }
 
     async fn retrieve_chunks_dlpack(
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
-    ) -> Result<ManagerCtx<RawBytesDlPack>, ArrayError> {
+    ) -> Result<RawBytesDlPack, ArrayError> {
         let array_subset = self.chunks_subset(chunks)?;
         self.retrieve_array_subset_dlpack(&array_subset, options)
             .await

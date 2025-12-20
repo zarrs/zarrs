@@ -73,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `criterion` (dev) to 0.8.1
 - Bump `zfp-sys` to 0.4.2
 - Bump `pco` to 0.4.7
-- Bump `float8` to 0.5.0
+- **Breaking**: Bump `float8` (public) to 0.5.0
+- **Breaking**: Bump `dlpark` (public) to 0.6.0
 
 ### Removed
 

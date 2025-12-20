@@ -81,7 +81,7 @@ zarrs_registry.workspace = true
 zarrs_storage.workspace = true
 zfp-sys = {version = "0.4.2", features = ["static"], optional = true }
 zstd = { version = "0.13.3", features = ["zstdmt", "experimental"], optional = true }
-dlpark = { version = ">=0.4.1,<0.6", features = ["half"], optional = true }
+dlpark = { version = "0.6.0", features = ["half"], optional = true }
 async-generic = { version = "1.1.2", optional = true }
 async-lock = "3.4.0"
 zarrs_metadata_ext.workspace = true
