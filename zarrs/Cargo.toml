@@ -110,7 +110,7 @@ features = ["bytemuck"]
 
 [dev-dependencies]
 chrono = "0.4.39"
-criterion = "0.7.0"
+criterion = "0.8.1"
 object_store = { workspace = true, features = ["http"] }
 serial_test = "3.2.0"
 tempfile = "3"

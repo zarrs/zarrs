@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This is necessary to choose an appropriate default array-to-bytes codec
 - **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` to avoid unnecessary copies with some element types
   - Added `Element::to_array_bytes()` matching the old signature
+- Bump `criterion` (dev) to 0.8.1
 
 ### Removed
 
