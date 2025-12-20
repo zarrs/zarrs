@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `Element::to_array_bytes()` matching the old signature
 - Bump `criterion` (dev) to 0.8.1
 - Bump `zfp-sys` to 0.4.2
+- Bump `pco` to 0.4.7
 
 ### Removed
 
