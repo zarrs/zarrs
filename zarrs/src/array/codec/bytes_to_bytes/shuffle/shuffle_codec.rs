@@ -74,14 +74,6 @@ impl CodecTraits for ShuffleCodec {
     }
 }
 
-fn is_multiple_of(lhs: usize, rhs: usize) -> bool {
-    match rhs {
-        // prevent division by zero
-        0 => lhs == 0,
-        _ => lhs % rhs == 0,
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -104,7 +96,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        if !is_multiple_of(decoded_value.len(), self.elementsize) {
+        if !decoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 
@@ -126,7 +118,7 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        if !is_multiple_of(encoded_value.len(), self.elementsize) {
+        if !encoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 
