@@ -5,19 +5,19 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use zarrs::storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
 use zarrs::storage::{
+    AsyncReadableStorageTraits,
     storage_adapter::{
         performance_metrics::PerformanceMetricsStorageAdapter,
         sync_to_async::SyncToAsyncStorageAdapter,
     },
     store::MemoryStore,
-    AsyncReadableStorageTraits,
 };
 use zarrs::{
     array::{
+        ArrayBuilder, DataType,
         codec::{
             ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptionsBuilder, ReshapeDim,
         },
-        ArrayBuilder, DataType,
     },
     array_subset::ArraySubset,
 };

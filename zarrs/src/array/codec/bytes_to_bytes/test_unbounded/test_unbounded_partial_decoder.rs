@@ -5,10 +5,10 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::storage::StorageError;
 use crate::{
     array::{
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         ArrayBytesRaw,
+        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
     },
-    storage::byte_range::{extract_byte_ranges, ByteRangeIterator},
+    storage::byte_range::{ByteRangeIterator, extract_byte_ranges},
 };
 
 /// Partial decoder for the `test_unbounded` codec.

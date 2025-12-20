@@ -7,6 +7,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 #[cfg(feature = "ndarray")]
 use super::elements_to_ndarray;
 use super::{
+    Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
+    ArrayMetadataV3, DataType,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
         optional_nesting_depth,
@@ -17,15 +19,13 @@ use super::{
     },
     concurrency::concurrency_chunks_and_codec,
     element::ElementOwned,
-    Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV3, DataType,
 };
 use crate::iter_concurrent_limit;
 use crate::{
     array::{ArrayBytes, ArrayMetadataV2},
     array_subset::ArraySubset,
     config::MetadataRetrieveVersion,
-    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
+    node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{ReadableStorageTraits, StorageError, StorageHandle},
 };
 

@@ -5,8 +5,8 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 use crate::{
     array_subset::{
-        iterators::{ContiguousIndices, ContiguousLinearisedIndices},
         ArraySubset,
+        iterators::{ContiguousIndices, ContiguousLinearisedIndices},
     },
     indexer::IncompatibleIndexerError,
 };
@@ -222,33 +222,39 @@ mod tests {
         {
             let bytes = UnsafeCellSlice::new(&mut bytes);
 
-            assert!(unsafe {
-                ArrayBytesFixedDisjointView::new(
-                    bytes,
-                    1,
-                    &[10, 10],
-                    ArraySubset::new_with_ranges(&[0..2, 1..3]),
-                )
-            }
-            .is_err()); // incompatible shape
-            assert!(unsafe {
-                ArrayBytesFixedDisjointView::new(
-                    bytes,
-                    2,
-                    &shape,
-                    ArraySubset::new_with_ranges(&[0..2, 1..3]),
-                )
-            }
-            .is_err()); // invalid bytes length
-            assert!(unsafe {
-                ArrayBytesFixedDisjointView::new(
-                    bytes,
-                    1,
-                    &shape,
-                    ArraySubset::new_with_ranges(&[0..2, 1..10]),
-                )
-            }
-            .is_err()); // OOB
+            assert!(
+                unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        bytes,
+                        1,
+                        &[10, 10],
+                        ArraySubset::new_with_ranges(&[0..2, 1..3]),
+                    )
+                }
+                .is_err()
+            ); // incompatible shape
+            assert!(
+                unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        bytes,
+                        2,
+                        &shape,
+                        ArraySubset::new_with_ranges(&[0..2, 1..3]),
+                    )
+                }
+                .is_err()
+            ); // invalid bytes length
+            assert!(
+                unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        bytes,
+                        1,
+                        &shape,
+                        ArraySubset::new_with_ranges(&[0..2, 1..10]),
+                    )
+                }
+                .is_err()
+            ); // OOB
 
             let mut view0 = unsafe {
                 ArrayBytesFixedDisjointView::new(

@@ -36,8 +36,8 @@ pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
 pub use vlen_v2_codec::VlenV2Codec;
 
 use crate::array::{
-    codec::{CodecError, InvalidBytesLengthError},
     ArrayBytesRaw,
+    codec::{CodecError, InvalidBytesLengthError},
 };
 use crate::metadata_ext::codec::vlen_v2::{self};
 use crate::{

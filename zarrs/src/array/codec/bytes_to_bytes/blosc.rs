@@ -50,8 +50,8 @@ use std::{
 
 pub use blosc_codec::BloscCodec;
 use blosc_src::{
-    blosc_cbuffer_metainfo, blosc_cbuffer_sizes, blosc_cbuffer_validate, blosc_compress_ctx,
-    blosc_decompress_ctx, blosc_getitem, BLOSC_MAX_OVERHEAD, BLOSC_MAX_THREADS,
+    BLOSC_MAX_OVERHEAD, BLOSC_MAX_THREADS, blosc_cbuffer_metainfo, blosc_cbuffer_sizes,
+    blosc_cbuffer_validate, blosc_compress_ctx, blosc_decompress_ctx, blosc_getitem,
 };
 use derive_more::From;
 use thiserror::Error;
@@ -271,8 +271,8 @@ mod tests {
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             ArrayRepresentation, BytesRepresentation, DataType,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
         },
         array_subset::ArraySubset,
         indexer::Indexer,

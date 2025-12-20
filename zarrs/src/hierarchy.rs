@@ -267,16 +267,16 @@ mod tests {
 
     use super::*;
     use crate::metadata::{
+        GroupMetadata,
         v2::{ArrayMetadataV2, GroupMetadataV2},
         v3::GroupMetadataV3,
-        GroupMetadata,
     };
     #[cfg(feature = "async")]
     use crate::storage::AsyncReadableWritableListableStorageTraits;
     use crate::{
         array::ArrayBuilder,
         group::GroupBuilder,
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
+        storage::{StoreKey, WritableStorageTraits, store::MemoryStore},
     };
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";

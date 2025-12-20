@@ -12,13 +12,13 @@ use crate::array::codec::{
 };
 use crate::metadata::DataTypeSize;
 use crate::storage::{
-    byte_range::{extract_byte_ranges, ByteRangeIterator},
     OffsetBytesIterator, StorageError,
+    byte_range::{ByteRangeIterator, extract_byte_ranges},
 };
 use crate::{
     array::{
-        array_bytes::update_array_bytes, ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw,
-        BytesRepresentation, ChunkRepresentation,
+        ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+        array_bytes::update_array_bytes,
     },
     array_subset::ArraySubset,
 };

@@ -3,15 +3,15 @@ use std::sync::Arc;
 use derive_more::From;
 
 use super::{
+    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
+    DataType, DimensionName, StorageTransformerChain,
     chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
     codec::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
         NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
     },
-    Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
-    DataType, DimensionName, StorageTransformerChain,
 };
-use crate::metadata::{v3::AdditionalFieldsV3, ChunkKeySeparator, IntoDimensionName};
+use crate::metadata::{ChunkKeySeparator, IntoDimensionName, v3::AdditionalFieldsV3};
 use crate::{array::ChunkGrid, node::NodePath};
 
 mod array_builder_chunk_grid;
@@ -585,9 +585,9 @@ mod tests {
     use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use crate::{
         array::{
+            ChunkGrid,
             chunk_grid::{ChunkGridTraits, RegularChunkGrid},
             chunk_key_encoding::V2ChunkKeyEncoding,
-            ChunkGrid,
         },
         storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
     };
@@ -723,9 +723,11 @@ mod tests {
                 .build_metadata()
                 .is_err()
         );
-        assert!(ArrayBuilder::new(vec![8, 8], "{", DataType::Int8, 0i8)
-            .build_metadata()
-            .is_err());
+        assert!(
+            ArrayBuilder::new(vec![8, 8], "{", DataType::Int8, 0i8)
+                .build_metadata()
+                .is_err()
+        );
         ArrayBuilder::new(vec![8, 8], vec![2, 2], DataType::Int8, 0i8)
             .build_metadata()
             .unwrap();

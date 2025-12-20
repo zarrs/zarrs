@@ -3,20 +3,20 @@ use std::{num::NonZeroU64, sync::Arc};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
-    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
+    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
 use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
+        ChunkRepresentation, ChunkShape,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits,
             CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
             RecommendedConcurrency,
         },
-        ChunkRepresentation, ChunkShape,
     },
     plugin::PluginCreateError,
 };

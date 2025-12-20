@@ -10,14 +10,14 @@ use super::DataTypeExtensionPackBitsCodecComponents;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
-    codec::{
-        array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
-        ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
-    },
     ArrayBytes, ChunkRepresentation, DataType,
+    codec::{
+        ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
+        array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
+    },
 };
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use crate::storage::{byte_range::ByteRange, StorageError};
+use crate::storage::{StorageError, byte_range::ByteRange};
 
 // https://github.com/scouten/async-generic/pull/17
 #[allow(clippy::too_many_lines)]

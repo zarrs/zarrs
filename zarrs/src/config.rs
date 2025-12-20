@@ -7,7 +7,7 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 #[cfg(doc)]
-use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
+use crate::array::{ArrayMetadataOptions, codec::CodecOptions};
 use crate::registry::{
     ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
     ExtensionAliasesDataTypeV3,

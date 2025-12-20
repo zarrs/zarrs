@@ -6,11 +6,11 @@ use zarrs::{
     array::Array,
     array_subset::ArraySubset,
     storage::{
+        ReadableStorage,
         storage_adapter::{
             async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
             usage_log::UsageLogStorageAdapter,
         },
-        ReadableStorage,
     },
 };
 

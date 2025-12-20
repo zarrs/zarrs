@@ -73,10 +73,10 @@ mod tests {
     use super::*;
     use crate::{
         array::{
+            BytesRepresentation,
             codec::{
                 BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
             },
-            BytesRepresentation,
         },
         storage::byte_range::ByteRange,
     };

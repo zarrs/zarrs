@@ -25,7 +25,7 @@ fn create_optional_array(data_type: DataType, fill_value: FillValue) -> Array<Me
 
 #[test]
 fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
-    use ndarray::{array, Array2};
+    use ndarray::{Array2, array};
 
     let array = create_optional_array(DataType::UInt8.into_optional(), None::<u8>.into());
 
@@ -131,7 +131,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
-    use ndarray::{array, Array2};
+    use ndarray::{Array2, array};
 
     // Test Option<Option<u8>>
     let array = create_optional_array(
@@ -167,7 +167,7 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
-    use ndarray::{array, Array2};
+    use ndarray::{Array2, array};
 
     // Test Option<Option<Option<u16>>>
     let array = create_optional_array(
@@ -214,7 +214,7 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::Error>> {
-    use ndarray::{array, Array2};
+    use ndarray::{Array2, array};
 
     // Create an optional array with a non-null fill value
     let array = create_optional_array(
@@ -247,7 +247,7 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
 
 #[test]
 fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
-    use ndarray::{array, Array2};
+    use ndarray::{Array2, array};
 
     // The ArrayBuilder automatically handles optional strings with the correct vlen codec
     let array = create_optional_array(DataType::String.into_optional(), None::<String>.into());

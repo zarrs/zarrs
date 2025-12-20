@@ -1,11 +1,11 @@
 use std::{borrow::Cow, ffi::c_char, sync::Arc};
 
-use blosc_src::{blosc_get_complib_info, BLOSC_MAX_OVERHEAD};
+use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
 
 use super::{
-    blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder, blosc_validate,
-    compressor_as_cstr, BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel,
-    BloscCompressor, BloscError, BloscShuffleMode,
+    BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
+    BloscError, BloscShuffleMode, blosc_compress_bytes, blosc_decompress_bytes,
+    blosc_partial_decoder, blosc_validate, compressor_as_cstr,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -13,12 +13,12 @@ use crate::metadata::Configuration;
 use crate::registry::codec::BLOSC;
 use crate::{
     array::{
+        ArrayBytesRaw, BytesRepresentation,
         codec::{
             BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
             CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
             RecommendedConcurrency,
         },
-        ArrayBytesRaw, BytesRepresentation,
     },
     plugin::PluginCreateError,
 };

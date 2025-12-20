@@ -11,21 +11,21 @@ use zarrs_plugin::PluginCreateError;
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::{
-    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
     DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
-    PackBitsCodecConfigurationV1,
+    PackBitsCodecConfigurationV1, pack_bits_components,
+    packbits_partial_decoder::PackBitsPartialDecoder,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
     codec::{
-        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
+        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
     },
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
 };
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
@@ -48,11 +48,7 @@ impl Default for PackBitsCodec {
 
 fn padding_bits(num_elements: u64, element_size_bits: u64) -> u8 {
     let rem = ((num_elements * element_size_bits) % 8) as u8;
-    if rem == 0 {
-        0
-    } else {
-        8 - rem
-    }
+    if rem == 0 { 0 } else { 8 - rem }
 }
 
 impl PackBitsCodec {

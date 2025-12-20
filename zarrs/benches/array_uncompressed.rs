@@ -1,7 +1,7 @@
 //! Benchmark uncompressed unsharded and sharded arrays.
 #![allow(missing_docs)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 fn array_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_write_all");

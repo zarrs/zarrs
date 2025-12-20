@@ -32,7 +32,7 @@ mod squeeze_codec_partial;
 
 use std::{num::NonZeroU64, sync::Arc};
 
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
 
 pub use crate::metadata_ext::codec::squeeze::{
@@ -41,8 +41,8 @@ pub use crate::metadata_ext::codec::squeeze::{
 use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
-        codec::{Codec, CodecError, CodecPlugin},
         ArrayIndices,
+        codec::{Codec, CodecError, CodecPlugin},
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -126,8 +126,8 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
             ArrayBytes, ChunkRepresentation, DataType, FillValue,
+            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
         },
         array_subset::ArraySubset,
     };

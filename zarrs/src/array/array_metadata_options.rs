@@ -1,5 +1,5 @@
 use super::codec::CodecMetadataOptions;
-use crate::config::{global_config, MetadataConvertVersion};
+use crate::config::{MetadataConvertVersion, global_config};
 
 /// Options for writing array metadata.
 #[derive(Debug, Clone)]

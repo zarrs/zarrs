@@ -4,15 +4,15 @@
 use std::borrow::Cow;
 
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
-    Throughput,
+    AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
+    criterion_main,
 };
 use zarrs::array::{
-    codec::{
-        bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
-        ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
-    },
     BytesRepresentation, ChunkRepresentation, DataType, Element, Endianness,
+    codec::{
+        ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
+        bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
+    },
 };
 
 fn codec_bytes(c: &mut Criterion) {

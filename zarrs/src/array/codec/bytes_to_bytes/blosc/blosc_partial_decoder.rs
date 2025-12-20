@@ -6,11 +6,11 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::storage::StorageError;
 use crate::{
     array::{
-        codec::{
-            bytes_to_bytes::blosc::blosc_nbytes, BytesPartialDecoderTraits, CodecError,
-            CodecOptions,
-        },
         ArrayBytesRaw,
+        codec::{
+            BytesPartialDecoderTraits, CodecError, CodecOptions,
+            bytes_to_bytes::blosc::blosc_nbytes,
+        },
     },
     storage::byte_range::ByteRangeIterator,
 };

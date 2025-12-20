@@ -1,4 +1,4 @@
-use super::{codec::ShardingCodecConfiguration, Array, ArrayShape, ChunkGrid, ChunkShape};
+use super::{Array, ArrayShape, ChunkGrid, ChunkShape, codec::ShardingCodecConfiguration};
 use crate::metadata::ConfigurationSerialize;
 use crate::registry::codec::SHARDING;
 

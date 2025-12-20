@@ -9,17 +9,17 @@ use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
 use super::codec::{CodecError, ShardingCodec};
 use super::element::ElementOwned;
 use super::{
-    codec::CodecOptions, concurrency::concurrency_chunks_and_codec, Array, ArrayError,
-    ArrayShardedExt, ChunkGrid,
+    Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
+    concurrency::concurrency_chunks_and_codec,
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::StoragePartialDecoder;
 use crate::iter_concurrent_limit;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use crate::storage::byte_range::ByteRange;
 use crate::storage::ReadableStorageTraits;
 use crate::storage::StorageHandle;
+use crate::storage::byte_range::ByteRange;
 use crate::{array::codec::ArrayPartialDecoderTraits, array_subset::ArraySubset};
 
 // TODO: Remove with trait upcasting
@@ -687,8 +687,8 @@ mod tests {
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
-            codec::{array_to_bytes::sharding::ShardingCodecBuilder, TransposeCodec},
             ArrayBuilder, DataType,
+            codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
         },
         array_subset::ArraySubset,
         storage::{

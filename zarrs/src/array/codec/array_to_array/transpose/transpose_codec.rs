@@ -1,25 +1,25 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use super::{
-    apply_permutation, inverse_permutation, permute, TransposeCodecConfiguration, TransposeOrder,
+    TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
-    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
     DataType, FillValue,
+    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
 use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
+        ArrayBytes, ChunkRepresentation, ChunkShape,
         codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
             RecommendedConcurrency,
         },
-        ArrayBytes, ChunkRepresentation, ChunkShape,
     },
     plugin::PluginCreateError,
 };

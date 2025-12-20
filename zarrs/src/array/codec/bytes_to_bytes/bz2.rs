@@ -71,8 +71,8 @@ mod tests {
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             ArrayRepresentation, BytesRepresentation, DataType,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
         },
         array_subset::ArraySubset,
         indexer::Indexer,

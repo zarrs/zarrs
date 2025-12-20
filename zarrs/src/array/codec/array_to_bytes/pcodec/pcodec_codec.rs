@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use pco::{standalone::guarantee::file_size, ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
+use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec, standalone::guarantee::file_size};
 use zarrs_plugin::PluginCreateError;
 
 use super::{
@@ -8,13 +8,13 @@ use super::{
     PcodecDeltaEncodingOrder,
 };
 use crate::array::{
+    BytesRepresentation, ChunkRepresentation, DataType,
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
         CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    convert_from_bytes_slice, transmute_to_bytes_vec, BytesRepresentation, ChunkRepresentation,
-    DataType,
+    convert_from_bytes_slice, transmute_to_bytes_vec,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::pcodec::{

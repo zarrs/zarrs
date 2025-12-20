@@ -43,8 +43,8 @@ use crate::{
     config::MetadataRetrieveVersion,
     group::GroupCreateError,
     metadata::{
-        v2::{ArrayMetadataV2, GroupMetadataV2},
         GroupMetadata,
+        v2::{ArrayMetadataV2, GroupMetadataV2},
     },
     storage::{ListableStorageTraits, ReadableStorageTraits, StorageError},
 };
@@ -469,7 +469,7 @@ mod tests {
     use crate::{
         array::{ArrayBuilder, ArrayMetadataOptions},
         group::{GroupMetadata, GroupMetadataV3},
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
+        storage::{StoreKey, WritableStorageTraits, store::MemoryStore},
     };
 
     #[test]

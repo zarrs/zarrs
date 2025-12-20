@@ -5,8 +5,8 @@ use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::storage::StorageError;
 use crate::{
     array::{
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
         ArrayBytesRaw,
+        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
     },
     storage::byte_range::{ByteRange, ByteRangeIterator},
 };

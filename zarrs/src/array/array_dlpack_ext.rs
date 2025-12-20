@@ -1,7 +1,7 @@
 use std::{ffi::c_void, sync::Arc};
 
 use derive_more::Display;
-use dlpark::{ffi::Device, ShapeAndStrides, ToTensor};
+use dlpark::{ShapeAndStrides, ToTensor, ffi::Device};
 use thiserror::Error;
 
 use super::{ArrayBytesRaw, ChunkRepresentation};
@@ -146,7 +146,7 @@ mod tests {
 
     use crate::storage::store::MemoryStore;
     use crate::{
-        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType},
+        array::{ArrayBuilder, ArrayDlPackExt, DataType, codec::CodecOptions},
         array_subset::ArraySubset,
     };
 

@@ -5,9 +5,9 @@ use std::sync::Arc;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
+    ArrayBytes, ArrayBytesRaw, ChunkRepresentation, DataType, FillValue,
     array_bytes::extract_decoded_regions_vlen,
     codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-    ArrayBytes, ArrayBytesRaw, ChunkRepresentation, DataType, FillValue,
 };
 use crate::storage::StorageError;
 

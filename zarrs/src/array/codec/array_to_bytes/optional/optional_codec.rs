@@ -8,14 +8,14 @@ use zarrs_plugin::PluginCreateError;
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+    DataType,
     array_bytes::ArrayBytesVariableLength,
     codec::{
         ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
-    DataType,
 };
 use crate::metadata::{Configuration, DataTypeSize};
 use crate::registry::codec::OPTIONAL;
@@ -530,8 +530,8 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 mod tests {
     use super::*;
     use crate::array::{
-        codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
         ArrayBytes, ChunkRepresentation, DataType,
+        codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
     };
 
     #[test]
@@ -942,7 +942,7 @@ mod tests {
                 assert_eq!(data_slice[0], 10u8); // valid element
                 assert_eq!(data_slice[2], 20u8); // valid element
                 assert_eq!(data_slice[4], 30u8); // valid element
-                                                 // Invalid elements (indices 1, 3, 5) can be 0 or fill value depending on implementation
+                // Invalid elements (indices 1, 3, 5) can be 0 or fill value depending on implementation
                 assert_eq!(mask_slice[1], 0u8); // invalid
                 assert_eq!(mask_slice[3], 0u8); // invalid
                 assert_eq!(mask_slice[5], 0u8); // invalid

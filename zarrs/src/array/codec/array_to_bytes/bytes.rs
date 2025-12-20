@@ -42,8 +42,8 @@ pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecC
 use crate::registry::codec::BYTES;
 use crate::{
     array::{
-        codec::{Codec, CodecPlugin},
         DataType,
+        codec::{Codec, CodecPlugin},
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -156,10 +156,10 @@ mod tests {
     use super::*;
     use crate::{
         array::{
+            ArrayBytes, ChunkRepresentation, ChunkShape, Endianness, FillValue,
             codec::{
                 ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecTraits,
             },
-            ArrayBytes, ChunkRepresentation, ChunkShape, Endianness, FillValue,
         },
         array_subset::ArraySubset,
     };

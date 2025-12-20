@@ -1,13 +1,13 @@
 use futures::{StreamExt, TryStreamExt};
 
 use super::{
+    Array, ArrayError, Element,
     array_bytes::update_array_bytes,
     codec::{
         ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
         StoragePartialEncoder,
     },
     concurrency::concurrency_chunks_and_codec,
-    Array, ArrayError, Element,
 };
 use crate::storage::AsyncReadableStorageTraits;
 use crate::storage::{MaybeSend, MaybeSync};

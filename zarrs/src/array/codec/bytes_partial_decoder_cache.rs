@@ -8,7 +8,7 @@ use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use crate::storage::StorageError;
 use crate::{
     array::ArrayBytesRaw,
-    storage::byte_range::{extract_byte_ranges, ByteRange, ByteRangeIterator},
+    storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges},
 };
 
 /// A cache for a [`BytesPartialDecoderTraits`] partial decoder.

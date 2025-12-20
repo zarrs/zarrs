@@ -66,8 +66,8 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             BytesRepresentation,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
         },
         storage::byte_range::ByteRange,
     };

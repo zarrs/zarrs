@@ -8,8 +8,8 @@ use moka::{policy::EvictionPolicy, sync::CacheBuilder};
 use thread_local::ThreadLocal;
 
 use super::{
-    atomic, Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits,
-    ChunkCacheType, ChunkIndices,
+    Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
+    ChunkIndices, atomic,
 };
 
 type Cache<CT> = moka::sync::Cache<ChunkIndices, CT>;

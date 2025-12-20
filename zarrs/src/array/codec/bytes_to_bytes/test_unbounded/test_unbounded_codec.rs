@@ -4,12 +4,12 @@ use super::test_unbounded_partial_decoder;
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::array::{
+    ArrayBytesRaw, BytesRepresentation,
     codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
         CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
         RecommendedConcurrency,
     },
-    ArrayBytesRaw, BytesRepresentation,
 };
 use crate::metadata::Configuration;
 

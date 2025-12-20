@@ -2,7 +2,7 @@
 
 use futures::TryStreamExt;
 use zarrs::storage::{
-    storage_adapter::usage_log::UsageLogStorageAdapter, AsyncReadableWritableListableStorage,
+    AsyncReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
 };
 
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {

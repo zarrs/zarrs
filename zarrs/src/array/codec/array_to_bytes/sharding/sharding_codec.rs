@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     num::NonZeroU64,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, atomic::AtomicUsize},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -11,10 +11,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::{
+    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
     sharding_index_decoded_representation, sharding_partial_decoder_sync::ShardingPartialDecoder,
-    sharding_partial_encoder, ShardingCodecConfiguration, ShardingCodecConfigurationV1,
-    ShardingIndexLocation,
+    sharding_partial_encoder,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -22,6 +22,8 @@ use crate::metadata::Configuration;
 use crate::registry::codec::SHARDING;
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation,
+        ChunkRepresentation, ChunkShape, DataTypeSize,
         array_bytes::merge_chunks_vlen,
         chunk_shape_to_array_shape,
         codec::{
@@ -32,8 +34,7 @@ use crate::{
             RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
-        transmute_to_bytes_vec, unravel_index, ArrayBytes, ArrayBytesFixedDisjointView,
-        ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, ChunkShape, DataTypeSize,
+        transmute_to_bytes_vec, unravel_index,
     },
     array_subset::ArraySubset,
     plugin::PluginCreateError,

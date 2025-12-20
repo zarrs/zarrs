@@ -4,16 +4,17 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{
+    Array, ArrayError, Element,
     codec::{
         ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialEncoder,
     },
     concurrency::concurrency_chunks_and_codec,
-    update_array_bytes, Array, ArrayError, Element,
+    update_array_bytes,
 };
 use crate::storage::ReadableStorageTraits;
 use crate::{
-    array::codec::CodecTraits,
     array::ArrayBytes,
+    array::codec::CodecTraits,
     array_subset::ArraySubset,
     storage::{ReadableWritableStorageTraits, StorageHandle},
 };

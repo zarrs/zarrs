@@ -5,7 +5,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
-use zarrs::metadata::{v3::MetadataV3, Configuration};
+use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs::{
     array::{

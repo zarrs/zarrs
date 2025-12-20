@@ -34,19 +34,19 @@ use thiserror::Error;
 
 pub use self::group_builder::GroupBuilder;
 use crate::metadata::NodeMetadata;
+pub use crate::metadata::{GroupMetadata, v3::GroupMetadataV3};
 use crate::metadata::{v2::GroupMetadataV2, v3::AdditionalFieldV3};
-pub use crate::metadata::{v3::GroupMetadataV3, GroupMetadata};
 use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use crate::metadata_ext::v2_to_v3::group_metadata_v2_to_v3;
 use crate::storage::ListableStorageTraits;
 use crate::{
     array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError},
     config::{
-        global_config, MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion,
+        MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
     },
     node::{
-        get_all_nodes_of, get_child_nodes, meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
-        Node, NodeCreateError, NodePath, NodePathError,
+        Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
+        meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
     },
     storage::{ReadableStorageTraits, StorageError, StorageHandle, WritableStorageTraits},
 };
@@ -809,7 +809,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{store::MemoryStore, StoreKey};
+    use crate::storage::{StoreKey, store::MemoryStore};
 
     const JSON_VALID1: &str = r#"{
     "zarr_format": 3,
@@ -892,11 +892,13 @@ mod tests {
         )
         .unwrap();
         assert!(group_metadata.additional_fields.len() == 1);
-        assert!(group_metadata
-            .additional_fields
-            .get("unknown")
-            .unwrap()
-            .must_understand());
+        assert!(
+            group_metadata
+                .additional_fields
+                .get("unknown")
+                .unwrap()
+                .must_understand()
+        );
 
         // Permit manual creation of group with unsupported metadata
         let storage = Arc::new(MemoryStore::new());
@@ -1000,21 +1002,27 @@ mod tests {
 
         assert!(root.store_metadata().is_ok());
 
-        assert!(builder
-            .build(store.clone(), "/group")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup/leafgroup")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
+        assert!(
+            builder
+                .build(store.clone(), "/group")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup/leafgroup")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
 
         let nodes = root.traverse();
         assert!(nodes.is_ok());
@@ -1048,24 +1056,30 @@ mod tests {
 
         assert!(root.async_store_metadata().await.is_ok());
 
-        assert!(builder
-            .build(store.clone(), "/group")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup/leafgroup")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
+        assert!(
+            builder
+                .build(store.clone(), "/group")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup/leafgroup")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
 
         let nodes = root.async_traverse().await;
         assert!(nodes.is_ok());

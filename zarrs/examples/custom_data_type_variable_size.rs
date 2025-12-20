@@ -9,7 +9,7 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
     ElementOwned, FillValueMetadataV3,
 };
-use zarrs::metadata::{v3::MetadataV3, Configuration};
+use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,

@@ -5,17 +5,17 @@ use std::sync::Arc;
 
 use zarrs::{
     array::{
-        codec::{
-            array_to_bytes::sharding::ShardingCodecBuilder, BytesToBytesCodecTraits,
-            CodecOptionsBuilder,
-        },
         ArrayBuilder, DataType,
+        codec::{
+            BytesToBytesCodecTraits, CodecOptionsBuilder,
+            array_to_bytes::sharding::ShardingCodecBuilder,
+        },
     },
     array_subset::ArraySubset,
     metadata_ext::codec::sharding::ShardingIndexLocation,
     storage::{
-        storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
         ReadableStorageTraits,
+        storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
     },
 };
 

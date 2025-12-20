@@ -2,7 +2,7 @@
 
 use derive_more::From;
 
-use super::{try_create_storage_transformer, StorageTransformer};
+use super::{StorageTransformer, try_create_storage_transformer};
 use crate::storage::StorageError;
 #[cfg(feature = "async")]
 use crate::storage::{

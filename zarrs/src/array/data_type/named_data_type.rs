@@ -1,11 +1,11 @@
 use std::ops::Deref;
 
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use zarrs_data_type::{DataTypeFillValueMetadataError, FillValue};
 
 use crate::array::{
-    data_type::{complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value},
     DataType,
+    data_type::{complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value},
 };
 use crate::metadata::v3::FillValueMetadataV3;
 

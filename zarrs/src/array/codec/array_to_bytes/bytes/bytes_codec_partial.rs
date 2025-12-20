@@ -1,20 +1,21 @@
 use std::{borrow::Cow, sync::Arc};
 
-use super::{reverse_endianness, Endianness};
+use super::{Endianness, reverse_endianness};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
 use crate::registry::codec::BYTES;
-use crate::storage::{byte_range::ByteRange, StorageError};
+use crate::storage::{StorageError, byte_range::ByteRange};
 use crate::{
     array::{
+        ArrayBytes, ChunkRepresentation, DataType,
         codec::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
-        update_array_bytes, ArrayBytes, ChunkRepresentation, DataType,
+        update_array_bytes,
     },
     indexer::IncompatibleIndexerError,
 };

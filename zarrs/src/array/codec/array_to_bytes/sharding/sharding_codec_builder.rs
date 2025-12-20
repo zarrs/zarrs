@@ -4,12 +4,12 @@ use codec::CodecChain;
 
 use super::{ShardingCodec, ShardingIndexLocation};
 use crate::array::{
-    codec::{
-        self, default_array_to_bytes_codec, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-        BytesToBytesCodecTraits, NamedArrayToArrayCodec, NamedArrayToBytesCodec,
-        NamedBytesToBytesCodec,
-    },
     ChunkShape, DataType,
+    codec::{
+        self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
+        NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
+        default_array_to_bytes_codec,
+    },
 };
 
 /// A [`ShardingCodec`] builder.

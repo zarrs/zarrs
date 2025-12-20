@@ -8,16 +8,16 @@ use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
 use super::codec::{CodecError, ShardingCodec};
 use super::element::ElementOwned;
 use super::{
-    codec::CodecOptions, concurrency::concurrency_chunks_and_codec, Array, ArrayError,
-    ArrayShardedExt, ChunkGrid,
+    Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
+    concurrency::concurrency_chunks_and_codec,
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use crate::storage::byte_range::ByteRange;
 use crate::storage::AsyncReadableStorageTraits;
 use crate::storage::StorageHandle;
+use crate::storage::byte_range::ByteRange;
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
 
@@ -740,8 +740,8 @@ mod tests {
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
-            codec::{array_to_bytes::sharding::ShardingCodecBuilder, TransposeCodec},
             ArrayBuilder, DataType,
+            codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
         },
         array_subset::ArraySubset,
         storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
@@ -930,14 +930,18 @@ mod tests {
             assert_eq!(compare, test);
             assert!(cache.is_empty().await);
 
-            assert!(array
-                .async_retrieve_encoded_inner_chunk(&cache, &[0, 0])
-                .await
-                .is_err());
-            assert!(array
-                .async_inner_chunk_byte_range(&cache, &[0, 0])
-                .await
-                .is_err());
+            assert!(
+                array
+                    .async_retrieve_encoded_inner_chunk(&cache, &[0, 0])
+                    .await
+                    .is_err()
+            );
+            assert!(
+                array
+                    .async_inner_chunk_byte_range(&cache, &[0, 0])
+                    .await
+                    .is_err()
+            );
         }
 
         Ok(())

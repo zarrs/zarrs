@@ -7,8 +7,9 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::DataTypeFillValueError;
 
 use super::{
+    ArrayBytesFixedDisjointView, DataType, FillValue,
     codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
-    ravel_indices, ArrayBytesFixedDisjointView, DataType, FillValue,
+    ravel_indices,
 };
 use crate::{
     array_subset::ArraySubset,
@@ -1208,8 +1209,8 @@ mod tests {
     }
 
     #[test]
-    fn update_array_bytes_array_subset_nested_optional_2_level(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn update_array_bytes_array_subset_nested_optional_2_level()
+    -> Result<(), Box<dyn std::error::Error>> {
         // Create initial 4x4 array with Option<Option<u8>> data
         // Layout (row-major, S=Some, N=None, outer/inner):
         // [SS(1)  SS(2)  SN     NN   ]

@@ -4,7 +4,7 @@ use derive_more::From;
 use serde::Serialize;
 
 use crate::array::ArrayCreateError;
-use crate::metadata::{v3::MetadataV3, ArrayShape, ChunkShape};
+use crate::metadata::{ArrayShape, ChunkShape, v3::MetadataV3};
 use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 /// An input that can be mapped to a chunk grid.

@@ -21,12 +21,12 @@ pub use zarrs_data_type::{
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
 
 use crate::metadata::{
-    v3::{FillValueMetadataV3, MetadataV3},
     ConfigurationSerialize, DataTypeSize,
+    v3::{FillValueMetadataV3, MetadataV3},
 };
 use crate::metadata_ext::data_type::{
-    numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
-    numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1, NumpyTimeUnit,
+    NumpyTimeUnit, numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
+    numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
 };
 use crate::registry::ExtensionAliasesDataTypeV3;
 
@@ -2415,36 +2415,56 @@ mod tests {
         assert!(DataType::Int32.fill_value_from_metadata(&metadata).is_err());
         assert!(DataType::Int64.fill_value_from_metadata(&metadata).is_err());
         assert!(DataType::UInt8.fill_value_from_metadata(&metadata).is_err());
-        assert!(DataType::UInt16
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::UInt32
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::UInt64
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::Float16
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::Float32
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::Float64
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::BFloat16
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::Complex64
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::Complex128
-            .fill_value_from_metadata(&metadata)
-            .is_err());
-        assert!(DataType::RawBits(1)
-            .fill_value_from_metadata(&metadata)
-            .is_err());
+        assert!(
+            DataType::UInt16
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::UInt32
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::UInt64
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::Float16
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::Float32
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::Float64
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::BFloat16
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::Complex64
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::Complex128
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            DataType::RawBits(1)
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
     }
 
     #[test]

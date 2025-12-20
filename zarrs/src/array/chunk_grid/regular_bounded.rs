@@ -39,8 +39,8 @@ pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfigura
 
 use crate::{
     array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
         ArrayIndices, ArrayShape, ChunkShape,
+        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     metadata::v3::MetadataV3,
@@ -176,11 +176,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             .map(|(chunk_shape, &array_shape, chunk_indices)| {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
-                if end > start {
-                    Some(end - start)
-                } else {
-                    None
-                }
+                if end > start { Some(end - start) } else { None }
             })
             .collect::<Option<Vec<_>>>())
         } else {
@@ -283,11 +279,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             .map(|(chunk_shape, &array_shape, chunk_indices)| {
                 let start = (chunk_indices * chunk_shape.get()).min(array_shape);
                 let end = (start + chunk_shape.get()).min(array_shape);
-                if end > start {
-                    Some(start..end)
-                } else {
-                    None
-                }
+                if end > start { Some(start..end) } else { None }
             })
             .collect::<Option<Vec<_>>>();
             if let Some(ranges) = ranges {
@@ -381,15 +373,19 @@ mod tests {
                 Some(ArraySubset::new_with_ranges(&[1..3, 2..4, 15..24]))
             );
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
-                .is_err());
+            assert!(
+                chunk_grid
+                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
+                    .is_err()
+            );
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
-                .unwrap()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_grid
+                    .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
+                    .unwrap()
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         assert!(RegularBoundedChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());

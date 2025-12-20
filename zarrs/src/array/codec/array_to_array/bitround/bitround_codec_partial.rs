@@ -4,10 +4,10 @@ use super::round_bytes;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
+    DataType,
     codec::{
         ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
     },
-    DataType,
 };
 use crate::registry::codec::BITROUND;
 use crate::storage::StorageError;

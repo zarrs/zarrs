@@ -3,16 +3,15 @@ use std::{borrow::Cow, sync::Arc};
 use zarrs_plugin::PluginCreateError;
 
 use super::{
-    gdeflate_decode, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
-    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor,
-    GDEFLATE_STATIC_HEADER_LENGTH,
+    GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
+    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
 use crate::array::{
+    ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency,
     codec::{
         BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability,
     },
-    ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency,
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::GDEFLATE;

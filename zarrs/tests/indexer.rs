@@ -12,11 +12,11 @@ use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::metadata::ChunkShape;
 use zarrs::{
     array::{
+        ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
         codec::{
             ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
         },
-        ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},

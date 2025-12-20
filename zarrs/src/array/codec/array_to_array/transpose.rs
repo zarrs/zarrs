@@ -40,9 +40,9 @@ pub use crate::metadata_ext::codec::transpose::{
 use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
+        ArrayBytes, ArrayBytesRaw, DataType,
         array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength},
         codec::{Codec, CodecError, CodecPlugin},
-        ArrayBytes, ArrayBytesRaw, DataType,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -248,8 +248,8 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
             ArrayBytes, ChunkRepresentation, DataType, FillValue,
+            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
         },
         array_subset::ArraySubset,
     };

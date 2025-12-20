@@ -37,8 +37,8 @@ pub use crate::metadata_ext::chunk_grid::rectangular::{
 use crate::registry::chunk_grid::RECTANGULAR;
 use crate::{
     array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
         ArrayIndices, ArrayShape, ChunkShape,
+        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
     },
     array_subset::IncompatibleDimensionalityError,
     metadata::v3::MetadataV3,

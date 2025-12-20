@@ -75,11 +75,11 @@ mod tests {
     use std::num::NonZeroU64;
 
     use crate::array::{
-        codec::{
-            array_to_array::fixedscaleoffset::FixedScaleOffsetCodec, ArrayToArrayCodecTraits,
-            CodecOptions,
-        },
         ArrayBytes, ChunkRepresentation, DataType,
+        codec::{
+            ArrayToArrayCodecTraits, CodecOptions,
+            array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
+        },
     };
     use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
@@ -125,7 +125,9 @@ mod tests {
         );
         assert_eq!(
             decoded_elements,
-            &[1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.]
+            &[
+                1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.
+            ]
         );
     }
 }

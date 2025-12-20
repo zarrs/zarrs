@@ -3,17 +3,17 @@ use std::sync::Arc;
 use zarrs_plugin::PluginCreateError;
 
 use super::{
-    bitround_codec_partial, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
+    BitroundCodecConfiguration, BitroundCodecConfigurationV1, bitround_codec_partial, round_bytes,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
+    ChunkRepresentation, DataType,
     codec::{
         ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
         ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
-    ChunkRepresentation, DataType,
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::BITROUND;

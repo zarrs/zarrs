@@ -6,14 +6,14 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::{
     array::chunk_grid::RectangularChunkGridConfiguration,
     storage::{
-        storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
+        ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
     },
 };
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
-        array::{codec, DataType, ZARR_NAN_F32},
+        array::{DataType, ZARR_NAN_F32, codec},
         array_subset::ArraySubset,
         node::Node,
         storage::store,

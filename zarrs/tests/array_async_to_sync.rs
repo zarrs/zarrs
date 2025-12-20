@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use serde_json::json;
 use zarrs::storage::{
-    storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
     ReadableWritableStorage,
+    storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
 };
 use zarrs::{
     array::{DataType, ZARR_NAN_F32},

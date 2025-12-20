@@ -54,8 +54,8 @@ pub use crate::metadata_ext::codec::gdeflate::{
 use crate::registry::codec::GDEFLATE;
 use crate::{
     array::{
-        codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError},
         ArrayBytesRaw,
+        codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError},
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -273,8 +273,8 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
             BytesRepresentation,
+            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
         },
         storage::byte_range::ByteRange,
     };

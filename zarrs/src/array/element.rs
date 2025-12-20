@@ -1,11 +1,11 @@
 use std::mem::ManuallyDrop;
 
-use itertools::Itertools;
 use ArrayError::IncompatibleElementType as IET;
+use itertools::Itertools;
 
 use super::{
-    convert_from_bytes_slice, transmute_to_bytes, transmute_to_bytes_vec, ArrayBytes,
-    ArrayBytesOffsets, ArrayError, DataType,
+    ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, convert_from_bytes_slice,
+    transmute_to_bytes, transmute_to_bytes_vec,
 };
 
 mod numpy;

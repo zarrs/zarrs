@@ -133,6 +133,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
       - run: cargo minimal-versions check --all-features --workspace --exclude zarrs_object_store
+  msrv-1-86:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.86"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --all-features -p zarrs
   msrv-1-82:
     runs-on: ubuntu-latest
     steps:
@@ -142,7 +152,7 @@ jobs:
           toolchain: "1.82"
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --all-features -p zarrs -p zarrs_storage -p zarrs_filesystem
+      - run: cargo minimal-versions check --all-features -p zarrs_storage -p zarrs_filesystem
   msrv-1-77:
     runs-on: ubuntu-latest
     steps:
