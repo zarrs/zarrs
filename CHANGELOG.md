@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking**: Bump MSRV to 1.86 and use Rust 2024 edition
+- **Breaking**: Bump MSRV to 1.87 and use Rust 2024 edition
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
 - **Breaking**: Bump `zarrs_metadata` to 0.7.0
 - **Breaking**: Bump `zarrs_data_type` to 0.5.0
