@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![allow(unused)]
 
 use std::{error::Error, sync::Arc};
@@ -84,7 +83,7 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
         if !matches!(unit, NumpyTimeUnit::Year | NumpyTimeUnit::Month) {
             use chrono::{DateTime, Utc};
 
-            let elements = array.retrieve_array_subset_elements::<DateTime<Utc>>(&subset_all)?;
+            let elements = array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&subset_all)?;
             println!("{elements:?}");
 
             // Only subminute are not rounded
@@ -115,7 +114,7 @@ fn zarr_python_v3_numpy_datetime_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "jiff")]
         {
             use jiff::{Timestamp, TimestampRound, Unit};
-            let elements = array.retrieve_array_subset_elements::<jiff::Timestamp>(&subset_all)?;
+            let elements = array.retrieve_array_subset::<Vec<jiff::Timestamp>>(&subset_all)?;
             println!("{path:?}");
             println!("{elements:?}");
 
@@ -211,13 +210,13 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
                 DateTime::<Utc>::MIN_UTC,
             ];
 
-            array.store_array_subset_elements(&array.subset_all(), &elements)?;
+            array.store_array_subset(&array.subset_all(), &elements)?;
             if !matches!(unit, |NumpyTimeUnit::Week| NumpyTimeUnit::Day
                 | NumpyTimeUnit::Hour
                 | NumpyTimeUnit::Minute)
             {
                 assert_eq!(
-                    array.retrieve_array_subset_elements::<DateTime<Utc>>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&array.subset_all())?,
                     elements
                 );
             }
@@ -253,11 +252,11 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
                 Timestamp::MIN,
             ];
 
-            array.store_array_subset_elements(&array.subset_all(), &elements)?;
+            array.store_array_subset(&array.subset_all(), &elements)?;
 
             if !matches!(unit, NumpyTimeUnit::Hour | NumpyTimeUnit::Minute) {
                 assert_eq!(
-                    array.retrieve_array_subset_elements::<jiff::Timestamp>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<jiff::Timestamp>>(&array.subset_all())?,
                     elements
                 );
             }
@@ -305,7 +304,7 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "chrono")]
         {
             use chrono::TimeDelta;
-            let elements = array.retrieve_array_subset_elements::<TimeDelta>(&subset_all)?;
+            let elements = array.retrieve_array_subset::<Vec<TimeDelta>>(&subset_all)?;
 
             let start_elem = if matches!(unit, NumpyTimeUnit::Picosecond) {
                 // first element overflows in numpy
@@ -337,7 +336,7 @@ fn zarr_python_v3_numpy_timedelta_read() -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "jiff")]
         if !matches!(unit, NumpyTimeUnit::Picosecond) {
             use jiff::{SignedDuration, Timestamp, TimestampRound, Unit};
-            let elements = array.retrieve_array_subset_elements::<SignedDuration>(&subset_all)?;
+            let elements = array.retrieve_array_subset::<Vec<SignedDuration>>(&subset_all)?;
 
             println!("{path:?}");
             println!("{elements:?}");
@@ -409,9 +408,9 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
                     TimeDelta::MIN,
                 ];
 
-                array.store_array_subset_elements(&array.subset_all(), &elements)?;
+                array.store_array_subset(&array.subset_all(), &elements)?;
                 assert_eq!(
-                    array.retrieve_array_subset_elements::<TimeDelta>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all())?,
                     elements
                 );
             }
@@ -433,9 +432,9 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
                     SignedDuration::MIN,
                 ];
 
-                array.store_array_subset_elements(&array.subset_all(), &elements)?;
+                array.store_array_subset(&array.subset_all(), &elements)?;
                 assert_eq!(
-                    array.retrieve_array_subset_elements::<SignedDuration>(&array.subset_all())?,
+                    array.retrieve_array_subset::<Vec<SignedDuration>>(&array.subset_all())?,
                     elements
                 );
             }

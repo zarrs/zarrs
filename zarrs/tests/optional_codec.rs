@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 
 use std::sync::Arc;
 
@@ -38,7 +37,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [Some(9), Some(10), Some(11), Some(12)],
         [Some(13), Some(14), None, Some(16)],
     ];
-    array.store_chunk_ndarray(&[0, 0], &data0)?;
+    array.store_chunk(&[0, 0], data0.clone())?;
 
     // Chunk [0,1]: half None, half Some
     let data1 = array![
@@ -47,7 +46,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [Some(1), Some(2), Some(3), Some(4)],
         [Some(5), Some(6), Some(7), Some(8)],
     ];
-    array.store_chunk_ndarray(&[0, 1], &data1)?;
+    array.store_chunk(&[0, 1], data1.clone())?;
 
     // Chunk [1,0]: all None
     let data2 = array![
@@ -56,7 +55,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [None, None, None, None],
         [None, None, None, None],
     ];
-    array.store_chunk_ndarray(&[1, 0], &data2)?;
+    array.store_chunk(&[1, 0], data2.clone())?;
 
     // Chunk [1,1]: alternating Some/None
     let data3 = array![
@@ -65,27 +64,28 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [Some(8), None, Some(10), None],
         [Some(12), None, Some(14), None],
     ];
-    array.store_chunk_ndarray(&[1, 1], &data3)?;
+    array.store_chunk(&[1, 1], data3.clone())?;
 
     // Verify all chunks
-    let retrieved0 = array.retrieve_chunk_ndarray::<Option<u8>>(&[0, 0])?;
+    let retrieved0 = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[0, 0])?;
     let retrieved0: Array2<Option<u8>> = retrieved0.into_dimensionality()?;
     assert_eq!(retrieved0, data0);
 
-    let retrieved1 = array.retrieve_chunk_ndarray::<Option<u8>>(&[0, 1])?;
+    let retrieved1 = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[0, 1])?;
     let retrieved1: Array2<Option<u8>> = retrieved1.into_dimensionality()?;
     assert_eq!(retrieved1, data1);
 
-    let retrieved2 = array.retrieve_chunk_ndarray::<Option<u8>>(&[1, 0])?;
+    let retrieved2 = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[1, 0])?;
     let retrieved2: Array2<Option<u8>> = retrieved2.into_dimensionality()?;
     assert_eq!(retrieved2, data2);
 
-    let retrieved3 = array.retrieve_chunk_ndarray::<Option<u8>>(&[1, 1])?;
+    let retrieved3 = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[1, 1])?;
     let retrieved3: Array2<Option<u8>> = retrieved3.into_dimensionality()?;
     assert_eq!(retrieved3, data3);
 
     // Verify entire array
-    let retrieved_full = array.retrieve_array_subset_ndarray::<Option<u8>>(&array.subset_all())?;
+    let retrieved_full =
+        array.retrieve_array_subset::<ndarray::ArrayD<Option<u8>>>(&array.subset_all())?;
     let retrieved_full: Array2<Option<u8>> = retrieved_full.into_dimensionality()?;
     #[rustfmt::skip]
     let expected_full = array![
@@ -107,14 +107,18 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [Some(95), None, Some(94), None],
         [None, Some(93), None, Some(92)],
     ];
-    array.store_array_subset_ndarray(&[0, 2], &update_data)?;
+    array.store_array_subset(
+        &ArraySubset::new_with_start_shape(
+            vec![0, 2],
+            update_data.shape().iter().map(|&x| x as u64).collect(),
+        )?,
+        update_data.clone(),
+    )?;
 
     // Verify partial update
-    let retrieved_update =
-        array.retrieve_array_subset_ndarray::<Option<u8>>(&ArraySubset::new_with_ranges(&[
-            0..4,
-            2..6,
-        ]))?;
+    let retrieved_update = array.retrieve_array_subset::<ndarray::ArrayD<Option<u8>>>(
+        &ArraySubset::new_with_ranges(&[0..4, 2..6]),
+    )?;
     let retrieved_update: Array2<Option<u8>> = retrieved_update.into_dimensionality()?;
     assert_eq!(retrieved_update, update_data);
     let chunk0_updated_data = array![
@@ -123,7 +127,7 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
         [Some(9), Some(10), Some(95), None],
         [Some(13), Some(14), None, Some(93)],
     ];
-    let retrieved0_updated = array.retrieve_chunk_ndarray::<Option<u8>>(&[0, 0])?;
+    let retrieved0_updated = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[0, 0])?;
     let retrieved0_updated: Array2<Option<u8>> = retrieved0_updated.into_dimensionality()?;
     assert_eq!(retrieved0_updated, chunk0_updated_data);
 
@@ -150,10 +154,10 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
         [Some(Some(9)), None, Some(Some(11)), Some(None)],
         [Some(Some(13)), Some(Some(14)), None, Some(Some(16))],
     ];
-    array.store_chunk_ndarray(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], data.clone())?;
 
     // Retrieve and verify
-    let retrieved = array.retrieve_chunk_ndarray::<Option<Option<u8>>>(&[0, 0])?;
+    let retrieved = array.retrieve_chunk::<ndarray::ArrayD<Option<Option<u8>>>>(&[0, 0])?;
     let retrieved: Array2<Option<Option<u8>>> = retrieved.into_dimensionality()?;
     assert_eq!(retrieved, data);
 
@@ -196,10 +200,11 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
             None
         ],
     ];
-    array.store_chunk_ndarray(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], data.clone())?;
 
     // Retrieve and verify
-    let retrieved = array.retrieve_chunk_ndarray::<Option<Option<Option<u16>>>>(&[0, 0])?;
+    let retrieved =
+        array.retrieve_chunk::<ndarray::ArrayD<Option<Option<Option<u16>>>>>(&[0, 0])?;
     let retrieved: Array2<Option<Option<Option<u16>>>> = retrieved.into_dimensionality()?;
     assert_eq!(retrieved, data);
 
@@ -230,10 +235,10 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
         [None, Some(10), Some(11), Some(12)],
         [Some(13), Some(14), None, Some(16)],
     ];
-    array.store_chunk_ndarray(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], data.clone())?;
 
     // Retrieve and verify
-    let retrieved = array.retrieve_chunk_ndarray::<Option<u8>>(&[0, 0])?;
+    let retrieved = array.retrieve_chunk::<ndarray::ArrayD<Option<u8>>>(&[0, 0])?;
     let retrieved: Array2<Option<u8>> = retrieved.into_dimensionality()?;
     assert_eq!(retrieved, data);
 
@@ -280,10 +285,10 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
             Some("encoding".to_string())
         ],
     ];
-    array.store_chunk_ndarray(&[0, 0], &data)?;
+    array.store_chunk(&[0, 0], data.clone())?;
 
     // Retrieve and verify
-    let retrieved = array.retrieve_chunk_ndarray::<Option<String>>(&[0, 0])?;
+    let retrieved = array.retrieve_chunk::<ndarray::ArrayD<Option<String>>>(&[0, 0])?;
     let retrieved: Array2<Option<String>> = retrieved.into_dimensionality()?;
     assert_eq!(retrieved, data);
 
@@ -321,9 +326,9 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
         ],
         [None, None, Some("final".to_string()), None],
     ];
-    array.store_chunk_ndarray(&[0, 1], &data2)?;
+    array.store_chunk(&[0, 1], data2.clone())?;
 
-    let retrieved2 = array.retrieve_chunk_ndarray::<Option<String>>(&[0, 1])?;
+    let retrieved2 = array.retrieve_chunk::<ndarray::ArrayD<Option<String>>>(&[0, 1])?;
     let retrieved2: Array2<Option<String>> = retrieved2.into_dimensionality()?;
     assert_eq!(retrieved2, data2);
 

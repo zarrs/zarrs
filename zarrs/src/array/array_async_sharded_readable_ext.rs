@@ -719,7 +719,6 @@ mod private {
 
 #[cfg(test)]
 mod tests {
-    #![expect(deprecated)]
     use std::sync::Arc;
 
     use super::*;
@@ -757,7 +756,7 @@ mod tests {
             .collect();
 
         array
-            .async_store_array_subset_elements(&array.subset_all(), &data)
+            .async_store_array_subset(&array.subset_all(), &data)
             .await?;
 
         let cache = AsyncArrayShardedReadableExtCache::new(&array);
@@ -768,13 +767,13 @@ mod tests {
             assert_eq!(inner_chunk_grid.grid_shape(), &[4, 4]);
 
             let compare = array
-                .async_retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_ranges(&[
+                .async_retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_ranges(&[
                     4..6,
                     6..8,
                 ]))
                 .await?;
             let test = array
-                .async_retrieve_inner_chunk_elements_opt::<u16>(
+                .async_retrieve_inner_chunk_opt::<Vec<u16>>(
                     &cache,
                     &[2, 3],
                     &CodecOptions::default(),
@@ -786,13 +785,12 @@ mod tests {
             #[cfg(feature = "ndarray")]
             {
                 let compare = array
-                    .async_retrieve_array_subset_ndarray::<u16>(&ArraySubset::new_with_ranges(&[
-                        4..6,
-                        6..8,
-                    ]))
+                    .async_retrieve_array_subset::<ndarray::ArrayD<u16>>(
+                        &ArraySubset::new_with_ranges(&[4..6, 6..8]),
+                    )
                     .await?;
                 let test = array
-                    .async_retrieve_inner_chunk_ndarray_opt::<u16>(
+                    .async_retrieve_inner_chunk_opt::<ndarray::ArrayD<u16>>(
                         &cache,
                         &[2, 3],
                         &CodecOptions::default(),
@@ -806,10 +804,10 @@ mod tests {
 
             let subset = ArraySubset::new_with_ranges(&[3..7, 3..7]);
             let compare = array
-                .async_retrieve_array_subset_elements::<u16>(&subset)
+                .async_retrieve_array_subset::<Vec<u16>>(&subset)
                 .await?;
             let test = array
-                .async_retrieve_array_subset_elements_sharded_opt::<u16>(
+                .async_retrieve_array_subset_sharded_opt::<Vec<u16>>(
                     &cache,
                     &subset,
                     &CodecOptions::default(),
@@ -822,10 +820,10 @@ mod tests {
             {
                 let subset = ArraySubset::new_with_ranges(&[3..7, 3..7]);
                 let compare = array
-                    .async_retrieve_array_subset_ndarray::<u16>(&subset)
+                    .async_retrieve_array_subset::<ndarray::ArrayD<u16>>(&subset)
                     .await?;
                 let test = array
-                    .async_retrieve_array_subset_ndarray_sharded_opt::<u16>(
+                    .async_retrieve_array_subset_sharded_opt::<ndarray::ArrayD<u16>>(
                         &cache,
                         &subset,
                         &CodecOptions::default(),
@@ -837,10 +835,10 @@ mod tests {
             let subset = ArraySubset::new_with_ranges(&[2..6, 2..6]);
             let inner_chunks = ArraySubset::new_with_ranges(&[1..3, 1..3]);
             let compare = array
-                .async_retrieve_array_subset_elements::<u16>(&subset)
+                .async_retrieve_array_subset::<Vec<u16>>(&subset)
                 .await?;
             let test = array
-                .async_retrieve_inner_chunks_elements_opt::<u16>(
+                .async_retrieve_inner_chunks_opt::<Vec<u16>>(
                     &cache,
                     &inner_chunks,
                     &CodecOptions::default(),
@@ -854,10 +852,10 @@ mod tests {
                 let subset = ArraySubset::new_with_ranges(&[2..6, 2..6]);
                 let inner_chunks = ArraySubset::new_with_ranges(&[1..3, 1..3]);
                 let compare = array
-                    .async_retrieve_array_subset_ndarray::<u16>(&subset)
+                    .async_retrieve_array_subset::<ndarray::ArrayD<u16>>(&subset)
                     .await?;
                 let test = array
-                    .async_retrieve_inner_chunks_ndarray_opt::<u16>(
+                    .async_retrieve_inner_chunks_opt::<ndarray::ArrayD<u16>>(
                         &cache,
                         &inner_chunks,
                         &CodecOptions::default(),
@@ -888,13 +886,13 @@ mod tests {
             assert_eq!(inner_chunk_grid.grid_shape(), &[2, 2]);
 
             let compare = array
-                .async_retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_ranges(&[
+                .async_retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_ranges(&[
                     4..8,
                     4..8,
                 ]))
                 .await?;
             let test = array
-                .async_retrieve_inner_chunk_elements_opt::<u16>(
+                .async_retrieve_inner_chunk_opt::<Vec<u16>>(
                     &cache,
                     &[1, 1],
                     &CodecOptions::default(),
@@ -904,10 +902,10 @@ mod tests {
 
             let subset = ArraySubset::new_with_ranges(&[3..7, 3..7]);
             let compare = array
-                .async_retrieve_array_subset_elements::<u16>(&subset)
+                .async_retrieve_array_subset::<Vec<u16>>(&subset)
                 .await?;
             let test = array
-                .async_retrieve_array_subset_elements_sharded_opt::<u16>(
+                .async_retrieve_array_subset_sharded_opt::<Vec<u16>>(
                     &cache,
                     &subset,
                     &CodecOptions::default(),
@@ -1003,13 +1001,13 @@ mod tests {
             .map(|i| i as u32)
             .collect();
         array
-            .async_store_array_subset_elements(&array.subset_all(), &data)
+            .async_store_array_subset(&array.subset_all(), &data)
             .await?;
 
         // Retrieving an inner chunk should be exactly 2 reads: index + chunk
         let inner_chunk_subset = inner_chunk_grid.subset(&[0, 0, 0])?.unwrap();
         let inner_chunk_data = array
-            .async_retrieve_array_subset_elements::<u32>(&inner_chunk_subset)
+            .async_retrieve_array_subset::<Vec<u32>>(&inner_chunk_subset)
             .await?;
         assert_eq!(inner_chunk_data, &[0, 1, 2, 144, 145, 146]);
         assert_eq!(store.reads(), 2);

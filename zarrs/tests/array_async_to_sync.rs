@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(all(feature = "async"))]
 
 use std::sync::Arc;
@@ -58,15 +57,17 @@ fn array_read_and_write_async_storage_adapter() {
     assert_eq!(array.shape(), &[8, 8]);
 
     array
-        .store_chunk_elements::<f32>(
+        .store_chunk(
             &[0, 0],
             &[
-                0.0, 0.1, 0.2, 0.3, 1.0, 1.1, 1.2, 1.3, 2.0, 2.1, 2.2, 2.3, 3.0, 3.1, 3.2, 3.3,
+                0.0f32, 0.1, 0.2, 0.3, 1.0, 1.1, 1.2, 1.3, 2.0, 2.1, 2.2, 2.3, 3.0, 3.1, 3.2, 3.3,
             ],
         )
         .unwrap();
 
     let subset = ArraySubset::new_with_ranges(&[2..4, 2..4]);
-    let data = array.retrieve_array_subset_ndarray::<f32>(&subset).unwrap();
+    let data = array
+        .retrieve_array_subset::<ndarray::ArrayD<f32>>(&subset)
+        .unwrap();
     assert_eq!(data, ndarray::array![[2.2, 2.3], [3.2, 3.3]].into_dyn());
 }

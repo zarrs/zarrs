@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(feature = "bz2")]
 
 use std::sync::Arc;
@@ -39,7 +38,7 @@ fn array_future_stabilisation_bz2() {
     let store = Arc::new(FilesystemStore::new(path).unwrap());
     let array = Array::open(store, "/").unwrap();
     let elements = array
-        .retrieve_array_subset_elements::<f32>(&array.subset_all())
+        .retrieve_array_subset::<Vec<f32>>(&array.subset_all())
         .unwrap();
     assert_eq!(
         &elements,

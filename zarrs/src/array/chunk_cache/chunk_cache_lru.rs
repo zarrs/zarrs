@@ -406,8 +406,6 @@ impl ChunkCache for ChunkCachePartialDecoderLruSizeLimitThreadLocal {
 #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
-    #![expect(deprecated)]
-
     use std::sync::Arc;
 
     use super::*;
@@ -468,7 +466,7 @@ mod tests {
         assert!(cache.is_empty());
         assert_eq!(
             cache
-                .retrieve_array_subset_ndarray::<u8>(
+                .retrieve_array_subset::<ndarray::ArrayD<u8>>(
                     &ArraySubset::new_with_ranges(&[3..5, 0..4]),
                     &CodecOptions::default()
                 )
@@ -490,7 +488,7 @@ mod tests {
         // Retrieve a chunk in cache
         assert_eq!(
             cache
-                .retrieve_chunk_ndarray::<u8>(&[0, 0], &CodecOptions::default())
+                .retrieve_chunk::<ndarray::ArrayD<u8>>(&[0, 0], &CodecOptions::default())
                 .unwrap(),
             ndarray::array![
                 [0, 1, 2, 3],
@@ -513,7 +511,7 @@ mod tests {
 
         assert_eq!(
             cache
-                .retrieve_chunk_subset_ndarray::<u8>(
+                .retrieve_chunk_subset::<ndarray::ArrayD<u8>>(
                     &[0, 0],
                     &ArraySubset::new_with_ranges(&[1..3, 1..3]),
                     &CodecOptions::default()
@@ -535,7 +533,7 @@ mod tests {
         // Retrieve chunks in the cache
         assert_eq!(
             cache
-                .retrieve_chunks_ndarray::<u8>(
+                .retrieve_chunks::<ndarray::ArrayD<u8>>(
                     &ArraySubset::new_with_ranges(&[0..2, 0..1]),
                     &CodecOptions::default()
                 )
@@ -791,7 +789,7 @@ mod tests {
 
         // Retrieve an array subset (within a single chunk to test basic functionality)
         let result = cache
-            .retrieve_array_subset_elements::<String>(
+            .retrieve_array_subset::<Vec<String>>(
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
             )
@@ -812,7 +810,7 @@ mod tests {
 
         // Retrieve a chunk in cache
         let result = cache
-            .retrieve_chunk_elements::<String>(&[0, 0], &CodecOptions::default())
+            .retrieve_chunk::<Vec<String>>(&[0, 0], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
             "x".repeat((0 % 8) + 1),  // i=0
@@ -841,7 +839,7 @@ mod tests {
 
         // Retrieve a chunk subset
         let result = cache
-            .retrieve_chunk_subset_elements::<String>(
+            .retrieve_chunk_subset::<Vec<String>>(
                 &[0, 0],
                 &ArraySubset::new_with_ranges(&[1..3, 1..3]),
                 &CodecOptions::default(),
@@ -862,7 +860,7 @@ mod tests {
 
         // Retrieve chunks in the cache
         let result = cache
-            .retrieve_chunks_elements::<String>(
+            .retrieve_chunks::<Vec<String>>(
                 &ArraySubset::new_with_ranges(&[0..2, 0..1]),
                 &CodecOptions::default(),
             )
@@ -886,7 +884,7 @@ mod tests {
 
         // Retrieve a chunk not in cache
         let result = cache
-            .retrieve_chunk_elements::<String>(&[0, 1], &CodecOptions::default())
+            .retrieve_chunk::<Vec<String>>(&[0, 1], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
             "x".repeat((4 % 8) + 1),  // i=4

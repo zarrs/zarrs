@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(all(feature = "sharding", feature = "zstd"))]
 
 use std::{
@@ -67,8 +66,8 @@ fn cities_impl(
         .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
 
     let subset_all = array.subset_all();
-    array.store_array_subset_elements(&subset_all, &cities)?;
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    array.store_array_subset(&subset_all, cities)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
     assert_eq!(cities, cities_out);
 
     let last_block: ArrayBytes =
@@ -134,7 +133,7 @@ fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);
@@ -149,7 +148,7 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);

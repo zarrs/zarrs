@@ -1154,7 +1154,6 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
 
 #[cfg(test)]
 mod tests {
-    #![expect(deprecated)]
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
@@ -1282,15 +1281,15 @@ mod tests {
         .unwrap();
 
         array
-            .store_array_subset_elements::<f32>(
+            .store_array_subset(
                 &ArraySubset::new_with_ranges(&[3..6, 3..6]),
-                &[1.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                &[1.0f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
             )
             .unwrap();
 
         let subset_all = array.subset_all();
         let data_all = array
-            .retrieve_array_subset_elements::<f32>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all)
             .unwrap();
         assert_eq!(
             data_all,
@@ -1309,14 +1308,14 @@ mod tests {
         );
         assert!(
             array
-                .retrieve_chunk_elements_if_exists::<f32>(&[0; 2])
+                .retrieve_chunk_if_exists::<Vec<f32>>(&[0; 2])
                 .unwrap()
                 .is_none()
         );
         #[cfg(feature = "ndarray")]
         assert!(
             array
-                .retrieve_chunk_ndarray_if_exists::<f32>(&[0; 2])
+                .retrieve_chunk_if_exists::<ndarray::ArrayD<f32>>(&[0; 2])
                 .unwrap()
                 .is_none()
         );
@@ -1331,7 +1330,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
         let elements = array_in
-            .retrieve_array_subset_elements::<f32>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all)
             .unwrap();
 
         assert_eq!(
@@ -1353,7 +1352,7 @@ mod tests {
         let store = Arc::new(FilesystemStore::new(path_out).unwrap());
         let array_out = Array::new_with_metadata(store, "/", array_in.metadata().clone()).unwrap();
         array_out
-            .store_array_subset_elements::<f32>(&subset_all, &elements)
+            .store_array_subset(&subset_all, &elements)
             .unwrap();
 
         // Store V2 and V3 metadata
@@ -1472,7 +1471,7 @@ mod tests {
 
         let subset_all = ArraySubset::new_with_shape(array_in.shape().to_vec());
         let elements = array_in
-            .retrieve_array_subset_elements::<f32>(&subset_all)
+            .retrieve_array_subset::<Vec<f32>>(&subset_all)
             .unwrap();
 
         assert_eq!(

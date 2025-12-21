@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 
 use std::{error::Error, path::PathBuf, sync::Arc};
 
@@ -20,9 +19,8 @@ fn zarr_python_compat_fletcher32_v2() -> Result<(), Box<dyn Error>> {
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
-    let elements = array.retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_shape(
-        array.shape().to_vec(),
-    ))?;
+    let elements = array
+        .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
 
     Ok(())
@@ -42,9 +40,8 @@ fn zarr_python_compat_adler32_v2() -> Result<(), Box<dyn Error>> {
 
     let array = Array::open(store, "/")?;
     assert_eq!(array.shape(), vec![100, 100]);
-    let elements = array.retrieve_array_subset_elements::<u16>(&ArraySubset::new_with_shape(
-        array.shape().to_vec(),
-    ))?;
+    let elements = array
+        .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
     assert_eq!(elements, (0..100 * 100).collect::<Vec<u16>>());
 
     Ok(())
@@ -57,7 +54,7 @@ fn zarr_python_v2_compat_str_fv_0() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     assert_eq!(elements, &["a", "bb", "", "", ""]);
 
@@ -71,7 +68,7 @@ fn zarr_python_v2_compat_str_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     assert_eq!(elements, &["a", "bb", "", "", ""]);
 
@@ -85,7 +82,7 @@ fn zarr_python_v2_compat_bool_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset_elements::<bool>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<bool>>(&subset_all)?;
     assert_eq!(elements, &[true, false, false, false, false]);
 
     Ok(())
@@ -98,7 +95,7 @@ fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset_elements::<i32>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<i32>>(&subset_all)?;
     assert_eq!(elements, &[42, 123, 0, 0, 0]);
 
     Ok(())
@@ -111,7 +108,7 @@ fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
     )?);
     let array = Array::open(store, "/")?;
     let subset_all = array.subset_all();
-    let elements = array.retrieve_array_subset_elements::<f32>(&subset_all)?;
+    let elements = array.retrieve_array_subset::<Vec<f32>>(&subset_all)?;
     assert_eq!(elements, &[3.14, 2.71, 0.0, 0.0, 0.0]);
 
     Ok(())

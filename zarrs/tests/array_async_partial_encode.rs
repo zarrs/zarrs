@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(feature = "async")]
 
 use std::{num::NonZeroU64, sync::Arc};
@@ -76,7 +75,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
     let elements = vec![10.0f32, 20.0, 30.0, 40.0];
     array
-        .async_store_array_subset_elements_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
         .await
         .unwrap();
 
@@ -106,7 +105,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
 
     // Retrieve and verify the data
     let retrieved = array
-        .async_retrieve_array_subset_elements::<f32>(&subset)
+        .async_retrieve_array_subset::<Vec<f32>>(&subset)
         .await
         .unwrap();
     assert_eq!(
@@ -120,7 +119,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     let elements2 = vec![100f32, 200.0, 300.0, 400.0];
 
     array
-        .async_store_array_subset_elements_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
         .await
         .unwrap();
 
@@ -163,7 +162,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
 
     // Retrieve the full chunk to verify overlapping data was handled correctly
     let full_chunk = array
-        .async_retrieve_chunk_elements::<f32>(&[0, 0])
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
         .await
         .unwrap();
     assert_eq!(
@@ -234,7 +233,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     let initial_bytes_read = store_perf.bytes_read();
 
     array
-        .async_store_array_subset_elements_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
         .await
         .unwrap();
 
@@ -272,7 +271,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .async_store_array_subset_elements_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
         .await
         .unwrap();
 
@@ -335,7 +334,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
 
     // Retrieve and verify the final data
     let full_chunk = array
-        .async_retrieve_chunk_elements::<f32>(&[0, 0])
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
         .await
         .unwrap();
     assert_eq!(
@@ -634,7 +633,7 @@ async fn test_codec_chain_async_partial_encoding() {
     let elements = vec![10f32, 20f32, 30f32, 40f32];
 
     array
-        .async_store_array_subset_elements_opt(&subset, &elements, &opt)
+        .async_store_array_subset_opt(&subset, &elements, &opt)
         .await
         .unwrap();
 
@@ -653,7 +652,7 @@ async fn test_codec_chain_async_partial_encoding() {
 
     // Verify round-trip
     let retrieved = array
-        .async_retrieve_array_subset_elements::<f32>(&subset)
+        .async_retrieve_array_subset::<Vec<f32>>(&subset)
         .await
         .unwrap();
     assert_eq!(retrieved, elements, "Codec chain round-trip failed");
@@ -665,7 +664,7 @@ async fn test_codec_chain_async_partial_encoding() {
     let elements2 = vec![100f32, 200f32, 300f32, 400f32];
 
     array
-        .async_store_array_subset_elements_opt(&subset2, &elements2, &opt)
+        .async_store_array_subset_opt(&subset2, &elements2, &opt)
         .await
         .unwrap();
 
@@ -684,7 +683,7 @@ async fn test_codec_chain_async_partial_encoding() {
 
     // Verify data integrity after partial update
     let full_chunk = array
-        .async_retrieve_chunk_elements::<f32>(&[0, 0])
+        .async_retrieve_chunk::<Vec<f32>>(&[0, 0])
         .await
         .unwrap();
     assert_eq!(

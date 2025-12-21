@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(feature = "sharding")]
 
 use std::sync::Arc;
@@ -81,11 +80,7 @@ fn array_partial_encode_sharding(
 
     // [1, 0]
     // [0, 0]
-    array.store_array_subset_elements_opt::<u16>(
-        &ArraySubset::new_with_ranges(&[0..1, 0..1]),
-        &[1],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&ArraySubset::new_with_ranges(&[0..1, 0..1]), &[1u16], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     assert_eq!(store_perf.bytes_read(), 0);
@@ -99,11 +94,7 @@ fn array_partial_encode_sharding(
 
     // [0, 0]
     // [0, 0]
-    array.store_array_subset_elements_opt::<u16>(
-        &ArraySubset::new_with_ranges(&[0..1, 0..1]),
-        &[0],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&ArraySubset::new_with_ranges(&[0..1, 0..1]), &[0u16], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -114,9 +105,9 @@ fn array_partial_encode_sharding(
 
     // [1, 2]
     // [0, 0]
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[0..1, 0..2]),
-        &[1, 2],
+        &[1u16, 2],
         &opt,
     )?;
     assert_eq!(store_perf.reads(), 1); // index
@@ -127,18 +118,15 @@ fn array_partial_encode_sharding(
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(
-        array.retrieve_chunk_elements::<u16>(&[0, 0])?,
-        vec![1, 2, 0, 0]
-    );
+    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![1, 2, 0, 0]);
     store_perf.reset();
 
     // Check that the shard is entirely rewritten when possible, rather than appended
     // [3, 4]
     // [0, 0]
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[0..1, 0..2]),
-        &[3, 4],
+        &[3u16, 4],
         &opt,
     )?;
     assert_eq!(store_perf.reads(), 1); // index + 1x inner chunk
@@ -152,17 +140,14 @@ fn array_partial_encode_sharding(
             shard_index_size + size_of::<u16>() * 2
         );
     }
-    assert_eq!(
-        array.retrieve_chunk_elements::<u16>(&[0, 0])?,
-        vec![3, 4, 0, 0]
-    );
+    assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, vec![3, 4, 0, 0]);
     store_perf.reset();
 
     // [99, 4]
     // [5, 0]
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[0..2, 0..1]),
-        &[99, 5],
+        &[99u16, 5],
         &opt,
     )?;
     assert_eq!(store_perf.reads(), 1); // index
@@ -174,7 +159,7 @@ fn array_partial_encode_sharding(
         );
     }
     assert_eq!(
-        array.retrieve_chunk_elements::<u16>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
         vec![99, 4, 5, 0]
     );
     store_perf.reset();
@@ -182,9 +167,9 @@ fn array_partial_encode_sharding(
     // [99, 4]
     // [5, 100]
     store_perf.reset();
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[1..2, 1..2]),
-        &[100],
+        &[100u16],
         &opt,
     )?;
     assert_eq!(store_perf.reads(), 1); // index
@@ -198,7 +183,7 @@ fn array_partial_encode_sharding(
     store_perf.reset();
 
     assert_eq!(
-        array.retrieve_chunk_elements::<u16>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
         vec![99, 4, 5, 100]
     );
 
@@ -302,7 +287,7 @@ fn array_partial_encode_sharding_compact(
     // Step 1: Write a large compressible pattern (all same values)
     // This fills multiple inner chunks with highly compressible data
     let compressible_data = vec![42u16; 16]; // Fill all 16 elements of the shard
-    array.store_chunk_elements_opt(&[0, 0], &compressible_data, &opt)?;
+    array.store_chunk_opt(&[0, 0], &compressible_data, &opt)?;
 
     let size_after_first_write = get_bytes_0_0()?.unwrap().len();
 
@@ -310,7 +295,7 @@ fn array_partial_encode_sharding_compact(
     // This creates gaps as the old compressed data is marked stale
     // Write to inner chunk [0,0] (elements [0..2, 0..2] of the shard)
     let random_data1 = vec![100u16, 101, 102, 103];
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[0..2, 0..2]),
         &random_data1,
         &opt,
@@ -318,7 +303,7 @@ fn array_partial_encode_sharding_compact(
 
     // Write to inner chunk [1,0] (elements [2..4, 0..2] of the shard)
     let random_data2 = vec![200u16, 201, 202, 203];
-    array.store_array_subset_elements_opt::<u16>(
+    array.store_array_subset_opt(
         &ArraySubset::new_with_ranges(&[2..4, 0..2]),
         &random_data2,
         &opt,
@@ -369,7 +354,7 @@ fn array_partial_encode_sharding_compact(
         202, 203, 42, 42,
     ];
     assert_eq!(
-        array.retrieve_chunk_elements::<u16>(&[0, 0])?,
+        array.retrieve_chunk::<Vec<u16>>(&[0, 0])?,
         expected_data,
         "Data should be unchanged after compaction"
     );

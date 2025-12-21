@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![expect(deprecated)]
 #![cfg(feature = "bitround")]
 
 use std::{path::PathBuf, sync::Arc};
@@ -94,10 +93,10 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store the test data
     let subset = ArraySubset::new_with_ranges(&[0..test_data.len() as u64]);
-    array.store_array_subset_elements(&subset, &test_data)?;
+    array.store_array_subset(&subset, &test_data)?;
 
     // Retrieve the data
-    let retrieved: Vec<f32> = array.retrieve_array_subset_elements(&subset)?;
+    let retrieved: Vec<f32> = array.retrieve_array_subset(&subset)?;
 
     // Print the comparison table
     print_bitround_table_f32(&test_data, &retrieved, keepbits);
@@ -172,8 +171,8 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store and retrieve
     let subset = ArraySubset::new_with_ranges(&[0..test_data_u8.len() as u64]);
-    array.store_array_subset_elements(&subset, &test_data_u8)?;
-    let retrieved: Vec<u8> = array.retrieve_array_subset_elements(&subset)?;
+    array.store_array_subset(&subset, &test_data_u8)?;
+    let retrieved: Vec<u8> = array.retrieve_array_subset(&subset)?;
 
     println!("\n## Bitround uint8 Encoding (keepbits={})\n", keepbits);
     println!("| Original | Rounded | Original (0b) | Rounded (0b) |");
