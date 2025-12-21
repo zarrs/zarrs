@@ -3,13 +3,12 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 
 use super::{
-    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element,
+    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element, IntoArrayBytes,
     codec::{ArrayToBytesCodecTraits, CodecOptions},
     concurrency::concurrency_chunks_and_codec,
 };
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
-    array::ArrayBytes,
     array_subset::ArraySubset,
     config::{MetadataEraseVersion, global_config},
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
@@ -78,12 +77,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     pub async fn async_store_chunk<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_bytes: impl Into<ArrayBytes<'a>> + MaybeSend,
+        chunk_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_opt(chunk_indices, chunk_bytes, &CodecOptions::default())
+        self.async_store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
             .await
     }
 
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunk() instead")]
     /// Async variant of [`store_chunk_elements`](Array::store_chunk_elements).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunk_elements<T: Element + MaybeSend + MaybeSync>(
@@ -91,11 +91,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_elements: &[T],
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_elements_opt(chunk_indices, chunk_elements, &CodecOptions::default())
+        self.async_store_chunk_opt(chunk_indices, chunk_elements, &CodecOptions::default())
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunk()  instead")]
     /// Async variant of [`store_chunk_ndarray`](Array::store_chunk_ndarray).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunk_ndarray<
@@ -106,8 +107,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_ndarray_opt(chunk_indices, chunk_array, &CodecOptions::default())
-            .await
+        self.async_store_chunk_opt(
+            chunk_indices,
+            chunk_array.as_standard_layout().into_owned(),
+            &CodecOptions::default(),
+        )
+        .await
     }
 
     /// Async variant of [`store_chunks`](Array::store_chunks).
@@ -116,12 +121,13 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     pub async fn async_store_chunks<'a>(
         &self,
         chunks: &ArraySubset,
-        chunks_bytes: impl Into<ArrayBytes<'a>> + MaybeSend,
+        chunks_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_opt(chunks, chunks_bytes, &CodecOptions::default())
+        self.async_store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
             .await
     }
 
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunks() instead")]
     /// Async variant of [`store_chunks_elements`](Array::store_chunks_elements).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_elements<T: Element + MaybeSend + MaybeSync>(
@@ -129,11 +135,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunks: &ArraySubset,
         chunks_elements: &[T],
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_elements_opt(chunks, chunks_elements, &CodecOptions::default())
+        self.async_store_chunks_opt(chunks, chunks_elements, &CodecOptions::default())
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunks()  instead")]
     /// Async variant of [`store_chunks_ndarray`](Array::store_chunks_ndarray).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_ndarray<
@@ -144,8 +151,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         chunks: &ArraySubset,
         chunks_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_ndarray_opt(chunks, chunks_array, &CodecOptions::default())
-            .await
+        self.async_store_chunks_opt(
+            chunks,
+            chunks_array.as_standard_layout().into_owned(),
+            &CodecOptions::default(),
+        )
+        .await
     }
 
     /// Async variant of [`erase_metadata`](Array::erase_metadata).
@@ -239,10 +250,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     pub async fn async_store_chunk_opt<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_bytes: impl Into<ArrayBytes<'a>> + MaybeSend,
+        chunk_data: impl IntoArrayBytes<'a> + MaybeSend,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_bytes = chunk_bytes.into();
+        let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
         // Validation
         let chunk_array_representation = self.chunk_array_representation(chunk_indices)?;
@@ -284,6 +295,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_opt() instead")]
     /// Async variant of [`store_chunk_elements_opt`](Array::store_chunk_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunk_elements_opt<T: Element + MaybeSend + MaybeSync>(
@@ -298,6 +310,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_opt()  instead")]
     /// Async variant of [`store_chunk_ndarray_opt`](Array::store_chunk_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunk_ndarray_opt<
@@ -311,9 +324,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<(), ArrayError> {
         let chunk_shape = self.chunk_shape_usize(chunk_indices)?;
         if chunk_array.shape() == chunk_shape {
-            let chunk_array = super::ndarray_to_cow(chunk_array);
-            self.async_store_chunk_elements_opt(chunk_indices, &chunk_array, options)
-                .await
+            self.async_store_chunk_opt(
+                chunk_indices,
+                chunk_array.as_standard_layout().to_owned(),
+                options,
+            )
+            .await
         } else {
             Err(ArrayError::InvalidDataShape(
                 chunk_array.shape().to_vec(),
@@ -328,22 +344,22 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     pub async fn async_store_chunks_opt<'a>(
         &self,
         chunks: &ArraySubset,
-        chunks_bytes: impl Into<ArrayBytes<'a>> + MaybeSend,
+        chunks_data: impl IntoArrayBytes<'a> + MaybeSend,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
             0 => {
-                let chunks_bytes = chunks_bytes.into();
+                let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
                 chunks_bytes.validate(0, self.data_type())?;
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.async_store_chunk_opt(chunk_indices, chunks_bytes, options)
+                self.async_store_chunk_opt(chunk_indices, chunks_data, options)
                     .await?;
             }
             _ => {
-                let chunks_bytes = chunks_bytes.into();
+                let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
                 let array_subset = self.chunks_subset(chunks)?;
                 chunks_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
@@ -384,6 +400,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunks_opt() instead")]
     /// Async variant of [`store_chunks_elements_opt`](Array::store_chunks_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_elements_opt<T: Element + MaybeSend + MaybeSync>(
@@ -398,6 +415,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(since = "0.23.0", note = "Use async_store_chunks_opt()  instead")]
     /// Async variant of [`store_chunks_ndarray_opt`](Array::store_chunks_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_ndarray_opt<
@@ -412,9 +430,12 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         let chunks_subset = self.chunks_subset(chunks)?;
         let chunks_shape = chunks_subset.shape_usize();
         if chunks_array.shape() == chunks_shape {
-            let chunks_array = super::ndarray_to_cow(chunks_array);
-            self.async_store_chunks_elements_opt(chunks, &chunks_array, options)
-                .await
+            self.async_store_chunks_opt(
+                chunks,
+                chunks_array.as_standard_layout().to_owned(),
+                options,
+            )
+            .await
         } else {
             Err(ArrayError::InvalidDataShape(
                 chunks_array.shape().to_vec(),

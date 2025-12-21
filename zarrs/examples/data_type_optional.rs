@@ -11,6 +11,7 @@
 
 use std::sync::Arc;
 
+use ndarray::ArrayD;
 use zarrs::{
     array::{ArrayBuilder, DataType, FillValue},
     storage::ReadableStorageTraits,
@@ -61,10 +62,10 @@ N marks missing (`None`=`null`) values:
     .into_dyn();
 
     // Write the data
-    array.store_array_subset_ndarray(array.subset_all().start(), &data)?;
+    array.store_array_subset(&array.subset_all(), data.clone())?;
 
     // Read back the data
-    let data_read = array.retrieve_array_subset_ndarray::<Option<u8>>(&array.subset_all())?;
+    let data_read: ArrayD<Option<u8>> = array.retrieve_array_subset(&array.subset_all())?;
 
     // Verify data integrity
     assert_eq!(data, data_read);

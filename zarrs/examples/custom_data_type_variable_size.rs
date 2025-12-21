@@ -190,11 +190,10 @@ fn main() {
         CustomDataTypeVariableSizeElement::from(None),
         CustomDataTypeVariableSizeElement::from(Some(3.0)),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeVariableSizeElement>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeVariableSizeElement> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     assert_eq!(data[0], CustomDataTypeVariableSizeElement::from(Some(1.0)));
     assert_eq!(data[1], CustomDataTypeVariableSizeElement::from(None));

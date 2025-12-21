@@ -243,22 +243,22 @@ fn main() {
         .collect();
 
     array
-        .store_array_subset_elements(&array.subset_all(), &data)
+        .store_array_subset(&array.subset_all(), &data)
         .unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeUInt12Element>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeUInt12Element> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for i in 0usize..4096 {
         let element = CustomDataTypeUInt12Element::try_from(i as u64).unwrap();
         assert_eq!(data[i], element);
-        let element_pd = array
-            .retrieve_array_subset_elements::<CustomDataTypeUInt12Element>(
-                &ArraySubset::new_with_ranges(&[(i as u64)..i as u64 + 1, 0..1]),
-            )
-            .unwrap()[0];
-        assert_eq!(element_pd, element);
+        let element_pd: Vec<CustomDataTypeUInt12Element> = array
+            .retrieve_array_subset(&ArraySubset::new_with_ranges(&[
+                (i as u64)..i as u64 + 1,
+                0..1,
+            ]))
+            .unwrap();
+        assert_eq!(element_pd[0], element);
     }
 }
 

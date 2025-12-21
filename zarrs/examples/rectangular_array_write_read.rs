@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use ndarray::ArrayD;
+
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::{
     array::chunk_grid::RectangularChunkGridConfiguration,
@@ -91,7 +93,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                     .collect::<Vec<_>>(),
                 i as f32,
             );
-            array.store_chunk_ndarray(&chunk_indices, &chunk_array)
+            array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -105,41 +107,38 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write a subset spanning multiple chunks, including updating chunks already written
-    array.store_array_subset_ndarray(
-        &[3, 3], // start
-        &ndarray::ArrayD::<f32>::from_shape_vec(
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[3..6, 3..6]), // start
+        ndarray::ArrayD::<f32>::from_shape_vec(
             vec![3, 3],
-            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+            vec![0.1f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         )?,
     )?;
 
     // Store elements directly, in this case set the 7th column to 123.0
-    array.store_array_subset_elements::<f32>(
-        &ArraySubset::new_with_ranges(&[0..8, 6..7]),
-        &[123.0; 8],
-    )?;
+    array.store_array_subset(&ArraySubset::new_with_ranges(&[0..8, 6..7]), &[123.0f32; 8])?;
 
     // Store elements directly in a chunk, in this case set the last row of the bottom right chunk
-    array.store_chunk_subset_elements::<f32>(
+    array.store_chunk_subset(
         // chunk indices
         &[3, 1],
         // subset within chunk
         &ArraySubset::new_with_ranges(&[1..2, 0..4]),
-        &[-4.0; 4],
+        &[-4.0f32; 4],
     )?;
 
     // Read the whole array
-    let data_all = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a chunk back from the store
     let chunk_indices = vec![1, 0];
-    let data_chunk = array.retrieve_chunk_ndarray::<f32>(&chunk_indices)?;
+    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2 = array.retrieve_array_subset_ndarray::<f32>(&subset_4x2)?;
+    let data_4x2: ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     // Show the hierarchy

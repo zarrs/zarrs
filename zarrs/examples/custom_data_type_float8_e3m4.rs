@@ -255,11 +255,10 @@ fn main() {
         CustomDataTypeFloat8e3m4Element::from(f32::NEG_INFINITY),
         CustomDataTypeFloat8e3m4Element::from(f32::NAN),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeFloat8e3m4Element>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeFloat8e3m4Element> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for f in &data {
         println!(

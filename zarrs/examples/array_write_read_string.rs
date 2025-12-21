@@ -10,7 +10,7 @@ use zarrs::{
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::{array::DataType, array_subset::ArraySubset, storage::store};
+    use zarrs::{array::ArrayBytes, array::DataType, array_subset::ArraySubset, storage::store};
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
@@ -73,30 +73,27 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write some chunks
-    array.store_chunk_ndarray(
+    array.store_chunk(
         &[0, 0],
-        &ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
+        ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
     )?;
-    array.store_chunk_ndarray(
+    array.store_chunk(
         &[0, 1],
-        &ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
+        ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
     )?;
     let subset_all = array.subset_all();
-    let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
     println!("store_chunk [0, 0] and [0, 1]:\n{data_all}\n");
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     let ndarray_subset: Array2<&str> = array![["!", "@@"], ["###", "$$$$"]];
-    array.store_array_subset_ndarray(
-        ArraySubset::new_with_ranges(&[1..3, 1..3]).start(),
-        &ndarray_subset,
-    )?;
-    let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
+    array.store_array_subset(&ArraySubset::new_with_ranges(&[1..3, 1..3]), ndarray_subset)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
     println!("store_array_subset [1..3, 1..3]:\nndarray::ArrayD<String>\n{data_all}");
 
     // Retrieve bytes directly, convert into a single string allocation, create a &str ndarray
     // TODO: Add a convenience function for this?
-    let data_all = array.retrieve_array_subset(&subset_all)?;
+    let data_all: ArrayBytes = array.retrieve_array_subset(&subset_all)?;
     let (bytes, offsets) = data_all.into_variable()?.into_parts();
     let string = String::from_utf8(bytes.into_owned())?;
     let elements = offsets

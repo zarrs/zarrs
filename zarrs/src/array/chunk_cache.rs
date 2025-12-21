@@ -14,6 +14,7 @@ use crate::{
         array_bytes::merge_chunks_vlen,
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
+        from_array_bytes::FromArrayBytes,
     },
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
 };
@@ -59,14 +60,34 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
 
-    /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
+    /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk(
+    fn retrieve_chunk_bytes(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
 
+    /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>
+    where
+        Self: Sized,
+    {
+        let bytes = self.retrieve_chunk_bytes(chunk_indices, options)?;
+        let shape = self
+            .array()
+            .chunk_grid()
+            .chunk_shape_u64(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        T::from_array_bytes_arc(bytes, &shape, self.array().data_type())
+    }
+
+    #[deprecated(since = "0.23.0", note = "Use retrieve_chunk::<Vec<T>>() instead")]
     /// Cached variant of [`retrieve_chunk_elements_opt`](Array::retrieve_chunk_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_elements<T: ElementOwned>(
@@ -77,13 +98,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        T::from_array_bytes(
-            self.array().data_type(),
-            Arc::unwrap_or_clone(self.retrieve_chunk(chunk_indices, options)?),
-        )
+        self.retrieve_chunk(chunk_indices, options)
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_chunk::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_chunk_ndarray_opt`](Array::retrieve_chunk_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_ndarray<T: ElementOwned>(
@@ -94,24 +116,37 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        let shape = self
-            .array()
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        let elements = self.retrieve_chunk_elements(chunk_indices, options)?;
-        crate::array::elements_to_ndarray(&shape, elements)
+        self.retrieve_chunk(chunk_indices, options)
     }
 
-    /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
+    /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset(
+    fn retrieve_chunk_subset_bytes(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
 
+    /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_subset<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>
+    where
+        Self: Sized,
+    {
+        let bytes = self.retrieve_chunk_subset_bytes(chunk_indices, chunk_subset, options)?;
+        T::from_array_bytes_arc(bytes, chunk_subset.shape(), self.array().data_type())
+    }
+
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_chunk_subset::<Vec<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_chunk_subset_elements_opt`](Array::retrieve_chunk_subset_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_subset_elements<T: ElementOwned>(
@@ -123,17 +158,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        T::from_array_bytes(
-            self.array().data_type(),
-            Arc::unwrap_or_clone(self.retrieve_chunk_subset(
-                chunk_indices,
-                chunk_subset,
-                options,
-            )?),
-        )
+        self.retrieve_chunk_subset(chunk_indices, chunk_subset, options)
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_chunk_subset::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_chunk_subset_ndarray_opt`](Array::retrieve_chunk_subset_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_subset_ndarray<T: ElementOwned>(
@@ -145,14 +177,13 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        let elements = self.retrieve_chunk_subset_elements(chunk_indices, chunk_subset, options)?;
-        crate::array::elements_to_ndarray(chunk_subset.shape(), elements)
+        self.retrieve_chunk_subset(chunk_indices, chunk_subset, options)
     }
 
-    /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).
+    /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::too_many_lines)]
-    fn retrieve_array_subset(
+    fn retrieve_array_subset_bytes(
         &self,
         array_subset: &ArraySubset,
         options: &CodecOptions,
@@ -192,11 +223,11 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                 let chunk_subset = array.chunk_subset(chunk_indices)?;
                 if &chunk_subset == array_subset {
                     // Single chunk fast path if the array subset domain matches the chunk domain
-                    Ok(self.retrieve_chunk(chunk_indices, options)?)
+                    self.retrieve_chunk_bytes(chunk_indices, options)
                 } else {
                     let array_subset_in_chunk_subset =
                         array_subset.relative_to(chunk_subset.start())?;
-                    self.retrieve_chunk_subset(
+                    self.retrieve_chunk_subset_bytes(
                         chunk_indices,
                         &array_subset_in_chunk_subset,
                         options,
@@ -239,6 +270,24 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         }
     }
 
+    /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_array_subset<T: FromArrayBytes>(
+        &self,
+        array_subset: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>
+    where
+        Self: Sized,
+    {
+        let bytes = self.retrieve_array_subset_bytes(array_subset, options)?;
+        T::from_array_bytes_arc(bytes, array_subset.shape(), self.array().data_type())
+    }
+
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_array_subset::<Vec<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_array_subset_elements_opt`](Array::retrieve_array_subset_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_array_subset_elements<T: ElementOwned>(
@@ -249,13 +298,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        T::from_array_bytes(
-            self.array().data_type(),
-            Arc::unwrap_or_clone(self.retrieve_array_subset(array_subset, options)?),
-        )
+        self.retrieve_array_subset(array_subset, options)
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_array_subset::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_array_subset_ndarray_opt`](Array::retrieve_array_subset_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_array_subset_ndarray<T: ElementOwned>(
@@ -266,13 +316,12 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        let elements = self.retrieve_array_subset_elements(array_subset, options)?;
-        crate::array::elements_to_ndarray(array_subset.shape(), elements)
+        self.retrieve_array_subset(array_subset, options)
     }
 
-    /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt).
+    /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks(
+    fn retrieve_chunks_bytes(
         &self,
         chunks: &ArraySubset,
         options: &CodecOptions,
@@ -286,9 +335,25 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         }
 
         let array_subset = self.array().chunks_subset(chunks)?;
-        self.retrieve_array_subset(&array_subset, options)
+        self.retrieve_array_subset_bytes(&array_subset, options)
     }
 
+    /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunks<T: FromArrayBytes>(
+        &self,
+        chunks: &ArraySubset,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>
+    where
+        Self: Sized,
+    {
+        let bytes = self.retrieve_chunks_bytes(chunks, options)?;
+        let array_subset = self.array().chunks_subset(chunks)?;
+        T::from_array_bytes_arc(bytes, array_subset.shape(), self.array().data_type())
+    }
+
+    #[deprecated(since = "0.23.0", note = "Use retrieve_chunks::<Vec<T>>() instead")]
     /// Cached variant of [`retrieve_chunks_elements_opt`](Array::retrieve_chunks_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunks_elements<T: ElementOwned>(
@@ -299,13 +364,14 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        T::from_array_bytes(
-            self.array().data_type(),
-            Arc::unwrap_or_clone(self.retrieve_chunks(chunks, options)?),
-        )
+        self.retrieve_chunks(chunks, options)
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use retrieve_chunks::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Cached variant of [`retrieve_chunks_ndarray_opt`](Array::retrieve_chunks_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunks_ndarray<T: ElementOwned>(
@@ -316,9 +382,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     where
         Self: Sized,
     {
-        let array_subset = self.array().chunks_subset(chunks)?;
-        let elements = self.retrieve_chunks_elements(chunks, options)?;
-        crate::array::elements_to_ndarray(array_subset.shape(), elements)
+        self.retrieve_chunks(chunks, options)
     }
 
     /// Return the number of chunks in the cache. For a thread-local cache, returns the number of chunks cached on the current thread.
@@ -356,7 +420,7 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
         iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             cache
-                .retrieve_chunk(&chunk_indices, options)
+                .retrieve_chunk_bytes(&chunk_indices, options)
                 .map(|bytes| (bytes, chunk_subset))
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
@@ -409,7 +473,7 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
             let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset.start())?;
 
             // Retrieve the chunk subset bytes
-            let chunk_subset_bytes = cache.retrieve_chunk_subset(
+            let chunk_subset_bytes = cache.retrieve_chunk_subset_bytes(
                 &chunk_indices,
                 &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                 options,

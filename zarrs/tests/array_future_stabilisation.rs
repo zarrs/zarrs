@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+#![expect(deprecated)]
 #![cfg(feature = "bz2")]
 
 use std::sync::Arc;

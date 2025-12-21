@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,12 +54,11 @@ N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
     .into_dyn();
 
     // Write the data
-    array.store_array_subset_ndarray(&array.subset_all().start(), &data)?;
+    array.store_array_subset(&array.subset_all(), data.clone())?;
     println!("Data written to array.");
 
     // Read back the data
-    let data_read =
-        array.retrieve_array_subset_ndarray::<Option<Option<u8>>>(&array.subset_all())?;
+    let data_read: ArrayD<Option<Option<u8>>> = array.retrieve_array_subset(&array.subset_all())?;
 
     // Verify data integrity
     assert_eq!(data, data_read);

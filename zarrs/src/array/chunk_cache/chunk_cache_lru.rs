@@ -114,7 +114,7 @@ macro_rules! impl_ChunkCacheLruCommon {
 
 macro_rules! impl_ChunkCacheLruEncoded {
     () => {
-        fn retrieve_chunk(
+        fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
             options: &$crate::array::codec::CodecOptions,
@@ -160,7 +160,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
             }
         }
 
-        fn retrieve_chunk_subset(
+        fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
@@ -207,7 +207,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
 
 macro_rules! impl_ChunkCacheLruDecoded {
     () => {
-        fn retrieve_chunk(
+        fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
             options: &$crate::array::codec::CodecOptions,
@@ -216,8 +216,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
                     Ok(Arc::new(
                         self.array
-                            .retrieve_chunk_opt(chunk_indices, options)?
-                            .into_owned(),
+                            .retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
                     ))
                 })
                 .map_err(|err| {
@@ -228,7 +227,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
                 })
         }
 
-        fn retrieve_chunk_subset(
+        fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
@@ -239,8 +238,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
                     Ok(Arc::new(
                         self.array
-                            .retrieve_chunk_opt(chunk_indices, options)?
-                            .into_owned(),
+                            .retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
                     ))
                 })
                 .map_err(|err| {
@@ -264,7 +262,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
 
 macro_rules! impl_ChunkCacheLruPartialDecoder {
     () => {
-        fn retrieve_chunk(
+        fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
             options: &$crate::array::codec::CodecOptions,
@@ -288,7 +286,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                 .into())
         }
 
-        fn retrieve_chunk_subset(
+        fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
             chunk_subset: &ArraySubset,
@@ -408,6 +406,8 @@ impl ChunkCache for ChunkCachePartialDecoderLruSizeLimitThreadLocal {
 #[cfg(feature = "ndarray")]
 #[cfg(test)]
 mod tests {
+    #![expect(deprecated)]
+
     use std::sync::Arc;
 
     use super::*;
@@ -446,7 +446,7 @@ mod tests {
 
         let data: Vec<u8> = (0..8 * 8).map(|i| i as u8).collect();
         array
-            .store_array_subset_elements(&ArraySubset::new_with_shape(vec![8, 8]), &data)
+            .store_array_subset(&ArraySubset::new_with_shape(vec![8, 8]), &data)
             .unwrap();
         array.store_metadata().unwrap();
 
@@ -566,7 +566,7 @@ mod tests {
         // Retrieve a chunk not in cache
         assert_eq!(
             cache
-                .retrieve_chunk(&[0, 1], &CodecOptions::default())
+                .retrieve_chunk_bytes(&[0, 1], &CodecOptions::default())
                 .unwrap(),
             Arc::new(vec![4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31].into())
         );
@@ -583,7 +583,7 @@ mod tests {
 
         // Partially retrieve from a cached chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[0, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
@@ -600,7 +600,7 @@ mod tests {
 
         // Partially retrieve from an uncached chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[1, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
@@ -618,7 +618,7 @@ mod tests {
 
         // Partially retrieve from an empty chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[2, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
@@ -769,10 +769,7 @@ mod tests {
         // Create test data with variable-length strings
         let data: Vec<String> = (0..8 * 8).map(|i| "x".repeat((i % 8) + 1)).collect();
         array
-            .store_array_subset_elements::<String>(
-                &ArraySubset::new_with_shape(vec![8, 8]),
-                data.as_slice(),
-            )
+            .store_array_subset(&ArraySubset::new_with_shape(vec![8, 8]), data.as_slice())
             .unwrap();
         array.store_metadata().unwrap();
 
@@ -920,7 +917,7 @@ mod tests {
 
         // Partially retrieve from a cached chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[0, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
@@ -935,7 +932,7 @@ mod tests {
 
         // Partially retrieve from an uncached chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[1, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),
@@ -952,7 +949,7 @@ mod tests {
 
         // Partially retrieve from an empty chunk
         cache
-            .retrieve_chunk_subset(
+            .retrieve_chunk_subset_bytes(
                 &[2, 1],
                 &ArraySubset::new_with_ranges(&[0..2, 0..2]),
                 &CodecOptions::default(),

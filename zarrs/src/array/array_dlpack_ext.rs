@@ -5,12 +5,6 @@ use dlpark::traits::{RowMajorCompactLayout, TensorLike};
 
 use super::{DataType, Tensor, TensorError};
 
-mod array_dlpack_ext_async;
-mod array_dlpack_ext_sync;
-
-pub use array_dlpack_ext_async::AsyncArrayDlPackExt;
-pub use array_dlpack_ext_sync::ArrayDlPackExt;
-
 macro_rules! unsupported_dtypes {
     // TODO: Add support for extensions?
     () => {
@@ -116,10 +110,10 @@ impl TensorLike<RowMajorCompactLayout> for Tensor {
 mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
-    use crate::array::transmute_to_bytes;
+    use crate::array::{Tensor, transmute_to_bytes};
     use crate::storage::store::MemoryStore;
     use crate::{
-        array::{ArrayBuilder, ArrayDlPackExt, DataType, codec::CodecOptions},
+        array::{ArrayBuilder, DataType, codec::CodecOptions},
         array_subset::ArraySubset,
     };
 
@@ -130,10 +124,10 @@ mod tests {
             .build(store.into(), "/")
             .unwrap();
         array
-            .store_chunk_elements::<f32>(&[0, 0], &[0.0, 1.0, 2.0, 3.0])
+            .store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])
             .unwrap();
-        let tensor = array
-            .retrieve_chunks_dlpack(
+        let tensor: Tensor = array
+            .retrieve_chunks_opt(
                 &ArraySubset::new_with_shape(vec![1, 2]),
                 &CodecOptions::default(),
             )
