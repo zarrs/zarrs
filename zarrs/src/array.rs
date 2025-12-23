@@ -63,7 +63,7 @@ pub use chunk_cache::{
     ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
 };
 pub use data_type::{DataType, DataTypeOptional, FillValue, NamedDataType};
-pub use zarrs_chunk_grid::ArrayIndices;
+pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 
 #[expect(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
@@ -228,7 +228,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use zarrs::array::{Array, ArrayBytes};
+/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec};
 /// # use zarrs::array_subset::ArraySubset;
 /// # use zarrs::array_subset::iterators::Indices;
 /// # use zarrs::indexer::Indexer;
@@ -242,7 +242,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// let chunks: Indices = ArraySubset::new_with_shape(chunk_grid_shape.to_vec()).indices();
 ///
 /// // Iterate over chunk indices (in parallel)
-/// chunks.into_par_iter().try_for_each(|chunk_indices: Vec<u64>| {
+/// chunks.into_par_iter().try_for_each(|chunk_indices: ArrayIndicesTinyVec| {
 ///     // Retrieve the array subset of the chunk within the array bounds
 ///     //   This partially decodes chunks that extend beyond the array end
 ///     let subset: ArraySubset = array.chunk_subset_bounded(&chunk_indices)?;

@@ -10,7 +10,7 @@ use super::codec::{CodecError, ShardingCodec};
 use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
-    Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
+    Array, ArrayError, ArrayIndicesTinyVec, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
     concurrency::concurrency_chunks_and_codec,
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
@@ -558,7 +558,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
 
                 match self.data_type().size() {
                     DataTypeSize::Variable => {
-                        let retrieve_inner_chunk = |shard_indices: Vec<u64>| -> Result<
+                        let retrieve_inner_chunk = |shard_indices: ArrayIndicesTinyVec| -> Result<
                             (ArrayBytes<'_>, ArraySubset),
                             ArrayError,
                         > {
@@ -597,33 +597,34 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                             {
                                 let output =
                                     UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                                let retrieve_shard_into_slice = |shard_indices: Vec<u64>| {
-                                    let shard_subset = self.chunk_subset(&shard_indices)?;
-                                    let shard_subset_overlap =
-                                        shard_subset.overlap(array_subset)?;
-                                    let bytes = cache
-                                        .retrieve(self, &shard_indices)?
-                                        .partial_decode(
-                                            &shard_subset_overlap
-                                                .relative_to(shard_subset.start())?,
-                                            &options,
-                                        )?
-                                        .into_owned();
-                                    let mut output_view = unsafe {
-                                        // SAFETY: chunks represent disjoint array subsets
-                                        ArrayBytesFixedDisjointView::new(
-                                            output,
-                                            data_type_size,
-                                            array_subset.shape(),
-                                            shard_subset_overlap
-                                                .relative_to(array_subset.start())?,
-                                        )?
+                                let retrieve_shard_into_slice =
+                                    |shard_indices: ArrayIndicesTinyVec| {
+                                        let shard_subset = self.chunk_subset(&shard_indices)?;
+                                        let shard_subset_overlap =
+                                            shard_subset.overlap(array_subset)?;
+                                        let bytes = cache
+                                            .retrieve(self, &shard_indices)?
+                                            .partial_decode(
+                                                &shard_subset_overlap
+                                                    .relative_to(shard_subset.start())?,
+                                                &options,
+                                            )?
+                                            .into_owned();
+                                        let mut output_view = unsafe {
+                                            // SAFETY: chunks represent disjoint array subsets
+                                            ArrayBytesFixedDisjointView::new(
+                                                output,
+                                                data_type_size,
+                                                array_subset.shape(),
+                                                shard_subset_overlap
+                                                    .relative_to(array_subset.start())?,
+                                            )?
+                                        };
+                                        output_view
+                                            .copy_from_slice(&bytes.into_fixed()?)
+                                            .map_err(CodecError::from)?;
+                                        Ok::<_, ArrayError>(())
                                     };
-                                    output_view
-                                        .copy_from_slice(&bytes.into_fixed()?)
-                                        .map_err(CodecError::from)?;
-                                    Ok::<_, ArrayError>(())
-                                };
                                 let indices = shards.indices();
                                 iter_concurrent_limit!(
                                     chunk_concurrent_limit,

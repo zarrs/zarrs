@@ -3,7 +3,8 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 
 use super::{
-    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element, IntoArrayBytes,
+    Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, Element,
+    IntoArrayBytes,
     codec::{ArrayToBytesCodecTraits, CodecOptions},
     concurrency::concurrency_chunks_and_codec,
 };
@@ -227,7 +228,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_async_writable_transformer(storage_handle)
             .await?;
-        let erase_chunk = |chunk_indices: Vec<u64>| {
+        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let storage_transformer = storage_transformer.clone();
             async move {
                 storage_transformer
@@ -375,7 +376,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
-                let store_chunk = |chunk_indices: Vec<u64>| {
+                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                     let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                     let chunk_bytes = chunks_bytes
                         .extract_array_subset(

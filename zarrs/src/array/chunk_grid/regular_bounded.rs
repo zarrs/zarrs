@@ -301,6 +301,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
+    use crate::array::ArrayIndicesTinyVec;
     use crate::array_subset::ArraySubset;
 
     #[test]
@@ -429,13 +430,23 @@ mod tests {
         let iter = chunk_grid.iter_chunk_indices();
         assert_eq!(
             iter.collect::<Vec<_>>(),
-            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+            vec![
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+            ]
         );
 
         let iter = chunk_grid.par_iter_chunk_indices();
         assert_eq!(
             iter.collect::<Vec<_>>(),
-            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+            vec![
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+            ]
         );
     }
 }

@@ -5,7 +5,7 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{array_subset::ArraySubset, unravel_index, ArrayIndices};
+use crate::{array_subset::ArraySubset, unravel_index, ArrayIndicesTinyVec};
 
 /// An iterator over the indices in an array subset.
 ///
@@ -78,7 +78,7 @@ impl Indices {
 }
 
 impl<'a> IntoIterator for &'a Indices {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -90,7 +90,7 @@ impl<'a> IntoIterator for &'a Indices {
 }
 
 impl<'a> IntoParallelRefIterator<'a> for &'a Indices {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type Iter = ParIndicesIterator<'a>;
 
     fn par_iter(&self) -> Self::Iter {
@@ -102,7 +102,7 @@ impl<'a> IntoParallelRefIterator<'a> for &'a Indices {
 }
 
 impl<'a> IntoParallelIterator for &'a Indices {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type Iter = ParIndicesIterator<'a>;
 
     fn into_par_iter(self) -> Self::Iter {
@@ -114,7 +114,7 @@ impl<'a> IntoParallelIterator for &'a Indices {
 }
 
 impl IntoIterator for Indices {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -126,7 +126,7 @@ impl IntoIterator for Indices {
 }
 
 impl IntoParallelIterator for Indices {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type Iter = ParIndicesIntoIterator;
 
     fn into_par_iter(self) -> Self::Iter {
@@ -158,7 +158,7 @@ pub struct IndicesIntoIterator {
 macro_rules! impl_indices_iterator {
     ($iterator_type:ty) => {
         impl Iterator for $iterator_type {
-            type Item = ArrayIndices;
+            type Item = ArrayIndicesTinyVec;
 
             fn next(&mut self) -> Option<Self::Item> {
                 if self.range.start >= self.range.end {
@@ -224,7 +224,7 @@ pub struct ParIndicesIntoIterator {
 macro_rules! impl_par_chunks_iterator {
     ($iterator_type:ty) => {
         impl ParallelIterator for $iterator_type {
-            type Item = ArrayIndices;
+            type Item = ArrayIndicesTinyVec;
 
             fn drive_unindexed<C>(self, consumer: C) -> C::Result
             where
@@ -258,7 +258,7 @@ impl_par_chunks_iterator!(ParIndicesIterator<'_>);
 impl_par_chunks_iterator!(ParIndicesIntoIterator);
 
 impl<'a> Producer for ParIndicesIterator<'a> {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type IntoIter = IndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -282,7 +282,7 @@ impl<'a> Producer for ParIndicesIterator<'a> {
 }
 
 impl Producer for ParIndicesIntoIterator {
-    type Item = ArrayIndices;
+    type Item = ArrayIndicesTinyVec;
     type IntoIter = IndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -308,6 +308,7 @@ impl Producer for ParIndicesIntoIterator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ArrayIndicesTinyVec;
 
     #[test]
     fn indices_iterator_partial() {
@@ -315,9 +316,12 @@ mod tests {
             Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), 1..4);
         assert_eq!(indices.len(), 3);
         let mut iter = indices.iter();
-        assert_eq!(iter.next(), Some(vec![1, 6]));
-        assert_eq!(iter.next_back(), Some(vec![2, 6]));
-        assert_eq!(iter.next(), Some(vec![2, 5]));
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 6])));
+        assert_eq!(
+            iter.next_back(),
+            Some(ArrayIndicesTinyVec::Heap(vec![2, 6]))
+        );
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![2, 5])));
         assert_eq!(iter.next(), None);
 
         assert_eq!(
@@ -329,7 +333,7 @@ mod tests {
             Indices::new_with_start_end(ArraySubset::new_with_ranges(&[1..3, 5..7]), ..=0);
         assert_eq!(indices.len(), 1);
         let mut iter = indices.iter();
-        assert_eq!(iter.next(), Some(vec![1, 5]));
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 5])));
         assert_eq!(iter.next(), None);
     }
 

@@ -4,8 +4,8 @@ use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::{
-    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV2, ArrayMetadataV3, DataType, FromArrayBytes,
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError,
+    ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataV2, ArrayMetadataV3, DataType, FromArrayBytes,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
         optional_nesting_depth,
@@ -506,7 +506,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .create_async_readable_transformer(storage_handle)
             .await?;
 
-        let retrieve_encoded_chunk = |chunk_indices: Vec<u64>| {
+        let retrieve_encoded_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let storage_transformer = storage_transformer.clone();
             async move {
                 storage_transformer
@@ -588,7 +588,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             )));
         }
 
-        let retrieve_chunk = |chunk_indices: Vec<u64>| {
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let options = options.clone();
             async move {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
@@ -648,7 +648,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .collect();
             let mask_output_slices = mask_output_slices.as_slice();
 
-            let retrieve_chunk = |chunk_indices: Vec<u64>| {
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let options = options.clone();
                 async move {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;

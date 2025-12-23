@@ -12,7 +12,7 @@ use crate::storage::{
 use crate::{
     array::{
         ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-        ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
+        ArrayIndicesTinyVec, ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
         array_bytes::merge_chunks_vlen,
         chunk_grid::RegularChunkGrid,
         codec::{
@@ -225,7 +225,7 @@ async fn partial_decode_fixed_array_subset(
         .chunks_in_array_subset(array_subset)?
         .indices()
         .into_iter()
-        .map(|chunk_indices: Vec<u64>| {
+        .map(|chunk_indices: ArrayIndicesTinyVec| {
             let chunk_index =
                 ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
             let chunk_index = usize::try_from(chunk_index).unwrap();
@@ -391,7 +391,7 @@ async fn partial_decode_variable_array_subset(
     )
     .expect("matching dimensionality");
 
-    let decode_inner_chunk_subset = |chunk_indices: Vec<u64>, chunk_subset| {
+    let decode_inner_chunk_subset = |chunk_indices: ArrayIndicesTinyVec, chunk_subset| {
         let shard_index_idx =
             ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();

@@ -18,6 +18,10 @@ use zarrs_plugin::PluginUnsupportedError;
 /// An ND index to an element in an array or chunk.
 pub type ArrayIndices = Vec<u64>;
 
+/// An ND index to an element in an array or chunk.
+/// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
+pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
+
 use array_subset::{
     iterators::{IndicesIntoIterator, ParIndicesIntoIterator},
     ArraySubset, IncompatibleDimensionalityError,
@@ -417,7 +421,7 @@ pub trait ChunkGridTraitsIterators: ChunkGridTraits {
     /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
     fn iter_chunk_indices_and_subsets(
         &self,
-    ) -> Box<dyn Iterator<Item = (ArrayIndices, ArraySubset)> + '_> {
+    ) -> Box<dyn Iterator<Item = (ArrayIndicesTinyVec, ArraySubset)> + '_> {
         Box::new(self.iter_chunk_indices().map(|chunk_indices| {
             let chunk_subset = self
                 .subset(&chunk_indices)
@@ -449,22 +453,25 @@ fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
 
 /// Unravel a linearised index to ND indices.
 #[must_use]
-fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
+fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
+    let total_size: u64 = shape
+        .iter()
+        .try_fold(1u64, |acc, &dim| acc.checked_mul(dim))?;
+    if index >= total_size {
+        return None;
+    }
+
     let len = shape.len();
-    let mut indices: ArrayIndices = Vec::with_capacity(len);
-    for (indices_i, &dim) in std::iter::zip(
-        indices.spare_capacity_mut().iter_mut().rev(),
-        shape.iter().rev(),
-    ) {
-        indices_i.write(index % dim);
+    let mut indices = ArrayIndicesTinyVec::with_capacity(len);
+
+    // Build indices in reverse order, then reverse
+    for &dim in shape.iter().rev() {
+        indices.push(index % dim);
         index /= dim;
     }
-    unsafe { indices.set_len(len) };
-    if index == 0 {
-        Some(indices)
-    } else {
-        None
-    }
+    indices.reverse();
+
+    Some(indices)
 }
 
 /// Get a mutable slice of the spare capacity in a vector.

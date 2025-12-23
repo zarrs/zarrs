@@ -35,6 +35,7 @@ pub use linearised_indices_iterator::{
 
 #[cfg(test)]
 mod tests {
+    use crate::ArrayIndicesTinyVec;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
     use crate::array_subset::ArraySubset;
@@ -46,14 +47,22 @@ mod tests {
 
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (4, Some(4)));
-        assert_eq!(iter.next(), Some(vec![1, 1]));
-        assert_eq!(iter.next_back(), Some(vec![2, 2]));
-        assert_eq!(iter.next(), Some(vec![1, 2]));
-        assert_eq!(iter.next(), Some(vec![2, 1]));
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 1])));
+        assert_eq!(
+            iter.next_back(),
+            Some(ArrayIndicesTinyVec::Heap(vec![2, 2]))
+        );
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![1, 2])));
+        assert_eq!(iter.next(), Some(ArrayIndicesTinyVec::Heap(vec![2, 1])));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.next_back(), None);
 
-        let expected = vec![vec![1, 1], vec![1, 2], vec![2, 1], vec![2, 2]];
+        let expected = vec![
+            ArrayIndicesTinyVec::Heap(vec![1, 1]),
+            ArrayIndicesTinyVec::Heap(vec![1, 2]),
+            ArrayIndicesTinyVec::Heap(vec![2, 1]),
+            ArrayIndicesTinyVec::Heap(vec![2, 2]),
+        ];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         assert_eq!((&indices).par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
@@ -94,7 +103,10 @@ mod tests {
         let mut iter = indices.into_iter();
         assert_eq!(iter.size_hint(), (1, Some(1)));
         assert_eq!(iter.contiguous_elements(), 4);
-        assert_eq!(iter.next(), Some((vec![0, 0], 4)));
+        assert_eq!(
+            iter.next(),
+            Some((ArrayIndicesTinyVec::Heap(vec![0, 0]), 4))
+        );
         assert_eq!(iter.next(), None);
     }
 
@@ -109,11 +121,20 @@ mod tests {
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (2, Some(2)));
         assert_eq!(iter.contiguous_elements(), 2);
-        assert_eq!(iter.next_back(), Some((vec![2, 1], 2)));
-        assert_eq!(iter.next(), Some((vec![1, 1], 2)));
+        assert_eq!(
+            iter.next_back(),
+            Some((ArrayIndicesTinyVec::Heap(vec![2, 1]), 2))
+        );
+        assert_eq!(
+            iter.next(),
+            Some((ArrayIndicesTinyVec::Heap(vec![1, 1]), 2))
+        );
         assert_eq!(iter.next(), None);
 
-        let expected = vec![(vec![1, 1], 2), (vec![2, 1], 2)];
+        let expected = vec![
+            (ArrayIndicesTinyVec::Heap(vec![1, 1]), 2),
+            (ArrayIndicesTinyVec::Heap(vec![2, 1]), 2),
+        ];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);
@@ -125,7 +146,7 @@ mod tests {
         let subset = ArraySubset::new_with_ranges(&[1..3, 0..1, 0..2, 0..2]);
         let indices = subset.contiguous_indices(&[3, 1, 2, 2]).unwrap();
 
-        let expected = vec![(vec![1, 0, 0, 0], 8)];
+        let expected = vec![(ArrayIndicesTinyVec::Heap(vec![1, 0, 0, 0]), 8)];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
         // assert_eq!(indices.par_iter().collect::<Vec<_>>(), expected);
         assert_eq!(indices.clone().into_iter().collect::<Vec<_>>(), expected);

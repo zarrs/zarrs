@@ -5,7 +5,7 @@ use thiserror::Error;
 use crate::ArrayShape;
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    ravel_indices, ArrayIndices,
+    ravel_indices, ArrayIndices, ArrayIndicesTinyVec,
 };
 use crate::{MaybeSend, MaybeSync};
 
@@ -73,7 +73,7 @@ pub trait Indexer: MaybeSend + MaybeSync {
     fn output_shape(&self) -> Vec<u64>;
 
     /// Returns an iterator over the indices of elements.
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>>;
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>>;
 
     /// Returns an iterator over the linearised indices of elements.
     ///
@@ -134,7 +134,7 @@ impl<T: Indexer> Indexer for &T {
         (**self).output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         (**self).iter_indices()
     }
 
@@ -167,7 +167,7 @@ impl<T: Indexer> Indexer for &[T] {
         vec![self.len()]
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         let indices = self.iter().map(Indexer::iter_indices).collect::<Vec<_>>();
 
         Box::new(indices.into_iter().flat_map(IntoIterator::into_iter))
@@ -223,7 +223,7 @@ impl<T: Indexer> Indexer for Vec<T> {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         self.as_slice().iter_indices()
     }
 
@@ -260,7 +260,7 @@ impl<T: Indexer, const N: usize> Indexer for [T; N] {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         self.as_slice().iter_indices()
     }
 
@@ -297,9 +297,12 @@ impl Indexer for &[ArrayIndices] {
         vec![self.len()]
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
-        #[allow(clippy::unnecessary_to_owned)] // false positive
-        Box::new(self.to_vec().into_iter())
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
+        let indices: Vec<ArrayIndicesTinyVec> = self
+            .iter()
+            .map(|v| v.iter().copied().collect::<ArrayIndicesTinyVec>())
+            .collect();
+        Box::new(indices.into_iter())
     }
 
     fn iter_linearised_indices(
@@ -367,7 +370,7 @@ impl Indexer for Vec<ArrayIndices> {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         self.as_slice().iter_indices()
     }
 
@@ -404,7 +407,7 @@ impl<const N: usize> Indexer for [ArrayIndices; N] {
         self.as_slice().output_shape()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         self.as_slice().iter_indices()
     }
 

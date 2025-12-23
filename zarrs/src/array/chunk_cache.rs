@@ -10,7 +10,7 @@ use crate::storage::ReadableStorageTraits;
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{
-        Array, ArrayBytesFixedDisjointView, ElementOwned,
+        Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ElementOwned,
         array_bytes::merge_chunks_vlen,
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
@@ -467,7 +467,7 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
             .as_mut()
             .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
 
-        let retrieve_chunk = |chunk_indices: Vec<u64>| {
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
             let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset.start())?;

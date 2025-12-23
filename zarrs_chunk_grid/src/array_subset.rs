@@ -23,7 +23,7 @@ use zarrs_metadata::ChunkShape;
 
 use crate::{
     indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},
-    ArrayIndices, ArrayShape,
+    ArrayIndices, ArrayIndicesTinyVec, ArrayShape,
 };
 
 /// An array subset.
@@ -458,7 +458,7 @@ impl Indexer for ArraySubset {
         self.shape().to_vec()
     }
 
-    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndices>> {
+    fn iter_indices(&self) -> Box<dyn IndexerIterator<Item = ArrayIndicesTinyVec>> {
         Box::new(self.indices().into_iter())
     }
 

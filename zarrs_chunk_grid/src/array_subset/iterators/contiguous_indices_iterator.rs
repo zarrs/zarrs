@@ -7,7 +7,7 @@ use crate::{
     array_subset::{
         iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
     },
-    ArrayIndices,
+    ArrayIndicesTinyVec,
 };
 
 /// Iterates over contiguous element indices in an array subset.
@@ -141,7 +141,7 @@ impl ContiguousIndices {
 }
 
 impl<'a> IntoIterator for &'a ContiguousIndices {
-    type Item = (ArrayIndices, u64);
+    type Item = (ArrayIndicesTinyVec, u64);
     type IntoIter = ContiguousIndicesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -157,7 +157,7 @@ impl<'a> IntoIterator for &'a ContiguousIndices {
 }
 
 impl IntoIterator for ContiguousIndices {
-    type Item = (ArrayIndices, u64);
+    type Item = (ArrayIndicesTinyVec, u64);
     type IntoIter = ContiguousIndicesIntoIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -208,7 +208,7 @@ macro_rules! impl_contiguous_indices_iterator {
         }
 
         impl Iterator for $iterator_type {
-            type Item = (ArrayIndices, u64);
+            type Item = (ArrayIndicesTinyVec, u64);
 
             fn next(&mut self) -> Option<Self::Item> {
                 self.inner.next().map(|i| (i, self.contiguous_elements()))

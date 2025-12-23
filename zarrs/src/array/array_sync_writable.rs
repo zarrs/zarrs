@@ -4,7 +4,8 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{
-    Array, ArrayError, ArrayMetadata, ArrayMetadataOptions, Element, IntoArrayBytes,
+    Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, Element,
+    IntoArrayBytes,
     codec::{ArrayToBytesCodecTraits, CodecOptions},
     concurrency::concurrency_chunks_and_codec,
 };
@@ -255,8 +256,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let storage_transformer = self
             .storage_transformers()
             .create_writable_transformer(storage_handle)?;
-        let erase_chunk =
-            |chunk_indices: Vec<u64>| storage_transformer.erase(&self.chunk_key(&chunk_indices));
+        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            storage_transformer.erase(&self.chunk_key(&chunk_indices))
+        };
 
         #[cfg(not(target_arch = "wasm32"))]
         chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
@@ -388,7 +390,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
-                let store_chunk = |chunk_indices: Vec<u64>| -> Result<(), ArrayError> {
+                let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                     let chunk_subset = self.chunk_subset(&chunk_indices)?;
                     let chunk_bytes = chunks_bytes.extract_array_subset(
                         &chunk_subset.relative_to(array_subset.start())?,

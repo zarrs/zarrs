@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 
 use super::{
-    Array, ArrayError, Element, IntoArrayBytes,
+    Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes,
     array_bytes::update_array_bytes,
     codec::{
         ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
@@ -346,7 +346,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 &codec_concurrency,
             );
 
-            let store_chunk = |chunk_indices: Vec<u64>| {
+            let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                 let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
                 let chunk_subset_in_array_subset =
