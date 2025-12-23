@@ -137,22 +137,27 @@ impl BytesToBytesCodecTraits for Adler32Codec {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {
                     let (checksum, decoded_value) = encoded_value.split_at(CHECKSUM_SIZE);
-                    (decoded_value, checksum)
+                    let checksum: [u8; CHECKSUM_SIZE] = checksum.try_into().unwrap();
+                    (Cow::Owned(decoded_value.to_vec()), checksum)
                 }
                 Adler32CodecConfigurationChecksumLocation::End => {
-                    encoded_value.split_at(encoded_value.len() - CHECKSUM_SIZE)
+                    let mut owned = encoded_value.into_owned();
+                    let checksum_start = owned.len() - CHECKSUM_SIZE;
+                    let checksum: [u8; CHECKSUM_SIZE] = owned[checksum_start..].try_into().unwrap();
+                    owned.truncate(checksum_start);
+                    (Cow::Owned(owned), checksum)
                 }
             };
 
             if options.validate_checksums() {
                 let mut adler = simd_adler32::Adler32::new();
-                adler.write(decoded_value);
+                adler.write(&decoded_value);
                 if adler.finish().to_le_bytes() != checksum {
                     return Err(CodecError::InvalidChecksum);
                 }
             }
 
-            Ok(Cow::Owned(decoded_value.to_vec()))
+            Ok(decoded_value)
         } else {
             Err(CodecError::Other(
                 "adler32 decoder expects a 32 bit input".to_string(),

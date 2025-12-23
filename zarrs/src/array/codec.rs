@@ -774,7 +774,7 @@ impl BytesPartialDecoderTraits for StoragePartialDecoder {
         let bytes = self.storage.get_partial_many(&self.key, decoded_regions)?;
         if let Some(bytes) = bytes {
             let bytes = bytes
-                .map(|b| Ok::<_, StorageError>(Cow::Owned(b?.to_vec())))
+                .map(|b| Ok::<_, StorageError>(Cow::Owned(b?.into())))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Some(bytes))
         } else {
@@ -827,7 +827,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStoragePartialDecoder {
             use futures::{StreamExt, TryStreamExt};
             Some(
                 bytes
-                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.to_vec())))
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
                     .try_collect()
                     .await?,
             )
@@ -860,7 +860,7 @@ impl BytesPartialDecoderTraits for Mutex<Option<Vec<u8>>> {
             let mut outputs = vec![];
             for byte_range in decoded_regions {
                 if byte_range.end(size) <= size {
-                    outputs.push(Cow::Owned(input[byte_range.to_range_usize(size)].to_vec()));
+                    outputs.push(Cow::Owned(input[byte_range.to_range_usize(size)].into()));
                 } else {
                     return Err(InvalidByteRangeError::new(byte_range, size).into());
                 }
@@ -942,7 +942,7 @@ impl BytesPartialDecoderTraits for StoragePartialEncoder<ReadableWritableStorage
             Ok(Some(
                 results
                     .into_iter()
-                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.to_vec())))
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         } else {
@@ -1007,7 +1007,7 @@ impl AsyncBytesPartialDecoderTraits for StoragePartialEncoder<AsyncReadableWrita
             use futures::{StreamExt, TryStreamExt};
             Ok(Some(
                 results
-                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.to_vec())))
+                    .map(|bytes| Ok::<_, StorageError>(Cow::Owned(bytes?.into())))
                     .try_collect()
                     .await?,
             ))

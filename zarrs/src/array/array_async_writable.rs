@@ -271,7 +271,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                 .codecs()
                 .encode(chunk_bytes, &chunk_array_representation, options)
                 .map_err(ArrayError::CodecError)?;
-            let chunk_encoded = Bytes::from(chunk_encoded.to_vec());
+            let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;
         }
         Ok(())

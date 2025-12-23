@@ -227,7 +227,7 @@ where
             let chunk_shape = self.decoded_representation.shape_u64();
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
-            let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
+            let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
                     reverse_endianness(
@@ -327,7 +327,7 @@ where
             let chunk_shape = self.decoded_representation.shape_u64();
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
-            let mut bytes_to_encode = bytes.clone().into_fixed()?.to_vec();
+            let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
                     reverse_endianness(

@@ -141,11 +141,17 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
             if options.validate_checksums() {
                 let decoded_value = &encoded_value[..encoded_value.len() - CHECKSUM_SIZE];
                 let checksum = h5_checksum_fletcher32(decoded_value).to_le_bytes();
-                if checksum != encoded_value[encoded_value.len() - CHECKSUM_SIZE..] {
+                let checksum_stored: [u8; CHECKSUM_SIZE] = encoded_value
+                    [encoded_value.len() - CHECKSUM_SIZE..]
+                    .try_into()
+                    .unwrap();
+                if checksum != checksum_stored {
                     return Err(CodecError::InvalidChecksum);
                 }
             }
-            let decoded_value = encoded_value[..encoded_value.len() - CHECKSUM_SIZE].to_vec();
+
+            let mut decoded_value = encoded_value.into_owned();
+            decoded_value.truncate(decoded_value.len() - CHECKSUM_SIZE);
             Ok(Cow::Owned(decoded_value))
         } else {
             Err(CodecError::Other(

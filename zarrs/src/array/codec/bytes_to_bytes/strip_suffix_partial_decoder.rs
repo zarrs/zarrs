@@ -51,12 +51,16 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
                         let length = bytes.len() - self.suffix_size;
-                        Cow::Owned(bytes[..length].to_vec())
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Cow::Owned(bytes)
                     }
                     ByteRange::Suffix(_) => {
                         let length = bytes.len() as u64 - (self.suffix_size as u64);
                         let length = usize::try_from(length).unwrap();
-                        Cow::Owned(bytes[..length].to_vec())
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Cow::Owned(bytes)
                     }
                 }))
             })
@@ -122,7 +126,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
-                        Ok(Some(Cow::Owned(bytes[..length].to_vec())))
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Ok(Some(Cow::Owned(bytes)))
                     } else {
                         Ok(None)
                     }

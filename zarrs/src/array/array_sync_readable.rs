@@ -168,7 +168,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 
         storage_transformer
             .get(&self.chunk_key(chunk_indices))
-            .map(|maybe_bytes| maybe_bytes.map(|bytes| bytes.to_vec()))
+            .map(|maybe_bytes| maybe_bytes.map(Into::into))
     }
 
     /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist with default codec options.
@@ -248,7 +248,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let retrieve_encoded_chunk = |chunk_indices: Vec<u64>| {
             storage_transformer
                 .get(&self.chunk_key(&chunk_indices))
-                .map(|maybe_bytes| maybe_bytes.map(|bytes| bytes.to_vec()))
+                .map(|maybe_bytes| maybe_bytes.map(Into::into))
         };
 
         let indices = chunks.indices();
@@ -471,11 +471,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_encoded: Vec<u8> = chunk_encoded.into();
             let chunk_representation = self.chunk_array_representation(chunk_indices)?;
             let bytes = self
                 .codecs()
-                .decode(Cow::Owned(chunk_encoded), &chunk_representation, options)
+                .decode(
+                    Cow::Borrowed(&chunk_encoded),
+                    &chunk_representation,
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
@@ -528,11 +531,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_encoded: Vec<u8> = chunk_encoded.into();
             let chunk_representation = self.chunk_array_representation(chunk_indices)?;
             self.codecs()
                 .decode_into(
-                    Cow::Owned(chunk_encoded),
+                    Cow::Borrowed(&chunk_encoded),
                     &chunk_representation,
                     output_target,
                     options,
