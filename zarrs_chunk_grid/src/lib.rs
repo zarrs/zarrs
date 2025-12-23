@@ -18,6 +18,10 @@ use zarrs_plugin::PluginUnsupportedError;
 /// An ND index to an element in an array or chunk.
 pub type ArrayIndices = Vec<u64>;
 
+/// An ND index to an element in an array or chunk.
+/// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
+pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
+
 use array_subset::{
     iterators::{IndicesIntoIterator, ParIndicesIntoIterator},
     ArraySubset, IncompatibleDimensionalityError,
@@ -417,7 +421,7 @@ pub trait ChunkGridTraitsIterators: ChunkGridTraits {
     /// Return a serial iterator over the chunk indices and subsets of the chunk grid.
     fn iter_chunk_indices_and_subsets(
         &self,
-    ) -> Box<dyn Iterator<Item = (ArrayIndices, ArraySubset)> + '_> {
+    ) -> Box<dyn Iterator<Item = (ArrayIndicesTinyVec, ArraySubset)> + '_> {
         Box::new(self.iter_chunk_indices().map(|chunk_indices| {
             let chunk_subset = self
                 .subset(&chunk_indices)
@@ -449,26 +453,70 @@ fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
 
 /// Unravel a linearised index to ND indices.
 #[must_use]
-fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
-    let len = shape.len();
-    let mut indices: ArrayIndices = Vec::with_capacity(len);
-    for (indices_i, &dim) in std::iter::zip(
-        indices.spare_capacity_mut().iter_mut().rev(),
-        shape.iter().rev(),
-    ) {
-        indices_i.write(index % dim);
-        index /= dim;
+fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
+    let total_size: u64 = shape
+        .iter()
+        .try_fold(1u64, |acc, &dim| acc.checked_mul(dim))?;
+    if index >= total_size {
+        return None;
     }
-    unsafe { indices.set_len(len) };
-    if index == 0 {
-        Some(indices)
-    } else {
-        None
+
+    // Specialised routines for dimensions <=4, unrolled and no dynamic allocation
+    match shape.len() {
+        0 => Some(ArrayIndicesTinyVec::new()),
+        1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
+        2 => {
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1))
+        }
+        3 => {
+            let i2 = index % shape[2];
+            index /= shape[2];
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2))
+        }
+        4 => {
+            let i3 = index % shape[3];
+            index /= shape[3];
+            let i2 = index % shape[2];
+            index /= shape[2];
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3))
+        }
+        len => {
+            // For 5+ dimensions, use Vec path with spare_capacity_mut
+            let mut vec = Vec::with_capacity(len);
+
+            {
+                // SAFETY: `indices` are initialised and never read below
+                let indices = unsafe { vec_spare_capacity_to_mut_slice(&mut vec) };
+
+                // Fill in reverse order
+                for i in (0..len).rev() {
+                    indices[i] = index % shape[i];
+                    index /= shape[i];
+                }
+            }
+
+            // SAFETY: all `len` elements are initialised
+            unsafe { vec.set_len(len) };
+
+            Some(ArrayIndicesTinyVec::Heap(vec))
+        }
     }
 }
 
 /// Get a mutable slice of the spare capacity in a vector.
-fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
+///
+/// # Safety
+/// The caller must not read from the returned slice before it has been initialised.
+unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
     let spare_capacity = vec.spare_capacity_mut();
     // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
     unsafe {

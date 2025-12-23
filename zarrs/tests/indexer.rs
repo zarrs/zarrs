@@ -12,7 +12,7 @@ use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::metadata::ChunkShape;
 use zarrs::{
     array::{
-        ArrayIndices, ChunkRepresentation, CodecChain, DataType, ElementOwned,
+        ArrayIndices, ArrayIndicesTinyVec, ChunkRepresentation, CodecChain, DataType, ElementOwned,
         codec::{
             ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
@@ -41,7 +41,13 @@ fn indexer_basic<T: Indexer>(
             .collect_vec(),
         contiguous_indices
     );
-    assert_eq!(indexer.iter_indices().collect_vec(), indices);
+    assert_eq!(
+        indexer.iter_indices().collect_vec(),
+        indices
+            .into_iter()
+            .map(ArrayIndicesTinyVec::Heap)
+            .collect_vec()
+    );
     assert_eq!(
         indexer
             .iter_linearised_indices(&[4, 4])

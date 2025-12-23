@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{
-    Array, ArrayError, Element, IntoArrayBytes,
+    Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes,
     codec::{
         ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialEncoder,
     },
@@ -378,7 +378,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
                 &codec_concurrency,
             );
 
-            let store_chunk = |chunk_indices: Vec<u64>| -> Result<(), ArrayError> {
+            let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
                 let chunk_subset_in_array_subset = overlap.relative_to(array_subset.start())?;

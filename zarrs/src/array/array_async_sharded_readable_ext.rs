@@ -12,7 +12,7 @@ use super::{
     Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
     concurrency::concurrency_chunks_and_codec,
 };
-use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
+use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
@@ -594,7 +594,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
 
                 match self.data_type().size() {
                     DataTypeSize::Variable => {
-                        let retrieve_inner_chunk = |shard_indices: Vec<u64>| {
+                        let retrieve_inner_chunk = |shard_indices: ArrayIndicesTinyVec| {
                             let options = options.clone();
                             async move {
                                 let shard_subset = self.chunk_subset(&shard_indices)?;
@@ -632,35 +632,36 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                             {
                                 let output =
                                     UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                                let retrieve_shard_into_slice = |shard_indices: Vec<u64>| {
-                                    let options = options.clone();
-                                    async move {
-                                        let shard_subset = self.chunk_subset(&shard_indices)?;
-                                        let shard_subset_overlap =
-                                            shard_subset.overlap(array_subset)?;
-                                        let mut output_view = unsafe {
-                                            // SAFETY: chunks represent disjoint array subsets
-                                            ArrayBytesFixedDisjointView::new(
-                                                output,
-                                                data_type_size,
-                                                array_subset.shape(),
-                                                shard_subset_overlap
-                                                    .relative_to(array_subset.start())?,
-                                            )?
-                                        };
-                                        cache
-                                            .retrieve(self, &shard_indices)
-                                            .await?
-                                            .partial_decode_into(
-                                                &shard_subset_overlap
-                                                    .relative_to(shard_subset.start())?,
-                                                (&mut output_view).into(),
-                                                &options,
-                                            )
-                                            .await?;
-                                        Ok::<_, ArrayError>(())
-                                    }
-                                };
+                                let retrieve_shard_into_slice =
+                                    |shard_indices: ArrayIndicesTinyVec| {
+                                        let options = options.clone();
+                                        async move {
+                                            let shard_subset = self.chunk_subset(&shard_indices)?;
+                                            let shard_subset_overlap =
+                                                shard_subset.overlap(array_subset)?;
+                                            let mut output_view = unsafe {
+                                                // SAFETY: chunks represent disjoint array subsets
+                                                ArrayBytesFixedDisjointView::new(
+                                                    output,
+                                                    data_type_size,
+                                                    array_subset.shape(),
+                                                    shard_subset_overlap
+                                                        .relative_to(array_subset.start())?,
+                                                )?
+                                            };
+                                            cache
+                                                .retrieve(self, &shard_indices)
+                                                .await?
+                                                .partial_decode_into(
+                                                    &shard_subset_overlap
+                                                        .relative_to(shard_subset.start())?,
+                                                    (&mut output_view).into(),
+                                                    &options,
+                                                )
+                                                .await?;
+                                            Ok::<_, ArrayError>(())
+                                        }
+                                    };
 
                                 futures::stream::iter(&shards.indices())
                                     .map(Ok)

@@ -27,3 +27,4 @@ zarrs_plugin.workspace = true
 inventory.workspace = true
 itertools = "0.14.0"
 rayon = "1.10.0"
+tinyvec = { version = "1.8", features = ["alloc"] }

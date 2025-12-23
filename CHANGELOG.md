@@ -122,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add missing complex subfloats to `DataType::from_metadata()`
 - Fix `transpose` codec decoding with variable-size data types
 - Fix various unnecessary allocations in `Array` methods and some codecs
+- Improve index iterator performance
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 

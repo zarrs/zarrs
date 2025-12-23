@@ -243,7 +243,10 @@ pub use zarrs_registry as registry;
 pub use zarrs_storage as storage;
 
 /// Get a mutable slice of the spare capacity in a vector.
-fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
+///
+/// # Safety
+/// The caller must not read from the returned slice before it has been initialised.
+unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
     let spare_capacity = vec.spare_capacity_mut();
     // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
     unsafe {

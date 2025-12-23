@@ -5,8 +5,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::{
-    Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV3, DataType, FromArrayBytes,
+    Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
+    ArrayMetadata, ArrayMetadataV3, DataType, FromArrayBytes,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
         optional_nesting_depth,
@@ -245,7 +245,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
 
-        let retrieve_encoded_chunk = |chunk_indices: Vec<u64>| {
+        let retrieve_encoded_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             storage_transformer
                 .get(&self.chunk_key(&chunk_indices))
                 .map(|maybe_bytes| maybe_bytes.map(Into::into))
@@ -677,7 +677,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 
         // Retrieve all the chunks
         let retrieve_chunk =
-            |chunk_indices: Vec<u64>| -> Result<(ArrayBytes<'static>, ArraySubset), ArrayError> {
+            |chunk_indices: ArrayIndicesTinyVec| -> Result<(ArrayBytes<'static>, ArraySubset), ArrayError> {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 Ok((
@@ -730,7 +730,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
                 .collect();
 
-            let retrieve_chunk = |chunk_indices: Vec<u64>| {
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 let chunk_subset_in_array =

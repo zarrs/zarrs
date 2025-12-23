@@ -12,7 +12,7 @@ use crate::storage::{
 use crate::{
     array::{
         ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-        ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
+        ArrayIndicesTinyVec, ChunkRepresentation, ChunkShape, DataType, DataTypeSize,
         array_bytes::merge_chunks_vlen,
         chunk_grid::RegularChunkGrid,
         codec::{
@@ -278,7 +278,7 @@ pub(crate) fn partial_decode_fixed_array_subset(
     )
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
-    let decode_inner_chunk_subset_into_slice = |chunk_indices: Vec<u64>| {
+    let decode_inner_chunk_subset_into_slice = |chunk_indices: ArrayIndicesTinyVec| {
         let shard_index_idx =
             ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
@@ -372,7 +372,7 @@ pub(crate) fn partial_decode_variable_array_subset(
     )
     .expect("matching dimensionality");
 
-    let decode_inner_chunk_subset = |chunk_indices: Vec<u64>| {
+    let decode_inner_chunk_subset = |chunk_indices: ArrayIndicesTinyVec| {
         let shard_index_idx =
             ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();

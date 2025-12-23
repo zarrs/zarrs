@@ -13,7 +13,8 @@ use super::{ShardingIndexLocation, sharding_index_decoded_representation};
 use crate::storage::StorageError;
 use crate::{
     array::{
-        ArrayBytes, ArrayBytesRaw, ChunkRepresentation, ChunkShape, CodecChain, DataType,
+        ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkRepresentation, ChunkShape,
+        CodecChain, DataType,
         array_bytes::update_array_bytes,
         chunk_grid::RegularChunkGrid,
         codec::{
@@ -207,14 +208,14 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         // Get all the inner chunks intersected
         inner_chunks_intersected.extend(inner_chunks.iter().map(
-            |inner_chunk_indices: Vec<u64>| {
+            |inner_chunk_indices: ArrayIndicesTinyVec| {
                 ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk")
             },
         ));
 
         // Get all the inner chunks that need to be updated
         inner_chunks_indices.extend(inner_chunks.iter().filter_map(
-            |inner_chunk_indices: Vec<u64>| {
+            |inner_chunk_indices: ArrayIndicesTinyVec| {
                 let inner_chunk_subset = self
                     .chunk_grid
                     .subset(&inner_chunk_indices)
@@ -304,7 +305,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         #[cfg(target_arch = "wasm32")]
         let mut iterator = inner_chunks.indices().into_iter();
 
-        iterator.try_for_each(|inner_chunk_indices: Vec<u64>| {
+        iterator.try_for_each(|inner_chunk_indices: ArrayIndicesTinyVec| {
             // Extract the inner chunk bytes that overlap with the chunk subset
             let inner_chunk_index =
                 ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
