@@ -155,6 +155,61 @@ pub struct IndicesIntoIterator {
     pub(crate) range: std::ops::Range<usize>,
 }
 
+/// Compute indices from a linear index for dimensionality 1, adding subset start offset.
+#[inline]
+fn unravel_index_1d(index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+    debug_assert_eq!(shape.len(), 1);
+    debug_assert_eq!(start.len(), 1);
+    tinyvec::tiny_vec!([u64; 4] => start[0] + (index % shape[0]))
+}
+
+/// Compute indices from a linear index for dimensionality 2, adding subset start offset.
+#[inline]
+fn unravel_index_2d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+    debug_assert_eq!(shape.len(), 2);
+    debug_assert_eq!(start.len(), 2);
+    let i1 = start[1] + (index % shape[1]);
+    index /= shape[1];
+    let i0 = start[0] + (index % shape[0]);
+    tinyvec::tiny_vec!([u64; 4] => i0, i1)
+}
+
+/// Compute indices from a linear index for dimensionality 3, adding subset start offset.
+#[inline]
+fn unravel_index_3d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+    debug_assert_eq!(shape.len(), 3);
+    debug_assert_eq!(start.len(), 3);
+    let i2 = start[2] + (index % shape[2]);
+    index /= shape[2];
+    let i1 = start[1] + (index % shape[1]);
+    index /= shape[1];
+    let i0 = start[0] + (index % shape[0]);
+    tinyvec::tiny_vec!([u64; 4] => i0, i1, i2)
+}
+
+/// Compute indices from a linear index for dimensionality 4, adding subset start offset.
+#[inline]
+fn unravel_index_4d(mut index: u64, shape: &[u64], start: &[u64]) -> ArrayIndicesTinyVec {
+    debug_assert_eq!(shape.len(), 4);
+    debug_assert_eq!(start.len(), 4);
+    let i3 = start[3] + (index % shape[3]);
+    index /= shape[3];
+    let i2 = start[2] + (index % shape[2]);
+    index /= shape[2];
+    let i1 = start[1] + (index % shape[1]);
+    index /= shape[1];
+    let i0 = start[0] + (index % shape[0]);
+    tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3)
+}
+
+/// Compute indices from a linear index for dimensionality 5+, adding subset start offset.
+#[inline]
+fn unravel_index_nd(index: u64, shape: &[u64], start: &[u64]) -> Option<ArrayIndicesTinyVec> {
+    let mut indices = unravel_index(index, shape)?;
+    std::iter::zip(indices.iter_mut(), start).for_each(|(idx, st)| *idx += st);
+    Some(indices)
+}
+
 macro_rules! impl_indices_iterator {
     ($iterator_type:ty) => {
         impl Iterator for $iterator_type {
@@ -164,15 +219,17 @@ macro_rules! impl_indices_iterator {
                 if self.range.start >= self.range.end {
                     return None;
                 }
-                let mut indices = unravel_index(self.range.start as u64, self.subset.shape())?;
-                std::iter::zip(indices.iter_mut(), self.subset.start())
-                    .for_each(|(index, start)| *index += start);
-
-                if self.range.start < self.range.end {
-                    self.range.start += 1;
-                    Some(indices)
-                } else {
-                    None
+                let index = self.range.start as u64;
+                self.range.start += 1;
+                let shape = self.subset.shape();
+                let start = self.subset.start();
+                match shape.len() {
+                    0 => Some(ArrayIndicesTinyVec::new()),
+                    1 => Some(unravel_index_1d(index, shape, start)),
+                    2 => Some(unravel_index_2d(index, shape, start)),
+                    3 => Some(unravel_index_3d(index, shape, start)),
+                    4 => Some(unravel_index_4d(index, shape, start)),
+                    _ => unravel_index_nd(index, shape, start),
                 }
             }
 
@@ -186,10 +243,17 @@ macro_rules! impl_indices_iterator {
             fn next_back(&mut self) -> Option<Self::Item> {
                 if self.range.end > self.range.start {
                     self.range.end -= 1;
-                    let mut indices = unravel_index(self.range.end as u64, self.subset.shape())?;
-                    std::iter::zip(indices.iter_mut(), self.subset.start())
-                        .for_each(|(index, start)| *index += start);
-                    Some(indices)
+                    let index = self.range.end as u64;
+                    let shape = self.subset.shape();
+                    let start = self.subset.start();
+                    match shape.len() {
+                        0 => Some(ArrayIndicesTinyVec::new()),
+                        1 => Some(unravel_index_1d(index, shape, start)),
+                        2 => Some(unravel_index_2d(index, shape, start)),
+                        3 => Some(unravel_index_3d(index, shape, start)),
+                        4 => Some(unravel_index_4d(index, shape, start)),
+                        _ => unravel_index_nd(index, shape, start),
+                    }
                 } else {
                     None
                 }
