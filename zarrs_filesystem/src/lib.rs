@@ -12,7 +12,7 @@ use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
 use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
+    byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError},
     store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
     StorePrefix, StorePrefixes, WritableStorageTraits,
@@ -360,6 +360,7 @@ impl ReadableStorageTraits for FilesystemStore {
                 return Err(err.into());
             }
         };
+        let file_size = file.metadata()?.len();
 
         let out = byte_ranges
             .map(|byte_range| {
@@ -371,20 +372,31 @@ impl ReadableStorageTraits for FilesystemStore {
                     }
                 }?;
 
+                // Get read length
+                let length = match byte_range {
+                    ByteRange::FromStart(offset, None) => {
+                        file_size.checked_sub(offset).ok_or_else(|| {
+                            StorageError::from(InvalidByteRangeError::new(byte_range, file_size))
+                        })?
+                    }
+                    ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => length,
+                };
+                let length = usize::try_from(length).unwrap();
+
                 // Read
-                match byte_range {
-                    ByteRange::FromStart(_, None) => {
-                        let mut buffer = Vec::new();
-                        file.read_to_end(&mut buffer)?;
-                        Ok(Bytes::from(buffer))
-                    }
-                    ByteRange::FromStart(_, Some(length)) | ByteRange::Suffix(length) => {
-                        let length = usize::try_from(length).unwrap();
-                        let mut buffer = vec![0; length];
-                        file.read_exact(&mut buffer)?;
-                        Ok(Bytes::from(buffer))
-                    }
+                let mut buffer = Vec::with_capacity(length);
+                let spare = buffer.spare_capacity_mut();
+                // SAFETY: We're reading into uninitialised memory, which is safe because
+                // read_exact will fill all bytes or return an error
+                let slice = unsafe {
+                    std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), length)
+                };
+                file.read_exact(slice)?;
+                // SAFETY: read_exact succeeded, so all bytes are now initialised
+                unsafe {
+                    buffer.set_len(length);
                 }
+                Ok(Bytes::from(buffer))
             })
             .collect::<Vec<_>>();
 
