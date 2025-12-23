@@ -461,7 +461,7 @@ fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
         return None;
     }
 
-    // Specialized paths for common dimensions (1-4) to avoid dynamic allocation
+    // Specialised routines for dimensions <=4, unrolled and no dynamic allocation
     match shape.len() {
         0 => Some(ArrayIndicesTinyVec::new()),
         1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
