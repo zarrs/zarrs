@@ -298,20 +298,24 @@ impl ArraySubset {
 
         let num_elements = usize::try_from(self.num_elements()).unwrap();
         let mut elements_subset = Vec::with_capacity(num_elements);
-        let elements_subset_slice = crate::vec_spare_capacity_to_mut_slice(&mut elements_subset);
-        let mut subset_offset = 0;
-        // SAFETY: `array_shape` is encapsulated by an array with `array_shape`.
-        for (array_index, contiguous_elements) in
-            &self.contiguous_linearised_indices(array_shape)?
         {
-            let element_offset = usize::try_from(array_index).unwrap();
-            let element_length =
-                usize::try_from(contiguous_elements * size_of::<T>() as u64).unwrap();
-            debug_assert!(element_offset + element_length <= elements.len());
-            debug_assert!(subset_offset + element_length <= num_elements);
-            elements_subset_slice[subset_offset..subset_offset + element_length]
-                .copy_from_slice(&elements[element_offset..element_offset + element_length]);
-            subset_offset += element_length;
+            // SAFETY: `elements_subset` is fully initialised before being read.
+            let elements_subset_slice =
+                unsafe { crate::vec_spare_capacity_to_mut_slice(&mut elements_subset) };
+            let mut subset_offset = 0;
+            // SAFETY: `array_shape` is encapsulated by an array with `array_shape`.
+            for (array_index, contiguous_elements) in
+                &self.contiguous_linearised_indices(array_shape)?
+            {
+                let element_offset = usize::try_from(array_index).unwrap();
+                let element_length =
+                    usize::try_from(contiguous_elements * size_of::<T>() as u64).unwrap();
+                debug_assert!(element_offset + element_length <= elements.len());
+                debug_assert!(subset_offset + element_length <= num_elements);
+                elements_subset_slice[subset_offset..subset_offset + element_length]
+                    .copy_from_slice(&elements[element_offset..element_offset + element_length]);
+                subset_offset += element_length;
+            }
         }
         unsafe { elements_subset.set_len(num_elements) };
         Ok(elements_subset)

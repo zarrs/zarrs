@@ -461,21 +461,62 @@ fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndicesTinyVec> {
         return None;
     }
 
-    let len = shape.len();
-    let mut indices = ArrayIndicesTinyVec::with_capacity(len);
+    // Specialized paths for common dimensions (1-4) to avoid dynamic allocation
+    match shape.len() {
+        0 => Some(ArrayIndicesTinyVec::new()),
+        1 => Some(tinyvec::tiny_vec!([u64; 4] => index % shape[0])),
+        2 => {
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1))
+        }
+        3 => {
+            let i2 = index % shape[2];
+            index /= shape[2];
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2))
+        }
+        4 => {
+            let i3 = index % shape[3];
+            index /= shape[3];
+            let i2 = index % shape[2];
+            index /= shape[2];
+            let i1 = index % shape[1];
+            index /= shape[1];
+            let i0 = index % shape[0];
+            Some(tinyvec::tiny_vec!([u64; 4] => i0, i1, i2, i3))
+        }
+        len => {
+            // For 5+ dimensions, use Vec path with spare_capacity_mut
+            let mut vec = Vec::with_capacity(len);
 
-    // Build indices in reverse order, then reverse
-    for &dim in shape.iter().rev() {
-        indices.push(index % dim);
-        index /= dim;
+            {
+                // SAFETY: `indices` are initialised and never read below
+                let indices = unsafe { vec_spare_capacity_to_mut_slice(&mut vec) };
+
+                // Fill in reverse order
+                for i in (0..len).rev() {
+                    indices[i] = index % shape[i];
+                    index /= shape[i];
+                }
+            }
+
+            // SAFETY: all `len` elements are initialised
+            unsafe { vec.set_len(len) };
+
+            Some(ArrayIndicesTinyVec::Heap(vec))
+        }
     }
-    indices.reverse();
-
-    Some(indices)
 }
 
 /// Get a mutable slice of the spare capacity in a vector.
-fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
+///
+/// # Safety
+/// The caller must not read from the returned slice before it has been initialised.
+unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
     let spare_capacity = vec.spare_capacity_mut();
     // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
     unsafe {

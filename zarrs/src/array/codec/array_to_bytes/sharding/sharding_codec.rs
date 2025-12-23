@@ -809,7 +809,8 @@ impl ShardingCodec {
             &options,
         )?;
         {
-            let shard_slice = crate::vec_spare_capacity_to_mut_slice(&mut shard);
+            // SAFETY: `shard_slice` is not read from until it has been written
+            let shard_slice = unsafe { crate::vec_spare_capacity_to_mut_slice(&mut shard) };
             match self.index_location {
                 ShardingIndexLocation::Start => {
                     shard_slice[..encoded_array_index.len()].copy_from_slice(&encoded_array_index);
@@ -959,7 +960,8 @@ impl ShardingCodec {
             options,
         )?;
         {
-            let shard_slice = crate::vec_spare_capacity_to_mut_slice(&mut shard);
+            // SAFETY: `shard_slice` is not read from until it has been written
+            let shard_slice = unsafe { crate::vec_spare_capacity_to_mut_slice(&mut shard) };
             match self.index_location {
                 ShardingIndexLocation::Start => {
                     shard_slice[..encoded_array_index.len()].copy_from_slice(&encoded_array_index);
