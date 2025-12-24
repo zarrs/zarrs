@@ -14,7 +14,7 @@ use zarrs::storage::{
 };
 use zarrs::{
     array::{
-        ArrayBuilder, DataType,
+        ArrayBuilder, ChunkShapeTraits, DataType,
         codec::{
             ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptionsBuilder, ReshapeDim,
         },
@@ -95,11 +95,8 @@ async fn test_array_to_array_codec_async_partial_encoding<
     );
 
     // Get the full chunk size for comparison
-    let full_chunk_size = array
-        .chunk_array_representation(&[0, 0])
-        .unwrap()
-        .fixed_size()
-        .unwrap();
+    let full_chunk_size = array.chunk_shape(&[0, 0]).unwrap().num_elements_usize()
+        * array.data_type().fixed_size().unwrap();
 
     store_perf.reset();
 
@@ -258,11 +255,8 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     );
 
     // Get the chunk size for comparison
-    let full_chunk_size = array
-        .chunk_array_representation(&[0, 0])
-        .unwrap()
-        .fixed_size()
-        .unwrap();
+    let full_chunk_size = array.chunk_shape(&[0, 0]).unwrap().num_elements_usize()
+        * array.data_type().fixed_size().unwrap();
 
     store_perf.reset();
 

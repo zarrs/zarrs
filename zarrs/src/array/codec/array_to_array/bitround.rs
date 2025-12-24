@@ -282,12 +282,12 @@ fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<
 mod tests {
     use std::{num::NonZeroU64, sync::Arc};
 
-    use array_representation::ChunkRepresentation;
+    use zarrs_data_type::FillValue;
 
     use super::*;
     use crate::{
         array::{
-            ArrayBytes, array_representation,
+            ArrayBytes,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
         },
         array_subset::ArraySubset,
@@ -297,9 +297,9 @@ mod tests {
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation =
-            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float32, 0.0f32)
-                .unwrap();
+        let shape = vec![NonZeroU64::new(4).unwrap()];
+        let data_type = DataType::Float32;
+        let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = vec![
             //                         |
             0.0,
@@ -322,12 +322,20 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f32>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -338,9 +346,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation =
-            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt32, 0u32)
-                .unwrap();
+        let shape = vec![NonZeroU64::new(7).unwrap()];
+        let data_type = DataType::UInt32;
+        let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -351,12 +359,20 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -373,9 +389,9 @@ mod tests {
     #[test]
     fn codec_bitround_uint8() {
         const JSON: &'static str = r#"{ "keepbits": 3 }"#;
-        let chunk_representation =
-            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::UInt8, 0u8)
-                .unwrap();
+        let shape = vec![NonZeroU64::new(9).unwrap()];
+        let data_type = DataType::UInt8;
+        let fill_value = FillValue::from(0u8);
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -386,12 +402,20 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<u32>(
             decoded.into_fixed().unwrap().into_owned(),
@@ -409,18 +433,17 @@ mod tests {
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let chunk_representation = ChunkRepresentation::new(
-            vec![(elements.len() as u64).try_into().unwrap()],
-            DataType::Float32,
-            0.0f32,
-        )
-        .unwrap();
+        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let data_type = DataType::Float32;
+        let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
 
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -430,14 +453,18 @@ mod tests {
         let input_handle = bytes_codec
             .partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -461,24 +488,25 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_bitround_async_partial_decode() {
+        use zarrs_data_type::FillValue;
+
         const JSON: &'static str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
-        let chunk_representation = ChunkRepresentation::new(
-            vec![(elements.len() as u64).try_into().unwrap()],
-            DataType::Float32,
-            0.0f32,
-        )
-        .unwrap();
+        let shape = vec![(elements.len() as u64).try_into().unwrap()];
+        let data_type = DataType::Float32;
+        let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
 
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -487,7 +515,9 @@ mod tests {
         let input_handle = bytes_codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await
@@ -495,7 +525,9 @@ mod tests {
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await

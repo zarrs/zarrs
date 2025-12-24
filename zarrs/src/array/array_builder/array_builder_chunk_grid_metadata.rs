@@ -3,8 +3,8 @@ use std::num::NonZeroU64;
 use derive_more::From;
 use serde::Serialize;
 
-use crate::array::ArrayCreateError;
-use crate::metadata::{ArrayShape, ChunkShape, v3::MetadataV3};
+use crate::array::{ArrayCreateError, ArrayShape, ChunkShape};
+use crate::metadata::v3::MetadataV3;
 use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 
 /// An input that can be mapped to a chunk grid.
@@ -106,7 +106,7 @@ impl From<&[u64]> for ArrayBuilderChunkGridMetadata {
 impl<const N: usize> From<[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: [NonZeroU64; N]) -> Self {
         Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
-            chunk_shape.to_vec().into(),
+            chunk_shape.to_vec(),
         ))
     }
 }
@@ -114,7 +114,7 @@ impl<const N: usize> From<[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
 impl<const N: usize> From<&[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[NonZeroU64; N]) -> Self {
         Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
-            chunk_shape.to_vec().into(),
+            chunk_shape.to_vec(),
         ))
     }
 }
@@ -122,16 +122,14 @@ impl<const N: usize> From<&[NonZeroU64; N]> for ArrayBuilderChunkGridMetadata {
 impl From<&[NonZeroU64]> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: &[NonZeroU64]) -> Self {
         Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
-            chunk_shape.to_vec().into(),
+            chunk_shape.to_vec(),
         ))
     }
 }
 
 impl From<Vec<NonZeroU64>> for ArrayBuilderChunkGridMetadata {
     fn from(chunk_shape: Vec<NonZeroU64>) -> Self {
-        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(
-            chunk_shape.into(),
-        ))
+        Self(ArrayBuilderChunkGridMetadataImpl::ChunkShape(chunk_shape))
     }
 }
 

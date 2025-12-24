@@ -43,7 +43,7 @@ macro_rules! vlen_v2_codec {
         #[cfg(feature = "async")]
         use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use crate::array::{
-            ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation,
+            ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation,
             RecommendedConcurrency,
             codec::{
                 ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
@@ -101,9 +101,10 @@ macro_rules! vlen_v2_codec {
         impl ArrayCodecTraits for $struct {
             fn recommended_concurrency(
                 &self,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
             ) -> Result<RecommendedConcurrency, CodecError> {
-                self.inner.recommended_concurrency(decoded_representation)
+                self.inner.recommended_concurrency(shape, data_type)
             }
         }
 
@@ -120,41 +121,57 @@ macro_rules! vlen_v2_codec {
             fn encode<'a>(
                 &self,
                 bytes: ArrayBytes<'a>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-                self.inner.encode(bytes, decoded_representation, options)
+                self.inner
+                    .encode(bytes, shape, data_type, fill_value, options)
             }
 
             fn decode<'a>(
                 &self,
                 bytes: ArrayBytesRaw<'a>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<ArrayBytes<'a>, CodecError> {
-                self.inner.decode(bytes, decoded_representation, options)
+                self.inner
+                    .decode(bytes, shape, data_type, fill_value, options)
             }
 
             fn partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-                self.inner
-                    .clone()
-                    .partial_decoder(input_handle, decoded_representation, options)
+                self.inner.clone().partial_decoder(
+                    input_handle,
+                    shape,
+                    data_type,
+                    fill_value,
+                    options,
+                )
             }
 
             fn partial_encoder(
                 self: Arc<Self>,
                 input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
                 self.inner.clone().partial_encoder(
                     input_output_handle,
-                    decoded_representation,
+                    shape,
+                    data_type,
+                    fill_value,
                     options,
                 )
             }
@@ -163,20 +180,25 @@ macro_rules! vlen_v2_codec {
             async fn async_partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
                 self.inner
                     .clone()
-                    .async_partial_decoder(input_handle, decoded_representation, options)
+                    .async_partial_decoder(input_handle, shape, data_type, fill_value, options)
                     .await
             }
 
             fn encoded_representation(
                 &self,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
             ) -> Result<BytesRepresentation, CodecError> {
-                self.inner.encoded_representation(decoded_representation)
+                self.inner
+                    .encoded_representation(shape, data_type, fill_value)
             }
         }
     };

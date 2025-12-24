@@ -14,7 +14,7 @@ use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
 use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
-        ArrayBytes, ChunkRepresentation, ChunkShape,
+        ArrayBytes, ChunkShape,
         codec::{
             ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -55,15 +55,15 @@ impl TransposeCodec {
         Self { order }
     }
 
-    /// Validate the chunk representation for this codec.
-    fn validate(&self, decoded_representation: &ChunkRepresentation) -> Result<(), CodecError> {
-        if decoded_representation.data_type().is_optional() {
+    /// Validate the shape and data type for this codec.
+    fn validate(&self, shape: &[NonZeroU64], data_type: &DataType) -> Result<(), CodecError> {
+        if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 TRANSPOSE.to_string(),
             ));
         }
-        if self.order.0.len() != decoded_representation.dimensionality() {
+        if self.order.0.len() != shape.len() {
             return Err(CodecError::Other(
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
             ));
@@ -136,9 +136,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
             ));
         }
-        Ok(permute(decoded_shape, &self.order.0)
-            .expect("matching dimensionality")
-            .into())
+        Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
     fn decoded_shape(
@@ -152,55 +150,59 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         }
         let transposed_shape = permute(encoded_shape, &inverse_permutation(&self.order.0))
             .expect("matching dimensionality");
-        Ok(Some(transposed_shape.into()))
+        Ok(Some(transposed_shape))
     }
 
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(decoded_representation)?;
+        self.validate(shape, data_type)?;
 
         // Encode: apply the transpose order to the decoded shape
-        apply_permutation(
-            &bytes,
-            decoded_representation.shape_u64(),
-            &self.order.0,
-            decoded_representation.data_type(),
-        )
+        let shape_u64 = bytemuck::must_cast_slice(shape);
+        apply_permutation(&bytes, shape_u64, &self.order.0, data_type)
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(decoded_representation)?;
+        self.validate(shape, data_type)?;
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
-        let transposed_shape =
-            permute(decoded_representation.shape_u64(), &self.order.0).expect("validated");
+        let shape_u64 = bytemuck::must_cast_slice(shape);
+        let transposed_shape = permute(shape_u64, &self.order.0).expect("validated");
         apply_permutation(
             &bytes,
             &transposed_shape,
             &inverse_permutation(&self.order.0),
-            decoded_representation.data_type(),
+            data_type,
         )
     }
 
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -209,13 +211,17 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_output_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -225,13 +231,17 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -241,13 +251,17 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::transpose_codec_partial::TransposeCodecPartial::new(
                 input_output_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 self.order.0.clone(),
             ),
         ))
@@ -257,7 +271,8 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
 impl ArrayCodecTraits for TransposeCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: This could be increased, need to implement `transpose_array` without ndarray
         Ok(RecommendedConcurrency::new_maximum(1))

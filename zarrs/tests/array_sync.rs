@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 #![cfg(feature = "ndarray")]
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::CodecOptions;
@@ -13,7 +14,7 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(array.data_type(), &DataType::UInt8);
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
-    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
+    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
@@ -115,13 +116,10 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     .build(store, array_path)
     .unwrap();
 
-    let chunk_representation =
-        array.chunk_array_representation(&vec![0; array.dimensionality()])?;
+    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
-        array
-            .codecs()
-            .partial_decode_granularity(&chunk_representation),
-        [2, 2].try_into().unwrap()
+        array.codecs().partial_decode_granularity(&chunk_shape),
+        [NonZeroU64::new(2).unwrap(); 2]
     );
 
     array_sync_read(&array)?;
@@ -154,13 +152,10 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     let array = builder.build(store, array_path).unwrap();
 
-    let chunk_representation =
-        array.chunk_array_representation(&vec![0; array.dimensionality()])?;
+    let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
-        array
-            .codecs()
-            .partial_decode_granularity(&chunk_representation),
-        [1, 1].try_into().unwrap()
+        array.codecs().partial_decode_granularity(&chunk_shape),
+        [NonZeroU64::new(1).unwrap(); 2]
     );
 
     array_sync_read(&array)?;
@@ -308,7 +303,7 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     ))]);
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
-            vec![2, 1].try_into().unwrap(),
+            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(1).unwrap()],
             &DataType::String,
         )
         .array_to_bytes_codec(Arc::<VlenCodec>::default())

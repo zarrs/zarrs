@@ -64,13 +64,14 @@ pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCr
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
     use std::{borrow::Cow, sync::Arc};
 
     use super::*;
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            ArrayRepresentation, BytesRepresentation, DataType,
+            BytesRepresentation, ChunkShapeTraits, DataType,
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
         },
         array_subset::ArraySubset,
@@ -105,13 +106,13 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_zlib_partial_decode() {
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = DataType::UInt16;
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: ZlibCodecConfiguration =
@@ -122,7 +123,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
@@ -154,13 +155,13 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_zlib_async_partial_decode() {
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = DataType::UInt16;
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: ZlibCodecConfiguration =
@@ -171,7 +172,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);

@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use ndarray::ArrayD;
@@ -64,7 +65,16 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         MetadataV3::new_with_configuration(
             "rectangular",
             RectangularChunkGridConfiguration {
-                chunk_shape: vec![[1, 2, 3, 2].try_into()?, 4.try_into()?], // chunk sizes
+                chunk_shape: vec![
+                    vec![
+                        NonZeroU64::new(1).unwrap(),
+                        NonZeroU64::new(2).unwrap(),
+                        NonZeroU64::new(3).unwrap(),
+                        NonZeroU64::new(2).unwrap(),
+                    ]
+                    .into(),
+                    NonZeroU64::new(4).unwrap().into(),
+                ], // chunk sizes
             },
         ),
         DataType::Float32,

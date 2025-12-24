@@ -26,3 +26,6 @@ pub mod codec;
 pub mod data_type;
 
 pub mod v2_to_v3;
+
+/// A chunk shape. Dimensions must be non-zero.
+type ChunkShape = Vec<std::num::NonZeroU64>;

@@ -74,8 +74,10 @@ pub(crate) fn create_codec_fixedscaleoffset(
 mod tests {
     use std::num::NonZeroU64;
 
+    use zarrs_data_type::FillValue;
+
     use crate::array::{
-        ArrayBytes, ChunkRepresentation, DataType,
+        ArrayBytes, DataType,
         codec::{
             ArrayToArrayCodecTraits, CodecOptions,
             array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
@@ -88,9 +90,9 @@ mod tests {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &'static str =
             r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
-        let chunk_representation =
-            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float64, 0.0f64)
-                .unwrap();
+        let shape = [NonZeroU64::new(4).unwrap()];
+        let data_type = DataType::Float64;
+        let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,
             1000.11111111,
@@ -113,12 +115,20 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
             decoded.into_fixed().unwrap().into_owned(),

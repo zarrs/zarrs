@@ -1,3 +1,4 @@
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use derive_more::From;
@@ -489,8 +490,10 @@ impl ArrayBuilder {
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
             let subchunk_shape: ChunkShape = subchunk_shape
-                .clone()
-                .try_into()
+                .iter()
+                .copied()
+                .map(NonZeroU64::try_from)
+                .collect::<Result<Vec<_>, _>>()
                 .map_err(|_| ArrayCreateError::InvalidSubchunkShape(subchunk_shape.clone()))?;
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
@@ -774,7 +777,7 @@ mod tests {
             MetadataV3::new_with_configuration(
                 "regular",
                 RegularChunkGridConfiguration {
-                    chunk_shape: [2, 2].try_into().unwrap(),
+                    chunk_shape: vec![NonZeroU64::new(2).unwrap(); 2],
                 },
             ),
             DataType::Int8,
@@ -784,19 +787,22 @@ mod tests {
         .unwrap();
 
         ArrayBuilder::new_with_chunk_grid(
-            RegularChunkGrid::new(vec![8, 8], [2, 2].try_into().unwrap()).unwrap(),
+            RegularChunkGrid::new(vec![8, 8], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
             DataType::Int8,
             0i8,
         )
         .build_metadata()
         .unwrap();
-        let chunk_grid: Arc<dyn ChunkGridTraits> =
-            Arc::new(RegularChunkGrid::new(vec![4, 4], [2, 2].try_into().unwrap()).unwrap());
+        let chunk_grid: Arc<dyn ChunkGridTraits> = Arc::new(
+            RegularChunkGrid::new(vec![4, 4], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
+        );
         ArrayBuilder::new_with_chunk_grid(chunk_grid, DataType::Int8, 0i8)
             .build_metadata()
             .unwrap();
         ArrayBuilder::new_with_chunk_grid(
-            ChunkGrid::new(RegularChunkGrid::new(vec![8, 8], [2, 2].try_into().unwrap()).unwrap()),
+            ChunkGrid::new(
+                RegularChunkGrid::new(vec![8, 8], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
+            ),
             DataType::Int8,
             0i8,
         )

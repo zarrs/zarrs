@@ -8,7 +8,7 @@ use super::{
     PcodecDeltaEncodingOrder,
 };
 use crate::array::{
-    BytesRepresentation, ChunkRepresentation, DataType,
+    BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
         CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -21,6 +21,7 @@ use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use crate::registry::codec::PCODEC;
+use std::num::NonZeroU64;
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]
@@ -148,7 +149,8 @@ impl CodecTraits for PcodecCodec {
 impl ArrayCodecTraits for PcodecCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // pcodec does not support parallel decode
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -168,10 +170,11 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let data_type = decoded_representation.data_type();
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
             ( $t:ty ) => {
@@ -230,10 +233,11 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let data_type = decoded_representation.data_type();
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
                 pco::standalone::simple_decompress(&bytes)
@@ -288,10 +292,11 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let data_type = decoded_representation.data_type();
-        let mut num_elements = decoded_representation.num_elements_usize();
+        let mut num_elements = shape.num_elements_usize();
         if data_type == &DataType::Complex64 || data_type == &DataType::Complex128 {
             num_elements *= 2;
         }

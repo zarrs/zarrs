@@ -20,15 +20,19 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 mod array;
 
+/// An array shape. Dimensions may be zero.
+pub type ArrayShape = Vec<u64>;
+
+/// A chunk shape. Dimensions must be non-zero.
+pub type ChunkShape = Vec<std::num::NonZeroU64>;
+
 /// Zarr V3 metadata.
 pub mod v3;
 
 /// Zarr V2 metadata.
 pub mod v2;
 
-pub use array::{
-    ArrayShape, ChunkKeySeparator, ChunkShape, DimensionName, Endianness, IntoDimensionName,
-};
+pub use array::{ChunkKeySeparator, DimensionName, Endianness, IntoDimensionName};
 use thiserror::Error;
 
 /// Zarr array metadata (V2 or V3).

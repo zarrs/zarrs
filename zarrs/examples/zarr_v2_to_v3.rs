@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::ArrayMetadataOptions;
@@ -61,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a Zarr V2 array
     let array_metadata = ArrayMetadataV2::new(
         vec![10, 10],
-        vec![5, 5].try_into()?,
+        vec![NonZeroU64::new(5).unwrap(); 2],
         ">f4".into(), // big endian float32
         FillValueMetadataV2::from(f32::NAN),
         None,

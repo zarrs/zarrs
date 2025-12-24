@@ -2,9 +2,10 @@
 
 use std::num::NonZeroU64;
 
+use crate::ChunkShape;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::{ChunkShape, ConfigurationSerialize};
+use zarrs_metadata::ConfigurationSerialize;
 
 /// Configuration parameters for a `regular` chunk grid.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display)]

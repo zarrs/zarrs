@@ -4,17 +4,19 @@ use super::{get_squeezed_array_subset, get_squeezed_indexer};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
-    ChunkRepresentation, DataType,
+    DataType, FillValue,
     codec::{
         ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
     },
 };
 use crate::storage::StorageError;
+use std::num::NonZeroU64;
 
 /// Generic partial codec for the Squeeze codec.
 pub(crate) struct SqueezeCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
 }
 
 impl<T: ?Sized> SqueezeCodecPartial<T> {
@@ -22,11 +24,14 @@ impl<T: ?Sized> SqueezeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        decoded_representation: ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Self {
         Self {
             input_output_handle,
-            decoded_representation,
+            shape: shape.to_vec(),
+            data_type: data_type.clone(),
         }
     }
 }
@@ -36,7 +41,7 @@ where
     T: ArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -53,13 +58,11 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed =
-                get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;
+            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
                 .partial_decode(&array_subset_squeezed, options)
         } else {
-            let indexer_squeezed =
-                get_squeezed_indexer(indexer, self.decoded_representation.shape())?;
+            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
                 .partial_decode(&indexer_squeezed, options)
         }
@@ -89,13 +92,11 @@ where
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed =
-                get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;
+            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
                 .partial_encode(&array_subset_squeezed, bytes, options)
         } else {
-            let indexer_squeezed =
-                get_squeezed_indexer(indexer, self.decoded_representation.shape())?;
+            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
                 .partial_encode(&indexer_squeezed, bytes, options)
         }
@@ -114,7 +115,7 @@ where
     T: AsyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -131,14 +132,12 @@ where
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed =
-                get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;
+            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
                 .partial_decode(&array_subset_squeezed, options)
                 .await
         } else {
-            let indexer_squeezed =
-                get_squeezed_indexer(indexer, self.decoded_representation.shape())?;
+            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
                 .partial_decode(&indexer_squeezed, options)
                 .await
@@ -172,14 +171,12 @@ where
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let array_subset_squeezed =
-                get_squeezed_array_subset(array_subset, self.decoded_representation.shape())?;
+            let array_subset_squeezed = get_squeezed_array_subset(array_subset, &self.shape)?;
             self.input_output_handle
                 .partial_encode(&array_subset_squeezed, bytes, options)
                 .await
         } else {
-            let indexer_squeezed =
-                get_squeezed_indexer(indexer, self.decoded_representation.shape())?;
+            let indexer_squeezed = get_squeezed_indexer(indexer, &self.shape)?;
             self.input_output_handle
                 .partial_encode(&indexer_squeezed, bytes, options)
                 .await

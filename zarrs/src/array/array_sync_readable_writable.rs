@@ -192,7 +192,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         if let Some(chunk_bytes) = chunk_bytes {
             if let Some(compacted_bytes) = self.codecs.compact(
                 chunk_bytes.into(),
-                &self.chunk_array_representation(chunk_indices)?,
+                &self.chunk_shape(chunk_indices)?,
+                self.data_type(),
+                self.fill_value(),
                 options,
             )? {
                 // SAFETY: The compacted bytes are already encoded
@@ -368,9 +370,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             let subset_bytes = subset_data.into_array_bytes(self.data_type())?;
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
-            let chunk_representation =
-                self.chunk_array_representation(&vec![0; self.dimensionality()])?;
-            let codec_concurrency = self.recommended_codec_concurrency(&chunk_representation)?;
+            let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
+            let codec_concurrency =
+                self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
@@ -459,8 +461,6 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-
         // Input/output
         let storage_transformer = self
             .storage_transformers()
@@ -472,7 +472,9 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
 
         Ok(self.codecs.clone().partial_encoder(
             input_output_handle,
-            &chunk_representation,
+            &self.chunk_shape(chunk_indices)?,
+            self.data_type(),
+            self.fill_value(),
             options,
         )?)
     }

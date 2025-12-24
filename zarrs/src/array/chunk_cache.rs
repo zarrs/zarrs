@@ -205,8 +205,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
             ));
         };
 
-        let chunk_representation0 =
-            array.chunk_array_representation(&vec![0; array.dimensionality()])?;
+        let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
 
         let num_chunks = chunks.num_elements_usize();
         match num_chunks {
@@ -238,7 +237,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
                 // Calculate chunk/codec concurrency
                 let num_chunks = chunks.num_elements_usize();
                 let codec_concurrency =
-                    array.recommended_codec_concurrency(&chunk_representation0)?;
+                    array.recommended_codec_concurrency(&chunk_shape0, array.data_type())?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,

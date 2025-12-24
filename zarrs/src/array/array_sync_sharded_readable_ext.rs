@@ -126,7 +126,7 @@ impl ArrayShardedReadableExtCache {
             ));
 
             // --- Workaround for lack of trait upcasting ---
-            let chunk_representation = array.chunk_array_representation(shard_indices)?;
+            let chunk_shape = array.chunk_shape(shard_indices)?;
             let sharding_codec_configuration = array
                 .codecs()
                 .array_to_bytes_codec()
@@ -143,8 +143,10 @@ impl ArrayShardedReadableExtCache {
             let partial_decoder =
                 MaybeShardingPartialDecoder::Sharding(Arc::new(ShardingPartialDecoder::new(
                     input_handle,
-                    chunk_representation,
-                    &sharding_codec.chunk_shape,
+                    array.data_type().clone(),
+                    array.fill_value().clone(),
+                    chunk_shape.clone(),
+                    sharding_codec.subchunk_shape.clone(),
                     sharding_codec.inner_codecs.clone(),
                     &sharding_codec.index_codecs,
                     sharding_codec.index_location,
@@ -545,10 +547,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 .map_err(ArrayError::from)?
             } else {
                 // Calculate chunk/codec concurrency
-                let chunk_representation =
-                    self.chunk_array_representation(&vec![0; self.dimensionality()])?;
+                let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
                 let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_representation)?;
+                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_shards,
@@ -675,6 +676,7 @@ mod private {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
     use std::sync::Arc;
 
     use super::*;
@@ -719,7 +721,10 @@ mod tests {
         assert_eq!(array.is_sharded(), sharded);
         let inner_chunk_grid = array.inner_chunk_grid();
         if sharded {
-            assert_eq!(array.inner_chunk_shape(), Some(vec![2, 2].try_into()?));
+            assert_eq!(
+                array.inner_chunk_shape(),
+                Some(vec![NonZeroU64::new(2).unwrap(); 2])
+            );
             assert_eq!(inner_chunk_grid.grid_shape(), &[4, 4]);
 
             let compare = array
@@ -867,7 +872,16 @@ mod tests {
         )?))]);
         builder.array_to_bytes_codec(Arc::new(
             ShardingCodecBuilder::new(
-                vec![1, if valid_inner_chunk_shape { 2 } else { 3 }, 3].try_into()?,
+                vec![
+                    NonZeroU64::new(1).unwrap(),
+                    if valid_inner_chunk_shape {
+                        NonZeroU64::new(2).unwrap()
+                    } else {
+                        NonZeroU64::new(3).unwrap()
+                    },
+                    NonZeroU64::new(3).unwrap(),
+                ]
+                .try_into()?,
                 &DataType::UInt32,
             )
             .bytes_to_bytes_codecs(vec![
@@ -893,10 +907,21 @@ mod tests {
             //   2 x  1 x 3 Effective inner chunk shape (read granularity)
 
             assert_eq!(array.chunk_grid_shape(), &[2, 4, 3]);
-            assert_eq!(array.inner_chunk_shape(), Some(vec![1, 2, 3].try_into()?));
+            assert_eq!(
+                array.inner_chunk_shape(),
+                Some(vec![
+                    NonZeroU64::new(1).unwrap(),
+                    NonZeroU64::new(2).unwrap(),
+                    NonZeroU64::new(3).unwrap()
+                ])
+            );
             assert_eq!(
                 array.effective_inner_chunk_shape(),
-                Some(vec![2, 1, 3].try_into()?)
+                Some(vec![
+                    NonZeroU64::new(2).unwrap(),
+                    NonZeroU64::new(1).unwrap(),
+                    NonZeroU64::new(3).unwrap()
+                ])
             ); // NOTE: transposed
             assert_eq!(inner_chunk_grid.grid_shape(), &[8, 16, 3]);
         } else {
@@ -929,7 +954,7 @@ mod tests {
             array_sharded_ext_impl_transpose(false)
                 .unwrap_err()
                 .to_string(),
-            "invalid inner chunk shape [1, 3, 3], it must evenly divide [4, 8, 3]"
+            "invalid subchunk shape [1, 3, 3], it must evenly divide shard shape [4, 8, 3]"
         )
     }
 }

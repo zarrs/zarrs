@@ -237,6 +237,8 @@ pub enum ArrayMetadataV2Order {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use super::*;
 
     #[test]
@@ -244,7 +246,7 @@ mod tests {
         let array = ArrayMetadataV2 {
             zarr_format: monostate::MustBe!(2u64),
             shape: vec![10000, 10000],
-            chunks: vec![1000, 1000].try_into().unwrap(),
+            chunks: vec![NonZeroU64::new(1000).unwrap(); 2].try_into().unwrap(),
             dtype: DataTypeMetadataV2::Simple("<f8".to_string()),
             compressor: None,
             fill_value: FillValueMetadataV2::String("NaN".to_string()),

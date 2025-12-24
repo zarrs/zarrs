@@ -20,7 +20,7 @@ use crate::array::{
 /// Use the methods in the `sharding` codec builder to change the configuration away from these defaults, and then build the `sharding` codec with [`build`](ShardingCodecBuilder::build).
 #[derive(Debug)]
 pub struct ShardingCodecBuilder {
-    inner_chunk_shape: ChunkShape,
+    subchunk_shape: ChunkShape,
     index_array_to_bytes_codec: NamedArrayToBytesCodec,
     index_bytes_to_bytes_codecs: Vec<NamedBytesToBytesCodec>,
     array_to_array_codecs: Vec<NamedArrayToArrayCodec>,
@@ -35,9 +35,9 @@ impl ShardingCodecBuilder {
     /// The default inner chunk array-to-bytes codec is chosen based on the data type
     /// (see [`default_array_to_bytes_codec`]).
     #[must_use]
-    pub fn new(inner_chunk_shape: ChunkShape, data_type: &DataType) -> Self {
+    pub fn new(subchunk_shape: ChunkShape, data_type: &DataType) -> Self {
         Self {
-            inner_chunk_shape,
+            subchunk_shape,
             index_array_to_bytes_codec: Arc::<codec::BytesCodec>::default().into(),
             index_bytes_to_bytes_codecs: vec![
                 #[cfg(feature = "crc32c")]
@@ -190,7 +190,7 @@ impl ShardingCodecBuilder {
             self.index_bytes_to_bytes_codecs.clone(),
         ));
         ShardingCodec::new(
-            self.inner_chunk_shape.clone(),
+            self.subchunk_shape.clone(),
             inner_codecs,
             index_codecs,
             self.index_location,

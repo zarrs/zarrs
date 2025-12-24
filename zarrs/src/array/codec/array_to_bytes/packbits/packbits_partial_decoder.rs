@@ -5,12 +5,13 @@ use std::{ops::Div, sync::Arc};
 #[cfg(feature = "async")]
 use async_generic::async_generic;
 use num::Integer;
+use std::num::NonZeroU64;
 
 use super::DataTypeExtensionPackBitsCodecComponents;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
-    ArrayBytes, ChunkRepresentation, DataType,
+    ArrayBytes, ChunkShape, DataType, FillValue,
     codec::{
         ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
         array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
@@ -21,10 +22,13 @@ use crate::storage::{StorageError, byte_range::ByteRange};
 
 // https://github.com/scouten/async-generic/pull/17
 #[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_arguments)]
 #[cfg_attr(feature = "async", async_generic(
     async_signature(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
-    decoded_representation: &ChunkRepresentation,
+    shape: &[NonZeroU64],
+    data_type: &DataType,
+    fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
@@ -33,7 +37,9 @@ use crate::storage::{StorageError, byte_range::ByteRange};
 )))]
 fn partial_decode<'a>(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
-    decoded_representation: &ChunkRepresentation,
+    shape: &[NonZeroU64],
+    data_type: &DataType,
+    fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
@@ -44,7 +50,7 @@ fn partial_decode<'a>(
         component_size_bits,
         num_components,
         sign_extension,
-    } = pack_bits_components(decoded_representation.data_type())?;
+    } = pack_bits_components(data_type)?;
     let first_bit = first_bit.unwrap_or(0);
     let last_bit = last_bit.unwrap_or(component_size_bits - 1);
 
@@ -52,12 +58,9 @@ fn partial_decode<'a>(
     let component_size_bits_extracted = last_bit - first_bit + 1;
     let element_size_bits = component_size_bits_extracted * num_components;
 
-    let data_type_size_dec = decoded_representation
-        .data_type()
-        .fixed_size()
-        .ok_or_else(|| {
-            CodecError::Other("data type must have a fixed size for packbits codec".to_string())
-        })?;
+    let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
+        CodecError::Other("data type must have a fixed size for packbits codec".to_string())
+    })?;
 
     let element_size_bits_usize = usize::try_from(element_size_bits).unwrap();
 
@@ -66,10 +69,9 @@ fn partial_decode<'a>(
         PackBitsPaddingEncoding::None | PackBitsPaddingEncoding::LastByte => 0,
     };
 
-    let chunk_shape = decoded_representation.shape_u64();
     // Get the bit ranges that map to the elements
     let bit_ranges = indexer
-        .iter_contiguous_byte_ranges(chunk_shape, element_size_bits_usize)?
+        .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(shape), element_size_bits_usize)?
         .collect::<Vec<_>>();
 
     // Convert to byte ranges, skipping the padding encoding byte
@@ -139,11 +141,7 @@ fn partial_decode<'a>(
         }
         ArrayBytes::new_flen(bytes_dec)
     } else {
-        ArrayBytes::new_fill_value(
-            decoded_representation.data_type(),
-            indexer.len(),
-            decoded_representation.fill_value(),
-        )?
+        ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value)?
     };
     Ok(decoded_bytes)
 }
@@ -151,7 +149,9 @@ fn partial_decode<'a>(
 /// Partial decoder for the `packbits` codec.
 pub(crate) struct PackBitsPartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: ChunkShape,
+    data_type: DataType,
+    fill_value: FillValue,
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
@@ -161,14 +161,18 @@ impl PackBitsPartialDecoder {
     /// Create a new partial decoder for the `packbits` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
         padding_encoding: PackBitsPaddingEncoding,
         first_bit: Option<u64>,
         last_bit: Option<u64>,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
             padding_encoding,
             first_bit,
             last_bit,
@@ -178,7 +182,7 @@ impl PackBitsPartialDecoder {
 
 impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -196,7 +200,9 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
             &self.input_handle,
-            &self.decoded_representation,
+            &self.shape,
+            &self.data_type,
+            &self.fill_value,
             self.padding_encoding,
             self.first_bit,
             self.last_bit,
@@ -214,7 +220,9 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
 /// Asynchronous partial decoder for the `packbits` codec.
 pub(crate) struct AsyncPackBitsPartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: ChunkShape,
+    data_type: DataType,
+    fill_value: FillValue,
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
@@ -225,14 +233,18 @@ impl AsyncPackBitsPartialDecoder {
     /// Create a new partial decoder for the `packbits` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
         padding_encoding: PackBitsPaddingEncoding,
         first_bit: Option<u64>,
         last_bit: Option<u64>,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
             padding_encoding,
             first_bit,
             last_bit,
@@ -245,7 +257,7 @@ impl AsyncPackBitsPartialDecoder {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -263,7 +275,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         partial_decode_async(
             &self.input_handle,
-            &self.decoded_representation,
+            &self.shape,
+            &self.data_type,
+            &self.fill_value,
             self.padding_encoding,
             self.first_bit,
             self.last_bit,

@@ -372,7 +372,9 @@ pub fn fill_value_metadata_v2_to_v3(
 
 #[cfg(test)]
 mod tests {
-    use zarrs_metadata::{ChunkKeySeparator, ChunkShape, Endianness};
+    use std::num::NonZeroU64;
+
+    use zarrs_metadata::{ChunkKeySeparator, Endianness};
     use zarrs_registry::{
         ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
         ExtensionAliasesDataTypeV3,
@@ -382,6 +384,7 @@ mod tests {
     use crate::codec::{
         blosc::BloscCodecConfigurationV1, transpose::TransposeCodecConfigurationV1,
     };
+    use crate::ChunkShape;
 
     #[test]
     fn array_v2_config() -> Result<(), Box<dyn std::error::Error>> {
@@ -413,7 +416,7 @@ mod tests {
             serde_json::from_str(&json).unwrap();
         assert_eq!(
             array_metadata_v2.chunks,
-            ChunkShape::try_from(vec![1000, 1000]).unwrap()
+            ChunkShape::try_from(vec![NonZeroU64::new(1000).unwrap(); 2]).unwrap()
         );
         assert_eq!(array_metadata_v2.shape, vec![10000, 10000]);
         assert_eq!(

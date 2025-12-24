@@ -1,15 +1,14 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::cast_possible_truncation)]
 
-use std::{mem::size_of, sync::Arc};
+use std::{mem::size_of, num::NonZeroU64, sync::Arc};
 
 use zarrs_data_type::FillValue;
 use zarrs_plugin::PluginCreateError;
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
-    DataType,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType,
     array_bytes::ArrayBytesVariableLength,
     codec::{
         ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
@@ -305,7 +304,8 @@ impl CodecTraits for OptionalCodec {
 impl ArrayCodecTraits for OptionalCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // Sequential processing for now
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -325,10 +325,12 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        if !decoded_representation.data_type().is_optional() {
+        if !data_type.is_optional() {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
@@ -339,19 +341,16 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
             ));
         };
         let (dense_data, mask) = optional_bytes.into_parts();
-        if mask.len() != decoded_representation.num_elements_usize() {
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        if mask.len() != usize::try_from(num_elements).unwrap() {
             return Err(CodecError::Other(format!(
                 "mask length {} does not match number of elements {}",
                 mask.len(),
-                decoded_representation.num_elements_usize()
+                num_elements
             )));
         }
 
-        // Create representations for mask and data
-        let mask_representation =
-            ChunkRepresentation::new(decoded_representation.shape().to_vec(), DataType::Bool, 0u8)?;
-
-        let DataType::Optional(opt) = decoded_representation.data_type() else {
+        let DataType::Optional(opt) = data_type else {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
@@ -360,7 +359,9 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         // Encode mask
         let encoded_mask = self.mask_codecs.encode(
             ArrayBytes::from(mask.as_ref()),
-            &mask_representation,
+            shape,
+            &DataType::Bool,
+            &FillValue::from(0u8),
             options,
         )?;
 
@@ -373,11 +374,8 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
             let fill_value = Self::create_fill_value_for_inner_type(opt);
-            self.data_codecs.encode(
-                sparse_data,
-                &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
-                options,
-            )?
+            self.data_codecs
+                .encode(sparse_data, &data_shape, opt, &fill_value, options)?
         } else {
             ArrayBytesRaw::from(vec![])
         };
@@ -395,7 +393,9 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
@@ -414,16 +414,17 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let encoded_data = &bytes[16 + mask_len..];
 
         // Decode mask
-        let mask_representation =
-            ChunkRepresentation::new(decoded_representation.shape().to_vec(), DataType::Bool, 0u8)?;
-
-        let decoded_mask =
-            self.mask_codecs
-                .decode(encoded_mask.into(), &mask_representation, options)?;
+        let decoded_mask = self.mask_codecs.decode(
+            encoded_mask.into(),
+            shape,
+            &DataType::Bool,
+            &FillValue::from(0u8),
+            options,
+        )?;
         let mask = decoded_mask.into_fixed()?.into_owned();
 
         // Decode data
-        let DataType::Optional(opt) = decoded_representation.data_type() else {
+        let DataType::Optional(opt) = data_type else {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
@@ -436,11 +437,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
                 let fill_value = Self::create_fill_value_for_inner_type(opt);
                 self.data_codecs
-                    .decode(
-                        encoded_data.into(),
-                        &ChunkRepresentation::new(data_shape, (**opt).clone(), fill_value)?,
-                        options,
-                    )?
+                    .decode(encoded_data.into(), &data_shape, opt, &fill_value, options)?
                     .into_owned()
             };
 
@@ -455,60 +452,34 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         Ok(dense_data.with_optional_mask(mask))
     }
 
-    // fn partial_decoder(
-    //     self: Arc<Self>,
-    //     _input_handle: Arc<dyn crate::array::codec::BytesPartialDecoderTraits>,
-    //     _decoded_representation: &ChunkRepresentation,
-    //     _options: &CodecOptions,
-    // ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-    //     Err(CodecError::Other(
-    //         "partial decoding is not supported for the optional codec".to_string(),
-    //     ))
-    // }
-
-    // #[cfg(feature = "async")]
-    // async fn async_partial_decoder(
-    //     self: Arc<Self>,
-    //     _input_handle: Arc<dyn crate::array::codec::AsyncBytesPartialDecoderTraits>,
-    //     _decoded_representation: &ChunkRepresentation,
-    //     _options: &CodecOptions,
-    // ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-    //     Err(CodecError::Other(
-    //         "async partial decoding is not supported for the optional codec".to_string(),
-    //     ))
-    // }
-
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Header: mask_len (u64) + data_len (u64) = 16 bytes
         const HEADER_SIZE: u64 = 16;
 
         // Get the inner data type (unwrap Optional)
-        let DataType::Optional(inner_type) = decoded_representation.data_type() else {
+        let DataType::Optional(inner_type) = data_type else {
             return Err(CodecError::Other(
                 "optional codec requires an optional data type".to_string(),
             ));
         };
 
         // Compute mask representation: bool array with same shape
-        let mask_representation =
-            ChunkRepresentation::new(decoded_representation.shape().to_vec(), DataType::Bool, 0u8)?;
-        let mask_bytes_repr = self
-            .mask_codecs
-            .encoded_representation(&mask_representation)?;
+        let mask_bytes_repr = self.mask_codecs.encoded_representation(
+            shape,
+            &DataType::Bool,
+            &FillValue::from(0u8),
+        )?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
         let fill_value = Self::create_fill_value_for_inner_type(inner_type);
-        let data_representation = ChunkRepresentation::new(
-            decoded_representation.shape().to_vec(),
-            (**inner_type).clone(),
-            fill_value,
-        )?;
-        let data_bytes_repr = self
-            .data_codecs
-            .encoded_representation(&data_representation)?;
+        let data_bytes_repr =
+            self.data_codecs
+                .encoded_representation(shape, inner_type, &fill_value)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
         match (mask_bytes_repr.size(), data_bytes_repr.size()) {
@@ -530,7 +501,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 mod tests {
     use super::*;
     use crate::array::{
-        ArrayBytes, ChunkRepresentation, DataType,
+        ArrayBytes, ChunkShapeTraits, DataType,
         codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
     };
 
@@ -631,12 +602,9 @@ mod tests {
         use std::num::NonZeroU64;
 
         let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let chunk_representation = unsafe {
-            // SAFETY: We control the data type and fill value
-            ChunkRepresentation::new_unchecked(chunk_shape, data_type.clone(), fill_value)
-        };
+        let fill_value = fill_value.into();
 
-        let num_elements = chunk_representation.num_elements_usize();
+        let num_elements = chunk_shape.num_elements_usize();
 
         // Build codec configuration recursively for nested optional types
         let data_codecs_config = build_codec_config_for_type(&data_type);
@@ -654,8 +622,20 @@ mod tests {
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
 
-        let encoded = codec.encode(input, &chunk_representation, &CodecOptions::default())?;
-        let decoded = codec.decode(encoded, &chunk_representation, &CodecOptions::default())?;
+        let encoded = codec.encode(
+            input,
+            &chunk_shape,
+            &data_type,
+            &fill_value,
+            &CodecOptions::default(),
+        )?;
+        let decoded = codec.decode(
+            encoded,
+            &chunk_shape,
+            &data_type,
+            &fill_value,
+            &CodecOptions::default(),
+        )?;
 
         // The codec now returns optional ArrayBytes
         assert!(matches!(decoded, ArrayBytes::Optional(..)));
@@ -807,14 +787,8 @@ mod tests {
 
         // Test Option<Option<u8>> with explicit mask construction
         let data_type = DataType::UInt8.into_optional().into_optional();
+        let fill_value = FillValue::from(None::<Option<u8>>);
         let chunk_shape = vec![NonZeroU64::new(8).unwrap()];
-        let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(
-                chunk_shape,
-                data_type,
-                FillValue::from(None::<Option<u8>>),
-            )
-        };
 
         // Create test data:
         // Element 0: Some(Some(10))  - outer valid=1, inner valid=1, data=10
@@ -853,12 +827,20 @@ mod tests {
         let encoded = codec
             .encode(
                 input.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -892,10 +874,8 @@ mod tests {
         // This represents the outer optional wrapping a non-optional type
         let data_type = DataType::UInt8.into_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
-        let chunk_representation = unsafe {
-            // Use a non-null fill value of 255 for missing elements
-            ChunkRepresentation::new_unchecked(chunk_shape, data_type, FillValue::new(vec![255u8]))
-        };
+        // Use a non-null fill value of 255 for missing elements
+        let fill_value = FillValue::new(vec![255u8]);
 
         // Create test data:
         // Element 0: Some(10)  - valid=1, data=10
@@ -922,12 +902,20 @@ mod tests {
         let encoded = codec
             .encode(
                 input.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure
@@ -964,13 +952,7 @@ mod tests {
             .into_optional()
             .into_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
-        let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(
-                chunk_shape,
-                data_type,
-                FillValue::from(None::<Option<Option<u16>>>),
-            )
-        };
+        let fill_value = FillValue::from(None::<Option<Option<u16>>>);
 
         // Create test data with 3 levels:
         // Element 0: Some(Some(Some(100)))  - outer=1, middle=1, inner=1, data=100
@@ -1023,12 +1005,20 @@ mod tests {
         let encoded = codec
             .encode(
                 input.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
 
         // Verify the 3-level nested structure
@@ -1067,13 +1057,7 @@ mod tests {
         // Test Option<f32> with a specific fill value (e.g., NaN)
         let data_type = DataType::Float32.into_optional();
         let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
-        let chunk_representation = unsafe {
-            ChunkRepresentation::new_unchecked(
-                chunk_shape,
-                data_type,
-                FillValue::from(Some(f32::NAN)),
-            )
-        };
+        let fill_value = FillValue::from(Some(f32::NAN));
 
         // Create test data with some valid and some invalid f32 values
         let mask = vec![1u8, 0, 1, 1, 0];
@@ -1100,12 +1084,20 @@ mod tests {
         let encoded = codec
             .encode(
                 input.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
 
         // Verify the decoded structure

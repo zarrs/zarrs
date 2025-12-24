@@ -4,8 +4,8 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{
-    Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, Element,
-    IntoArrayBytes,
+    Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
+    Element, IntoArrayBytes,
     codec::{ArrayToBytesCodecTraits, CodecOptions},
     concurrency::concurrency_chunks_and_codec,
 };
@@ -283,11 +283,8 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
 
         // Validation
-        let chunk_array_representation = self.chunk_array_representation(chunk_indices)?;
-        chunk_bytes.validate(
-            chunk_array_representation.num_elements(),
-            chunk_array_representation.data_type(),
-        )?;
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        chunk_bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
 
         let is_fill_value =
             !options.store_empty_chunks() && chunk_bytes.is_fill_value(self.fill_value());
@@ -296,7 +293,13 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         } else {
             let chunk_encoded = self
                 .codecs()
-                .encode(chunk_bytes, &chunk_array_representation, options)
+                .encode(
+                    chunk_bytes,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
             let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
             unsafe { self.store_encoded_chunk(chunk_indices, chunk_encoded) }?;
@@ -379,10 +382,9 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 chunks_bytes.validate(array_subset.num_elements(), self.data_type())?;
 
                 // Calculate chunk/codec concurrency
-                let chunk_representation =
-                    self.chunk_array_representation(&vec![0; self.dimensionality()])?;
+                let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
                 let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_representation)?;
+                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,

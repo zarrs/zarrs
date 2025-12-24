@@ -153,8 +153,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
                 let end = (start + chunk_shape.get()).min(array_shape);
                 NonZeroU64::new(end.saturating_sub(start))
             })
-            .collect::<Option<Vec<_>>>()
-            .map(ChunkShape::from))
+            .collect::<Option<Vec<_>>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -331,7 +330,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
 
         {
             let chunk_grid =
@@ -352,7 +355,7 @@ mod tests {
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
-                Some(vec![1, 1, 1].try_into().unwrap())
+                Some(vec![NonZeroU64::new(1).unwrap(); 3].try_into().unwrap())
             );
             assert_eq!(chunk_grid.chunk_shape(&[5, 0, 0]).unwrap(), None);
             let chunk_grid_shape = chunk_grid.grid_shape();
@@ -395,7 +398,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_out_of_bounds() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 53];
@@ -409,7 +416,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_unlimited() {
         let array_shape: ArrayShape = vec![5, 7, 0];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 1000];
@@ -424,7 +435,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_bounded_iterators() {
         let array_shape: ArrayShape = vec![2, 2, 6];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let iter = chunk_grid.iter_chunk_indices();
