@@ -80,6 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `pco` to 0.4.7
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
+- Bump `zarrs_metadata_ext` to 0.3.0
+- Bump `zarrs_registry` to 0.1.9
+- Bump `zarrs_filesystem` to 0.3.6
+- Bump `zarrs_chunk_grid` to 0.1.0
 - **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
   - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
     - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
