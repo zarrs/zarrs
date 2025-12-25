@@ -294,7 +294,7 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         let zfp_type = zarr_to_zfp_data_type(data_type)
-            .ok_or_else(|| CodecError::from("data type {} is unsupported for zfp codec"))?;
+            .ok_or_else(|| CodecError::UnsupportedDataType(data_type.clone(), ZFP.to_string()))?;
 
         let bufsize = {
             let field = unsafe {
