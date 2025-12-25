@@ -21,7 +21,6 @@ use crate::iter_concurrent_limit;
 use crate::storage::ReadableStorageTraits;
 use crate::storage::StorageHandle;
 use crate::storage::byte_range::ByteRange;
-use crate::storage::{MaybeSend, MaybeSync};
 
 type PartialDecoderHashMap = HashMap<Vec<u64>, Arc<dyn ArrayPartialDecoderTraits>>;
 
@@ -343,7 +342,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 inner_chunk_indices,
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
-            let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
+            #[cfg(not(target_arch = "wasm32"))]
+            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
+            #[cfg(target_arch = "wasm32")]
+            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
             let partial_decoder = partial_decoder
                 .downcast::<ShardingPartialDecoder>()
                 .expect("array is exclusively sharded");
@@ -368,7 +370,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 inner_chunk_indices,
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
-            let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
+            #[cfg(not(target_arch = "wasm32"))]
+            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
+            #[cfg(target_arch = "wasm32")]
+            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
             let partial_decoder = partial_decoder
                 .downcast::<ShardingPartialDecoder>()
                 .expect("array is exclusively sharded");

@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_and_test:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -38,8 +38,14 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo build ${{ matrix.features }}
-      - run: cargo test ${{ matrix.features }}
-      - run: cargo test ${{ matrix.features }} --examples
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
+      - run: cargo test --all-features --examples
   build_wasm:
     runs-on: ubuntu-latest
     steps:
