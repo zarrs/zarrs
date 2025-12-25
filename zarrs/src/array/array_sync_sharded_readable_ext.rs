@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::{collections::HashMap, sync::Arc};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -6,8 +5,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::array_bytes::merge_chunks_vlen;
-use super::codec::CodecError;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
+use super::codec::{CodecError, ShardingCodec};
 use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
@@ -15,14 +14,36 @@ use super::{
     concurrency::concurrency_chunks_and_codec,
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
-use crate::array::codec::{ArrayPartialDecoderTraits, StoragePartialDecoder};
-use crate::array_subset::ArraySubset;
+use crate::array::codec::StoragePartialDecoder;
 use crate::iter_concurrent_limit;
+use crate::metadata::ConfigurationSerialize;
+use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::ReadableStorageTraits;
 use crate::storage::StorageHandle;
 use crate::storage::byte_range::ByteRange;
+use crate::{array::codec::ArrayPartialDecoderTraits, array_subset::ArraySubset};
 
-type PartialDecoderHashMap = HashMap<Vec<u64>, Arc<dyn ArrayPartialDecoderTraits>>;
+// TODO: Remove with trait upcasting
+#[derive(Clone)]
+enum MaybeShardingPartialDecoder {
+    Sharding(Arc<ShardingPartialDecoder>),
+    Other(Arc<dyn ArrayPartialDecoderTraits>),
+}
+
+impl MaybeShardingPartialDecoder {
+    fn partial_decode(
+        &self,
+        indexer: &dyn crate::indexer::Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        match self {
+            Self::Sharding(partial_decoder) => partial_decoder.partial_decode(indexer, options),
+            Self::Other(partial_decoder) => partial_decoder.partial_decode(indexer, options),
+        }
+    }
+}
+
+type PartialDecoderHashMap = HashMap<Vec<u64>, MaybeShardingPartialDecoder>;
 
 /// A cache used for methods in the [`ArrayShardedReadableExt`] trait.
 pub struct ArrayShardedReadableExtCache {
@@ -89,7 +110,7 @@ impl ArrayShardedReadableExtCache {
         &self,
         array: &Array<TStorage>,
         shard_indices: &[u64],
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+    ) -> Result<MaybeShardingPartialDecoder, ArrayError> {
         let mut cache = self.cache.lock().unwrap();
         if let Some(partial_decoder) = cache.get(shard_indices) {
             Ok(partial_decoder.clone())
@@ -104,23 +125,48 @@ impl ArrayShardedReadableExtCache {
                 array.chunk_key(shard_indices),
             ));
 
+            // --- Workaround for lack of trait upcasting ---
             let chunk_shape = array.chunk_shape(shard_indices)?;
-            let partial_decoder = array
+            let sharding_codec_configuration = array
                 .codecs()
                 .array_to_bytes_codec()
-                .codec()
-                .clone()
-                .partial_decoder(
+                .configuration()
+                .expect("valid sharding metadata");
+            let sharding_codec_configuration =
+                ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)
+                    .expect("valid sharding configuration");
+            let sharding_codec = Arc::new(
+                ShardingCodec::new_with_configuration(&sharding_codec_configuration).expect(
+                    "supported sharding codec configuration, already instantiated in array",
+                ),
+            );
+            let partial_decoder =
+                MaybeShardingPartialDecoder::Sharding(Arc::new(ShardingPartialDecoder::new(
                     input_handle,
-                    &chunk_shape,
-                    array.data_type(),
-                    array.fill_value(),
+                    array.data_type().clone(),
+                    array.fill_value().clone(),
+                    chunk_shape.clone(),
+                    sharding_codec.subchunk_shape.clone(),
+                    sharding_codec.inner_codecs.clone(),
+                    &sharding_codec.index_codecs,
+                    sharding_codec.index_location,
                     &CodecOptions::default(),
-                )?;
+                )?));
+            // // TODO: Trait upcasting
+            // let partial_decoder = array
+            //     .codecs()
+            //     .array_to_bytes_codec()
+            //     .clone()
+            //     .partial_decoder(
+            //         input_handle,
+            //         &chunk_representation,
+            //         &CodecOptions::default(),
+            //     )?;
             cache.insert(shard_indices.to_vec(), partial_decoder.clone());
             Ok(partial_decoder)
         } else {
-            let partial_decoder = array.partial_decoder(shard_indices)?;
+            let partial_decoder =
+                MaybeShardingPartialDecoder::Other(array.partial_decoder(shard_indices)?);
             cache.insert(shard_indices.to_vec(), partial_decoder.clone());
             Ok(partial_decoder)
         }
@@ -342,13 +388,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 inner_chunk_indices,
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
-            #[cfg(target_arch = "wasm32")]
-            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
-            let partial_decoder = partial_decoder
-                .downcast::<ShardingPartialDecoder>()
-                .expect("array is exclusively sharded");
+            let MaybeShardingPartialDecoder::Sharding(partial_decoder) = partial_decoder else {
+                unreachable!("exlusively sharded")
+            };
+            // TODO: trait upcasting
+            // let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
+            // let partial_decoder = partial_decoder
+            //     .downcast::<ShardingPartialDecoder>()
+            //     .expect("array is exclusively sharded");
 
             Ok(partial_decoder.inner_chunk_byte_range(&chunk_indices)?)
         } else {
@@ -370,13 +417,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 inner_chunk_indices,
             )?;
             let partial_decoder = cache.retrieve(self, &shard_indices)?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
-            #[cfg(target_arch = "wasm32")]
-            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
-            let partial_decoder = partial_decoder
-                .downcast::<ShardingPartialDecoder>()
-                .expect("array is exclusively sharded");
+            let MaybeShardingPartialDecoder::Sharding(partial_decoder) = partial_decoder else {
+                unreachable!("exlusively sharded")
+            };
+            // TODO: trait upcasting
+            // let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
+            // let partial_decoder = partial_decoder
+            //     .downcast::<ShardingPartialDecoder>()
+            //     .expect("array is exclusively sharded");
 
             Ok(partial_decoder
                 .retrieve_inner_chunk_encoded(&chunk_indices)?
