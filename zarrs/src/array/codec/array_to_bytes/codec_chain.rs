@@ -976,7 +976,7 @@ mod tests {
 }"#;
 
     fn codec_chain_round_trip_impl(
-        shape: &ChunkShape,
+        shape: &[NonZeroU64],
         data_type: &DataType,
         fill_value: &FillValue,
         elements: Vec<f32>,

@@ -802,7 +802,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
 
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     #[must_use]
-    pub fn chunk_grid_shape(&self) -> &ArrayShape {
+    pub fn chunk_grid_shape(&self) -> &[u64] {
         self.chunk_grid().grid_shape()
     }
 

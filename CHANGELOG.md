@@ -121,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `CodecPartialDefault::new()`
   - Various `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, `ArrayCodecTraits` methods
 - **Breaking**: Replace `ChunkShape` newtype with `Vec<NonZeroU64>`
+- **Breaking**: Change return type of `Array::chunk_grid_shape()` to `&[u64]` instead of `&ArrayShape`
 
 ### Removed
 

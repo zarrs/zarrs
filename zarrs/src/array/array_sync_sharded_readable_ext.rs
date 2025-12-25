@@ -490,7 +490,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 .ok_or_else(|| {
                     ArrayError::InvalidArraySubset(
                         inner_chunks.clone(),
-                        inner_chunk_grid.grid_shape().clone(),
+                        inner_chunk_grid.grid_shape().to_vec(),
                     )
                 })?;
             self.retrieve_array_subset_sharded_opt(cache, &array_subset, options)

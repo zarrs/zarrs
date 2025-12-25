@@ -522,7 +522,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                 .ok_or_else(|| {
                     ArrayError::InvalidArraySubset(
                         inner_chunks.clone(),
-                        inner_chunk_grid.grid_shape().clone(),
+                        inner_chunk_grid.grid_shape().to_vec(),
                     )
                 })?;
             self.async_retrieve_array_subset_sharded_opt(cache, &array_subset, options)

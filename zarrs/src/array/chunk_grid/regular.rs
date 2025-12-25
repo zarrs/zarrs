@@ -216,11 +216,11 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
         self.chunk_shape.len()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         &self.array_shape
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
     }
 

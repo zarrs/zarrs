@@ -242,14 +242,12 @@ impl ArrayBuilder {
     ) -> &mut Self {
         let array_shape = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => {
-                chunk_grid.as_chunk_grid().array_shape().clone()
+                chunk_grid.as_chunk_grid().array_shape()
             }
-            ArrayBuilderChunkGridMaybe::Metadata(array_shape, _chunk_grid_metadata) => {
-                array_shape.clone()
-            }
+            ArrayBuilderChunkGridMaybe::Metadata(array_shape, _chunk_grid_metadata) => array_shape,
         };
         let chunk_grid_metadata = chunk_grid_metadata.into();
-        self.chunk_grid = (array_shape, chunk_grid_metadata).into();
+        self.chunk_grid = (array_shape.to_vec(), chunk_grid_metadata).into();
         self
     }
 
@@ -529,7 +527,7 @@ impl ArrayBuilder {
         );
 
         Ok(ArrayMetadataV3::new(
-            chunk_grid.array_shape().clone(),
+            chunk_grid.array_shape().to_vec(),
             chunk_grid.create_metadata(),
             data_type.metadata(),
             data_type.metadata_fill_value(&fill_value)?,

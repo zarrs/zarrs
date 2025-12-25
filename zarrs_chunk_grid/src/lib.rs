@@ -113,12 +113,12 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
     /// The array shape (i.e. number of elements).
     ///
     /// If supported by the chunk grid, zero sized dimensions are considered "unlimited".
-    fn array_shape(&self) -> &ArrayShape;
+    fn array_shape(&self) -> &[u64];
 
     /// The grid shape (i.e. number of chunks).
     ///
     /// If supported by the chunk grid, the grid will have zero sized dimensions where the array shape is zero, which is considered "unlimited".
-    fn grid_shape(&self) -> &ArrayShape;
+    fn grid_shape(&self) -> &[u64];
 
     /// The shape of the chunk at `chunk_indices`.
     ///
@@ -286,7 +286,7 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
 
     /// Return a serial iterator over the chunk indices of the chunk grid.
     fn iter_chunk_indices(&self) -> IndicesIntoIterator {
-        let shape = self.grid_shape().clone();
+        let shape = self.grid_shape().to_vec();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         IndicesIntoIterator {
@@ -297,7 +297,7 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
 
     /// Return a parallel iterator over the chunk indices of the chunk grid.
     fn par_iter_chunk_indices(&self) -> ParIndicesIntoIterator {
-        let shape = self.grid_shape().clone();
+        let shape = self.grid_shape().to_vec();
         let n_chunks = shape.iter().product::<u64>();
         let n_chunks = usize::try_from(n_chunks).unwrap();
         ParIndicesIntoIterator {
@@ -316,11 +316,11 @@ unsafe impl ChunkGridTraits for ChunkGrid {
         self.0.dimensionality()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         self.0.array_shape()
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         self.0.grid_shape()
     }
 
@@ -369,11 +369,11 @@ unsafe impl ChunkGridTraits for Arc<dyn ChunkGridTraits> {
         self.as_ref().dimensionality()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         self.as_ref().array_shape()
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         self.as_ref().grid_shape()
     }
 

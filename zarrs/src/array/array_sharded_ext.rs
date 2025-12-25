@@ -90,7 +90,7 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
     }
 
     fn inner_chunk_grid_shape(&self) -> ArrayShape {
-        self.inner_chunk_grid().grid_shape().clone()
+        self.inner_chunk_grid().grid_shape().to_vec()
     }
 }
 
