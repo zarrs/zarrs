@@ -11,7 +11,7 @@ use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{
         Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ElementOwned,
-        array_bytes::merge_chunks_vlen,
+        array_bytes::{merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth},
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,
         from_array_bytes::FromArrayBytes,
@@ -396,7 +396,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
 }
 
 /// Helper function to retrieve multiple chunks with variable-length data.
-/// Also handles optional data types with variable-length inner types (will error).
+/// Also handles optional data types with variable-length inner types (including nested optionals).
 fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
     cache: &CC,
     array: &Array<dyn ReadableStorageTraits>,
@@ -405,13 +405,7 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
 ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
-    if array.data_type().is_optional() {
-        // Optional data type with variable-length inner type is not supported
-        // TODO: Support this
-        return Err(ArrayError::CodecError(CodecError::Other(
-            "Optional data type with variable-length inner type is not supported in multi-chunk retrieval".to_string(),
-        )));
-    }
+    let nesting_depth = optional_nesting_depth(array.data_type());
 
     // Retrieve chunks for variable-length data
     let indices = chunks.indices();
@@ -429,7 +423,17 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
         .iter()
         .map(|(chunk_bytes, chunk_subset)| (ArrayBytes::clone(chunk_bytes), chunk_subset.clone()))
         .collect();
-    Ok(merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?.into())
+
+    if nesting_depth > 0 {
+        Ok(merge_chunks_vlen_optional(
+            chunk_bytes_and_subsets,
+            array_subset.shape(),
+            nesting_depth,
+        )?
+        .into())
+    } else {
+        Ok(merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?.into())
+    }
 }
 
 /// Helper method to retrieve multiple chunks with fixed-length data types.

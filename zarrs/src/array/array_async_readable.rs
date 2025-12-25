@@ -9,7 +9,7 @@ use super::{
     DataType, FromArrayBytes,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
-        optional_nesting_depth,
+        merge_chunks_vlen_optional, optional_nesting_depth,
     },
     codec::{
         ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
@@ -578,7 +578,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     }
 
     /// Helper method to retrieve multiple chunks with variable-length data types (async).
-    /// Also handles optional data types with variable-length inner types (will error).
+    /// Also handles optional data types with variable-length inner types (including nested optionals).
     async fn async_retrieve_multi_chunk_variable(
         &self,
         array_subset: &ArraySubset,
@@ -587,12 +587,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, ArrayError> {
-        if data_type.is_optional() {
-            // Optional data type with variable-length inner type is not supported
-            return Err(ArrayError::CodecError(CodecError::Other(
-                "Optional data type with variable-length inner type is not supported in multi-chunk retrieval".to_string(),
-            )));
-        }
+        let nesting_depth = optional_nesting_depth(data_type);
 
         let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let options = options.clone();
@@ -617,10 +612,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .try_collect()
             .await?;
 
-        Ok(merge_chunks_vlen(
-            chunk_bytes_and_subsets,
-            array_subset.shape(),
-        )?)
+        if nesting_depth > 0 {
+            Ok(merge_chunks_vlen_optional(
+                chunk_bytes_and_subsets,
+                array_subset.shape(),
+                nesting_depth,
+            )?)
+        } else {
+            Ok(merge_chunks_vlen(
+                chunk_bytes_and_subsets,
+                array_subset.shape(),
+            )?)
+        }
     }
 
     /// Helper method to retrieve multiple chunks with fixed-length data types (async).

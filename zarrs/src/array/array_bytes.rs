@@ -900,6 +900,76 @@ pub(crate) fn merge_chunks_vlen<'a>(
     Ok(array_bytes)
 }
 
+/// Merge multiple chunks with optional variable-length data types.
+///
+/// This handles optional wrappers (including nested optionals like `Option<Option<String>>`)
+/// around variable-length data. Each chunk should contain an `ArrayBytes::Optional` with
+/// variable-length inner data.
+///
+/// # Arguments
+/// * `chunk_bytes_and_subsets` - Pairs of `(ArrayBytes, ArraySubset)` for each chunk
+/// * `array_shape` - The shape of the output array
+/// * `nesting_depth` - The number of nested `Option` layers (e.g., 1 for `Option<String>`, 2 for `Option<Option<String>>`)
+///
+/// # Errors
+/// Returns an error if the chunks don't have the expected optional structure.
+pub(crate) fn merge_chunks_vlen_optional<'a>(
+    chunk_bytes_and_subsets: Vec<(ArrayBytes<'_>, ArraySubset)>,
+    array_shape: &[u64],
+    nesting_depth: usize,
+) -> Result<ArrayBytes<'a>, CodecError> {
+    debug_assert!(nesting_depth > 0);
+
+    let num_elements = usize::try_from(array_shape.iter().product::<u64>()).unwrap();
+
+    // Allocate mask buffers for each nesting level (1 byte per element per level)
+    let mut merged_masks: Vec<Vec<u8>> = (0..nesting_depth)
+        .map(|_| vec![0u8; num_elements])
+        .collect();
+
+    // Unwrap optionals and collect inner variable-length data
+    let mut inner_bytes_and_subsets = Vec::with_capacity(chunk_bytes_and_subsets.len());
+
+    for (chunk_bytes, chunk_subset) in chunk_bytes_and_subsets {
+        // Unwrap nesting_depth levels of Optional, collecting masks
+        let mut current = chunk_bytes;
+        let mut chunk_masks = Vec::with_capacity(nesting_depth);
+
+        for _ in 0..nesting_depth {
+            let optional = current.into_optional()?;
+            let (data, mask) = optional.into_parts();
+            chunk_masks.push(mask);
+            current = *data;
+        }
+
+        // Copy chunk masks to merged masks at correct positions
+        let indices: Vec<_> = chunk_subset
+            .linearised_indices(array_shape)
+            .unwrap()
+            .into_iter()
+            .collect();
+        for (level, chunk_mask) in chunk_masks.iter().enumerate() {
+            for (chunk_idx, &array_idx) in indices.iter().enumerate() {
+                let array_idx = usize::try_from(array_idx).unwrap();
+                merged_masks[level][array_idx] = chunk_mask[chunk_idx];
+            }
+        }
+
+        inner_bytes_and_subsets.push((current, chunk_subset));
+    }
+
+    // Merge the inner variable-length data using the existing function
+    let merged_vlen = merge_chunks_vlen(inner_bytes_and_subsets, array_shape)?;
+
+    // Wrap with masks in reverse order (innermost first)
+    let mut result = merged_vlen;
+    for mask in merged_masks.into_iter().rev() {
+        result = result.with_optional_mask(mask);
+    }
+
+    Ok(result)
+}
+
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],

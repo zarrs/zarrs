@@ -339,3 +339,344 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[test]
+fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
+    use ndarray::{Array2, array};
+
+    // 8x8 array with 4x4 chunks = 4 chunks total
+    let array = create_optional_array(DataType::String.into_optional(), None::<String>.into());
+
+    // Store data in all 4 chunks with varying patterns
+    // Chunk [0,0]: mixed Some/None with various string lengths
+    let data0 = array![
+        [
+            Some("hello".to_string()),
+            None,
+            Some("world".to_string()),
+            Some("test".to_string())
+        ],
+        [None, Some("a".to_string()), Some("bc".to_string()), None],
+        [
+            Some("".to_string()),
+            Some("data".to_string()),
+            None,
+            Some("xyz".to_string())
+        ],
+        [
+            Some("chunk0".to_string()),
+            None,
+            None,
+            Some("end".to_string())
+        ],
+    ];
+    array.store_chunk(&[0, 0], data0.clone())?;
+
+    // Chunk [0,1]: more None values
+    let data1 = array![
+        [None, None, None, None],
+        [
+            Some("only".to_string()),
+            Some("some".to_string()),
+            None,
+            None
+        ],
+        [
+            None,
+            Some("strings".to_string()),
+            Some("here".to_string()),
+            None
+        ],
+        [
+            Some("more".to_string()),
+            None,
+            Some("text".to_string()),
+            Some("data".to_string())
+        ],
+    ];
+    array.store_chunk(&[0, 1], data1.clone())?;
+
+    // Chunk [1,0]: including unicode and special chars
+    let data2 = array![
+        [
+            Some("lower".to_string()),
+            Some("left".to_string()),
+            Some("chunk".to_string()),
+            None
+        ],
+        [
+            None,
+            None,
+            Some("mixed".to_string()),
+            Some("values".to_string())
+        ],
+        [
+            Some("unicode: 你好".to_string()),
+            None,
+            None,
+            Some("emoji: 🎉".to_string())
+        ],
+        [
+            None,
+            Some("final".to_string()),
+            None,
+            Some("row".to_string())
+        ],
+    ];
+    array.store_chunk(&[1, 0], data2.clone())?;
+
+    // Chunk [1,1]: alternating pattern
+    let data3 = array![
+        [
+            None,
+            Some("corner".to_string()),
+            None,
+            Some("last".to_string())
+        ],
+        [
+            Some("bottom".to_string()),
+            None,
+            Some("right".to_string()),
+            None
+        ],
+        [
+            None,
+            Some("almost".to_string()),
+            None,
+            Some("done".to_string())
+        ],
+        [
+            Some("the".to_string()),
+            Some("very".to_string()),
+            Some("end".to_string()),
+            None
+        ],
+    ];
+    array.store_chunk(&[1, 1], data3.clone())?;
+
+    // Retrieve entire array spanning all chunks
+    let retrieved =
+        array.retrieve_array_subset::<ndarray::ArrayD<Option<String>>>(&array.subset_all())?;
+    let retrieved: Array2<Option<String>> = retrieved.into_dimensionality()?;
+
+    // Verify dimensions
+    assert_eq!(retrieved.shape(), &[8, 8]);
+
+    // Verify values from chunk [0,0] region (rows 0-3, cols 0-3)
+    assert_eq!(retrieved[[0, 0]], Some("hello".to_string()));
+    assert_eq!(retrieved[[0, 1]], None);
+    assert_eq!(retrieved[[1, 0]], None);
+    assert_eq!(retrieved[[2, 0]], Some("".to_string())); // Empty string Some("")
+
+    // Verify values from chunk [0,1] region (rows 0-3, cols 4-7)
+    assert_eq!(retrieved[[0, 4]], None);
+    assert_eq!(retrieved[[1, 4]], Some("only".to_string()));
+    assert_eq!(retrieved[[2, 5]], Some("strings".to_string()));
+
+    // Verify values from chunk [1,0] region (rows 4-7, cols 0-3)
+    assert_eq!(retrieved[[4, 0]], Some("lower".to_string()));
+    assert_eq!(retrieved[[6, 0]], Some("unicode: 你好".to_string()));
+    assert_eq!(retrieved[[6, 3]], Some("emoji: 🎉".to_string()));
+
+    // Verify values from chunk [1,1] region (rows 4-7, cols 4-7)
+    assert_eq!(retrieved[[4, 5]], Some("corner".to_string()));
+    assert_eq!(retrieved[[7, 6]], Some("end".to_string()));
+    assert_eq!(retrieved[[7, 7]], None);
+
+    Ok(())
+}
+
+#[test]
+fn optional_array_string_partial_subset() -> Result<(), Box<dyn std::error::Error>> {
+    use ndarray::{Array2, array};
+
+    let array = create_optional_array(DataType::String.into_optional(), None::<String>.into());
+
+    // Store chunks
+    let data0 = array![
+        [
+            Some("a".to_string()),
+            Some("b".to_string()),
+            Some("c".to_string()),
+            Some("d".to_string())
+        ],
+        [Some("e".to_string()), None, None, Some("h".to_string())],
+        [None, Some("j".to_string()), Some("k".to_string()), None],
+        [
+            Some("m".to_string()),
+            Some("n".to_string()),
+            Some("o".to_string()),
+            Some("p".to_string())
+        ],
+    ];
+    array.store_chunk(&[0, 0], data0)?;
+
+    let data1 = array![
+        [
+            Some("1".to_string()),
+            Some("2".to_string()),
+            None,
+            Some("4".to_string())
+        ],
+        [None, Some("6".to_string()), Some("7".to_string()), None],
+        [Some("9".to_string()), None, None, Some("12".to_string())],
+        [
+            Some("13".to_string()),
+            Some("14".to_string()),
+            Some("15".to_string()),
+            Some("16".to_string())
+        ],
+    ];
+    array.store_chunk(&[0, 1], data1)?;
+
+    // Retrieve subset spanning both chunks: rows 1..3, cols 2..6
+    let subset = ArraySubset::new_with_ranges(&[1..3, 2..6]);
+    let retrieved = array.retrieve_array_subset::<ndarray::ArrayD<Option<String>>>(&subset)?;
+    let retrieved: Array2<Option<String>> = retrieved.into_dimensionality()?;
+
+    assert_eq!(retrieved.shape(), &[2, 4]);
+
+    // Row 0 of result: from array row 1, cols 2..6
+    // cols 2,3 from chunk[0,0], cols 4,5 from chunk[0,1]
+    assert_eq!(retrieved[[0, 0]], None); // array[1,2] from chunk[0,0]
+    assert_eq!(retrieved[[0, 1]], Some("h".to_string())); // array[1,3] from chunk[0,0]
+    assert_eq!(retrieved[[0, 2]], None); // array[1,4] from chunk[0,1]
+    assert_eq!(retrieved[[0, 3]], Some("6".to_string())); // array[1,5] from chunk[0,1]
+
+    // Row 1 of result: from array row 2, cols 2..6
+    assert_eq!(retrieved[[1, 0]], Some("k".to_string())); // array[2,2] from chunk[0,0]
+    assert_eq!(retrieved[[1, 1]], None); // array[2,3] from chunk[0,0]
+    assert_eq!(retrieved[[1, 2]], Some("9".to_string())); // array[2,4] from chunk[0,1]
+    assert_eq!(retrieved[[1, 3]], None); // array[2,5] from chunk[0,1]
+
+    Ok(())
+}
+
+#[test]
+fn optional_array_bytes_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
+    use ndarray::{Array2, array};
+
+    let array = create_optional_array(DataType::Bytes.into_optional(), None::<Vec<u8>>.into());
+
+    // Store with varying byte lengths
+    let data0 = array![
+        [Some(vec![1u8]), Some(vec![2, 3]), None, Some(vec![4, 5, 6])],
+        [None, Some(vec![]), Some(vec![7, 8, 9, 10]), None],
+        [Some(vec![11, 12]), None, None, Some(vec![13])],
+        [
+            Some(vec![14, 15, 16]),
+            Some(vec![17]),
+            Some(vec![18, 19]),
+            None
+        ],
+    ];
+    array.store_chunk(&[0, 0], data0.clone())?;
+
+    let data1 = array![
+        [None, Some(vec![100, 101]), Some(vec![]), None],
+        [
+            Some(vec![102, 103, 104, 105]),
+            None,
+            Some(vec![106]),
+            Some(vec![107, 108])
+        ],
+        [
+            Some(vec![109]),
+            Some(vec![110, 111, 112]),
+            None,
+            Some(vec![])
+        ],
+        [None, None, Some(vec![113, 114]), Some(vec![115])],
+    ];
+    array.store_chunk(&[0, 1], data1.clone())?;
+
+    // Retrieve full array spanning both chunks
+    let subset = ArraySubset::new_with_ranges(&[0..4, 0..8]);
+    let retrieved = array.retrieve_array_subset::<ndarray::ArrayD<Option<Vec<u8>>>>(&subset)?;
+    let retrieved: Array2<Option<Vec<u8>>> = retrieved.into_dimensionality()?;
+
+    // Verify from chunk [0,0]
+    assert_eq!(retrieved[[0, 0]], Some(vec![1u8]));
+    assert_eq!(retrieved[[0, 1]], Some(vec![2, 3]));
+    assert_eq!(retrieved[[0, 2]], None);
+    assert_eq!(retrieved[[1, 1]], Some(vec![])); // Empty vec Some(vec![])
+
+    // Verify from chunk [0,1]
+    assert_eq!(retrieved[[1, 4]], Some(vec![102, 103, 104, 105]));
+    assert_eq!(retrieved[[1, 5]], None);
+    assert_eq!(retrieved[[2, 5]], Some(vec![110, 111, 112]));
+    assert_eq!(retrieved[[2, 7]], Some(vec![])); // Empty vec
+
+    Ok(())
+}
+
+#[test]
+fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
+    use ndarray::{Array2, array};
+
+    // Option<Option<String>> - testing nested optionals with variable-length inner type
+    let array = create_optional_array(
+        DataType::String.into_optional().into_optional(),
+        None::<Option<String>>.into(),
+    );
+
+    // Chunk with all three cases: None, Some(None), Some(Some(str))
+    let data0 = array![
+        [
+            Some(Some("hello".to_string())),
+            Some(None),
+            None,
+            Some(Some("world".to_string()))
+        ],
+        [None, Some(Some("test".to_string())), Some(None), None],
+        [
+            Some(Some("".to_string())),
+            None,
+            Some(None),
+            Some(Some("data".to_string()))
+        ],
+        [Some(None), Some(Some("end".to_string())), None, Some(None)],
+    ];
+    array.store_chunk(&[0, 0], data0.clone())?;
+
+    let data1 = array![
+        [None, Some(None), Some(Some("chunk2".to_string())), None],
+        [Some(Some("mixed".to_string())), None, None, Some(None)],
+        [
+            Some(None),
+            Some(Some("values".to_string())),
+            Some(None),
+            None
+        ],
+        [
+            None,
+            None,
+            Some(Some("last".to_string())),
+            Some(Some("entry".to_string()))
+        ],
+    ];
+    array.store_chunk(&[0, 1], data1.clone())?;
+
+    // Retrieve spanning both chunks
+    let subset = ArraySubset::new_with_ranges(&[0..4, 0..8]);
+    let retrieved =
+        array.retrieve_array_subset::<ndarray::ArrayD<Option<Option<String>>>>(&subset)?;
+    let retrieved: Array2<Option<Option<String>>> = retrieved.into_dimensionality()?;
+
+    // Verify nested None values are preserved correctly from chunk [0,0]
+    assert_eq!(retrieved[[0, 0]], Some(Some("hello".to_string())));
+    assert_eq!(retrieved[[0, 1]], Some(None)); // Some(None) is distinct from None
+    assert_eq!(retrieved[[0, 2]], None);
+    assert_eq!(retrieved[[2, 0]], Some(Some("".to_string()))); // Empty string Some(Some(""))
+    assert_eq!(retrieved[[3, 0]], Some(None));
+
+    // Verify from chunk [0,1]
+    assert_eq!(retrieved[[0, 4]], None);
+    assert_eq!(retrieved[[0, 5]], Some(None));
+    assert_eq!(retrieved[[0, 6]], Some(Some("chunk2".to_string())));
+    assert_eq!(retrieved[[1, 4]], Some(Some("mixed".to_string())));
+    assert_eq!(retrieved[[3, 6]], Some(Some("last".to_string())));
+    assert_eq!(retrieved[[3, 7]], Some(Some("entry".to_string())));
+
+    Ok(())
+}
