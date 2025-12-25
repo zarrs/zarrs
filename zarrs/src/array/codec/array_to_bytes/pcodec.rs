@@ -120,7 +120,7 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            ArrayBytes, ChunkRepresentation, ChunkShape, DataType, FillValue,
+            ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
             transmute_to_bytes_vec,
         },
@@ -147,22 +147,29 @@ mod tests {
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, data_type, fill_value).unwrap();
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let fill_value = fill_value.into();
+        let size = chunk_shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
-        let max_encoded_size = codec.encoded_representation(&chunk_representation)?;
+        let max_encoded_size =
+            codec.encoded_representation(chunk_shape.as_slice(), &data_type, &fill_value)?;
         let encoded = codec.encode(
             bytes.clone(),
-            &chunk_representation,
+            chunk_shape.as_slice(),
+            &data_type,
+            &fill_value,
             &CodecOptions::default(),
         )?;
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                chunk_shape.as_slice(),
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -340,10 +347,10 @@ mod tests {
 
     #[test]
     fn codec_pcodec_partial_decode() {
-        let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
-        let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
+        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = DataType::UInt32;
+        let fill_value = FillValue::from(0u32);
+        let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
@@ -355,7 +362,9 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -364,7 +373,9 @@ mod tests {
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -386,10 +397,10 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt32, 0u32).unwrap();
-        let elements: Vec<u32> = (0..chunk_representation.num_elements() as u32).collect();
+        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = DataType::UInt32;
+        let fill_value = FillValue::from(0u32);
+        let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
@@ -401,7 +412,9 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -410,7 +423,9 @@ mod tests {
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await

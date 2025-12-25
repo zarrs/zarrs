@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
 
 use super::{Endianness, reverse_endianness};
 #[cfg(feature = "async")]
@@ -10,7 +10,7 @@ use crate::registry::codec::BYTES;
 use crate::storage::{StorageError, byte_range::ByteRange};
 use crate::{
     array::{
-        ArrayBytes, ChunkRepresentation, DataType,
+        ArrayBytes, DataType, FillValue,
         codec::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
@@ -23,7 +23,9 @@ use crate::{
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
+    fill_value: FillValue,
     endian: Option<Endianness>,
 }
 
@@ -31,12 +33,16 @@ impl<T: ?Sized> BytesCodecPartial<T> {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        decoded_representation: ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         endian: Option<Endianness>,
     ) -> Self {
         Self {
             input_output_handle,
-            decoded_representation,
+            shape: shape.to_vec(),
+            data_type: data_type.clone(),
+            fill_value: fill_value.clone(),
             endian,
         }
     }
@@ -47,7 +53,7 @@ where
     T: BytesPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -63,22 +69,22 @@ where
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let Some(data_type_size) = self.data_type().fixed_size() else {
+        let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
-                self.data_type().clone(),
+                self.data_type.clone(),
                 BYTES.to_string(),
             ));
         };
 
-        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+        if indexer.dimensionality() != self.shape.len() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
-                self.decoded_representation.dimensionality(),
+                self.shape.len(),
             )
             .into());
         }
 
-        let chunk_shape = self.decoded_representation.shape_u64();
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
         // Get byte ranges
         let byte_ranges = indexer
             .iter_contiguous_byte_ranges(chunk_shape, data_type_size)?
@@ -93,16 +99,12 @@ where
             let mut decoded = decoded.concat();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(&mut decoded, self.decoded_representation.data_type());
+                    reverse_endianness(&mut decoded, &self.data_type);
                 }
             }
             ArrayBytes::from(decoded)
         } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                indexer.len(),
-                self.decoded_representation.fill_value(),
-            )?
+            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
 
         Ok(decoded)
@@ -121,7 +123,7 @@ where
     T: AsyncBytesPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -137,22 +139,22 @@ where
         indexer: &dyn crate::indexer::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let Some(data_type_size) = self.data_type().fixed_size() else {
+        let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
-                self.data_type().clone(),
+                self.data_type.clone(),
                 BYTES.to_string(),
             ));
         };
 
-        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+        if indexer.dimensionality() != self.shape.len() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
-                self.decoded_representation.dimensionality(),
+                self.shape.len(),
             )
             .into());
         }
 
-        let chunk_shape = self.decoded_representation.shape_u64();
+        let chunk_shape = bytemuck::must_cast_slice(&self.shape);
 
         // Get byte ranges
         let byte_ranges = indexer
@@ -169,16 +171,12 @@ where
             let mut decoded = decoded.concat();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(&mut decoded, self.decoded_representation.data_type());
+                    reverse_endianness(&mut decoded, &self.data_type);
                 }
             }
             ArrayBytes::from(decoded)
         } else {
-            ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                indexer.len(),
-                self.decoded_representation.fill_value(),
-            )?
+            ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
 
         Ok(decoded)
@@ -207,33 +205,30 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let Some(data_type_size) = self.data_type().fixed_size() else {
+        let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
-                self.data_type().clone(),
+                self.data_type.clone(),
                 BYTES.to_string(),
             ));
         };
 
-        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+        if indexer.dimensionality() != self.shape.len() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
-                self.decoded_representation.dimensionality(),
+                self.shape.len(),
             )
             .into());
         }
 
         // If the chunk is empty, initialise the chunk with the fill value and update
         if self.input_output_handle.exists()? {
-            let chunk_shape = self.decoded_representation.shape_u64();
+            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(
-                        &mut bytes_to_encode,
-                        self.decoded_representation.data_type(),
-                    );
+                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
                 }
             }
 
@@ -253,17 +248,16 @@ where
                 .partial_encode_many(Box::new(offset_bytes.into_iter()), options)
         } else {
             // Create a chunk filled with the fill value
-            let chunk_bytes = ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value(),
-            )?;
+            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
+            let chunk_bytes =
+                ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
+            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
-                self.decoded_representation.shape_u64(),
+                chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.data_type.size(),
             )?;
             let mut chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
@@ -272,7 +266,7 @@ where
 
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
+                    reverse_endianness(&mut chunk_bytes, &self.data_type);
                 }
             }
 
@@ -307,33 +301,30 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let Some(data_type_size) = self.data_type().fixed_size() else {
+        let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
-                self.data_type().clone(),
+                self.data_type.clone(),
                 BYTES.to_string(),
             ));
         };
 
-        if indexer.dimensionality() != self.decoded_representation.dimensionality() {
+        if indexer.dimensionality() != self.shape.len() {
             return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
-                self.decoded_representation.dimensionality(),
+                self.shape.len(),
             )
             .into());
         }
 
         // If the chunk is empty, initialise the chunk with the fill value and update
         if self.input_output_handle.exists().await? {
-            let chunk_shape = self.decoded_representation.shape_u64();
+            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(
-                        &mut bytes_to_encode,
-                        self.decoded_representation.data_type(),
-                    );
+                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
                 }
             }
 
@@ -354,17 +345,16 @@ where
                 .await
         } else {
             // Create a chunk filled with the fill value
-            let chunk_bytes = ArrayBytes::new_fill_value(
-                self.decoded_representation.data_type(),
-                self.decoded_representation.num_elements(),
-                self.decoded_representation.fill_value(),
-            )?;
+            let num_elements = self.shape.iter().map(|d| d.get()).product::<u64>();
+            let chunk_bytes =
+                ArrayBytes::new_fill_value(&self.data_type, num_elements, &self.fill_value)?;
+            let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let chunk_bytes = update_array_bytes(
                 chunk_bytes,
-                self.decoded_representation.shape_u64(),
+                chunk_shape,
                 indexer,
                 bytes,
-                self.decoded_representation.data_type().size(),
+                self.data_type.size(),
             )?;
             let mut chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
@@ -373,7 +363,7 @@ where
 
             if let Some(endian) = &self.endian {
                 if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, self.decoded_representation.data_type());
+                    reverse_endianness(&mut chunk_bytes, &self.data_type);
                 }
             }
 

@@ -19,11 +19,10 @@ use derive_more::From;
 use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 use itertools::izip;
 use thiserror::Error;
-use zarrs_metadata::ChunkShape;
 
 use crate::{
     indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},
-    ArrayIndices, ArrayIndicesTinyVec, ArrayShape,
+    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ChunkShape,
 };
 
 /// An array subset.
@@ -180,11 +179,7 @@ impl ArraySubset {
     /// Returns [`None`] if the shape is not a chunk shape (i.e. it has zero dimensions).
     #[must_use]
     pub fn chunk_shape(&self) -> Option<ChunkShape> {
-        self.shape
-            .iter()
-            .map(|s| NonZeroU64::new(*s))
-            .collect::<Option<Vec<_>>>()
-            .map(ChunkShape::from)
+        self.shape.iter().map(|s| NonZeroU64::new(*s)).collect()
     }
 
     /// Return the shape of the array subset.

@@ -37,12 +37,12 @@ use num::Integer;
 pub use reshape_codec::ReshapeCodec;
 
 // use itertools::Itertools;
-use crate::metadata::ChunkShape;
 pub use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
 use crate::registry::codec::RESHAPE;
 use crate::{
+    array::ChunkShape,
     array::codec::{Codec, CodecError, CodecPlugin},
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -95,7 +95,7 @@ fn get_encoded_shape(
         )));
     }
 
-    Ok(encoded_shape.into())
+    Ok(encoded_shape)
 }
 
 // Register the codec.
@@ -121,7 +121,7 @@ mod tests {
 
     use super::*;
     use crate::array::{
-        ArrayBytes, ChunkRepresentation, DataType, FillValue,
+        ArrayBytes, ChunkShapeTraits, DataType, FillValue,
         codec::{ArrayToArrayCodecTraits, CodecOptions},
     };
 
@@ -131,34 +131,34 @@ mod tests {
         fill_value: FillValue,
         output_shape: Vec<NonZeroU64>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let chunk_representation = ChunkRepresentation::new(
-            vec![
-                NonZeroU64::new(5).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-            ],
-            data_type,
-            fill_value,
-        )?;
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let shape = vec![
+            NonZeroU64::new(5).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
+        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
         let codec = ReshapeCodec::new_with_configuration(&configuration)?;
-        assert_eq!(
-            codec.encoded_shape(chunk_representation.shape())?,
-            output_shape.into()
-        );
+        assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
         let encoded = codec.encode(
             bytes.clone(),
-            &chunk_representation,
+            &shape,
+            &data_type,
+            &fill_value,
             &CodecOptions::default(),
         )?;
-        let decoded = codec.decode(encoded, &chunk_representation, &CodecOptions::default())?;
+        let decoded = codec.decode(
+            encoded,
+            &shape,
+            &data_type,
+            &fill_value,
+            &CodecOptions::default(),
+        )?;
         assert_eq!(bytes, decoded);
         Ok(())
     }

@@ -9,10 +9,10 @@ use std::{
 use itertools::Itertools;
 #[cfg(feature = "transpose")]
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
-use zarrs::metadata::ChunkShape;
 use zarrs::{
     array::{
-        ArrayIndices, ArrayIndicesTinyVec, ChunkRepresentation, CodecChain, DataType, ElementOwned,
+        ArrayIndices, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
+        ElementOwned,
         codec::{
             ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
@@ -21,6 +21,7 @@ use zarrs::{
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
 };
+use zarrs_data_type::FillValue;
 
 fn indexer_basic<T: Indexer>(
     indexer: T,
@@ -254,18 +255,19 @@ fn indexer_array_subsets_vec() {
 #[async_generic::async_generic]
 fn indexer_partial_decode_impl<T: ElementOwned>(
     codec: Arc<dyn ArrayToBytesCodecTraits>,
-    shape: &ChunkShape,
+    shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     data_type: DataType,
     bytes: &[T],
 ) -> Vec<T> {
-    let decoded_representation =
-        ChunkRepresentation::new(shape.to_vec(), data_type.clone(), 0u32).unwrap();
+    let fill_value = FillValue::from(0u32);
     let encoded_chunk = Arc::new(
         codec
             .encode(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
-                &decoded_representation,
+                shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -277,7 +279,9 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
             .clone()
             .async_partial_decoder(
                 encoded_chunk.clone(),
-                &decoded_representation,
+                shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await
@@ -287,7 +291,9 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
             .clone()
             .partial_decoder(
                 encoded_chunk.clone(),
-                &decoded_representation,
+                shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -310,19 +316,20 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
 // #[async_generic::async_generic]
 fn indexer_partial_encode_impl<T: ElementOwned>(
     codec: Arc<dyn ArrayToBytesCodecTraits>,
-    shape: &ChunkShape,
+    shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     elements_partial_encode: &[T],
     data_type: DataType,
     bytes: &[T],
 ) -> Vec<T> {
-    let decoded_representation =
-        ChunkRepresentation::new(shape.to_vec(), data_type.clone(), 0u32).unwrap();
+    let fill_value = FillValue::from(0u32);
     let encoded_chunk = Arc::new(
         codec
             .encode(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
-                &decoded_representation,
+                shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -335,7 +342,9 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
         .clone()
         .partial_encoder(
             output.clone(),
-            &decoded_representation,
+            shape,
+            &data_type,
+            &fill_value,
             &CodecOptions::default(),
         )
         .unwrap();
@@ -362,7 +371,9 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
         codec
             .decode(
                 output.into(),
-                &decoded_representation,
+                shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap(),

@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Tensor` type representing raw bytes with a data type and shape intended for interop with tensor libraries
   - Implements `dlpack::traits::TensorLike`
 - Add `TensorError` type and `ArrayError::TensorError` variant
+- Add `array::ChunkShapeTraits` (supersedes `ChunkShape` newtype)
 
 ### Changed
 
@@ -108,6 +109,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `Array::store_*_dlpark` and `Array::retrieve_*_dlpark` methods
     - Use the generic `Array::store_*` and `Array::retrieve_*` methods with the `Tensor` type instead, which implements `dlpark::traits::TensorLike`
   - Added `ChunkCache::retrieve_*_bytes` methods that return `ChunkCacheTypeDecoded` (`Arc<ArrayBytes<'static>>`) directly
+- **Breaking**: Change various methods to take a `ChunkShape`, `DataType`, and `FillValue` (or a subset of those) instead of a `ChunkRepresentation`
+  - `CodecPartialDefault::new()`
+  - Various `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, `ArrayCodecTraits` methods
+- **Breaking**: Replace `ChunkShape` newtype with `Vec<NonZeroU64>`
 
 ### Removed
 
@@ -115,6 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
 - **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError`, `AsyncArrayDlPackExt`, and `ArrayError::DlPackError`
+- **Breaking**: Remove `array::ArrayRepresentationBase`
+- **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
 
 ### Fixed
 

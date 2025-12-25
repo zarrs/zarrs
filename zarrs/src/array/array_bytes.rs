@@ -1,4 +1,4 @@
-use std::ops::IndexMut;
+use std::{num::NonZeroU64, ops::IndexMut};
 
 use derive_more::derive::Display;
 use itertools::Itertools;
@@ -904,9 +904,9 @@ pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
     indexer: &dyn crate::indexer::Indexer,
-    array_shape: &[u64],
+    array_shape: &[NonZeroU64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    let indices = indexer.iter_linearised_indices(array_shape)?;
+    let indices = indexer.iter_linearised_indices(bytemuck::must_cast_slice(array_shape))?;
     let indices: Vec<_> = indices.into_iter().collect();
     let mut region_bytes_len = 0;
     for index in &indices {

@@ -18,7 +18,7 @@ use crate::metadata_ext::codec::reshape::{
 use crate::registry::codec::RESHAPE;
 use crate::{
     array::{
-        ChunkRepresentation, ChunkShape,
+        ChunkShape,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
@@ -124,7 +124,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -133,7 +135,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -142,7 +146,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     fn partial_decoder(
         self: Arc<Self>,
         _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         // TODO: reshape partial decoding
@@ -154,7 +160,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     fn partial_encoder(
         self: Arc<Self>,
         _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         // TODO: reshape partial encoding
@@ -167,7 +175,9 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         // TODO: reshape partial decoding
@@ -180,7 +190,8 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 impl ArrayCodecTraits for ReshapeCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }

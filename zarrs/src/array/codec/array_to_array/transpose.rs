@@ -248,7 +248,7 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            ArrayBytes, ChunkRepresentation, DataType, FillValue,
+            ArrayBytes, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
         },
         array_subset::ArraySubset,
@@ -259,18 +259,13 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) {
-        let chunk_representation = ChunkRepresentation::new(
-            vec![
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-            ],
-            data_type,
-            fill_value,
-        )
-        .unwrap();
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let shape = vec![
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
+        let fill_value = fill_value.into();
+        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
@@ -280,25 +275,22 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
-
-        // let array = ndarray::ArrayViewD::from_shape(array_representation.shape(), &bytes).unwrap();
-        // let array_representation_transpose =
-        //     ArrayRepresentation::new(vec![2, 3, 2], data_type.clone(), fill_value.clone()).unwrap();
-        // let encoded_array = ndarray::ArrayViewD::from_shape(
-        //     array_representation_transpose.shape().to_vec(),
-        //     &encoded,
-        // )
-        // .unwrap();
-        // let decoded_array =
-        //     ndarray::ArrayViewD::from_shape(array_representation.shape(), &decoded).unwrap();
     }
 
     #[test]
@@ -322,12 +314,9 @@ mod tests {
         use crate::array::Element;
 
         // Create a 2x3 array of strings
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()],
-            DataType::String,
-            "",
-        )
-        .unwrap();
+        let shape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()];
+        let data_type = DataType::String;
+        let fill_value = FillValue::from("");
 
         // Create test data: 6 strings in row-major order
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
@@ -339,12 +328,20 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
 
         assert_eq!(bytes, decoded);
@@ -388,31 +385,38 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()],
-            DataType::Float32,
-            0.0f32,
-        )
-        .unwrap();
+        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let data_type = DataType::Float32;
+        let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
         let encoded = codec
-            .encode(bytes, &chunk_representation, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
         let input_handle = bytes_codec
             .partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -447,19 +451,18 @@ mod tests {
         let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let chunk_representation = ChunkRepresentation::new(
-            vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()],
-            DataType::Float32,
-            0.0f32,
-        )
-        .unwrap();
+        let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
+        let data_type = DataType::Float32;
+        let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -468,7 +471,9 @@ mod tests {
         let input_handle = bytes_codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await
@@ -476,7 +481,9 @@ mod tests {
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await

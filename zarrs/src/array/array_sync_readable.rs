@@ -471,18 +471,20 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_representation = self.chunk_array_representation(chunk_indices)?;
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
                 .codecs()
                 .decode(
                     Cow::Borrowed(&chunk_encoded),
-                    &chunk_representation,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
                     options,
                 )
                 .map_err(ArrayError::CodecError)?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
-                chunk_representation.shape_u64(),
+                bytemuck::must_cast_slice(&chunk_shape),
                 self.data_type(),
             )?))
         } else {
@@ -500,15 +502,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk) = self.retrieve_chunk_if_exists_opt::<T>(chunk_indices, options)? {
             Ok(chunk)
         } else {
-            let chunk_representation = self.chunk_array_representation(chunk_indices)?;
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = ArrayBytes::new_fill_value(
                 self.data_type(),
-                chunk_representation.num_elements(),
+                chunk_shape.iter().map(|&x| x.get()).product::<u64>(),
                 self.fill_value(),
             )
             .map_err(CodecError::from)
             .map_err(ArrayError::from)?;
-            T::from_array_bytes(bytes, chunk_representation.shape_u64(), self.data_type())
+            T::from_array_bytes(
+                bytes,
+                bytemuck::must_cast_slice(&chunk_shape),
+                self.data_type(),
+            )
         }
     }
 
@@ -531,11 +537,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_representation = self.chunk_array_representation(chunk_indices)?;
             self.codecs()
                 .decode_into(
                     Cow::Borrowed(&chunk_encoded),
-                    &chunk_representation,
+                    &self.chunk_shape(chunk_indices)?,
+                    self.data_type(),
+                    self.fill_value(),
                     output_target,
                     options,
                 )
@@ -848,12 +855,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 }
             }
             _ => {
-                let chunk_representation =
-                    self.chunk_array_representation(&vec![0; self.dimensionality()])?;
+                let chunk_shape = self.chunk_shape(chunks.start())?;
 
                 // Calculate chunk/codec concurrency
                 let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_representation)?;
+                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,
@@ -862,12 +868,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 );
 
                 // Delegate to appropriate helper based on data type size
-                let data_type = chunk_representation.data_type();
-                let bytes = if data_type.is_fixed() {
+                let bytes = if self.data_type().is_fixed() {
                     self.retrieve_multi_chunk_fixed(
                         array_subset,
                         &chunks,
-                        data_type,
+                        self.data_type(),
                         chunk_concurrent_limit,
                         &options,
                     )?
@@ -875,7 +880,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     self.retrieve_multi_chunk_variable(
                         array_subset,
                         &chunks,
-                        data_type,
+                        self.data_type(),
                         chunk_concurrent_limit,
                         &options,
                     )?
@@ -925,8 +930,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_subset: &ArraySubset,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-        if !chunk_subset.inbounds_shape(chunk_representation.shape_u64()) {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
                 chunk_subset.clone(),
                 self.shape().to_vec(),
@@ -934,7 +940,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         }
 
         let bytes = if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_representation.shape_u64()
+            && chunk_subset.shape() == chunk_shape_u64
         {
             // Fast path if `chunk_subset` encompasses the whole chunk
             return self.retrieve_chunk_opt(chunk_indices, options);
@@ -950,7 +956,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 
             self.codecs
                 .clone()
-                .partial_decoder(input_handle, &chunk_representation, options)?
+                .partial_decoder(
+                    input_handle,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )?
                 .partial_decode(chunk_subset, options)?
                 .into_owned()
         };
@@ -965,17 +977,16 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-        if !chunk_subset.inbounds_shape(chunk_representation.shape_u64()) {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
                 chunk_subset.clone(),
                 self.shape().to_vec(),
             ));
         }
 
-        if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_representation.shape_u64()
-        {
+        if chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64 {
             // Fast path if `chunk_subset` encompasses the whole chunk
             self.retrieve_chunk_into(chunk_indices, output_target, options)
         } else {
@@ -989,7 +1000,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             ));
             self.codecs
                 .clone()
-                .partial_decoder(input_handle, &chunk_representation, options)?
+                .partial_decoder(
+                    input_handle,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )?
                 .partial_decode_into(chunk_subset, output_target, options)?;
             Ok(())
         }
@@ -1048,10 +1065,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             storage_transformer,
             self.chunk_key(chunk_indices),
         ));
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-        Ok(self
-            .codecs
-            .clone()
-            .partial_decoder(input_handle, &chunk_representation, options)?)
+        Ok(self.codecs.clone().partial_decoder(
+            input_handle,
+            &self.chunk_shape(chunk_indices)?,
+            self.data_type(),
+            self.fill_value(),
+            options,
+        )?)
     }
 }

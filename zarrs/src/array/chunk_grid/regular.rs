@@ -312,7 +312,14 @@ mod tests {
     fn chunk_grid_regular_configuration() {
         let configuration: RegularChunkGridConfiguration =
             serde_json::from_str(r#"{"chunk_shape":[1,2,3]}"#).unwrap();
-        assert_eq!(configuration.chunk_shape, vec![1, 2, 3].try_into().unwrap());
+        assert_eq!(
+            configuration.chunk_shape,
+            vec![
+                NonZeroU64::new(1).unwrap(),
+                NonZeroU64::new(2).unwrap(),
+                NonZeroU64::new(3).unwrap()
+            ]
+        );
         assert_eq!(
             configuration.to_string(),
             r#"regular chunk grid {"chunk_shape":[1,2,3]}"#
@@ -344,7 +351,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
 
         {
             let chunk_grid =
@@ -392,7 +403,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_out_of_bounds() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 53];
@@ -412,7 +427,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_unlimited() {
         let array_shape: ArrayShape = vec![5, 7, 0];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 1000];
@@ -430,7 +449,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_iterators() {
         let array_shape: ArrayShape = vec![2, 2, 6];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let iter = chunk_grid.iter_chunk_indices();

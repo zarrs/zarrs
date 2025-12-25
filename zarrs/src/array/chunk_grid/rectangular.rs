@@ -186,8 +186,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                         offsets_sizes
                             .iter()
                             .map(|offset_size| offset_size.size)
-                            .collect_vec()
-                            .into(),
+                            .collect_vec(),
                     )
                 }
             })
@@ -226,8 +225,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                         }
                     }
                 })
-                .collect::<Option<Vec<_>>>()
-                .map(std::convert::Into::into))
+                .collect::<Option<Vec<_>>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -371,8 +369,17 @@ mod tests {
     fn chunk_grid_rectangular() {
         let array_shape: ArrayShape = vec![100, 100];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
@@ -413,8 +420,17 @@ mod tests {
     fn chunk_grid_rectangular_out_of_bounds() {
         let array_shape: ArrayShape = vec![100, 100];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
@@ -442,8 +458,17 @@ mod tests {
     fn chunk_grid_rectangular_unlimited() {
         let array_shape: ArrayShape = vec![100, 0];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 

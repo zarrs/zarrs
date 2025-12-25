@@ -11,7 +11,7 @@ use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCode
 use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
-        ChunkRepresentation, ChunkShape,
+        ChunkShape,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits,
             CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -111,9 +111,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
             .copied()
             .collect();
         if encoded_shape.is_empty() {
-            Ok(vec![NonZeroU64::new(1).unwrap()].into())
+            Ok(vec![NonZeroU64::new(1).unwrap()])
         } else {
-            Ok(encoded_shape.into())
+            Ok(encoded_shape)
         }
     }
 
@@ -127,7 +127,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -136,7 +138,9 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -145,13 +149,17 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
             ),
         ))
     }
@@ -159,13 +167,17 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_output_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
             ),
         ))
     }
@@ -174,13 +186,17 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
             ),
         ))
     }
@@ -189,13 +205,17 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(
             super::squeeze_codec_partial::SqueezeCodecPartial::new(
                 input_output_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
             ),
         ))
     }
@@ -204,7 +224,8 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
 impl ArrayCodecTraits for SqueezeCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }

@@ -8,12 +8,13 @@ use criterion::{
     criterion_main,
 };
 use zarrs::array::{
-    BytesRepresentation, ChunkRepresentation, DataType, Element, Endianness,
+    BytesRepresentation, DataType, Element, Endianness,
     codec::{
         ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
         bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
     },
 };
+use zarrs_data_type::FillValue;
 
 fn codec_bytes(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
@@ -26,16 +27,11 @@ fn codec_bytes(c: &mut Criterion) {
     #[cfg(target_endian = "little")]
     let codec = BytesCodec::new(Some(Endianness::Big));
 
+    let fill_value = FillValue::from(0u16);
     for size in [32, 64, 128, 256, 512].iter() {
         let size3 = size * size * size;
         let num_elements = size3 / 2;
-        let rep = ChunkRepresentation::new(
-            vec![num_elements.try_into().unwrap(); 1],
-            DataType::UInt16,
-            0u16,
-        )
-        .unwrap();
-
+        let shape = [num_elements.try_into().unwrap(); 1];
         let data = vec![0u8; size3.try_into().unwrap()];
         let bytes = Element::into_array_bytes(&DataType::UInt8, data).unwrap();
         group.throughput(Throughput::Bytes(size3));
@@ -43,7 +39,13 @@ fn codec_bytes(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("encode_decode", size3), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &rep, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &DataType::UInt16,
+                        &fill_value,
+                        &CodecOptions::default(),
+                    )
                     .unwrap()
             });
         });

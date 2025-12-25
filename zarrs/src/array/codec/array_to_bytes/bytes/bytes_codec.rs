@@ -15,7 +15,7 @@ use crate::array::codec::{
     AsyncBytesPartialEncoderTraits,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation, DataTypeSize,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataTypeSize, FillValue,
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -28,6 +28,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::registry::codec::BYTES;
+use std::num::NonZeroU64;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]
@@ -80,17 +81,18 @@ impl BytesCodec {
     fn do_encode_or_decode<'a>(
         &self,
         mut value: ArrayBytesRaw<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let Some(data_type_size) = decoded_representation.data_type().fixed_size() else {
+        let Some(data_type_size) = data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 BYTES.to_string(),
             ));
         };
 
-        let array_size =
-            usize::try_from(decoded_representation.num_elements() * data_type_size as u64).unwrap();
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let array_size = usize::try_from(num_elements * data_type_size as u64).unwrap();
         if value.len() != array_size {
             return Err(InvalidBytesLengthError::new(value.len(), array_size).into());
         } else if data_type_size > 1 && self.endian.is_none() {
@@ -101,7 +103,7 @@ impl BytesCodec {
 
         if let Some(endian) = &self.endian {
             if !endian.is_native() {
-                reverse_endianness(value.to_mut(), decoded_representation.data_type());
+                reverse_endianness(value.to_mut(), data_type);
             }
         }
         Ok(value)
@@ -141,16 +143,18 @@ impl CodecTraits for BytesCodec {
 impl ArrayCodecTraits for BytesCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: Recomment > 1 if endianness needs changing and input is sufficiently large
         // if let Some(endian) = &self.endian {
         //     if !endian.is_native() {
         //         FIXME: Support parallel
         //         let min_elements_per_thread = 32768; // 32^3
+        //         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         //         unsafe {
         //             NonZeroU64::new_unchecked(
-        //                 decoded_representation.num_elements().div_ceil(min_elements_per_thread),
+        //                 num_elements.div_ceil(min_elements_per_thread),
         //             )
         //         }
         //     }
@@ -172,28 +176,28 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Reject optional data types explicitly
-        if decoded_representation.data_type().is_optional() {
+        if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 BYTES.to_string(),
             ));
         }
 
-        bytes.validate(
-            decoded_representation.num_elements(),
-            decoded_representation.data_type(),
-        )?;
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        bytes.validate(num_elements, data_type)?;
         let bytes = bytes.into_fixed()?;
-        let bytes_encoded = if let DataType::Extension(ext) = decoded_representation.data_type() {
+        let bytes_encoded = if let DataType::Extension(ext) = data_type {
             ext.codec_bytes()?
                 .encode(bytes, self.endian)
                 .map_err(DataTypeExtensionError::from)?
         } else {
-            self.do_encode_or_decode(bytes, decoded_representation)?
+            self.do_encode_or_decode(bytes, shape, data_type)?
         };
         Ok(bytes_encoded)
     }
@@ -201,23 +205,25 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Reject optional data types explicitly
-        if decoded_representation.data_type().is_optional() {
+        if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 BYTES.to_string(),
             ));
         }
 
-        let bytes_decoded = if let DataType::Extension(ext) = decoded_representation.data_type() {
+        let bytes_decoded = if let DataType::Extension(ext) = data_type {
             ext.codec_bytes()?
                 .decode(bytes, self.endian)
                 .map_err(DataTypeExtensionError::from)?
         } else {
-            self.do_encode_or_decode(bytes, decoded_representation)?
+            self.do_encode_or_decode(bytes, shape, data_type)?
         };
         Ok(ArrayBytes::from(bytes_decoded))
     }
@@ -225,12 +231,16 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
-            decoded_representation.clone(),
+            shape,
+            data_type,
+            fill_value,
             self.endian,
         )))
     }
@@ -238,12 +248,16 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
-            decoded_representation.clone(),
+            shape,
+            data_type,
+            fill_value,
             self.endian,
         )))
     }
@@ -252,12 +266,16 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_handle,
-            decoded_representation.clone(),
+            shape,
+            data_type,
+            fill_value,
             self.endian,
         )))
     }
@@ -266,35 +284,41 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bytes_codec_partial::BytesCodecPartial::new(
             input_output_handle,
-            decoded_representation.clone(),
+            shape,
+            data_type,
+            fill_value,
             self.endian,
         )))
     }
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Reject optional data types explicitly
-        if decoded_representation.data_type().is_optional() {
+        if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 BYTES.to_string(),
             ));
         }
 
-        match decoded_representation.data_type().size() {
+        match data_type.size() {
             DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
+                data_type.clone(),
                 BYTES.to_string(),
             )),
             DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
-                decoded_representation.num_elements() * data_type_size as u64,
+                shape.num_elements_u64() * data_type_size as u64,
             )),
         }
     }

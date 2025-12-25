@@ -26,9 +26,9 @@ mod array_bytes;
 mod array_bytes_fixed_disjoint_view;
 mod array_errors;
 mod array_metadata_options;
-mod array_representation;
 mod bytes_representation;
 mod chunk_cache;
+mod chunk_shape;
 mod element;
 mod from_array_bytes;
 mod into_array_bytes;
@@ -48,7 +48,7 @@ mod array_sharded_ext;
 #[cfg(feature = "sharding")]
 mod array_sync_sharded_readable_ext;
 
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 
 #[cfg(all(feature = "sharding", feature = "async"))]
 pub use array_async_sharded_readable_ext::{
@@ -82,7 +82,6 @@ pub use self::{
     },
     array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError},
     array_metadata_options::ArrayMetadataOptions,
-    array_representation::{ArrayRepresentation, ArrayRepresentationBase, ChunkRepresentation},
     bytes_representation::BytesRepresentation,
     chunk_grid::ChunkGrid,
     chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator},
@@ -100,9 +99,7 @@ pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
-pub use crate::metadata::{
-    ArrayMetadata, ArrayShape, ChunkShape, DataTypeSize, DimensionName, Endianness,
-};
+pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness};
 use crate::metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
 use crate::plugin::PluginCreateError;
@@ -117,6 +114,7 @@ use crate::{
     node::{NodePath, data_key},
     storage::StoreKey,
 };
+pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -601,7 +599,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     ))
                 })?;
                 metadata.shape = array_shape;
-                metadata.chunks = regular_chunk_grid.chunk_shape().to_vec().into();
+                metadata.chunks = regular_chunk_grid.chunk_shape().to_vec();
             }
         }
         Ok(self)
@@ -904,32 +902,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
         Ok(chunks_subset.bound(self.shape())?)
     }
 
-    /// Get the chunk array representation at `chunk_index`.
-    ///
-    /// # Errors
-    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
-    pub fn chunk_array_representation(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<ChunkRepresentation, ArrayError> {
-        self.chunk_grid().chunk_shape(chunk_indices)?.map_or_else(
-            || {
-                Err(ArrayError::InvalidChunkGridIndicesError(
-                    chunk_indices.to_vec(),
-                ))
-            },
-            |chunk_shape| {
-                Ok(unsafe {
-                    ChunkRepresentation::new_unchecked(
-                        chunk_shape.to_vec(),
-                        self.data_type().clone(),
-                        self.fill_value().clone(),
-                    )
-                })
-            },
-        )
-    }
-
     /// Return an array subset indicating the chunks intersecting `array_subset`.
     ///
     /// Returns [`None`] if the intersecting chunks cannot be determined.
@@ -946,11 +918,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Calculate the recommended codec concurrency.
     fn recommended_codec_concurrency(
         &self,
-        chunk_representation: &ChunkRepresentation,
+        chunk_shape: &[NonZeroU64],
+        data_type: &DataType,
     ) -> Result<RecommendedConcurrency, ArrayError> {
         Ok(self
             .codecs()
-            .recommended_concurrency(chunk_representation)?)
+            .recommended_concurrency(chunk_shape, data_type)?)
     }
 
     /// Convert the array to Zarr V3.
@@ -1228,8 +1201,21 @@ mod tests {
             "rectangular",
             RectangularChunkGridConfiguration {
                 chunk_shape: vec![
-                    [4, 4, 6].try_into().unwrap(),          // varying sizes for dimension 0
-                    [4, 4, 4, 3, 2, 1].try_into().unwrap(), // varying sizes for dimension 1
+                    vec![
+                        NonZeroU64::new(4).unwrap(),
+                        NonZeroU64::new(4).unwrap(),
+                        NonZeroU64::new(6).unwrap(),
+                    ]
+                    .into(), // varying sizes for dimension 0
+                    vec![
+                        NonZeroU64::new(4).unwrap(),
+                        NonZeroU64::new(4).unwrap(),
+                        NonZeroU64::new(4).unwrap(),
+                        NonZeroU64::new(3).unwrap(),
+                        NonZeroU64::new(2).unwrap(),
+                        NonZeroU64::new(1).unwrap(),
+                    ]
+                    .into(), // varying sizes for dimension 1
                 ],
             },
         );

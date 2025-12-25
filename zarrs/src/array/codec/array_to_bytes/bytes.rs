@@ -156,7 +156,7 @@ mod tests {
     use super::*;
     use crate::{
         array::{
-            ArrayBytes, ChunkRepresentation, ChunkShape, Endianness, FillValue,
+            ArrayBytes, ChunkShape, ChunkShapeTraits, Endianness, FillValue,
             codec::{
                 ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecTraits,
             },
@@ -201,22 +201,31 @@ mod tests {
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let chunk_shape = vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(10).unwrap()];
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape, data_type, fill_value).unwrap();
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let chunk_shape = ChunkShape::from(vec![
+            NonZeroU64::new(10).unwrap(),
+            NonZeroU64::new(10).unwrap(),
+        ]);
+        let fill_value = fill_value.into();
+        let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
         let codec = BytesCodec::new(endianness);
 
         let encoded = codec.encode(
             bytes.clone(),
-            &chunk_representation,
+            &chunk_shape,
+            &data_type,
+            &fill_value,
             &CodecOptions::default(),
         )?;
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -292,10 +301,11 @@ mod tests {
 
     #[test]
     fn codec_bytes_partial_decode() {
-        let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
-        let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
+        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = DataType::UInt8;
+        let fill_value = FillValue::from(0u8);
+
+        let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None));
@@ -303,7 +313,9 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -312,7 +324,9 @@ mod tests {
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -334,10 +348,10 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_bytes_async_partial_decode() {
-        let chunk_shape: ChunkShape = vec![4, 4].try_into().unwrap();
-        let chunk_representation =
-            ChunkRepresentation::new(chunk_shape.to_vec(), DataType::UInt8, 0u8).unwrap();
-        let elements: Vec<u8> = (0..chunk_representation.num_elements() as u8).collect();
+        let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
+        let data_type = DataType::UInt8;
+        let fill_value = FillValue::from(0u8);
+        let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
         let codec = Arc::new(BytesCodec::new(None));
@@ -345,7 +359,9 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
@@ -354,7 +370,9 @@ mod tests {
         let partial_decoder = codec
             .async_partial_decoder(
                 input_handle,
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .await

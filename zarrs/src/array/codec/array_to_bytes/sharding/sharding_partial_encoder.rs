@@ -8,13 +8,14 @@ use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use zarrs_data_type::FillValue;
 
-use super::{ShardingIndexLocation, sharding_index_decoded_representation};
+use super::{ShardingIndexLocation, sharding_index_shape};
 use crate::storage::StorageError;
 use crate::{
     array::{
-        ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkRepresentation, ChunkShape,
-        CodecChain, DataType,
+        ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
+        DataType,
         array_bytes::update_array_bytes,
         chunk_grid::RegularChunkGrid,
         codec::{
@@ -30,13 +31,15 @@ use crate::{
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shard_shape: ChunkShape,
+    data_type: DataType,
+    fill_value: FillValue,
+    subchunk_shape: ChunkShape,
     chunk_grid: RegularChunkGrid,
     inner_codecs: Arc<CodecChain>,
     index_codecs: Arc<CodecChain>,
     index_location: ShardingIndexLocation,
-    index_decoded_representation: ChunkRepresentation,
-    inner_chunk_representation: ChunkRepresentation,
+    index_shape: ChunkShape,
     shard_index: Arc<Mutex<Vec<u64>>>,
 }
 
@@ -45,31 +48,25 @@ impl ShardingPartialEncoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        decoded_representation: ChunkRepresentation,
-        chunk_shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
+        shard_shape: ChunkShape,
+        subchunk_shape: ChunkShape,
         inner_codecs: Arc<CodecChain>,
         index_codecs: Arc<CodecChain>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
-        let chunks_per_shard =
-            &calculate_chunks_per_shard(decoded_representation.shape(), &chunk_shape)?;
-        let index_decoded_representation =
-            sharding_index_decoded_representation(chunks_per_shard.as_slice());
-        let inner_chunk_representation = ChunkRepresentation::new(
-            chunk_shape.to_vec(),
-            decoded_representation.data_type().clone(),
-            decoded_representation.fill_value().clone(),
-        )
-        .map_err(|_| CodecError::Other("Fill value and data type are incompatible?".to_string()))?;
+        let chunks_per_shard = calculate_chunks_per_shard(&shard_shape, &subchunk_shape)?;
+        let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
 
         // Decode the index
         let shard_index = super::decode_shard_index_partial_decoder(
             input_output_handle.clone().into_dyn_decoder().as_ref(),
             &index_codecs,
             index_location,
-            inner_chunk_representation.shape(),
-            &decoded_representation,
+            &shard_shape,
+            &subchunk_shape,
             options,
         )?
         .unwrap_or_else(|| {
@@ -78,17 +75,22 @@ impl ShardingPartialEncoder {
             vec![u64::MAX; num_chunks * 2]
         });
 
-        let shard_shape = decoded_representation.shape_u64().to_vec();
+        let chunk_grid = RegularChunkGrid::new(
+            bytemuck::must_cast_slice(shard_shape.as_slice()).to_vec(),
+            subchunk_shape.clone(),
+        )
+        .map_err(|err| CodecError::from(err.to_string()))?;
         Ok(Self {
             input_output_handle,
-            decoded_representation,
-            chunk_grid: RegularChunkGrid::new(shard_shape, chunk_shape)
-                .map_err(|err| CodecError::from(err.to_string()))?,
+            shard_shape,
+            data_type,
+            fill_value,
+            subchunk_shape,
+            chunk_grid,
             inner_codecs,
             index_codecs,
             index_location,
-            index_decoded_representation,
-            inner_chunk_representation,
+            index_shape,
             shard_index: Arc::new(Mutex::new(shard_index)),
         })
     }
@@ -96,7 +98,7 @@ impl ShardingPartialEncoder {
 
 impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -114,8 +116,10 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         super::sharding_partial_decoder_sync::partial_decode(
             &self.input_output_handle.clone().into_dyn_decoder(),
-            &self.decoded_representation,
-            &self.inner_chunk_representation,
+            &self.data_type,
+            &self.fill_value,
+            &self.shard_shape,
+            &self.subchunk_shape,
             &self.inner_codecs,
             Some(self.shard_index.lock().unwrap().as_slice()),
             indexer,
@@ -147,10 +151,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     ) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
 
-        let chunks_per_shard = calculate_chunks_per_shard(
-            self.decoded_representation.shape(),
-            self.inner_chunk_representation.shape(),
-        )?;
+        let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
         let chunks_per_shard = chunks_per_shard.to_array_shape();
 
         // Get the maximum offset of existing encoded chunks
@@ -170,9 +171,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         let get_inner_chunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
         let inner_chunk_fill_value = || {
             ArrayBytes::new_fill_value(
-                self.inner_chunk_representation.data_type(),
-                self.inner_chunk_representation.num_elements(),
-                self.inner_chunk_representation.fill_value(),
+                &self.data_type,
+                self.subchunk_shape.num_elements_u64(),
+                &self.fill_value,
             )
         };
 
@@ -193,12 +194,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         if chunk_subset_indexer
             .end_exc()
             .iter()
-            .zip(self.decoded_representation.shape())
+            .zip(&self.shard_shape)
             .any(|(a, b)| *a > b.get())
         {
             Err(IncompatibleIndexerError::new_oob(
                 chunk_subset_indexer.end_exc(),
-                self.decoded_representation.shape_u64().to_vec(),
+                bytemuck::cast_slice(&self.shard_shape).to_vec(),
             ))?;
         }
 
@@ -285,7 +286,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                             inner_chunk_index,
                             self.inner_codecs.decode(
                                 Cow::Owned(inner_chunk_encoded),
-                                &self.inner_chunk_representation,
+                                &self.subchunk_shape,
+                                &self.data_type,
+                                &self.fill_value,
                                 options,
                             )?,
                         ))
@@ -320,7 +323,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     .relative_to(chunk_subset_indexer.start())
                     .unwrap(),
                 chunk_subset_indexer.shape(),
-                self.inner_chunk_representation.data_type(),
+                &self.data_type,
             )?;
 
             // Decode the inner chunk
@@ -337,12 +340,12 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             // Update the inner chunk
             let inner_chunk_updated = update_array_bytes(
                 inner_chunk_decoded,
-                self.inner_chunk_representation.shape_u64(),
+                bytemuck::cast_slice(&self.subchunk_shape),
                 &inner_chunk_subset_overlap
                     .relative_to(inner_chunk_subset.start())
                     .unwrap(),
                 &inner_chunk_bytes,
-                self.inner_chunk_representation.data_type().size(),
+                self.data_type.size(),
             )?;
             inner_chunks_decoded
                 .lock()
@@ -364,14 +367,16 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let updated_inner_chunks = iterator
             .map(|(inner_chunk_index, inner_chunk_decoded)| {
-                if inner_chunk_decoded.is_fill_value(self.inner_chunk_representation.fill_value()) {
+                if inner_chunk_decoded.is_fill_value(&self.fill_value) {
                     Ok((inner_chunk_index, None))
                 } else {
                     let inner_chunk_encoded = self
                         .inner_codecs
                         .encode(
                             inner_chunk_decoded,
-                            &self.inner_chunk_representation,
+                            &self.subchunk_shape,
+                            &self.data_type,
+                            &self.fill_value,
                             options,
                         )?
                         .into_owned();
@@ -394,10 +399,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         };
 
         // Get the offset for new data
-        let index_encoded_size = compute_index_encoded_size(
-            self.index_codecs.as_ref(),
-            &self.index_decoded_representation,
-        )?;
+        let index_encoded_size =
+            compute_index_encoded_size(self.index_codecs.as_ref(), &self.index_shape)?;
         let offset_new_chunks = match self.index_location {
             ShardingIndexLocation::Start => max_data_offset.max(index_encoded_size),
             ShardingIndexLocation::End => max_data_offset,
@@ -430,7 +433,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 .index_codecs
                 .encode(
                     shard_index_bytes.into(),
-                    &self.index_decoded_representation,
+                    &self.index_shape,
+                    &DataType::UInt64,
+                    &FillValue::from(u64::MAX),
                     options,
                 )?
                 .into_owned();

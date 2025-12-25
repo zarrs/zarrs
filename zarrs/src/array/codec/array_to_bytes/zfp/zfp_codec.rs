@@ -16,7 +16,7 @@ use super::{
     zfp_stream::ZfpStream,
 };
 use crate::array::{
-    BytesRepresentation, ChunkRepresentation, DataType,
+    BytesRepresentation, DataType, FillValue,
     codec::{
         ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
         CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -29,6 +29,7 @@ use crate::metadata_ext::codec::{
     zfpy::{ZfpyCodecConfiguration, ZfpyCodecConfigurationMode},
 };
 use crate::registry::codec::ZFP;
+use std::num::NonZeroU64;
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]
@@ -181,7 +182,8 @@ impl CodecTraits for ZfpCodec {
 impl ArrayCodecTraits for ZfpCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: zfp supports multi thread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -201,16 +203,17 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
-        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, decoded_representation)?;
+        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, data_type)?;
         let zfp_type = bytes_promoted.zfp_type();
         let field = ZfpField::new(
             &mut bytes_promoted,
-            &decoded_representation
-                .shape()
+            &shape
                 .iter()
                 .map(|u| usize::try_from(u.get()).unwrap())
                 .collect::<Vec<usize>>(),
@@ -268,14 +271,17 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         zfp_decode(
             &self.mode,
             self.write_header,
             &mut bytes.to_vec(), // FIXME: Does zfp **really** need the encoded value as mutable?
-            decoded_representation,
+            shape,
+            data_type,
             false, // FIXME
         )
         .map(ArrayBytes::from)
@@ -283,10 +289,11 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let data_type = decoded_representation.data_type();
-        let zfp_type = zarr_to_zfp_data_type(decoded_representation.data_type())
+        let zfp_type = zarr_to_zfp_data_type(data_type)
             .ok_or_else(|| CodecError::from("data type {} is unsupported for zfp codec"))?;
 
         let bufsize = {
@@ -294,8 +301,7 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
                 // SAFETY: zfp_stream_maximum_size does not use the data in the field, so it can be empty
                 ZfpField::new_empty(
                     zfp_type,
-                    &decoded_representation
-                        .shape()
+                    &shape
                         .iter()
                         .map(|u| usize::try_from(u.get()).unwrap())
                         .collect::<Vec<usize>>(),

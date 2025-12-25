@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 #![cfg(all(feature = "async", feature = "ndarray"))]
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use object_store::memory::InMemory;
@@ -36,7 +37,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.data_type(), &DataType::UInt8);
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
-    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [2, 2].try_into().unwrap());
+    assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
     assert_eq!(array.chunk_grid_shape(), &[2, 2]);
 
     let options = CodecOptions::default();
@@ -288,7 +289,7 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         ))]);
         builder.array_to_bytes_codec(Arc::new(
             zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
-                vec![2, 1].try_into().unwrap(),
+                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(1).unwrap()],
                 &DataType::String,
             )
             .array_to_bytes_codec(Arc::new(

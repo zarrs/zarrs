@@ -1,11 +1,11 @@
 // TODO: Support actual partial decoding, coalescing required
 
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ChunkRepresentation, DataType, FillValue,
+    ArrayBytes, ArrayBytesRaw, DataType, FillValue,
     array_bytes::extract_decoded_regions_vlen,
     codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
 };
@@ -14,18 +14,24 @@ use crate::storage::StorageError;
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenV2PartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl VlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: Vec<NonZeroU64>,
+        data_type: DataType,
+        fill_value: FillValue,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
         }
     }
 }
@@ -35,10 +41,11 @@ fn decode_vlen_bytes<'a>(
     indexer: &dyn crate::indexer::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,
-    shape: &[u64],
+    shape: &[NonZeroU64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
-        let num_elements = usize::try_from(shape.iter().product::<u64>()).unwrap();
+        let num_elements =
+            usize::try_from(shape.iter().copied().map(NonZeroU64::get).product::<u64>()).unwrap();
         let (bytes, offsets) = super::get_interleaved_bytes_and_offsets(num_elements, &bytes)?;
         extract_decoded_regions_vlen(&bytes, &offsets, indexer, shape)
     } else {
@@ -49,7 +56,7 @@ fn decode_vlen_bytes<'a>(
 
 impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -70,9 +77,9 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         decode_vlen_bytes(
             bytes,
             indexer,
-            self.decoded_representation.data_type(),
-            self.decoded_representation.fill_value(),
-            self.decoded_representation.shape_u64(),
+            &self.data_type,
+            &self.fill_value,
+            &self.shape,
         )
     }
 
@@ -85,7 +92,9 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 /// Asynchronous partial decoder for the `bytes` codec.
 pub(crate) struct AsyncVlenV2PartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 #[cfg(feature = "async")]
@@ -93,11 +102,15 @@ impl AsyncVlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: Vec<NonZeroU64>,
+        data_type: DataType,
+        fill_value: FillValue,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
         }
     }
 }
@@ -107,7 +120,7 @@ impl AsyncVlenV2PartialDecoder {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -128,9 +141,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         decode_vlen_bytes(
             bytes,
             indexer,
-            self.decoded_representation.data_type(),
-            self.decoded_representation.fill_value(),
-            self.decoded_representation.shape_u64(),
+            &self.data_type,
+            &self.fill_value,
+            &self.shape,
         )
     }
 

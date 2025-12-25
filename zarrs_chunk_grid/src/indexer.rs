@@ -2,10 +2,9 @@
 
 use thiserror::Error;
 
-use crate::ArrayShape;
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    ravel_indices, ArrayIndices, ArrayIndicesTinyVec,
+    ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape,
 };
 use crate::{MaybeSend, MaybeSync};
 

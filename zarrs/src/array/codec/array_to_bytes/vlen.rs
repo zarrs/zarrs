@@ -102,10 +102,12 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
+use zarrs_data_type::FillValue;
+use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkRepresentation, CodecChain, DataType, Endianness,
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, DataType, Endianness,
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
     convert_from_bytes_slice,
 };
@@ -139,13 +141,22 @@ pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCr
 }
 
 fn get_vlen_bytes_and_offsets(
-    index_chunk_representation: &ChunkRepresentation,
     bytes: &ArrayBytesRaw,
+    shape: &[NonZeroU64],
+    index_data_type: VlenIndexDataType,
     index_codecs: &CodecChain,
     data_codecs: &CodecChain,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+    let index_shape = ChunkShape::from(vec![
+        NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
+    ]);
+    let (data_type, fill_value) = match index_data_type {
+        VlenIndexDataType::UInt32 => (DataType::UInt32, FillValue::from(0u32)),
+        VlenIndexDataType::UInt64 => (DataType::UInt64, FillValue::from(0u64)),
+    };
+
     // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
@@ -172,13 +183,19 @@ fn get_vlen_bytes_and_offsets(
 
     // Decode the index
     let mut index = index_codecs
-        .decode(index_enc.into(), index_chunk_representation, options)?
+        .decode(
+            index_enc.into(),
+            &index_shape,
+            &data_type,
+            &fill_value,
+            options,
+        )?
         .into_fixed()?;
     if Endianness::Big.is_native() {
         reverse_endianness(index.to_mut(), &DataType::UInt64);
     }
     #[allow(clippy::wildcard_enum_match_arm)]
-    let index = match index_chunk_representation.data_type() {
+    let index = match data_type {
         // DataType::UInt8 => {
         //     let index = convert_from_bytes_slice::<u8>(&index);
         //     offsets_u8_to_usize(index)
@@ -210,14 +227,9 @@ fn get_vlen_bytes_and_offsets(
         data_codecs
             .decode(
                 data_enc.into(),
-                &unsafe {
-                    // SAFETY: data type and fill value are compatible
-                    ChunkRepresentation::new_unchecked(
-                        vec![data_len_expected],
-                        DataType::UInt8,
-                        0u8,
-                    )
-                },
+                &[data_len_expected],
+                &DataType::UInt8,
+                &0u8.into(),
                 options,
             )?
             .into_fixed()?

@@ -1,9 +1,11 @@
-use std::{borrow::Cow, num::NonZero, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+
+use zarrs_data_type::FillValue;
 
 use super::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesToBytesCodecTraits, CodecError, CodecOptions,
+    BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{
@@ -17,11 +19,54 @@ use crate::storage::{
 };
 use crate::{
     array::{
-        ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, ChunkRepresentation,
+        ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation,
         array_bytes::update_array_bytes,
     },
     array_subset::ArraySubset,
 };
+
+/// Decoded representation for array codecs shape, data type, and fill value.
+pub(super) struct ArrayDecodedRepresentation {
+    shape: ChunkShape,
+    data_type: DataType,
+    fill_value: FillValue,
+}
+
+impl ArrayDecodedRepresentation {
+    /// Create a new array decoded representation.
+    pub(super) fn new(shape: ChunkShape, data_type: DataType, fill_value: FillValue) -> Self {
+        Self {
+            shape,
+            data_type,
+            fill_value,
+        }
+    }
+
+    /// Return the shape.
+    pub(super) fn shape(&self) -> &[NonZeroU64] {
+        &self.shape
+    }
+
+    /// Return the shape as u64.
+    pub(super) fn shape_u64(&self) -> &[u64] {
+        bytemuck::must_cast_slice(&self.shape)
+    }
+
+    /// Return the data type.
+    pub(super) fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    /// Return the fill value.
+    pub(super) fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    /// Return the number of elements.
+    pub(super) fn num_elements(&self) -> u64 {
+        self.shape.iter().map(|d| d.get()).product()
+    }
+}
 
 /// Generic partial codec for all codec operations with default behavior.
 ///
@@ -34,22 +79,44 @@ pub struct CodecPartialDefault<T: ?Sized, R, C: ?Sized> {
     codec: Arc<C>,
 }
 
-/// Type alias for the default array-to-bytes partial codec.
+/// Type alias for the default array-to-array partial codec.
 pub(super) type ArrayToArrayCodecPartialDefault<T> =
-    CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToArrayCodecTraits>;
+    CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>;
 
 /// Type alias for the default array-to-bytes partial codec.
 pub(super) type ArrayToBytesCodecPartialDefault<T> =
-    CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToBytesCodecTraits>;
+    CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>;
 
 /// Type alias for the default bytes-to-bytes partial codec.
 pub(super) type BytesToBytesCodecPartialDefault<T> =
     CodecPartialDefault<T, BytesRepresentation, dyn BytesToBytesCodecTraits>;
 
-impl<T: ?Sized, R, C: ?Sized> CodecPartialDefault<T, R, C> {
-    /// Create a new [`CodecPartialDefault`].
+impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, ArrayDecodedRepresentation, C> {
+    /// Create a new [`CodecPartialDefault`] for array codecs.
     #[must_use]
-    pub fn new(input_output_handle: Arc<T>, decoded_representation: R, codec: Arc<C>) -> Self {
+    pub fn new(
+        input_output_handle: Arc<T>,
+        shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
+        codec: Arc<C>,
+    ) -> Self {
+        Self {
+            input_output_handle,
+            decoded_representation: ArrayDecodedRepresentation::new(shape, data_type, fill_value),
+            codec,
+        }
+    }
+}
+
+impl<T: ?Sized, C: ?Sized> CodecPartialDefault<T, BytesRepresentation, C> {
+    /// Create a new [`CodecPartialDefault`] for bytes codecs.
+    #[must_use]
+    pub fn new_bytes(
+        input_output_handle: Arc<T>,
+        decoded_representation: BytesRepresentation,
+        codec: Arc<C>,
+    ) -> Self {
         Self {
             input_output_handle,
             decoded_representation,
@@ -59,7 +126,7 @@ impl<T: ?Sized, R, C: ?Sized> CodecPartialDefault<T, R, C> {
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToArrayCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
     T: ArrayPartialDecoderTraits,
 {
@@ -80,10 +147,10 @@ where
         indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
-        let output_shape = indexer
+        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
-            .map(|f| NonZero::try_from(*f))
+            .map(|f| NonZeroU64::try_from(*f))
             .collect();
 
         // Read the subsets
@@ -91,15 +158,13 @@ where
 
         // Decode the subsets
         if let Ok(shape) = output_shape {
+            let shape = ChunkShape::from(shape);
             self.codec
                 .decode(
                     chunk_bytes,
-                    &ChunkRepresentation::new(
-                        shape,
-                        self.decoded_representation.data_type().clone(),
-                        self.decoded_representation.fill_value().clone(),
-                    )
-                    .expect("data type and fill value are compatible"),
+                    &shape,
+                    self.decoded_representation.data_type(),
+                    self.decoded_representation.fill_value(),
                     options,
                 )
                 .map(ArrayBytes::into_owned)
@@ -119,7 +184,7 @@ where
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToArrayCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
     T: ArrayPartialEncoderTraits,
 {
@@ -143,9 +208,13 @@ where
         let encoded_value = self
             .input_output_handle
             .partial_decode(&array_subset_all, options)?;
-        let mut decoded_value =
-            self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?;
+        let mut decoded_value = self.codec.decode(
+            encoded_value,
+            self.decoded_representation.shape(),
+            self.decoded_representation.data_type(),
+            self.decoded_representation.fill_value(),
+            options,
+        )?;
 
         // Validate the bytes
         decoded_value.validate(
@@ -172,9 +241,13 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let encoded_value =
-                self.codec
-                    .encode(decoded_value, &self.decoded_representation, options)?;
+            let encoded_value = self.codec.encode(
+                decoded_value,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
             self.input_output_handle
                 .partial_encode(&array_subset_all, &encoded_value, options)
         }
@@ -186,7 +259,7 @@ where
 }
 
 impl<T: ?Sized> ArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToBytesCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
     T: BytesPartialDecoderTraits,
 {
@@ -212,9 +285,13 @@ where
 
         if let Some(bytes_enc) = bytes_enc {
             // Decode the entire chunk
-            let bytes_dec = self
-                .codec
-                .decode(bytes_enc, &self.decoded_representation, options)?;
+            let bytes_dec = self.codec.decode(
+                bytes_enc,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
 
             // Extract the subsets
             let chunk_shape = self.decoded_representation.shape_u64();
@@ -241,7 +318,7 @@ where
 }
 
 impl<T: ?Sized> ArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToBytesCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
     T: BytesPartialEncoderTraits,
 {
@@ -265,8 +342,13 @@ where
 
         // Handle a missing chunk
         let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec
-                .decode(chunk_bytes, &self.decoded_representation, options)?
+            self.codec.decode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?
         } else {
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
@@ -301,9 +383,13 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let chunk_bytes =
-                self.codec
-                    .encode(chunk_bytes, &self.decoded_representation, options)?;
+            let chunk_bytes = self.codec.encode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
             self.input_output_handle
                 .partial_encode(0, chunk_bytes, options)
         }
@@ -418,7 +504,7 @@ where
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToArrayCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
     T: AsyncArrayPartialDecoderTraits,
 {
@@ -439,10 +525,10 @@ where
         indexer: &dyn crate::indexer::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
-        let output_shape = indexer
+        let output_shape: Result<Vec<NonZeroU64>, _> = indexer
             .output_shape()
             .iter()
-            .map(|f| NonZero::try_from(*f))
+            .map(|f| NonZeroU64::try_from(*f))
             .collect();
 
         // Read the subsets
@@ -453,15 +539,13 @@ where
 
         // Decode the subsets
         if let Ok(shape) = output_shape {
+            let shape = ChunkShape::from(shape);
             self.codec
                 .decode(
                     chunk_bytes,
-                    &ChunkRepresentation::new(
-                        shape,
-                        self.decoded_representation.data_type().clone(),
-                        self.decoded_representation.fill_value().clone(),
-                    )
-                    .expect("data type and fill value are compatible"),
+                    &shape,
+                    self.decoded_representation.data_type(),
+                    self.decoded_representation.fill_value(),
                     options,
                 )
                 .map(ArrayBytes::into_owned)
@@ -484,7 +568,7 @@ where
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToArrayCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToArrayCodecTraits>
 where
     T: AsyncArrayPartialEncoderTraits,
 {
@@ -509,9 +593,13 @@ where
             .input_output_handle
             .partial_decode(&array_subset_all, options)
             .await?;
-        let mut decoded_value =
-            self.codec
-                .decode(encoded_value, &self.decoded_representation, options)?;
+        let mut decoded_value = self.codec.decode(
+            encoded_value,
+            self.decoded_representation.shape(),
+            self.decoded_representation.data_type(),
+            self.decoded_representation.fill_value(),
+            options,
+        )?;
 
         // Validate the bytes
         decoded_value.validate(
@@ -538,9 +626,13 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let encoded_value =
-                self.codec
-                    .encode(decoded_value, &self.decoded_representation, options)?;
+            let encoded_value = self.codec.encode(
+                decoded_value,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
             self.input_output_handle
                 .partial_encode(&array_subset_all, &encoded_value, options)
                 .await
@@ -556,7 +648,7 @@ where
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialDecoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToBytesCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
     T: AsyncBytesPartialDecoderTraits,
 {
@@ -582,9 +674,13 @@ where
 
         if let Some(bytes_enc) = bytes_enc {
             // Decode the entire chunk
-            let bytes_dec = self
-                .codec
-                .decode(bytes_enc, &self.decoded_representation, options)?;
+            let bytes_dec = self.codec.decode(
+                bytes_enc,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
 
             // Extract the subsets
             let chunk_shape = self.decoded_representation.shape_u64();
@@ -614,7 +710,7 @@ where
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<T: ?Sized> AsyncArrayPartialEncoderTraits
-    for CodecPartialDefault<T, ChunkRepresentation, dyn ArrayToBytesCodecTraits>
+    for CodecPartialDefault<T, ArrayDecodedRepresentation, dyn ArrayToBytesCodecTraits>
 where
     T: AsyncBytesPartialEncoderTraits,
 {
@@ -638,8 +734,13 @@ where
 
         // Handle a missing chunk
         let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec
-                .decode(chunk_bytes, &self.decoded_representation, options)?
+            self.codec.decode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?
         } else {
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
@@ -674,9 +775,13 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let chunk_bytes =
-                self.codec
-                    .encode(chunk_bytes, &self.decoded_representation, options)?;
+            let chunk_bytes = self.codec.encode(
+                chunk_bytes,
+                self.decoded_representation.shape(),
+                self.decoded_representation.data_type(),
+                self.decoded_representation.fill_value(),
+                options,
+            )?;
             self.input_output_handle
                 .partial_encode(0, chunk_bytes, options)
                 .await

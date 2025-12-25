@@ -8,7 +8,7 @@ use crate::metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
 use crate::registry::codec::FIXEDSCALEOFFSET;
 use crate::{
     array::{
-        ChunkRepresentation, DataType,
+        DataType, FillValue,
         codec::{
             ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
@@ -17,6 +17,7 @@ use crate::{
     },
     config::global_config,
 };
+use std::num::NonZeroU64;
 
 macro_rules! unsupported_dtypes {
     // TODO: Add support for all int/float types?
@@ -204,7 +205,8 @@ impl CodecTraits for FixedScaleOffsetCodec {
 impl ArrayCodecTraits for FixedScaleOffsetCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -418,20 +420,21 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if &self.dtype != decoded_representation.data_type() {
+        if &self.dtype != data_type {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {} as input, but metadata expects {}",
-                decoded_representation.data_type(),
-                self.dtype
+                data_type, self.dtype
             )));
         }
 
         do_encode(
             bytes,
-            decoded_representation.data_type(),
+            data_type,
             self.offset,
             self.scale,
             self.astype.as_ref(),
@@ -441,29 +444,25 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if &self.dtype != decoded_representation.data_type() {
+        if &self.dtype != data_type {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {} as input, but metadata expects {}",
-                decoded_representation.data_type(),
-                self.dtype
+                data_type, self.dtype
             )));
         }
 
         let bytes = bytes.into_fixed()?.into_owned();
         let mut bytes = if let Some(astype) = &self.astype {
-            cast_array(&bytes, astype, decoded_representation.data_type())?
+            cast_array(&bytes, astype, data_type)?
         } else {
             bytes
         };
-        unscale_array(
-            &mut bytes,
-            decoded_representation.data_type(),
-            self.offset,
-            self.scale,
-        )?;
+        unscale_array(&mut bytes, data_type, self.offset, self.scale)?;
         Ok(bytes.into())
     }
 

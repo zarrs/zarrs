@@ -5,7 +5,7 @@ use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ChunkCache, ChunkCacheTypeDecoded,
-    ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder,
+    ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
 use crate::array_subset::ArraySubset;
 use crate::storage::{ReadableStorageTraits, StorageError};
@@ -135,16 +135,19 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 })?;
 
             if let Some(chunk_encoded) = chunk_encoded.as_ref() {
-                let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
+                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
                 let bytes = self
                     .array
                     .codecs()
-                    .decode(Cow::Borrowed(chunk_encoded), &chunk_representation, options)
+                    .decode(
+                        Cow::Borrowed(chunk_encoded),
+                        &chunk_shape,
+                        self.array.data_type(),
+                        self.array.fill_value(),
+                        options,
+                    )
                     .map_err(ArrayError::CodecError)?;
-                bytes.validate(
-                    chunk_representation.num_elements(),
-                    chunk_representation.data_type(),
-                )?;
+                bytes.validate(chunk_shape.num_elements_u64(), self.array.data_type())?;
                 Ok(Arc::new(bytes.into_owned()))
             } else {
                 let chunk_shape = self.array.chunk_shape(chunk_indices)?;
@@ -182,11 +185,17 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 })?;
 
             if let Some(chunk_encoded) = chunk_encoded {
-                let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
+                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
                 Ok(self
                     .array
                     .codecs()
-                    .partial_decoder(chunk_encoded, &chunk_representation, options)?
+                    .partial_decoder(
+                        chunk_encoded,
+                        &chunk_shape,
+                        self.array.data_type(),
+                        self.array.fill_value(),
+                        options,
+                    )?
                     .partial_decode(chunk_subset, options)?
                     .into_owned()
                     .into())
@@ -247,11 +256,11 @@ macro_rules! impl_ChunkCacheLruDecoded {
                         ArrayError::StorageError(StorageError::from(err.to_string()))
                     })
                 })?;
-            let chunk_representation = self.array.chunk_array_representation(chunk_indices)?;
+            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
             Ok(chunk
                 .extract_array_subset(
                     chunk_subset,
-                    chunk_representation.shape_u64(),
+                    bytemuck::must_cast_slice(&chunk_shape),
                     self.array.data_type(),
                 )?
                 .into_owned()

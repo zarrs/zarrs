@@ -8,16 +8,17 @@ use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::array::{
-    ArrayBytes, ChunkRepresentation, DataType,
+    ArrayBytes, DataType, FillValue,
     codec::{CodecError, CodecOptions},
 };
 use crate::array_subset::ArraySubset;
 use crate::storage::StorageError;
+use std::num::NonZeroU64;
 
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {
     input_output_handle: Arc<T>,
-    decoded_representation: ChunkRepresentation,
+    data_type: DataType,
     /// Forward permutation order (for encoding).
     order: Vec<usize>,
     /// Inverse permutation order (for decoding).
@@ -29,13 +30,15 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     #[must_use]
     pub(crate) fn new(
         input_output_handle: Arc<T>,
-        decoded_representation: ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         order: Vec<usize>,
     ) -> Self {
         let order_inverse = inverse_permutation(&order);
         Self {
             input_output_handle,
-            decoded_representation,
+            data_type: data_type.clone(),
             order,
             order_inverse,
         }
@@ -47,12 +50,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
         bytes: &ArrayBytes<'a>,
         subset: &ArraySubset,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        apply_permutation(
-            bytes,
-            subset.shape(),
-            &self.order,
-            self.decoded_representation.data_type(),
-        )
+        apply_permutation(bytes, subset.shape(), &self.order, &self.data_type)
     }
 
     /// Decode: apply inverse permutation to bytes in encoded (transposed) shape.
@@ -67,7 +65,7 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
             bytes,
             &transposed_shape,
             &self.order_inverse,
-            self.decoded_representation.data_type(),
+            &self.data_type,
         )
     }
 }
@@ -77,7 +75,7 @@ where
     T: ArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -157,7 +155,7 @@ where
     T: AsyncArrayPartialDecoderTraits,
 {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
