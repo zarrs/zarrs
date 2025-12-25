@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Highlights
+- Generic array store and retrieve methods
+- Support for the `optional` data type and codec (aliased as `zarrs.optional`)
+- Improved performance
+
 ### Added
 
 - Add `ArrayBytesVariableLength`
@@ -51,9 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Breaking**: Bump MSRV to 1.87 and use Rust 2024 edition
-- **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
 - **Breaking**: Bump `zarrs_metadata` to 0.7.0
 - **Breaking**: Bump `zarrs_data_type` to 0.5.0
+- **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.3.0
+- **Breaking**: Bump `float8` (public) to 0.5.0
+- **Breaking**: Bump `dlpark` (public) to 0.6.0
+- Bump `zfp-sys` to 0.4.2
+- Bump `pco` to 0.4.7
+- Bump `zarrs_registry` to 0.1.9
+- Bump `zarrs_filesystem` to 0.3.6
+- Bump `criterion` (dev) to 0.8.1
+- **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
 - **Breaking**: The `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets
@@ -75,15 +88,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This is necessary to choose an appropriate default array-to-bytes codec
 - **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` to avoid unnecessary copies with some element types
   - Added `Element::to_array_bytes()` matching the old signature
-- Bump `criterion` (dev) to 0.8.1
-- Bump `zfp-sys` to 0.4.2
-- Bump `pco` to 0.4.7
-- **Breaking**: Bump `float8` (public) to 0.5.0
-- **Breaking**: Bump `dlpark` (public) to 0.6.0
-- Bump `zarrs_metadata_ext` to 0.3.0
-- Bump `zarrs_registry` to 0.1.9
-- Bump `zarrs_filesystem` to 0.3.6
-- Bump `zarrs_chunk_grid` to 0.1.0
 - **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
   - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
     - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
