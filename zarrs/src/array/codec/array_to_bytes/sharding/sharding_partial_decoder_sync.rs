@@ -529,9 +529,18 @@ fn partial_decode_fixed_indexer(
             .map_err(Arc::unwrap_or_clone)?
             .into_value();
         #[cfg(target_arch = "wasm32")]
-        let inner_partial_decoder = inner_chunk_partial_decoders
-            .get_or_insert_with(&chunk_index_1d, || {
-                get_inner_chunk_partial_decoder(partial_decoder, options, offset, size)
+        let inner_partial_decoder =
+            inner_chunk_partial_decoders.get_or_insert_with(&chunk_index_1d, || {
+                get_inner_chunk_partial_decoder(
+                    input_handle,
+                    data_type,
+                    fill_value,
+                    subchunk_shape,
+                    inner_codecs,
+                    options,
+                    offset,
+                    size,
+                )
             })?;
 
         // Get the element index
@@ -631,9 +640,18 @@ fn partial_decode_variable_indexer(
             .map_err(Arc::unwrap_or_clone)?
             .into_value();
         #[cfg(target_arch = "wasm32")]
-        let inner_partial_decoder = inner_chunk_partial_decoders
-            .get_or_insert_with(&chunk_index_1d, || {
-                get_inner_chunk_partial_decoder(partial_decoder, options, offset, size)
+        let inner_partial_decoder =
+            inner_chunk_partial_decoders.get_or_insert_with(&chunk_index_1d, || {
+                get_inner_chunk_partial_decoder(
+                    input_handle,
+                    data_type,
+                    fill_value,
+                    subchunk_shape,
+                    inner_codecs,
+                    options,
+                    offset,
+                    size,
+                )
             })?;
 
         // Get the element index
