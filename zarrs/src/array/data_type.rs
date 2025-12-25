@@ -404,7 +404,7 @@ impl DataType {
                     .cloned()
                     .unwrap_or_default();
                 MetadataV3::new_with_configuration(
-                    "optional",
+                    zarrs_registry::data_type::OPTIONAL,
                     zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1 {
                         name: data_type.name(),
                         configuration,
