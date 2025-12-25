@@ -351,10 +351,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
             let (shard_indices, chunk_indices) =
                 inner_chunk_shard_index_and_chunk_index(self, cache, inner_chunk_indices)?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
-            #[cfg(target_arch = "wasm32")]
-            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
+            let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
             let partial_decoder = partial_decoder
                 .downcast::<AsyncShardingPartialDecoder>()
                 .expect("array is exclusively sharded");
@@ -376,10 +373,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
             let (shard_indices, chunk_indices) =
                 inner_chunk_shard_index_and_chunk_index(self, cache, inner_chunk_indices)?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
-            #[cfg(not(target_arch = "wasm32"))]
-            let partial_decoder: Arc<dyn Any + Send + Sync> = partial_decoder.clone();
-            #[cfg(target_arch = "wasm32")]
-            let partial_decoder: Arc<dyn Any> = partial_decoder.clone();
+            let partial_decoder: Arc<dyn Any + MaybeSend + MaybeSync> = partial_decoder.clone();
             let partial_decoder = partial_decoder
                 .downcast::<AsyncShardingPartialDecoder>()
                 .expect("array is exclusively sharded");
