@@ -20,9 +20,11 @@ use zarrs::array::codec::{
 };
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
+    NamedDataType,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_filesystem::FilesystemStore;
+use zarrs_registry::{ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV3};
 
 // =============================================================================
 // Core Types
@@ -47,7 +49,7 @@ pub enum CodecTestResult {
 #[derive(Clone)]
 pub struct TestConfig {
     /// Data type to test
-    pub data_type: DataType,
+    pub data_type: NamedDataType,
     /// Fill value for the array
     pub fill_value: FillValue,
     /// Array shape
@@ -71,7 +73,7 @@ pub struct TestConfig {
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
-            data_type: DataType::UInt8,
+            data_type: DataType::UInt8.into_named(&ExtensionAliasesDataTypeV3::default()),
             fill_value: 0u8.into(),
             array_shape: vec![8, 24],
             chunk_shape: vec![4, 6],
@@ -90,70 +92,115 @@ impl Default for TestConfig {
 // =============================================================================
 
 /// All data types to test with their fill values and description
-pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
+pub fn all_data_types() -> Vec<(NamedDataType, FillValue, &'static str)> {
+    let a = ExtensionAliasesDataTypeV3::default();
     vec![
         // Core integers
-        (DataType::Bool, false.into(), "fill_false"),
-        (DataType::Int8, 0i8.into(), "fill_0"),
-        (DataType::Int16, 0i16.into(), "fill_0"),
-        (DataType::Int32, 0i32.into(), "fill_0"),
-        (DataType::Int64, 0i64.into(), "fill_0"),
-        (DataType::UInt8, 0u8.into(), "fill_0"),
-        (DataType::UInt16, 0u16.into(), "fill_0"),
-        (DataType::UInt32, 0u32.into(), "fill_0"),
-        (DataType::UInt64, 0u64.into(), "fill_0"),
+        (DataType::Bool.into_named(&a), false.into(), "fill_false"),
+        (DataType::Int8.into_named(&a), 0i8.into(), "fill_0"),
+        (DataType::Int16.into_named(&a), 0i16.into(), "fill_0"),
+        (DataType::Int32.into_named(&a), 0i32.into(), "fill_0"),
+        (DataType::Int64.into_named(&a), 0i64.into(), "fill_0"),
+        (DataType::UInt8.into_named(&a), 0u8.into(), "fill_0"),
+        (DataType::UInt16.into_named(&a), 0u16.into(), "fill_0"),
+        (DataType::UInt32.into_named(&a), 0u32.into(), "fill_0"),
+        (DataType::UInt64.into_named(&a), 0u64.into(), "fill_0"),
         // Sub-byte integers (fill value should be 1 byte packed value)
-        (DataType::Int2, FillValue::new(vec![0u8]), "fill_0"),
-        (DataType::Int4, FillValue::new(vec![0u8]), "fill_0"),
-        (DataType::UInt2, FillValue::new(vec![0u8]), "fill_0"),
-        (DataType::UInt4, FillValue::new(vec![0u8]), "fill_0"),
+        (
+            DataType::Int2.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            DataType::Int4.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            DataType::UInt2.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            DataType::UInt4.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
         // Half-precision floats (2 bytes)
-        (DataType::BFloat16, FillValue::new(vec![0u8; 2]), "fill_0"),
-        (DataType::Float16, FillValue::new(vec![0u8; 2]), "fill_0"),
+        (
+            DataType::BFloat16.into_named(&a),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            DataType::Float16.into_named(&a),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
         // Float8 variants (1 byte each)
-        (DataType::Float8E4M3, FillValue::new(vec![0u8]), "fill_0"),
-        (DataType::Float8E5M2, FillValue::new(vec![0u8]), "fill_0"),
+        (
+            DataType::Float8E4M3.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            DataType::Float8E5M2.into_named(&a),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
         // Standard floats
-        (DataType::Float32, 0.0f32.into(), "fill_0"),
-        (DataType::Float32, f32::NAN.into(), "fill_nan"),
-        (DataType::Float64, 0.0f64.into(), "fill_0"),
-        (DataType::Float64, f64::NAN.into(), "fill_nan"),
+        (DataType::Float32.into_named(&a), 0.0f32.into(), "fill_0"),
+        (
+            DataType::Float32.into_named(&a),
+            f32::NAN.into(),
+            "fill_nan",
+        ),
+        (DataType::Float64.into_named(&a), 0.0f64.into(), "fill_0"),
+        (
+            DataType::Float64.into_named(&a),
+            f64::NAN.into(),
+            "fill_nan",
+        ),
         // Complex half-precision (2 bytes each = 4 bytes total)
         (
-            DataType::ComplexBFloat16,
+            DataType::ComplexBFloat16.into_named(&a),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat16,
+            DataType::ComplexFloat16.into_named(&a),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         // Complex float8 (1 byte each = 2 bytes total)
         (
-            DataType::ComplexFloat8E4M3,
+            DataType::ComplexFloat8E4M3.into_named(&a),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat8E5M2,
+            DataType::ComplexFloat8E5M2.into_named(&a),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         // Complex standard (8 and 16 bytes)
         (
-            DataType::ComplexFloat32,
+            DataType::ComplexFloat32.into_named(&a),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat64,
+            DataType::ComplexFloat64.into_named(&a),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
-        (DataType::Complex64, FillValue::new(vec![0u8; 8]), "fill_0"),
         (
-            DataType::Complex128,
+            DataType::Complex64.into_named(&a),
+            FillValue::new(vec![0u8; 8]),
+            "fill_0",
+        ),
+        (
+            DataType::Complex128.into_named(&a),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
@@ -162,7 +209,8 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             DataType::NumpyDateTime64 {
                 unit: NumpyTimeUnit::Second,
                 scale_factor: std::num::NonZeroU32::new(1).unwrap(),
-            },
+            }
+            .into_named(&a),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
@@ -170,39 +218,57 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             DataType::NumpyTimeDelta64 {
                 unit: NumpyTimeUnit::Second,
                 scale_factor: std::num::NonZeroU32::new(1).unwrap(),
-            },
+            }
+            .into_named(&ExtensionAliasesDataTypeV3::default()),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         // Variable-length
-        (DataType::String, "".into(), "fill_empty"),
-        (DataType::Bytes, FillValue::new(vec![]), "fill_empty"),
+        (
+            DataType::String.into_named(&ExtensionAliasesDataTypeV3::default()),
+            "".into(),
+            "fill_empty",
+        ),
+        (
+            DataType::Bytes.into_named(&ExtensionAliasesDataTypeV3::default()),
+            FillValue::new(vec![]),
+            "fill_empty",
+        ),
         // RawBits
         (
-            DataType::RawBits(3),
+            DataType::RawBits(3).into_named(&ExtensionAliasesDataTypeV3::default()),
             FillValue::new(vec![0, 0, 0]),
             "fill_zeros",
         ),
         // Optional types
         (
-            DataType::UInt8.into_optional(),
+            DataType::UInt8
+                .into_named(&ExtensionAliasesDataTypeV3::default())
+                .into_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         (
-            DataType::Float32.into_optional(),
+            DataType::Float32
+                .into_named(&ExtensionAliasesDataTypeV3::default())
+                .into_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Nested optional (Optional<Optional<Float32>>)
         (
-            DataType::Float32.into_optional().into_optional(),
+            DataType::Float32
+                .into_named(&ExtensionAliasesDataTypeV3::default())
+                .into_optional()
+                .into_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Optional string
         (
-            DataType::String.into_optional(),
+            DataType::String
+                .into_named(&ExtensionAliasesDataTypeV3::default())
+                .into_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
@@ -437,16 +503,18 @@ pub fn snapshots_dir() -> PathBuf {
 }
 
 /// Sanitize a data type name for use in file paths
-pub fn sanitize_data_type_name(data_type: &DataType) -> String {
-    // For optional types, include the inner type name to distinguish them
-    let name = if let DataType::Optional(inner) = data_type {
-        format!("optional_{}", sanitize_data_type_name(inner))
+pub fn sanitize_data_type_name(data_type: &NamedDataType) -> String {
+    // For optional types, use the default name and include the inner type name
+    let name = if let Some(inner) = data_type.optional() {
+        let aliases = ExtensionAliasesDataTypeV3::default();
+        let optional_name = aliases.default_name(zarrs_registry::data_type::OPTIONAL);
+        format!("{}({})", optional_name, sanitize_data_type_name(inner))
     } else {
-        data_type.name()
+        data_type.name().to_string()
     };
     name.chars()
         .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
+            if c.is_alphanumeric() || c == '_' || c == '.' || c == '(' || c == ')' {
                 c.to_ascii_lowercase()
             } else {
                 '_'
@@ -495,7 +563,7 @@ pub struct SnapshotPath {
 impl SnapshotPath {
     pub fn new(
         chunk_grid: &str,
-        data_type: &DataType,
+        data_type: &NamedDataType,
         category: CodecCategory,
         codec_name: &str,
         codec_suffix: Option<&str>,
@@ -1423,19 +1491,22 @@ fn codec_registry() -> Vec<CodecDef> {
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |dt| {
+            let aliases = ExtensionAliasesCodecV3::default();
             // For optional types, default_array_to_bytes_codec returns an OptionalCodec
-            if dt.as_optional().is_some() {
-                CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt).codec().clone())
+            if dt.optional().is_some() {
+                CodecInstance::ArrayToBytes(
+                    default_array_to_bytes_codec(dt, &aliases).codec().clone(),
+                )
             } else {
                 // For non-optional types, manually wrap the default codec in an OptionalCodec
                 let mask_codec_chain = Arc::new(CodecChain::new_named(
                     vec![],
-                    Arc::new(PackBitsCodec::default()).into(),
+                    NamedCodec::new_default_name(Arc::new(PackBitsCodec::default()), &aliases),
                     vec![],
                 ));
                 let data_codec_chain = Arc::new(CodecChain::new_named(
                     vec![],
-                    default_array_to_bytes_codec(dt),
+                    default_array_to_bytes_codec(dt, &aliases),
                     vec![],
                 ));
                 CodecInstance::ArrayToBytes(Arc::new(OptionalCodec::new(
@@ -1456,7 +1527,7 @@ fn codec_registry() -> Vec<CodecDef> {
 fn build_test_config(
     codec: &CodecDef,
     instance: CodecInstance,
-    data_type: &DataType,
+    data_type: &NamedDataType,
     fill_value: &FillValue,
 ) -> TestConfig {
     let mut config = TestConfig {
@@ -1536,7 +1607,7 @@ mod compatibility_matrix {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use zarrs_registry::{codec, data_type};
+    use zarrs_registry::{ExtensionAliasesCodecV3, codec, data_type};
 
     /// Get codecs for a specific category from REGISTERED_CODECS
     fn get_codecs_for_category(category: &str) -> Vec<&'static str> {
@@ -1551,7 +1622,7 @@ mod compatibility_matrix {
     fn sanitize_data_type_name(name: &str) -> String {
         name.chars()
             .map(|c| {
-                if c.is_alphanumeric() || c == '_' {
+                if c.is_alphanumeric() || c == '_' || c == '.' {
                     c.to_ascii_lowercase()
                 } else {
                     '_'
@@ -1619,15 +1690,17 @@ mod compatibility_matrix {
         all_types
     }
 
-    /// Format a data type name for display in the table
-    /// Adds annotations for parameterized types (e.g., "r24" -> "r24 (r*)")
-    fn format_data_type_for_display(datatype: &str) -> String {
-        // Check if this is a rawbits type (r followed by digits)
-        if datatype.starts_with('r') && datatype[1..].chars().all(|c| c.is_ascii_digit()) {
-            format!("{} (r*)", datatype)
-        } else {
-            datatype.to_string()
-        }
+    /// Map a directory name to the canonical data type name for display
+    /// Directory names are already in canonical form (e.g., "zarrs.optional<float32>")
+    fn canonical_data_type_name(name: &str) -> String {
+        name.to_string()
+    }
+
+    /// Get the default codec name for display using the aliases
+    /// E.g., "optional" -> "zarrs.optional", "fixedscaleoffset" -> "numcodecs.fixedscaleoffset"
+    fn default_codec_name(identifier: &str) -> String {
+        let aliases = ExtensionAliasesCodecV3::default();
+        aliases.default_name(identifier).to_string()
     }
 
     // All known codec names (used for extracting base codec from directory names)
@@ -1655,7 +1728,7 @@ mod compatibility_matrix {
         "vlen-array",
         "vlen",
         "zfp",
-        "zfpy",
+        // "zfpy",
         "zlib",
         "zstd",
         "shuffle",
@@ -1681,7 +1754,7 @@ mod compatibility_matrix {
         (codec::VLEN_UTF8, "a2b"),
         (codec::VLEN_V2, "a2b"),
         (codec::ZFP, "a2b"),
-        (codec::ZFPY, "a2b"),
+        // (codec::ZFPY, "a2b"),
         // Bytes-to-Bytes
         (codec::ADLER32, "b2b"),
         (codec::BLOSC, "b2b"),
@@ -1831,10 +1904,10 @@ mod compatibility_matrix {
 
         output.push_str(&format!("## {}\n\n", title));
 
-        // Header row - include all codecs in the category
+        // Header row - include all codecs in the category with default names
         output.push_str("| Data Type |");
         for codec in codec_list {
-            output.push_str(&format!(" {} |", codec));
+            output.push_str(&format!(" {} |", default_codec_name(codec)));
         }
         output.push('\n');
 
@@ -1847,7 +1920,7 @@ mod compatibility_matrix {
 
         // Data rows - include all registered data types
         for datatype in all_datatypes {
-            let display_name = format_data_type_for_display(datatype);
+            let display_name = canonical_data_type_name(datatype);
             output.push_str(&format!("| {} |", display_name));
             for codec in codec_list {
                 // Look up using both the identifier and common variations

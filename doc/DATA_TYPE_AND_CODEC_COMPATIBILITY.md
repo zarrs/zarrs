@@ -24,7 +24,7 @@ Results:
 
 ## Array-to-Array Codecs
 
-| Data Type | bitround | fixedscaleoffset | reshape | squeeze | transpose |
+| Data Type | bitround | numcodecs.fixedscaleoffset | reshape | zarrs.squeeze | transpose |
 |-----------|---|---|---|---|---|
 | bfloat16 | ✓ | ✗ | ✓ | ✓ | ✓ |
 | bool | ✗ | ✗ | ✓ | ✓ | ✓ |
@@ -64,13 +64,9 @@ Results:
 | int4 | ✗ | ✗ | ✓ | ✓ | ✓ |
 | int64 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int8 | ✓ | ✗ | ✓ | ✓ | ✓ |
-| numpy_datetime64 | ✓ | ✗ | ✓ | ✓ | ✓ |
-| numpy_timedelta64 | ✓ | ✗ | ✓ | ✓ | ✓ |
-| optional_float32 | ✗ | ✗ | ✓ | ✓ | ✗ |
-| optional_optional_float32 | ✗ | ✗ | ✓ | ✓ | ✗ |
-| optional_string | ✗ | ✗ | ✓ | ✓ | ✗ |
-| optional_uint8 | ✗ | ✗ | ✓ | ✓ | ✗ |
-| r24 (r*) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| numpy.datetime64 | ✓ | ✗ | ✓ | ✓ | ✓ |
+| numpy.timedelta64 | ✓ | ✗ | ✓ | ✓ | ✓ |
+| r24 | ✗ | ✗ | ✓ | ✓ | ✓ |
 | string | ✗ | ✗ | ✓ | ✓ | ✓ |
 | uint16 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint2 | ✗ | ✗ | ✓ | ✓ | ✓ |
@@ -78,67 +74,71 @@ Results:
 | uint4 | ✗ | ✗ | ✓ | ✓ | ✓ |
 | uint64 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint8 | ✓ | ✗ | ✓ | ✓ | ✓ |
+| zarrs.optional(float32) | ✗ | ✗ | ✓ | ✓ | ✗ |
+| zarrs.optional(string) | ✗ | ✗ | ✓ | ✓ | ✗ |
+| zarrs.optional(uint8) | ✗ | ✗ | ✓ | ✓ | ✗ |
+| zarrs.optional(zarrs.optional(float32)) | ✗ | ✗ | ✓ | ✓ | ✗ |
 
 ## Array-to-Bytes Codecs
 
-| Data Type | bytes | optional | packbits | pcodec | sharding_indexed | vlen | vlen-array | vlen-bytes | vlen-utf8 | vlen_v2 | zfp | zfpy |
-|-----------|---|---|---|---|---|---|---|---|---|---|---|---|
-| bfloat16 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| bool | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| bytes | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | - |
-| complex128 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_bfloat16 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e4m3 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e5m2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| complex_float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - | - |
-| float16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| float32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| float64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e4m3 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e5m2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - | - |
-| int16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| int2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| int32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| int4 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| int64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| int8 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| numpy_datetime64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| numpy_timedelta64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| optional_float32 | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| optional_optional_float32 | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| optional_string | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| optional_uint8 | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| r24 (r*) | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| string | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | - |
-| uint16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| uint2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| uint32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| uint4 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | - |
-| uint64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
-| uint8 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | - |
+| Data Type | bytes | zarrs.optional | packbits | numcodecs.pcodec | sharding_indexed | zarrs.vlen | vlen-array | vlen-bytes | vlen-utf8 | zarrs.vlen_v2 | zfp |
+|-----------|---|---|---|---|---|---|---|---|---|---|---|
+| bfloat16 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| bool | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| bytes | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| complex128 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_bfloat16 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e4m3 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e5m2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| complex_float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - |
+| float16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| float32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - |
+| float64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - |
+| float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e4m3 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e5m2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - |
+| int16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| int2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| int32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| int4 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| int64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| int8 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| numpy.datetime64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| numpy.timedelta64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| r24 | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| string | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ |
+| uint16 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| uint2 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| uint32 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| uint4 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| uint64 | ✓ | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| uint8 | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| zarrs.optional(float32) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| zarrs.optional(string) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| zarrs.optional(uint8) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| zarrs.optional(zarrs.optional(float32)) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 ## Bytes-to-Bytes Codecs
 
-| Data Type | adler32 | blosc | bz2 | crc32c | fletcher32 | gdeflate | gzip | shuffle | zlib | zstd |
+| Data Type | numcodecs.adler32 | blosc | numcodecs.bz2 | crc32c | numcodecs.fletcher32 | zarrs.gdeflate | gzip | numcodecs.shuffle | numcodecs.zlib | zstd |
 |-----------|---|---|---|---|---|---|---|---|---|---|
 | bfloat16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | bool | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -178,13 +178,9 @@ Results:
 | int4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int8 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| numpy_datetime64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| numpy_timedelta64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| optional_float32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| optional_optional_float32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| optional_string | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| optional_uint8 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| r24 (r*) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| numpy.datetime64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| numpy.timedelta64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| r24 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | string | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
 | uint16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -192,4 +188,8 @@ Results:
 | uint4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | uint8 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| zarrs.optional(float32) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
+| zarrs.optional(string) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
+| zarrs.optional(uint8) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
+| zarrs.optional(zarrs.optional(float32)) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - | ✓ | ✓ |
 
