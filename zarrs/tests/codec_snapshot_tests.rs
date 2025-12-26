@@ -1512,9 +1512,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |dt| {
             let aliases = ExtensionAliasesCodecV3::default();
             // For optional types, default_array_to_bytes_codec returns an OptionalCodec
-            CodecInstance::ArrayToBytes(
-                default_array_to_bytes_codec(dt, &aliases).codec().clone(),
-            )
+            CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt, &aliases).codec().clone())
         },
         lossy: false,
         non_deterministic: false,
