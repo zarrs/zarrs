@@ -1885,7 +1885,7 @@ pub fn default_array_to_bytes_codec(
     aliases: &ExtensionAliasesCodecV3,
 ) -> NamedArrayToBytesCodec {
     // Special handling for optional types
-    if let Some(opt) = data_type.as_optional() {
+    if let Some(opt) = data_type.optional() {
         // Create mask codec chain using PackBitsCodec
         let mask_codec_chain = Arc::new(CodecChain::new_named(
             vec![],

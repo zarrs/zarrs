@@ -15,9 +15,12 @@ impl Default for ExtensionAliasesDataTypeV3 {
     fn default() -> Self {
         Self::new(
             // The default serialised `name`s
-            HashMap::from([]),
+            HashMap::from([
+                (data_type::OPTIONAL, "zarrs.optional".into()),
+            ]),
             // `name` aliases (string match)
             HashMap::from([
+                ("zarrs.optional".into(), data_type::OPTIONAL),
                 ("binary".into(), data_type::BYTES), // ZEP0007 uses binary, zarr-python uses bytes
                 ("variable_length_bytes".into(), data_type::BYTES), // zarr-python 3.1 uses variable_length_bytes
             ]),

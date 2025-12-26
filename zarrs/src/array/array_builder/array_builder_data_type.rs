@@ -1,6 +1,6 @@
 use zarrs_registry::ExtensionAliasesDataTypeV3;
 
-use crate::array::{ArrayCreateError, DataType};
+use crate::array::{ArrayCreateError, DataType, NamedDataType};
 use crate::metadata::v3::MetadataV3;
 
 /// An input that can be mapped to a data type.
@@ -9,6 +9,7 @@ pub struct ArrayBuilderDataType(ArrayBuilderDataTypeImpl);
 
 #[derive(Debug, PartialEq, Clone)]
 enum ArrayBuilderDataTypeImpl {
+    NamedDataType(NamedDataType),
     DataType(DataType),
     Metadata(MetadataV3),
     MetadataString(String),
@@ -18,11 +19,15 @@ impl ArrayBuilderDataType {
     pub(crate) fn to_data_type(
         &self,
         data_type_aliases: &ExtensionAliasesDataTypeV3,
-    ) -> Result<DataType, ArrayCreateError> {
+    ) -> Result<NamedDataType, ArrayCreateError> {
         match &self.0 {
-            ArrayBuilderDataTypeImpl::DataType(data_type) => Ok(data_type.clone()),
+            ArrayBuilderDataTypeImpl::NamedDataType(named_data_type) => Ok(named_data_type.clone()),
+            ArrayBuilderDataTypeImpl::DataType(data_type) => Ok(NamedDataType::new_default_name(
+                data_type.clone(),
+                data_type_aliases,
+            )),
             ArrayBuilderDataTypeImpl::Metadata(metadata) => {
-                DataType::from_metadata(metadata, data_type_aliases)
+                NamedDataType::from_metadata(metadata, data_type_aliases)
                     .map_err(ArrayCreateError::DataTypeCreateError)
             }
             ArrayBuilderDataTypeImpl::MetadataString(metadata) => {
@@ -30,10 +35,16 @@ impl ArrayBuilderDataType {
                 // this makes "float32" work for example, where normally r#""float32""# would be required
                 let metadata =
                     MetadataV3::try_from(metadata.as_str()).unwrap_or(MetadataV3::new(metadata));
-                DataType::from_metadata(&metadata, data_type_aliases)
+                NamedDataType::from_metadata(&metadata, data_type_aliases)
                     .map_err(ArrayCreateError::DataTypeCreateError)
             }
         }
+    }
+}
+
+impl From<NamedDataType> for ArrayBuilderDataType {
+    fn from(value: NamedDataType) -> Self {
+        Self(ArrayBuilderDataTypeImpl::NamedDataType(value))
     }
 }
 

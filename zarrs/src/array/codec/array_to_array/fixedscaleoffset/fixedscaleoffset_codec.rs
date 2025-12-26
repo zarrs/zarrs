@@ -3,6 +3,7 @@ use std::sync::Arc;
 use zarrs_plugin::PluginCreateError;
 
 use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
+use crate::array::NamedDataType;
 use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use crate::metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
 use crate::registry::codec::FIXEDSCALEOFFSET;
@@ -79,8 +80,8 @@ pub struct FixedScaleOffsetCodec {
     scale: f32,
     dtype_str: String,
     astype_str: Option<String>,
-    dtype: DataType,
-    astype: Option<DataType>,
+    dtype: NamedDataType,
+    astype: Option<NamedDataType>,
 }
 
 fn add_byteoder_to_dtype(dtype: &str) -> String {
@@ -127,7 +128,7 @@ impl FixedScaleOffsetCodec {
                 let config = global_config();
                 let data_type_aliases_v2 = config.data_type_aliases_v2();
                 let data_type_aliases_v3 = config.data_type_aliases_v3();
-                let dtype = DataType::from_metadata(
+                let dtype = NamedDataType::from_metadata(
                     &data_type_metadata_v2_to_v3(
                         &dtype,
                         data_type_aliases_v2,
@@ -137,7 +138,7 @@ impl FixedScaleOffsetCodec {
                     data_type_aliases_v3,
                 )?;
                 let astype = if let Some(astype) = astype {
-                    Some(DataType::from_metadata(
+                    Some(NamedDataType::from_metadata(
                         &data_type_metadata_v2_to_v3(
                             &astype,
                             data_type_aliases_v2,
@@ -421,10 +422,11 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if &self.dtype != data_type {
+        if self.dtype.data_type() != data_type {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {} as input, but metadata expects {}",
-                data_type, self.dtype
+                data_type,
+                self.dtype.data_type()
             )));
         }
 
@@ -433,7 +435,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             data_type,
             self.offset,
             self.scale,
-            self.astype.as_ref(),
+            self.astype.as_ref().map(NamedDataType::data_type),
         )
     }
 
@@ -445,10 +447,11 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if &self.dtype != data_type {
+        if self.dtype.data_type() != data_type {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {} as input, but metadata expects {}",
-                data_type, self.dtype
+                data_type,
+                self.dtype.data_type()
             )));
         }
 
@@ -475,7 +478,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             | DataType::Float32
             | DataType::Float64 => {
                 if let Some(astype) = &self.astype {
-                    Ok(astype.clone())
+                    Ok(astype.data_type().clone())
                 } else {
                     Ok(decoded_data_type.clone())
                 }

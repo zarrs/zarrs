@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayBytesOptional`
   - Add `DataTypeOptional`
   - Add `DataType::Optional` variant holding a `DataTypeOptional`
-  - Add `DataType::into_optional()`
+  - Add `NamedDataType::into_optional()`
+  - Add `DataType::optional()`
   - Implement `Element` for `Option<T>` where `T: Element`
   - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
   - Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
@@ -53,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `TensorError` type and `ArrayError::TensorError` variant
 - Add `array::ChunkShapeTraits` (supersedes `ChunkShape` newtype)
 - Add `Config::{codec_options,codec_metadata_options,array_metadata_options,group_metadata_options}()` methods
+- Add `Default` implementation for `MetadataConvertVersion` and `MetadataEraseVersion`
 
 ### Changed
 
@@ -132,9 +134,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Rename `CodecChain::create_metadatas_opt()` to `create_metadatas()` (now requires `&CodecMetadataOptions`)
   - Add `&ExtensionAliasesCodecV3` parameter to `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, `{Sharding,Optional,Vlen}Codec::new_with_configuration()`
   - Remove `CodecTraits::default_name()`
+- **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `identifier()` (`String` -> `&'static str`)
+- **Breaking**: Replace `DataType::metadata()` with `configuration()` (`MetadataV3` -> `Configuration`)
 
 ### Removed
 
+- **Breaking**: Remove `DataType::into_optional()` and `DataType::from_metadata()` (use `NamedDataType` equivalents)
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
   - Use `num_elements()` and `element_size()` instead
@@ -145,10 +150,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
-- Add missing complex subfloats to `DataType::from_metadata()`
+- Add missing complex subfloats to `NamedDataType::from_metadata()`
 - Fix `transpose` codec decoding with variable-size data types
 - Fix various unnecessary allocations in `Array` methods and some codecs
 - Improve index iterator performance
+- Various fixes to aliased data type handling
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 

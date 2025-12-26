@@ -2,7 +2,7 @@ use half::{bf16, f16};
 use serde_json::Number;
 use zarrs_data_type::FillValue;
 
-use crate::array::{ArrayCreateError, DataType};
+use crate::array::{ArrayCreateError, NamedDataType};
 use crate::metadata::v3::{
     FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
@@ -20,7 +20,7 @@ enum ArrayBuilderFillValueImpl {
 impl ArrayBuilderFillValue {
     pub(crate) fn to_fill_value(
         &self,
-        data_type: &DataType,
+        data_type: &NamedDataType,
     ) -> Result<FillValue, ArrayCreateError> {
         match &self.0 {
             ArrayBuilderFillValueImpl::Metadata(metadata) => {

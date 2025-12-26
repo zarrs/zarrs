@@ -24,8 +24,8 @@ use crate::{
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
-    /// The name of the data type.
-    fn name(&self) -> String;
+    /// The identifier of the data type.
+    fn identifier(&self) -> &'static str;
 
     /// The configuration of the data type.
     fn configuration(&self) -> Configuration;
@@ -64,7 +64,7 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     /// Returns [`DataTypeExtensionError::CodecUnsupported`] if the `bytes` codec is unsupported.
     fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
         Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.name(),
+            data_type: self.identifier().to_string(),
             codec: "bytes".to_string(),
         })
     }
@@ -81,7 +81,7 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
         &self,
     ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
         Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.name(),
+            data_type: self.identifier().to_string(),
             codec: "packbits".to_string(),
         })
     }

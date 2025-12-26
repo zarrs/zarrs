@@ -171,8 +171,8 @@ impl Default for Config {
             codec_concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             codec_store_metadata_if_encode_only: true,
-            metadata_convert_version: MetadataConvertVersion::Default,
-            metadata_erase_version: MetadataEraseVersion::Default,
+            metadata_convert_version: MetadataConvertVersion::default(),
+            metadata_erase_version: MetadataEraseVersion::default(),
             include_zarrs_metadata: true,
             codec_aliases_v3: ExtensionAliasesCodecV3::default(),
             codec_aliases_v2: ExtensionAliasesCodecV2::default(),
@@ -420,18 +420,20 @@ pub enum MetadataRetrieveVersion {
 }
 
 /// Version options for [`Array::store_metadata`](crate::array::Array::store_metadata) and [`Group::store_metadata`](crate::group::Group::store_metadata), and their async variants.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataConvertVersion {
     /// Write the same version as the input metadata.
+    #[default]
     Default,
     /// Write Zarr V3 metadata. Zarr V2 metadata will not be automatically removed if it exists.
     V3,
 }
 
 /// Version options for [`Array::erase_metadata`](crate::array::Array::erase_metadata) and [`Group::erase_metadata`](crate::group::Group::erase_metadata), and their async variants.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataEraseVersion {
     /// Erase the same version as the input metadata.
+    #[default]
     Default,
     /// Erase all metadata.
     All,

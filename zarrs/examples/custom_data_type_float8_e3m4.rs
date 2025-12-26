@@ -51,8 +51,8 @@ fn create_custom_dtype(
 
 /// Implement the core data type extension methods
 impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
-    fn name(&self) -> String {
-        FLOAT8_E3M4.to_string()
+    fn identifier(&self) -> &'static str {
+        FLOAT8_E3M4
     }
 
     fn configuration(&self) -> Configuration {
@@ -63,7 +63,12 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
         &self,
         fill_value_metadata: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || DataTypeFillValueMetadataError::new(self.name(), fill_value_metadata.clone());
+        let err = || {
+            DataTypeFillValueMetadataError::new(
+                self.identifier().to_string(),
+                fill_value_metadata.clone(),
+            )
+        };
         let element_metadata: f32 = fill_value_metadata.as_f32().ok_or_else(err)?;
         let element = CustomDataTypeFloat8e3m4Element::from(element_metadata);
         Ok(FillValue::new(element.to_ne_bytes().to_vec()))
@@ -74,10 +79,9 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
         fill_value: &FillValue,
     ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
         let element = CustomDataTypeFloat8e3m4Element::from_ne_bytes(
-            fill_value
-                .as_ne_bytes()
-                .try_into()
-                .map_err(|_| DataTypeFillValueError::new(self.name(), fill_value.clone()))?,
+            fill_value.as_ne_bytes().try_into().map_err(|_| {
+                DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
+            })?,
         );
         Ok(FillValueMetadataV3::from(element.as_f32()))
     }

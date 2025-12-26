@@ -9,7 +9,7 @@ use super::{
 use crate::metadata::Configuration;
 
 /// A named codec.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NamedCodec<T: CodecTraits + ?Sized> {
     name: String,
     codec: Arc<T>,

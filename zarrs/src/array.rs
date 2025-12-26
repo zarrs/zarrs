@@ -448,12 +448,11 @@ impl<TStorage: ?Sized> Array<TStorage> {
             }?
         };
 
-        let data_type = DataType::from_metadata(
+        let data_type = NamedDataType::from_metadata(
             &metadata_v3.data_type,
             global_config().data_type_aliases_v3(),
         )
         .map_err(ArrayCreateError::DataTypeCreateError)?;
-        let data_type = NamedDataType::new(metadata_v3.data_type.name().to_string(), data_type);
         let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
