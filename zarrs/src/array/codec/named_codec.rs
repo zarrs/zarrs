@@ -68,18 +68,6 @@ macro_rules! impl_named_codec {
                 }
             }
         }
-
-        // impl<T: $codec_trait + 'static> From<Arc<T>> for $named_codec {
-        //     fn from(codec: Arc<T>) -> Self {
-        //         $named_codec::new(codec.default_name(), codec)
-        //     }
-        // }
-
-        // impl From<Arc<dyn $codec_trait>> for $named_codec {
-        //     fn from(codec: Arc<dyn $codec_trait>) -> Self {
-        //         $named_codec::new(codec.default_name(), codec)
-        //     }
-        // }
     };
 }
 
