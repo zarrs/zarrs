@@ -611,3 +611,9 @@ impl Deref for NamedDataType {
         &self.data_type
     }
 }
+
+impl From<NamedDataType> for DataType {
+    fn from(value: NamedDataType) -> Self {
+        value.data_type
+    }
+}
