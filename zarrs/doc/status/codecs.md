@@ -6,7 +6,7 @@
 |                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
 | Array to Bytes | [`bytes`]                          | -                                   |               |
-|                | 🚧[`optional`]                     | -                                   |               |
+|                | 🚧[`zarrs.optional`]               | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   | **sharding**  |
 |                | 🚧[`vlen-array`]                   | `vlen-array`                        |               |
 |                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
@@ -50,7 +50,7 @@
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze
 
 [`bytes`]: crate::array::codec::array_to_bytes::bytes
-[`optional`]: crate::array::codec::array_to_bytes::optional
+[`zarrs.optional`]: crate::array::codec::array_to_bytes::optional
 [`vlen-array`]: crate::array::codec::array_to_bytes::vlen_array
 [`vlen-bytes`]: crate::array::codec::array_to_bytes::vlen_bytes
 [`vlen-utf8`]: crate::array::codec::array_to_bytes::vlen_utf8

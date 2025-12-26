@@ -407,7 +407,7 @@ where
     T: Element + Default,
 {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        T::validate_data_type(data_type.as_optional().ok_or(IET)?)
+        T::validate_data_type(data_type.optional().ok_or(IET)?)
     }
 
     fn to_array_bytes<'a>(
@@ -416,7 +416,7 @@ where
     ) -> Result<ArrayBytes<'a>, ArrayError> {
         Self::validate_data_type(data_type)?;
 
-        let opt = data_type.as_optional().ok_or(IET)?;
+        let opt = data_type.optional().ok_or(IET)?;
 
         let num_elements = elements.len();
 
@@ -463,7 +463,7 @@ where
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
 
-        let opt = data_type.as_optional().ok_or(IET)?;
+        let opt = data_type.optional().ok_or(IET)?;
 
         // Extract mask and dense data from optional ArrayBytes
         let optional_bytes = bytes.into_optional().map_err(|e| {

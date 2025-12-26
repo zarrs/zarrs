@@ -113,8 +113,8 @@ inventory::submit! {
 }
 
 impl DataTypeExtension for CustomDataTypeVariableSize {
-    fn name(&self) -> String {
-        CUSTOM_NAME.to_string()
+    fn identifier(&self) -> &'static str {
+        CUSTOM_NAME
     }
 
     fn configuration(&self) -> Configuration {
@@ -133,7 +133,7 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
             Ok(FillValue::new(bytes))
         } else {
             Err(DataTypeFillValueMetadataError::new(
-                self.name(),
+                self.identifier().to_string(),
                 fill_value_metadata.clone(),
             ))
         }
@@ -150,7 +150,10 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
             let value = f32::from_ne_bytes(fill_value.try_into().unwrap());
             Ok(FillValueMetadataV3::from(value))
         } else {
-            Err(DataTypeFillValueError::new(self.name(), fill_value.into()))
+            Err(DataTypeFillValueError::new(
+                self.identifier().to_string(),
+                fill_value.into(),
+            ))
         }
     }
 

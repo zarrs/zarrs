@@ -19,6 +19,7 @@ impl Default for ExtensionAliasesCodecV3 {
                 (codec::FIXEDSCALEOFFSET, "numcodecs.fixedscaleoffset".into()),
                 (codec::SQUEEZE, "zarrs.squeeze".into()),
                 // array to bytes
+                (codec::OPTIONAL, "zarrs.optional".into()),
                 (codec::PCODEC, "numcodecs.pcodec".into()),
                 (codec::ZFPY, "numcodecs.zfpy".into()),
                 (codec::VLEN, "zarrs.vlen".into()),
@@ -36,6 +37,8 @@ impl Default for ExtensionAliasesCodecV3 {
             HashMap::from([
                 // core
                 ("endian".into(), codec::BYTES), // changed to bytes after provisional acceptance
+                // zarrs 0.23
+                ("zarrs.optional".into(), codec::OPTIONAL),
                 // zarrs 0.22
                 ("bitround".into(), codec::BITROUND),
                 ("numcodecs.adler32".into(), codec::ADLER32),

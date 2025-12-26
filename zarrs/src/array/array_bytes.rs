@@ -148,7 +148,7 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
-        if let Some(opt) = data_type.as_optional() {
+        if let Some(opt) = data_type.optional() {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
             if opt.is_fill_value_null(fill_value) {
                 // Null fill value for optional type: create mask of all zeros
@@ -182,7 +182,7 @@ impl<'a> ArrayBytes<'a> {
                     ))
                 } else {
                     Err(DataTypeFillValueError::new(
-                        data_type.name(),
+                        data_type.identifier().to_string(),
                         fill_value.clone(),
                     ))
                 }

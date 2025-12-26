@@ -318,7 +318,7 @@ mod tests {
             r#"{"name":"zarrs.regular_bounded","configuration":{"invalid":[1,2,3]}}"#,
         )
         .unwrap();
-        assert!(create_chunk_grid_regular_bounded(&metadata.clone(), &vec![3, 3, 3]).is_err());
+        assert!(create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3]).is_err());
         assert_eq!(
             create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
