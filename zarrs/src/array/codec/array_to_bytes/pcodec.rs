@@ -42,6 +42,7 @@ mod pcodec_codec;
 use std::sync::Arc;
 
 pub use pcodec_codec::PcodecCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
@@ -63,7 +64,10 @@ fn is_identifier_pcodec(identifier: &str) -> bool {
     identifier == PCODEC
 }
 
-pub(crate) fn create_codec_pcodec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_pcodec(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(PCODEC, "codec", metadata.to_string()))?;

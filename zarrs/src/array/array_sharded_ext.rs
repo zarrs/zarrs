@@ -52,7 +52,7 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
         let configuration = self
             .codecs
             .array_to_bytes_codec()
-            .configuration()
+            .configuration(self.metadata_options.codec_metadata_options())
             .expect("the array to bytes codec should have metadata");
         if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
             ShardingCodecConfiguration::try_from_configuration(configuration)

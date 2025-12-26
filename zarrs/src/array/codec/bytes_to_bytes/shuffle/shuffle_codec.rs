@@ -49,11 +49,7 @@ impl CodecTraits for ShuffleCodec {
         SHUFFLE
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = ShuffleCodecConfiguration::V1(ShuffleCodecConfigurationV1 {
             elementsize: self.elementsize,
         });

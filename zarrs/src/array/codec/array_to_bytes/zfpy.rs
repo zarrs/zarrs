@@ -63,6 +63,7 @@
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use super::zfp::ZfpCodec;
 use crate::array::codec::{Codec, CodecPlugin};
@@ -81,7 +82,10 @@ fn is_identifier_zfpy(identifier: &str) -> bool {
     identifier == ZFPY
 }
 
-pub(crate) fn create_codec_zfpy(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_zfpy(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ZfpyCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(ZFPY, "codec", metadata.to_string()))?;

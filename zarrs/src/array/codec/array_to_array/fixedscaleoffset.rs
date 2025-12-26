@@ -37,6 +37,7 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
@@ -59,6 +60,7 @@ fn is_identifier_fixedscaleoffset(identifier: &str) -> bool {
 
 pub(crate) fn create_codec_fixedscaleoffset(
     metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
 ) -> Result<Codec, PluginCreateError> {
     let configuration: FixedScaleOffsetCodecConfiguration =
         metadata.to_configuration().map_err(|_| {

@@ -1,10 +1,10 @@
 use super::codec::CodecMetadataOptions;
-use crate::config::{MetadataConvertVersion, global_config};
+use crate::config::MetadataConvertVersion;
 
 /// Options for writing array metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ArrayMetadataOptions {
-    codec_options: CodecMetadataOptions,
+    codec_metadata_options: CodecMetadataOptions,
     convert_version: MetadataConvertVersion,
     include_zarrs_metadata: bool,
     convert_aliased_extension_names: bool,
@@ -13,10 +13,10 @@ pub struct ArrayMetadataOptions {
 impl Default for ArrayMetadataOptions {
     fn default() -> Self {
         Self {
-            codec_options: CodecMetadataOptions::default(),
-            convert_version: global_config().metadata_convert_version(),
-            include_zarrs_metadata: global_config().include_zarrs_metadata(),
-            convert_aliased_extension_names: global_config().convert_aliased_extension_names(),
+            codec_metadata_options: CodecMetadataOptions::default(),
+            convert_version: MetadataConvertVersion::Default,
+            include_zarrs_metadata: true,
+            convert_aliased_extension_names: false,
         }
     }
 }
@@ -24,14 +24,33 @@ impl Default for ArrayMetadataOptions {
 impl ArrayMetadataOptions {
     /// Return the codec options.
     #[must_use]
-    pub fn codec_options(&self) -> &CodecMetadataOptions {
-        &self.codec_options
+    pub fn codec_metadata_options(&self) -> &CodecMetadataOptions {
+        &self.codec_metadata_options
     }
 
     /// Return a mutable reference to the codec options.
     #[must_use]
-    pub fn codec_options_mut(&mut self) -> &mut CodecMetadataOptions {
-        &mut self.codec_options
+    pub fn codec_metadata_options_mut(&mut self) -> &mut CodecMetadataOptions {
+        &mut self.codec_metadata_options
+    }
+
+    /// Set the codec metadata options.
+    #[must_use]
+    pub fn with_codec_metadata_options(
+        mut self,
+        codec_metadata_options: CodecMetadataOptions,
+    ) -> Self {
+        self.codec_metadata_options = codec_metadata_options;
+        self
+    }
+
+    /// Set the codec metadata options.
+    pub fn set_codec_metadata_options(
+        &mut self,
+        codec_metadata_options: CodecMetadataOptions,
+    ) -> &mut Self {
+        self.codec_metadata_options = codec_metadata_options;
+        self
     }
 
     /// Get the [metadata convert version](crate::config::Config#metadata-convert-version) configuration.

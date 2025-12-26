@@ -15,9 +15,7 @@ use zarrs::storage::{
 use zarrs::{
     array::{
         ArrayBuilder, ChunkShapeTraits, DataType,
-        codec::{
-            ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptionsBuilder, ReshapeDim,
-        },
+        codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim},
     },
     array_subset::ArraySubset,
 };
@@ -41,9 +39,7 @@ async fn test_array_to_array_codec_async_partial_encoding<
     codec_name: &str,
     supports_partial_encoding: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),
@@ -194,9 +190,7 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
     codec_name: &str,
     supports_partial_encoding: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),
@@ -584,9 +578,7 @@ async fn test_gdeflate_async_partial_encoding() {
 // Combined codec chain test
 #[tokio::test]
 async fn test_codec_chain_async_partial_encoding() {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(SyncToAsyncStorageAdapter::new(
         Arc::new(MemoryStore::new()),

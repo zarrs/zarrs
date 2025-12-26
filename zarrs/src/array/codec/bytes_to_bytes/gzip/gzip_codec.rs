@@ -60,11 +60,7 @@ impl CodecTraits for GzipCodec {
         GZIP
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = GzipCodecConfiguration::V1(GzipCodecConfigurationV1 {
             level: self.compression_level,
         });

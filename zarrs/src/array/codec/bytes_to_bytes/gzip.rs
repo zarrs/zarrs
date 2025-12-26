@@ -30,6 +30,7 @@ mod gzip_codec;
 use std::sync::Arc;
 
 pub use gzip_codec::GzipCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
@@ -51,7 +52,10 @@ fn is_identifier_gzip(identifier: &str) -> bool {
     identifier == GZIP
 }
 
-pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_gzip(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: GzipCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(GZIP, "codec", metadata.to_string()))?;

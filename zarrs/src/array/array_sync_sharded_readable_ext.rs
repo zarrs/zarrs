@@ -15,6 +15,7 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, DataTypeSize};
 use crate::array::codec::StoragePartialDecoder;
+use crate::config::global_config;
 use crate::iter_concurrent_limit;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
@@ -130,15 +131,17 @@ impl ArrayShardedReadableExtCache {
             let sharding_codec_configuration = array
                 .codecs()
                 .array_to_bytes_codec()
-                .configuration()
+                .configuration(array.metadata_options.codec_metadata_options())
                 .expect("valid sharding metadata");
             let sharding_codec_configuration =
                 ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)
                     .expect("valid sharding configuration");
             let sharding_codec = Arc::new(
-                ShardingCodec::new_with_configuration(&sharding_codec_configuration).expect(
-                    "supported sharding codec configuration, already instantiated in array",
-                ),
+                ShardingCodec::new_with_configuration(
+                    &sharding_codec_configuration,
+                    global_config().codec_aliases_v3(),
+                )
+                .expect("supported sharding codec configuration, already instantiated in array"),
             );
             let partial_decoder =
                 MaybeShardingPartialDecoder::Sharding(Arc::new(ShardingPartialDecoder::new(

@@ -1,4 +1,4 @@
-use crate::config::{MetadataConvertVersion, global_config};
+use crate::config::MetadataConvertVersion;
 
 /// Options for writing group metadata.
 #[derive(Debug, Clone)]
@@ -9,7 +9,7 @@ pub struct GroupMetadataOptions {
 impl Default for GroupMetadataOptions {
     fn default() -> Self {
         Self {
-            convert_version: global_config().metadata_convert_version(),
+            convert_version: MetadataConvertVersion::Default,
         }
     }
 }

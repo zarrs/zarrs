@@ -77,11 +77,7 @@ impl CodecTraits for TransposeCodec {
         TRANSPOSE
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = TransposeCodecConfiguration::V1(TransposeCodecConfigurationV1 {
             order: self.order.clone(),
         });

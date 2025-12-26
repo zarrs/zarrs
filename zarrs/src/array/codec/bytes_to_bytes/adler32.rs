@@ -34,6 +34,7 @@ mod adler32_codec;
 use std::sync::Arc;
 
 pub use adler32_codec::Adler32Codec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
@@ -54,7 +55,10 @@ fn is_identifier_adler32(identifier: &str) -> bool {
     identifier == ADLER32
 }
 
-pub(crate) fn create_codec_adler32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_adler32(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(ADLER32, "codec", metadata.to_string()))?;
@@ -73,7 +77,8 @@ mod tests {
         array::{
             BytesRepresentation,
             codec::{
-                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
+                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions,
+                CodecOptions, CodecTraits,
             },
         },
         storage::byte_range::ByteRange,
@@ -87,7 +92,9 @@ mod tests {
     fn codec_adler32_configuration_none() {
         let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
         let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration("numcodecs.adler32").unwrap();
+        let configuration = codec
+            .configuration("numcodecs.adler32", &CodecMetadataOptions::default())
+            .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
     }
 

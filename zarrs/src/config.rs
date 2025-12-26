@@ -6,11 +6,16 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(doc)]
-use crate::array::{ArrayMetadataOptions, codec::CodecOptions};
-use crate::registry::{
-    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-    ExtensionAliasesDataTypeV3,
+use crate::{
+    array::{
+        ArrayMetadataOptions,
+        codec::{CodecMetadataOptions, CodecOptions},
+    },
+    group::GroupMetadataOptions,
+    registry::{
+        ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
+        ExtensionAliasesDataTypeV3,
+    },
 };
 
 /// Global configuration options for the `zarrs` crate.
@@ -180,6 +185,39 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Get the codec options.
+    #[must_use]
+    pub fn codec_options(&self) -> CodecOptions {
+        CodecOptions::default()
+            .with_validate_checksums(self.validate_checksums)
+            .with_store_empty_chunks(self.store_empty_chunks)
+            .with_concurrent_target(self.codec_concurrent_target)
+            .with_experimental_partial_encoding(self.experimental_partial_encoding)
+    }
+
+    /// Get the codec metadata options.
+    #[must_use]
+    pub fn codec_metadata_options(&self) -> CodecMetadataOptions {
+        CodecMetadataOptions::default()
+            .with_codec_store_metadata_if_encode_only(self.codec_store_metadata_if_encode_only)
+    }
+
+    /// Get the group metadata options.
+    #[must_use]
+    pub fn group_metadata_options(&self) -> crate::group::GroupMetadataOptions {
+        GroupMetadataOptions::default().with_metadata_convert_version(self.metadata_convert_version)
+    }
+
+    /// Get the array metadata options.
+    #[must_use]
+    pub fn array_metadata_options(&self) -> ArrayMetadataOptions {
+        ArrayMetadataOptions::default()
+            .with_codec_metadata_options(self.codec_metadata_options())
+            .with_metadata_convert_version(self.metadata_convert_version)
+            .with_include_zarrs_metadata(self.include_zarrs_metadata)
+            .with_convert_aliased_extension_names(self.convert_aliased_extension_names)
+    }
+
     /// Get the [validate checksums](#validate-checksums) configuration.
     #[must_use]
     pub fn validate_checksums(&self) -> bool {

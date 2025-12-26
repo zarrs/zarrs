@@ -31,6 +31,7 @@ use std::sync::Arc;
 
 use num::Integer;
 pub use packbits_codec::PackBitsCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use crate::array::DataType;
 use crate::array::codec::CodecError;
@@ -53,7 +54,10 @@ fn is_identifier_packbits(identifier: &str) -> bool {
     identifier == PACKBITS
 }
 
-pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_packbits(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: PackBitsCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(PACKBITS, "codec", metadata.to_string()))?;

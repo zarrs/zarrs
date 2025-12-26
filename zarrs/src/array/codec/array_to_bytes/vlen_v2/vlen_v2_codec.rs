@@ -32,11 +32,7 @@ impl CodecTraits for VlenV2Codec {
         zarrs_registry::codec::VLEN_V2
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         Some(Configuration::default())
     }
 

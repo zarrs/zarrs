@@ -21,13 +21,23 @@ mod maybe;
 pub use maybe::{MaybeSend, MaybeSync};
 
 /// A plugin.
-pub struct Plugin<TPlugin, TInputs> {
+pub struct Plugin<TPlugin, TInput> {
     /// the identifier of the plugin.
     identifier: &'static str,
     /// Tests if the name is a match for this plugin.
     match_name_fn: fn(name: &str) -> bool,
     /// Create an implementation of this plugin from metadata.
-    create_fn: fn(inputs: &TInputs) -> Result<TPlugin, PluginCreateError>,
+    create_fn: fn(input: &TInput) -> Result<TPlugin, PluginCreateError>,
+}
+
+/// A plugin (two parameters).
+pub struct Plugin2<TPlugin, TInput1, TInput2> {
+    /// the identifier of the plugin.
+    identifier: &'static str,
+    /// Tests if the name is a match for this plugin.
+    match_name_fn: fn(name: &str) -> bool,
+    /// Create an implementation of this plugin from metadata.
+    create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError>,
 }
 
 /// An unsupported plugin error
@@ -94,12 +104,12 @@ impl From<String> for PluginCreateError {
     }
 }
 
-impl<TPlugin, TInputs> Plugin<TPlugin, TInputs> {
+impl<TPlugin, TInput> Plugin<TPlugin, TInput> {
     /// Create a new plugin for registration.
     pub const fn new(
         identifier: &'static str,
         match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(inputs: &TInputs) -> Result<TPlugin, PluginCreateError>,
+        create_fn: fn(inputs: &TInput) -> Result<TPlugin, PluginCreateError>,
     ) -> Self {
         Self {
             identifier,
@@ -116,8 +126,47 @@ impl<TPlugin, TInputs> Plugin<TPlugin, TInputs> {
     ///  - metadata name being unregistered,
     ///  - or the configuration is invalid, or
     ///  - some other reason specific to the plugin.
-    pub fn create(&self, inputs: &TInputs) -> Result<TPlugin, PluginCreateError> {
-        (self.create_fn)(inputs)
+    pub fn create(&self, input: &TInput) -> Result<TPlugin, PluginCreateError> {
+        (self.create_fn)(input)
+    }
+
+    /// Returns true if this plugin is associated with `name`.
+    #[must_use]
+    pub fn match_name(&self, name: &str) -> bool {
+        (self.match_name_fn)(name)
+    }
+
+    /// Returns the identifier of the plugin.
+    #[must_use]
+    pub const fn identifier(&self) -> &'static str {
+        self.identifier
+    }
+}
+
+impl<TPlugin, TInput1, TInput2> Plugin2<TPlugin, TInput1, TInput2> {
+    /// Create a new plugin for registration.
+    pub const fn new(
+        identifier: &'static str,
+        match_name_fn: fn(name: &str) -> bool,
+        create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError>,
+    ) -> Self {
+        Self {
+            identifier,
+            match_name_fn,
+            create_fn,
+        }
+    }
+
+    /// Create a `TPlugin` plugin from `inputs`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginCreateError`] if plugin creation fails due to either:
+    ///  - metadata name being unregistered,
+    ///  - or the configuration is invalid, or
+    ///  - some other reason specific to the plugin.
+    pub fn create(&self, input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError> {
+        (self.create_fn)(input1, input2)
     }
 
     /// Returns true if this plugin is associated with `name`.

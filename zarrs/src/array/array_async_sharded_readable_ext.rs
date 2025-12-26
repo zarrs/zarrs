@@ -14,6 +14,7 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
+use crate::config::global_config;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::AsyncReadableStorageTraits;
@@ -152,15 +153,17 @@ impl AsyncArrayShardedReadableExtCache {
             let sharding_codec_configuration = array
                 .codecs()
                 .array_to_bytes_codec()
-                .configuration()
+                .configuration(array.metadata_options.codec_metadata_options())
                 .expect("valid sharding metadata");
             let sharding_codec_configuration =
                 ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)
                     .expect("valid sharding configuration");
             let sharding_codec = Arc::new(
-                ShardingCodec::new_with_configuration(&sharding_codec_configuration).expect(
-                    "supported sharding codec configuration, already instantiated in array",
-                ),
+                ShardingCodec::new_with_configuration(
+                    &sharding_codec_configuration,
+                    global_config().codec_aliases_v3(),
+                )
+                .expect("supported sharding codec configuration, already instantiated in array"),
             );
             let partial_decoder = MaybeShardingPartialDecoder::Sharding(Arc::new(
                 AsyncShardingPartialDecoder::new(
@@ -172,7 +175,7 @@ impl AsyncArrayShardedReadableExtCache {
                     sharding_codec.inner_codecs.clone(),
                     &sharding_codec.index_codecs,
                     sharding_codec.index_location,
-                    &CodecOptions::default(),
+                    &array.codec_options,
                 )
                 .await?,
             ));
@@ -184,7 +187,7 @@ impl AsyncArrayShardedReadableExtCache {
             //     .partial_decoder(
             //         input_handle,
             //         &chunk_representation,
-            //         &CodecOptions::default(),
+            //         &self.codec_options,
             //     )?;
             cache.insert(shard_indices.to_vec(), partial_decoder.clone());
             Ok(partial_decoder)

@@ -66,6 +66,7 @@ pub use sharding_codec_builder::ShardingCodecBuilder;
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
@@ -96,11 +97,17 @@ fn is_identifier_sharding(identifier: &str) -> bool {
     identifier == SHARDING
 }
 
-pub(crate) fn create_codec_sharding(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_sharding(
+    metadata: &MetadataV3,
+    aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ShardingCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(SHARDING, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
+    let codec = Arc::new(ShardingCodec::new_with_configuration(
+        &configuration,
+        aliases,
+    )?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
@@ -230,10 +237,7 @@ fn get_concurrent_target_and_codec_options(
         )),
         &inner_codecs.recommended_concurrency(subchunk_shape, data_type)?,
     );
-    let options = options
-        .into_builder()
-        .concurrent_target(concurrency_limit_codec)
-        .build();
+    let options = options.with_concurrent_target(concurrency_limit_codec);
     Ok((inner_chunk_concurrent_limit, options))
 }
 
@@ -292,22 +296,20 @@ async fn decode_shard_index_async_partial_decoder(
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use zarrs_registry::ExtensionAliasesCodecV3;
+
     use super::*;
     use crate::{
         array::{
             ArrayBytes,
-            codec::{
-                BytesToBytesCodecTraits, CodecOptionsBuilder,
-                bytes_to_bytes::test_unbounded::TestUnboundedCodec,
-            },
+            codec::{BytesToBytesCodecTraits, bytes_to_bytes::test_unbounded::TestUnboundedCodec},
         },
         array_subset::ArraySubset,
-        config::global_config,
     };
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {
-            global_config().codec_concurrent_target()
+            rayon::current_num_threads()
         } else {
             1
         }
@@ -422,9 +424,9 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options =
-                            CodecOptionsBuilder::new().concurrent_target(concurrent_target);
+                            CodecOptions::default().with_concurrent_target(concurrent_target);
                         codec_sharding_round_trip_impl(
-                            &options.build(),
+                            &options,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -448,9 +450,9 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options =
-                            CodecOptionsBuilder::new().concurrent_target(concurrent_target);
+                            CodecOptions::default().with_concurrent_target(concurrent_target);
                         codec_sharding_round_trip_impl(
-                            &options.build(),
+                            &options,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -516,9 +518,9 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options =
-                            CodecOptionsBuilder::new().concurrent_target(concurrent_target);
+                            CodecOptions::default().with_concurrent_target(concurrent_target);
                         codec_sharding_async_round_trip_impl(
-                            &options.build(),
+                            &options,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -604,9 +606,9 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options =
-                            CodecOptionsBuilder::new().concurrent_target(concurrent_target);
+                            CodecOptions::default().with_concurrent_target(concurrent_target);
                         codec_sharding_partial_decode(
-                            &options.build(),
+                            &options,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -693,9 +695,9 @@ mod tests {
                     for parallel in [true, false] {
                         let concurrent_target = get_concurrent_target(parallel);
                         let options =
-                            CodecOptionsBuilder::new().concurrent_target(concurrent_target);
+                            CodecOptions::default().with_concurrent_target(concurrent_target);
                         codec_sharding_async_partial_decode(
-                            &options.build(),
+                            &options,
                             unbounded,
                             all_fill_value,
                             index_at_end,
@@ -711,6 +713,8 @@ mod tests {
     #[cfg(feature = "crc32c")]
     #[test]
     fn codec_sharding_partial_decode2() {
+        use zarrs_registry::ExtensionAliasesCodecV3;
+
         let chunk_shape: ChunkShape = vec![
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(4).unwrap(),
@@ -724,7 +728,13 @@ mod tests {
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
-        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
+        let codec = Arc::new(
+            ShardingCodec::new_with_configuration(
+                &codec_configuration,
+                &ExtensionAliasesCodecV3::default(),
+            )
+            .unwrap(),
+        );
 
         let encoded = codec
             .encode(
@@ -775,7 +785,13 @@ mod tests {
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
+        let codec = Arc::new(
+            ShardingCodec::new_with_configuration(
+                &codec_configuration,
+                &ExtensionAliasesCodecV3::default(),
+            )
+            .unwrap(),
+        );
 
         let encoded = codec
             .encode(
@@ -832,7 +848,13 @@ mod tests {
         // Create a sharding codec with 2x2 inner chunks
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
+        let codec = Arc::new(
+            ShardingCodec::new_with_configuration(
+                &codec_configuration,
+                &ExtensionAliasesCodecV3::default(),
+            )
+            .unwrap(),
+        );
 
         // Step 1: Fully encode the shard
         let original_encoded = codec

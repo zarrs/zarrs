@@ -11,7 +11,7 @@ use super::{
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array_subset::ArraySubset,
-    config::{MetadataEraseVersion, global_config},
+    config::MetadataEraseVersion,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{AsyncWritableStorageTraits, Bytes, StorageError, StorageHandle},
 };
@@ -20,8 +20,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`store_metadata`](Array::store_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&ArrayMetadataOptions::default())
-            .await
+        self.async_store_metadata_opt(&self.metadata_options).await
     }
 
     /// Async variant of [`store_metadata_opt`](Array::store_metadata_opt).
@@ -163,8 +162,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`erase_metadata`](Array::erase_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.async_erase_metadata_opt(erase_version).await
+        self.async_erase_metadata_opt(self.metadata_erase_version)
+            .await
     }
 
     /// Async variant of [`erase_metadata_opt`](Array::erase_metadata_opt).
@@ -387,7 +386,6 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                             self.data_type(),
                         )
                         .unwrap(); // FIXME: unwrap
-                    let options = options.clone();
                     async move {
                         self.async_store_chunk_opt(&chunk_indices, chunk_bytes, &options)
                             .await

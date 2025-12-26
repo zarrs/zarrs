@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `Plugin2` for plugins with two input parameters
+
+### Changed
+- Bump `zarrs_plugin` to 0.2.3
+
 ## [0.2.2] - 2025-09-18
 
 ### Added

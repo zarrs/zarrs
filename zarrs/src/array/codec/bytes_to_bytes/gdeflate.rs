@@ -46,6 +46,7 @@ mod gdeflate_codec;
 use std::sync::Arc;
 
 pub use gdeflate_codec::GDeflateCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
@@ -70,7 +71,10 @@ fn is_identifier_gdeflate(identifier: &str) -> bool {
     identifier == GDEFLATE
 }
 
-pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_gdeflate(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: GDeflateCodecConfiguration = metadata
         .to_configuration()

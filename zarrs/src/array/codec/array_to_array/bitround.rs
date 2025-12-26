@@ -39,6 +39,7 @@ mod bitround_codec_partial;
 use std::sync::Arc;
 
 pub use bitround_codec::BitroundCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
@@ -132,7 +133,10 @@ fn is_identifier_bitround(identifier: &str) -> bool {
     identifier == BITROUND
 }
 
-pub(crate) fn create_codec_bitround(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_bitround(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: BitroundCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(BITROUND, "codec", metadata.to_string()))?;
