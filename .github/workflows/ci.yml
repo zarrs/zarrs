@@ -31,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -59,6 +61,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -73,6 +77,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -94,6 +100,8 @@ jobs:
             lscpu | grep Endian 
             "
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
@@ -173,6 +181,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly install cargo-llvm-cov --locked
