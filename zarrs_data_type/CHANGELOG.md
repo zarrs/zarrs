@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-12-26
+
 ### Added
 - Add `FillValue::into_optional()`
 - Implement `From<Option<T>>` for `FillValue` where `FillValue: From<T>`
@@ -84,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.4.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.5.0...HEAD
+[0.5.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.5.0
 [0.4.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.2
 [0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.1
 [0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.0

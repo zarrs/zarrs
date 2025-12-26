@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2025-12-26
+
 ### Added
 - Initial release
 - Split from the `zarrs::array::chunk_grid`, `zarrs:array_subset` and `zarrs::indexer` modules of `zarrs` 0.23.0-dev
@@ -20,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change `Item` associated type of `[Par]ContiguousIndices[Into]Iterator` from `(ArrayIndices, u64)` to `(ArrayIndicesTinyVec, u64)`
 - **Breaking**: Change return type `ChunkGridTraits::{array_shape,grid_shape}()` to `&[u64]` instead of `&ArrayShape`
 - **Breaking**: Change `ChunkGridPlugin::new()` `create_fn` signature from `fn(&(MetadataV3, ArrayShape))` to `fn(&MetadataV3, &ArrayShape)`
-- Bump `zarrs_plugin` to 0.2.3
 
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_grid-v0.1.0...HEAD
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.1.0
