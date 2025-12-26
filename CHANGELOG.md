@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0-beta.1] - 2025-12-29
+
 ## [0.23.0-beta.0] - 2025-12-29
 
 ### Highlights
@@ -2010,6 +2012,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release
 
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.10...HEAD
+[0.23.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.23.0-beta.1
 [0.23.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.23.0-beta.0
 [0.22.10]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.10
 [0.22.9]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.9
