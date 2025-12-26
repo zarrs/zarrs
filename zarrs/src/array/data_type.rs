@@ -352,8 +352,8 @@ impl DataType {
             | Self::ComplexFloat8E5M2FNUZ
             | Self::ComplexFloat8E8M0FNU
             | Self::String
-            | Self::Bytes => Configuration::default(),
-            Self::RawBits(_size) => Configuration::default(),
+            | Self::Bytes
+            | Self::RawBits(..) => Configuration::default(),
             Self::NumpyDateTime64 { unit, scale_factor } => {
                 Configuration::from(NumpyDateTime64DataTypeConfigurationV1 {
                     unit: *unit,
@@ -441,7 +441,60 @@ impl DataType {
     /// Converts this data type into a named data type using the provided aliases.
     #[must_use]
     pub fn into_named(self, aliases: &ExtensionAliasesDataTypeV3) -> NamedDataType {
-        NamedDataType::new(aliases.default_name(self.identifier()).to_string(), self)
+        // Handle parameterized types that need concrete names
+        let name = match &self {
+            Self::RawBits(size_bytes) => format!("r{}", size_bytes * 8),
+            Self::Bool
+            | Self::Int2
+            | Self::Int4
+            | Self::Int8
+            | Self::Int16
+            | Self::Int32
+            | Self::Int64
+            | Self::UInt2
+            | Self::UInt4
+            | Self::UInt8
+            | Self::UInt16
+            | Self::UInt32
+            | Self::UInt64
+            | Self::Float4E2M1FN
+            | Self::Float6E2M3FN
+            | Self::Float6E3M2FN
+            | Self::Float8E3M4
+            | Self::Float8E4M3
+            | Self::Float8E4M3B11FNUZ
+            | Self::Float8E4M3FNUZ
+            | Self::Float8E5M2
+            | Self::Float8E5M2FNUZ
+            | Self::Float8E8M0FNU
+            | Self::BFloat16
+            | Self::Float16
+            | Self::Float32
+            | Self::Float64
+            | Self::ComplexBFloat16
+            | Self::ComplexFloat16
+            | Self::ComplexFloat32
+            | Self::ComplexFloat64
+            | Self::ComplexFloat4E2M1FN
+            | Self::ComplexFloat6E2M3FN
+            | Self::ComplexFloat6E3M2FN
+            | Self::ComplexFloat8E3M4
+            | Self::ComplexFloat8E4M3
+            | Self::ComplexFloat8E4M3B11FNUZ
+            | Self::ComplexFloat8E4M3FNUZ
+            | Self::ComplexFloat8E5M2
+            | Self::ComplexFloat8E5M2FNUZ
+            | Self::ComplexFloat8E8M0FNU
+            | Self::Complex64
+            | Self::Complex128
+            | Self::String
+            | Self::Bytes
+            | Self::NumpyDateTime64 { .. }
+            | Self::NumpyTimeDelta64 { .. }
+            | Self::Optional(_)
+            | Self::Extension(_) => aliases.default_name(self.identifier()).to_string(),
+        };
+        NamedDataType::new(name, self)
     }
 
     /// Returns the optional type wrapper if this is an optional data type.
