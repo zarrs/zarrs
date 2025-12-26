@@ -34,6 +34,8 @@ mod zlib_codec;
 
 use std::sync::Arc;
 
+use zarrs_registry::ExtensionAliasesCodecV3;
+
 pub use self::zlib_codec::ZlibCodec;
 pub use crate::metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
@@ -54,7 +56,10 @@ fn is_identifier_zlib(identifier: &str) -> bool {
     identifier == ZLIB
 }
 
-pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_zlib(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ZlibCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(ZLIB, "codec", metadata.to_string()))?;

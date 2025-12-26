@@ -35,6 +35,8 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
+use zarrs_registry::ExtensionAliasesCodecV3;
+
 pub use self::bz2_codec::Bz2Codec;
 pub use crate::metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
@@ -55,7 +57,10 @@ fn is_identifier_bz2(identifier: &str) -> bool {
     identifier == BZ2
 }
 
-pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_bz2(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: Bz2CodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(BZ2, "codec", metadata.to_string()))?;

@@ -12,7 +12,7 @@ mod storage_transformer_chain;
 use std::sync::Arc;
 
 pub use storage_transformer_chain::StorageTransformerChain;
-use zarrs_plugin::{Plugin, PluginUnsupportedError};
+use zarrs_plugin::{Plugin2, PluginUnsupportedError};
 
 #[cfg(feature = "async")]
 use crate::storage::{
@@ -31,7 +31,7 @@ pub type StorageTransformer = Arc<dyn StorageTransformerExtension>;
 
 /// A storage transformer plugin.
 #[derive(derive_more::Deref)]
-pub struct StorageTransformerPlugin(Plugin<StorageTransformer, (MetadataV3, NodePath)>);
+pub struct StorageTransformerPlugin(Plugin2<StorageTransformer, MetadataV3, NodePath>);
 inventory::collect!(StorageTransformerPlugin);
 
 impl StorageTransformerPlugin {
@@ -40,10 +40,11 @@ impl StorageTransformerPlugin {
         identifier: &'static str,
         match_name_fn: fn(name: &str) -> bool,
         create_fn: fn(
-            inputs: &(MetadataV3, NodePath),
+            metadata: &MetadataV3,
+            path: &NodePath,
         ) -> Result<StorageTransformer, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(identifier, match_name_fn, create_fn))
+        Self(Plugin2::new(identifier, match_name_fn, create_fn))
     }
 }
 
@@ -58,7 +59,7 @@ pub fn try_create_storage_transformer(
 ) -> Result<StorageTransformer, PluginCreateError> {
     for plugin in inventory::iter::<StorageTransformerPlugin> {
         if plugin.match_name(metadata.name()) {
-            return plugin.create(&(metadata.clone(), path.clone()));
+            return plugin.create(metadata, path);
         }
     }
     Err(PluginUnsupportedError::new(

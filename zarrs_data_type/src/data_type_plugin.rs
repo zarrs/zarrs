@@ -43,8 +43,8 @@ mod tests {
     struct TestVoidDataType;
 
     impl DataTypeExtension for TestVoidDataType {
-        fn name(&self) -> String {
-            "zarrs.test_void".to_string()
+        fn identifier(&self) -> &'static str {
+            "zarrs.test_void"
         }
 
         fn size(&self) -> DataTypeSize {
@@ -87,7 +87,7 @@ mod tests {
             if plugin.match_name("zarrs.test_void") {
                 found = true;
                 let data_type = plugin.create(&MetadataV3::new("zarrs.test_void")).unwrap();
-                assert_eq!(data_type.name(), "zarrs.test_void");
+                assert_eq!(data_type.identifier(), "zarrs.test_void");
                 assert_eq!(data_type.size(), DataTypeSize::Fixed(0));
                 assert!(data_type.configuration().is_empty());
                 assert!(data_type.fill_value(&FillValueMetadataV3::Null).is_ok());

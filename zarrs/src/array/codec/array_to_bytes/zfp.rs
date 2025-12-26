@@ -99,6 +99,7 @@ mod zfp_stream;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_registry::ExtensionAliasesCodecV3;
 pub use zfp_codec::ZfpCodec;
 use zfp_sys::{
     zfp_decompress, zfp_exec_policy_zfp_exec_omp, zfp_field_alloc, zfp_field_free,
@@ -132,7 +133,10 @@ fn is_identifier_zfp(identifier: &str) -> bool {
     identifier == ZFP
 }
 
-pub(crate) fn create_codec_zfp(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_zfp(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ZfpCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(ZFP, "codec", metadata.to_string()))?;

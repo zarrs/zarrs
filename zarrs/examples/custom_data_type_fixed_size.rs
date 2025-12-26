@@ -174,8 +174,8 @@ inventory::submit! {
 
 /// Implement the core data type extension methods
 impl DataTypeExtension for CustomDataTypeFixedSize {
-    fn name(&self) -> String {
-        CUSTOM_NAME.to_string()
+    fn identifier(&self) -> &'static str {
+        CUSTOM_NAME
     }
 
     fn configuration(&self) -> Configuration {
@@ -186,7 +186,12 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
         &self,
         fill_value_metadata: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || DataTypeFillValueMetadataError::new(self.name(), fill_value_metadata.clone());
+        let err = || {
+            DataTypeFillValueMetadataError::new(
+                self.identifier().to_string(),
+                fill_value_metadata.clone(),
+            )
+        };
         let element_metadata: CustomDataTypeFixedSizeMetadata =
             fill_value_metadata.as_custom().ok_or_else(err)?;
         Ok(FillValue::new(element_metadata.to_ne_bytes().to_vec()))
@@ -197,10 +202,9 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
         fill_value: &FillValue,
     ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
         let element = CustomDataTypeFixedSizeMetadata::from_ne_bytes(
-            fill_value
-                .as_ne_bytes()
-                .try_into()
-                .map_err(|_| DataTypeFillValueError::new(self.name(), fill_value.clone()))?,
+            fill_value.as_ne_bytes().try_into().map_err(|_| {
+                DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
+            })?,
         );
         Ok(FillValueMetadataV3::from(element))
     }

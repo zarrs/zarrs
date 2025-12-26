@@ -93,7 +93,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<T>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -106,7 +106,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Vec<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -121,7 +121,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -151,7 +151,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -165,7 +165,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -180,7 +180,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -190,7 +190,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunks: &ArraySubset,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &CodecOptions::default())
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
@@ -204,7 +204,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunks: &ArraySubset,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &CodecOptions::default())
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
@@ -219,7 +219,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunks: &ArraySubset,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &CodecOptions::default())
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
@@ -230,7 +230,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
             .await
     }
 
@@ -245,7 +245,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
             .await
     }
 
@@ -261,7 +261,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_subset: &ArraySubset,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
             .await
     }
 
@@ -271,7 +271,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &ArraySubset,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &CodecOptions::default())
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
@@ -285,7 +285,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &ArraySubset,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &CodecOptions::default())
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
@@ -300,7 +300,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         array_subset: &ArraySubset,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &CodecOptions::default())
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
@@ -310,7 +310,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        self.async_partial_decoder_opt(chunk_indices, &CodecOptions::default())
+        self.async_partial_decoder_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -589,21 +589,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     ) -> Result<ArrayBytes<'_>, ArrayError> {
         let nesting_depth = optional_nesting_depth(data_type);
 
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            let options = options.clone();
-            async move {
-                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                Ok::<_, ArrayError>((
-                    self.async_retrieve_chunk_subset_opt(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        &options,
-                    )
-                    .await?,
-                    chunk_subset_overlap.relative_to(array_subset.start())?,
-                ))
-            }
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
+            let chunk_subset = self.chunk_subset(&chunk_indices)?;
+            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+            Ok::<_, ArrayError>((
+                self.async_retrieve_chunk_subset_opt(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    options,
+                )
+                .await?,
+                chunk_subset_overlap.relative_to(array_subset.start())?,
+            ))
         };
 
         let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
@@ -657,51 +654,48 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .collect();
             let mask_output_slices = mask_output_slices.as_slice();
 
-            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-                let options = options.clone();
-                async move {
-                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                    let chunk_subset_in_array =
-                        chunk_subset_overlap.relative_to(array_subset.start())?;
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| async move {
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                let chunk_subset_in_array =
+                    chunk_subset_overlap.relative_to(array_subset.start())?;
 
-                    let mut data_view = unsafe {
+                let mut data_view = unsafe {
+                    // SAFETY: chunks represent disjoint array subsets
+                    ArrayBytesFixedDisjointView::new(
+                        data_output_slice,
+                        data_type_size,
+                        array_subset.shape(),
+                        chunk_subset_in_array.clone(),
+                    )?
+                };
+
+                // Create mask views for each nesting level
+                let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
+                    .iter()
+                    .map(|mask_slice| unsafe {
                         // SAFETY: chunks represent disjoint array subsets
                         ArrayBytesFixedDisjointView::new(
-                            data_output_slice,
-                            data_type_size,
+                            *mask_slice,
+                            1, // 1 byte per element for mask
                             array_subset.shape(),
                             chunk_subset_in_array.clone(),
-                        )?
-                    };
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                    // Create mask views for each nesting level
-                    let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
-                        .iter()
-                        .map(|mask_slice| unsafe {
-                            // SAFETY: chunks represent disjoint array subsets
-                            ArrayBytesFixedDisjointView::new(
-                                *mask_slice,
-                                1, // 1 byte per element for mask
-                                array_subset.shape(),
-                                chunk_subset_in_array.clone(),
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
+                // Build the nested decode target
+                let target =
+                    build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
 
-                    // Build the nested decode target
-                    let target =
-                        build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
-
-                    self.async_retrieve_chunk_subset_into(
-                        &chunk_indices,
-                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                        target,
-                        &options,
-                    )
-                    .await?;
-                    Ok::<_, ArrayError>(())
-                }
+                self.async_retrieve_chunk_subset_into(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    target,
+                    options,
+                )
+                .await?;
+                Ok::<_, ArrayError>(())
             };
 
             futures::stream::iter(&chunks.indices())

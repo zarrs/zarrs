@@ -42,11 +42,7 @@ impl CodecTraits for Fletcher32Codec {
         FLETCHER32
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = Fletcher32CodecConfiguration::V1(Fletcher32CodecConfigurationV1 {});
         Some(configuration.into())
     }

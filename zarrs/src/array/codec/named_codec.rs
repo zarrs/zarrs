@@ -1,5 +1,7 @@
 use std::{ops::Deref, sync::Arc};
 
+use zarrs_registry::ExtensionAliasesCodecV3;
+
 use super::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
     CodecMetadataOptions, CodecTraits,
@@ -7,7 +9,7 @@ use super::{
 use crate::metadata::Configuration;
 
 /// A named codec.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NamedCodec<T: CodecTraits + ?Sized> {
     name: String,
     codec: Arc<T>,
@@ -20,6 +22,13 @@ impl<T: CodecTraits + ?Sized> NamedCodec<T> {
         Self { name, codec }
     }
 
+    /// Create a new [`NamedCodec`] with the default name for the codec.
+    #[must_use]
+    pub fn new_default_name(codec: Arc<T>, aliases: &ExtensionAliasesCodecV3) -> Self {
+        let name = aliases.default_name(codec.identifier()).to_string();
+        Self { name, codec }
+    }
+
     /// The name of the codec.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -28,18 +37,10 @@ impl<T: CodecTraits + ?Sized> NamedCodec<T> {
 
     /// Create the codec configuration.
     ///
-    /// See [`CodecTraits::configuration_opt`].
-    #[must_use]
-    pub fn configuration_opt(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
-        self.codec().configuration_opt(self.name(), options)
-    }
-
-    /// Create the codec configuration with default options.
-    ///
     /// See [`CodecTraits::configuration`].
     #[must_use]
-    pub fn configuration(&self) -> Option<Configuration> {
-        self.codec().configuration(self.name())
+    pub fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.codec().configuration(self.name(), options)
     }
 
     /// The underlying codec.
@@ -65,18 +66,6 @@ macro_rules! impl_named_codec {
                     name: self.name.clone(),
                     codec: self.codec.clone(),
                 }
-            }
-        }
-
-        impl<T: $codec_trait + 'static> From<Arc<T>> for $named_codec {
-            fn from(codec: Arc<T>) -> Self {
-                $named_codec::new(codec.default_name(), codec)
-            }
-        }
-
-        impl From<Arc<dyn $codec_trait>> for $named_codec {
-            fn from(codec: Arc<dyn $codec_trait>) -> Self {
-                $named_codec::new(codec.default_name(), codec)
             }
         }
     };

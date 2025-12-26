@@ -34,6 +34,7 @@ use std::sync::Arc;
 
 pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
 pub use vlen_v2_codec::VlenV2Codec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use crate::array::{
     ArrayBytesRaw,
@@ -76,7 +77,10 @@ fn is_identifier_vlen_utf8(identifier: &str) -> bool {
     identifier == zarrs_registry::codec::VLEN_UTF8
 }
 
-pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_vlen_v2(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     match metadata.name() {
         zarrs_registry::codec::VLEN_V2 | zarrs_registry::codec::VLEN_ARRAY => {
             crate::warn_experimental_extension(metadata.name(), "codec");

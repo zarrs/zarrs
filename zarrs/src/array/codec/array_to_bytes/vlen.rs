@@ -104,6 +104,7 @@ use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_data_type::FillValue;
 use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
@@ -131,12 +132,15 @@ fn is_identifier_vlen(identifier: &str) -> bool {
     identifier == VLEN
 }
 
-pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_vlen(
+    metadata: &MetadataV3,
+    aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: VlenCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;
-    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
+    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration, aliases)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 

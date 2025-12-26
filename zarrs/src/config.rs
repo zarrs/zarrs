@@ -6,11 +6,16 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(doc)]
-use crate::array::{ArrayMetadataOptions, codec::CodecOptions};
-use crate::registry::{
-    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-    ExtensionAliasesDataTypeV3,
+use crate::{
+    array::{
+        ArrayMetadataOptions,
+        codec::{CodecMetadataOptions, CodecOptions},
+    },
+    group::GroupMetadataOptions,
+    registry::{
+        ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
+        ExtensionAliasesDataTypeV3,
+    },
 };
 
 /// Global configuration options for the `zarrs` crate.
@@ -166,8 +171,8 @@ impl Default for Config {
             codec_concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             codec_store_metadata_if_encode_only: true,
-            metadata_convert_version: MetadataConvertVersion::Default,
-            metadata_erase_version: MetadataEraseVersion::Default,
+            metadata_convert_version: MetadataConvertVersion::default(),
+            metadata_erase_version: MetadataEraseVersion::default(),
             include_zarrs_metadata: true,
             codec_aliases_v3: ExtensionAliasesCodecV3::default(),
             codec_aliases_v2: ExtensionAliasesCodecV2::default(),
@@ -180,6 +185,39 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Get the codec options.
+    #[must_use]
+    pub fn codec_options(&self) -> CodecOptions {
+        CodecOptions::default()
+            .with_validate_checksums(self.validate_checksums)
+            .with_store_empty_chunks(self.store_empty_chunks)
+            .with_concurrent_target(self.codec_concurrent_target)
+            .with_experimental_partial_encoding(self.experimental_partial_encoding)
+    }
+
+    /// Get the codec metadata options.
+    #[must_use]
+    pub fn codec_metadata_options(&self) -> CodecMetadataOptions {
+        CodecMetadataOptions::default()
+            .with_codec_store_metadata_if_encode_only(self.codec_store_metadata_if_encode_only)
+    }
+
+    /// Get the group metadata options.
+    #[must_use]
+    pub fn group_metadata_options(&self) -> crate::group::GroupMetadataOptions {
+        GroupMetadataOptions::default().with_metadata_convert_version(self.metadata_convert_version)
+    }
+
+    /// Get the array metadata options.
+    #[must_use]
+    pub fn array_metadata_options(&self) -> ArrayMetadataOptions {
+        ArrayMetadataOptions::default()
+            .with_codec_metadata_options(self.codec_metadata_options())
+            .with_metadata_convert_version(self.metadata_convert_version)
+            .with_include_zarrs_metadata(self.include_zarrs_metadata)
+            .with_convert_aliased_extension_names(self.convert_aliased_extension_names)
+    }
+
     /// Get the [validate checksums](#validate-checksums) configuration.
     #[must_use]
     pub fn validate_checksums(&self) -> bool {
@@ -382,18 +420,20 @@ pub enum MetadataRetrieveVersion {
 }
 
 /// Version options for [`Array::store_metadata`](crate::array::Array::store_metadata) and [`Group::store_metadata`](crate::group::Group::store_metadata), and their async variants.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataConvertVersion {
     /// Write the same version as the input metadata.
+    #[default]
     Default,
     /// Write Zarr V3 metadata. Zarr V2 metadata will not be automatically removed if it exists.
     V3,
 }
 
 /// Version options for [`Array::erase_metadata`](crate::array::Array::erase_metadata) and [`Group::erase_metadata`](crate::group::Group::erase_metadata), and their async variants.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataEraseVersion {
     /// Erase the same version as the input metadata.
+    #[default]
     Default,
     /// Erase all metadata.
     All,

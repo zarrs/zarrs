@@ -39,6 +39,7 @@ mod shuffle_codec;
 use std::sync::Arc;
 
 pub use shuffle_codec::ShuffleCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
@@ -59,7 +60,10 @@ fn is_identifier_shuffle(identifier: &str) -> bool {
     identifier == SHUFFLE
 }
 
-pub(crate) fn create_codec_shuffle(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_shuffle(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(SHUFFLE, "codec", metadata.to_string()))?;

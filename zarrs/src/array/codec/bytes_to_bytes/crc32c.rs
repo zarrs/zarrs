@@ -29,6 +29,7 @@ mod crc32c_codec;
 use std::sync::Arc;
 
 pub use crc32c_codec::Crc32cCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
@@ -49,7 +50,10 @@ fn is_identifier_crc32c(identifier: &str) -> bool {
     identifier == CRC32C
 }
 
-pub(crate) fn create_codec_crc32c(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_crc32c(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(CRC32C, "codec", metadata.to_string()))?;
@@ -68,7 +72,8 @@ mod tests {
         array::{
             BytesRepresentation,
             codec::{
-                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
+                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions,
+                CodecOptions, CodecTraits,
             },
         },
         storage::byte_range::ByteRange,
@@ -80,7 +85,9 @@ mod tests {
     fn codec_crc32c_configuration_none() {
         let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
         let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
-        let metadata = codec.configuration("crc32c").unwrap();
+        let metadata = codec
+            .configuration("crc32c", &CodecMetadataOptions::default())
+            .unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), r#"{}"#);
     }
 

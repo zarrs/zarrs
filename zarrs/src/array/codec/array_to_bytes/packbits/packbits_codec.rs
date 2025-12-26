@@ -103,11 +103,7 @@ impl CodecTraits for PackBitsCodec {
         PACKBITS
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = PackBitsCodecConfiguration::V1(PackBitsCodecConfigurationV1 {
             padding_encoding: Some(self.padding_encoding),
             first_bit: self.first_bit,

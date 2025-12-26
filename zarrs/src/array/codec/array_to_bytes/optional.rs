@@ -89,6 +89,7 @@ mod optional_codec;
 use std::sync::Arc;
 
 pub use optional_codec::OptionalCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
@@ -109,11 +110,17 @@ fn is_identifier_optional(identifier: &str) -> bool {
     identifier == OPTIONAL
 }
 
-pub(crate) fn create_codec_optional(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_optional(
+    metadata: &MetadataV3,
+    aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: OptionalCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(OPTIONAL, "codec", metadata.to_string()))?;
-    let codec = Arc::new(OptionalCodec::new_with_configuration(&configuration)?);
+    let codec = Arc::new(OptionalCodec::new_with_configuration(
+        &configuration,
+        aliases,
+    )?);
     Ok(Codec::ArrayToBytes(codec))
 }

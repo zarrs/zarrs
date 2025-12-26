@@ -2,6 +2,8 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
+use zarrs_registry::ExtensionAliasesCodecV3;
+
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -49,15 +51,16 @@ impl CodecChain {
         array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
         bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> Self {
+        let config = global_config();
+        let aliases = config.codec_aliases_v3();
         let array_to_array = array_to_array
             .into_iter()
-            .map(|codec| NamedArrayToArrayCodec::new(codec.default_name(), codec))
+            .map(|codec| NamedArrayToArrayCodec::new_default_name(codec, aliases))
             .collect();
-        let array_to_bytes =
-            NamedArrayToBytesCodec::new(array_to_bytes.default_name(), array_to_bytes);
+        let array_to_bytes = NamedArrayToBytesCodec::new_default_name(array_to_bytes, aliases);
         let bytes_to_bytes = bytes_to_bytes
             .into_iter()
-            .map(|codec| NamedBytesToBytesCodec::new(codec.default_name(), codec))
+            .map(|codec| NamedBytesToBytesCodec::new_default_name(codec, aliases))
             .collect();
         Self::new_named(array_to_array, array_to_bytes, bytes_to_bytes)
     }
@@ -133,12 +136,15 @@ impl CodecChain {
     ///  - a codec could not be created,
     ///  - no array to bytes codec is supplied, or
     ///  - more than one array to bytes codec is supplied.
-    pub fn from_metadata(metadatas: &[MetadataV3]) -> Result<Self, PluginCreateError> {
+    pub fn from_metadata(
+        metadatas: &[MetadataV3],
+        codec_aliases: &ExtensionAliasesCodecV3,
+    ) -> Result<Self, PluginCreateError> {
         let mut array_to_array: Vec<NamedArrayToArrayCodec> = vec![];
         let mut array_to_bytes: Option<NamedArrayToBytesCodec> = None;
         let mut bytes_to_bytes: Vec<NamedBytesToBytesCodec> = vec![];
         for metadata in metadatas {
-            let codec = match Codec::from_metadata(metadata, global_config().codec_aliases_v3()) {
+            let codec = match Codec::from_metadata(metadata, codec_aliases) {
                 Ok(codec) => Ok(codec),
                 Err(err) => {
                     if metadata.must_understand() {
@@ -189,11 +195,11 @@ impl CodecChain {
 
     /// Create codec chain metadata.
     #[must_use]
-    pub fn create_metadatas_opt(&self, options: &CodecMetadataOptions) -> Vec<MetadataV3> {
+    pub fn create_metadatas(&self, options: &CodecMetadataOptions) -> Vec<MetadataV3> {
         let mut metadatas =
             Vec::with_capacity(self.array_to_array.len() + 1 + self.bytes_to_bytes.len());
         for codec in &self.array_to_array {
-            if let Some(configuration) = codec.configuration_opt(options) {
+            if let Some(configuration) = codec.configuration(options) {
                 metadatas.push(MetadataV3::new_with_configuration(
                     codec.name().to_string(),
                     configuration,
@@ -202,7 +208,7 @@ impl CodecChain {
         }
         {
             let codec = &self.array_to_bytes;
-            if let Some(configuration) = codec.configuration_opt(options) {
+            if let Some(configuration) = codec.configuration(options) {
                 metadatas.push(MetadataV3::new_with_configuration(
                     codec.name().to_string(),
                     configuration,
@@ -210,7 +216,7 @@ impl CodecChain {
             }
         }
         for codec in &self.bytes_to_bytes {
-            if let Some(configuration) = codec.configuration_opt(options) {
+            if let Some(configuration) = codec.configuration(options) {
                 metadatas.push(MetadataV3::new_with_configuration(
                     codec.name().to_string(),
                     configuration,
@@ -218,12 +224,6 @@ impl CodecChain {
             }
         }
         metadatas
-    }
-
-    /// Create codec chain metadata with default options.
-    #[must_use]
-    pub fn create_metadatas(&self) -> Vec<MetadataV3> {
-        self.create_metadatas_opt(&CodecMetadataOptions::default())
     }
 
     /// Get the array to array codecs
@@ -286,12 +286,8 @@ impl CodecTraits for CodecChain {
 
     /// Returns [`None`] since a codec chain does not have standard codec metadata.
     ///
-    /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas_opt()`] will call [`CodecTraits::configuration_opt()`] from for each codec.
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         None
     }
 
@@ -976,7 +972,7 @@ mod tests {
 }"#;
 
     fn codec_chain_round_trip_impl(
-        shape: &ChunkShape,
+        shape: &[NonZeroU64],
         data_type: &DataType,
         fill_value: &FillValue,
         elements: Vec<f32>,
@@ -1007,7 +1003,10 @@ mod tests {
         ];
         println!("{codec_configurations:?}");
         let not_just_bytes = codec_configurations.len() > 1;
-        let codec = Arc::new(CodecChain::from_metadata(&codec_configurations).unwrap());
+        let codec = Arc::new(
+            CodecChain::from_metadata(&codec_configurations, &ExtensionAliasesCodecV3::default())
+                .unwrap(),
+        );
 
         let encoded = codec
             .encode(

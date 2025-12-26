@@ -5,15 +5,24 @@ use derive_more::From;
 
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
-    DataType, DimensionName, StorageTransformerChain,
+    DimensionName, StorageTransformerChain,
     chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
     codec::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
         NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
     },
 };
-use crate::metadata::{ChunkKeySeparator, IntoDimensionName, v3::AdditionalFieldsV3};
-use crate::{array::ChunkGrid, node::NodePath};
+use crate::{
+    array::{
+        ArrayMetadataOptions, ChunkGrid,
+        codec::{CodecOptions, NamedCodec},
+    },
+    node::NodePath,
+};
+use crate::{
+    config::global_config,
+    metadata::{ChunkKeySeparator, IntoDimensionName, v3::AdditionalFieldsV3},
+};
 
 mod array_builder_chunk_grid;
 pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
@@ -117,6 +126,10 @@ pub struct ArrayBuilder {
     /// Subchunk (inner chunk) shape for sharding.
     #[cfg(feature = "sharding")]
     subchunk_shape: Option<ArrayShape>,
+    /// Codec options.
+    codec_options: CodecOptions,
+    /// Metadata options.
+    metadata_options: ArrayMetadataOptions,
 }
 
 #[derive(Debug, From)]
@@ -157,6 +170,8 @@ impl ArrayBuilder {
             additional_fields: AdditionalFieldsV3::default(),
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
+            codec_options: global_config().codec_options(),
+            metadata_options: global_config().array_metadata_options(),
         }
     }
 
@@ -185,6 +200,8 @@ impl ArrayBuilder {
             additional_fields: AdditionalFieldsV3::default(),
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
+            codec_options: global_config().codec_options(),
+            metadata_options: global_config().array_metadata_options(),
         }
     }
 
@@ -242,14 +259,12 @@ impl ArrayBuilder {
     ) -> &mut Self {
         let array_shape = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => {
-                chunk_grid.as_chunk_grid().array_shape().clone()
+                chunk_grid.as_chunk_grid().array_shape()
             }
-            ArrayBuilderChunkGridMaybe::Metadata(array_shape, _chunk_grid_metadata) => {
-                array_shape.clone()
-            }
+            ArrayBuilderChunkGridMaybe::Metadata(array_shape, _chunk_grid_metadata) => array_shape,
         };
         let chunk_grid_metadata = chunk_grid_metadata.into();
-        self.chunk_grid = (array_shape, chunk_grid_metadata).into();
+        self.chunk_grid = (array_shape.to_vec(), chunk_grid_metadata).into();
         self
     }
 
@@ -292,7 +307,12 @@ impl ArrayBuilder {
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     ) -> &mut Self {
-        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
+        let config = global_config();
+        let aliases = config.codec_aliases_v3();
+        self.array_to_array_codecs = array_to_array_codecs
+            .into_iter()
+            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .collect();
         self
     }
 
@@ -314,7 +334,10 @@ impl ArrayBuilder {
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
+        let config = global_config();
+        let aliases = config.codec_aliases_v3();
+        self.array_to_bytes_codec =
+            Some(NamedCodec::new_default_name(array_to_bytes_codec, aliases));
         self
     }
 
@@ -336,7 +359,12 @@ impl ArrayBuilder {
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> &mut Self {
-        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
+        let config = global_config();
+        let aliases = config.codec_aliases_v3();
+        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs
+            .into_iter()
+            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .collect();
         self
     }
 
@@ -467,7 +495,9 @@ impl ArrayBuilder {
                     .map_err(ArrayCreateError::ChunkGridCreateError)?
             }
         };
-        let data_type = self.data_type.to_data_type()?;
+        let data_type = self
+            .data_type
+            .to_data_type(global_config().data_type_aliases_v3())?;
         let fill_value = self.fill_value.to_fill_value(&data_type)?;
         if let Some(dimension_names) = &self.dimension_names {
             if dimension_names.len() != chunk_grid.dimensionality() {
@@ -478,14 +508,18 @@ impl ArrayBuilder {
             }
         }
 
-        let array_to_bytes_codec = self
-            .array_to_bytes_codec
-            .clone()
-            .unwrap_or_else(|| Self::default_codec(&data_type));
+        let array_to_bytes_codec = self.array_to_bytes_codec.clone().unwrap_or_else(|| {
+            super::codec::default_array_to_bytes_codec(
+                &data_type,
+                global_config().codec_aliases_v3(),
+            )
+        });
 
         // If subchunk_shape is set, wrap the codec chain with a sharding codec
         #[cfg(feature = "sharding")]
         let codec_chain = if let Some(subchunk_shape) = &self.subchunk_shape {
+            use crate::array::codec::NamedCodec;
+
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
@@ -498,21 +532,18 @@ impl ArrayBuilder {
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
             sharding_builder
-                .array_to_array_codecs(
-                    self.array_to_array_codecs
-                        .iter()
-                        .map(|c| c.codec().clone())
-                        .collect(),
-                )
-                .array_to_bytes_codec(array_to_bytes_codec.codec().clone())
-                .bytes_to_bytes_codecs(
-                    self.bytes_to_bytes_codecs
-                        .iter()
-                        .map(|c| c.codec().clone())
-                        .collect(),
-                );
+                .array_to_array_codecs_named(self.array_to_array_codecs.clone())
+                .array_to_bytes_codec_named(array_to_bytes_codec.clone())
+                .bytes_to_bytes_codecs_named(self.bytes_to_bytes_codecs.clone());
 
-            CodecChain::new_named(vec![], Arc::new(sharding_builder.build()).into(), vec![])
+            CodecChain::new_named(
+                vec![],
+                NamedCodec::new_default_name(
+                    Arc::new(sharding_builder.build()),
+                    global_config().codec_aliases_v3(),
+                ),
+                vec![],
+            )
         } else {
             CodecChain::new_named(
                 self.array_to_array_codecs.clone(),
@@ -529,11 +560,11 @@ impl ArrayBuilder {
         );
 
         Ok(ArrayMetadataV3::new(
-            chunk_grid.array_shape().clone(),
+            chunk_grid.array_shape().to_vec(),
             chunk_grid.create_metadata(),
             data_type.metadata(),
             data_type.metadata_fill_value(&fill_value)?,
-            codec_chain.create_metadatas(),
+            codec_chain.create_metadatas(self.metadata_options.codec_metadata_options()),
         )
         .with_attributes(self.attributes.clone())
         .with_additional_fields(self.additional_fields.clone())
@@ -555,11 +586,11 @@ impl ArrayBuilder {
     ) -> Result<Array<TStorage>, ArrayCreateError> {
         let path: NodePath = path.try_into()?;
         let array_metadata = ArrayMetadata::V3(self.build_metadata()?);
-        Array::new_with_metadata(storage, path.as_str(), array_metadata)
-    }
-
-    fn default_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
-        super::codec::default_array_to_bytes_codec(data_type)
+        Ok(
+            Array::new_with_metadata(storage, path.as_str(), array_metadata)?
+                .with_metadata_options(self.metadata_options)
+                .with_codec_options(self.codec_options),
+        )
     }
 
     /// Build into an [`Arc<Array>`].
@@ -588,7 +619,7 @@ mod tests {
     use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use crate::{
         array::{
-            ChunkGrid,
+            ChunkGrid, DataType,
             chunk_grid::{ChunkGridTraits, RegularChunkGrid},
             chunk_key_encoding::V2ChunkKeyEncoding,
         },

@@ -55,6 +55,7 @@ use blosc_src::{
 };
 use derive_more::From;
 use thiserror::Error;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
@@ -76,7 +77,10 @@ fn is_identifier_blosc(identifier: &str) -> bool {
     identifier == BLOSC
 }
 
-pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_blosc(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: BloscCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(BLOSC, "codec", metadata.to_string()))?;

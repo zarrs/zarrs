@@ -71,6 +71,8 @@ pub struct Group<TStorage: ?Sized> {
     path: NodePath,
     /// The metadata.
     metadata: GroupMetadata,
+    metadata_options: GroupMetadataOptions,
+    metadata_erase_version: MetadataEraseVersion,
 }
 
 impl<TStorage: ?Sized> Group<TStorage> {
@@ -90,6 +92,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
             storage,
             path,
             metadata,
+            metadata_options: global_config().group_metadata_options(),
+            metadata_erase_version: global_config().metadata_erase_version(),
         })
     }
 
@@ -200,6 +204,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
                 storage: self.storage,
                 path: self.path,
                 metadata,
+                metadata_options: self.metadata_options,
+                metadata_erase_version: self.metadata_erase_version,
             }
         } else {
             self
@@ -618,7 +624,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&GroupMetadataOptions::default())
+        self.store_metadata_opt(&self.metadata_options)
     }
 
     /// Store metadata with non-default [`GroupMetadataOptions`].
@@ -671,8 +677,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.erase_metadata_opt(erase_version)
+        self.erase_metadata_opt(self.metadata_erase_version)
     }
 
     /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
@@ -710,8 +715,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`store_metadata`](Group::store_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&GroupMetadataOptions::default())
-            .await
+        self.async_store_metadata_opt(&self.metadata_options).await
     }
 
     /// Async variant of [`store_metadata_opt`](Group::store_metadata_opt).
@@ -761,8 +765,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`erase_metadata`](Group::erase_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.async_erase_metadata_opt(erase_version).await
+        self.async_erase_metadata_opt(self.metadata_erase_version)
+            .await
     }
 
     /// Async variant of [`erase_metadata_opt`](Group::erase_metadata_opt).

@@ -34,6 +34,7 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
@@ -59,7 +60,10 @@ fn is_identifier_squeeze(identifier: &str) -> bool {
     identifier == SQUEEZE
 }
 
-pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_squeeze(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
     let configuration: SqueezeCodecConfiguration = metadata
         .to_configuration()

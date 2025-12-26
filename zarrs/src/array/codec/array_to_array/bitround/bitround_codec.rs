@@ -57,11 +57,7 @@ impl CodecTraits for BitroundCodec {
         BITROUND
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
         if options.codec_store_metadata_if_encode_only() {
             let configuration = BitroundCodecConfiguration::V1(BitroundCodecConfigurationV1 {
                 keepbits: self.keepbits,

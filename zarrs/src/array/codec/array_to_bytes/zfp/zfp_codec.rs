@@ -156,11 +156,7 @@ impl CodecTraits for ZfpCodec {
         ZFP
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         // ZfpyCodecConfigurationNumcodecs is forward compatible with ZfpCodecConfigurationV1
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
     }

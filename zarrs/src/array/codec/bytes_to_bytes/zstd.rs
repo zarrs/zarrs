@@ -34,6 +34,7 @@ mod zstd_codec;
 
 use std::sync::Arc;
 
+use zarrs_registry::ExtensionAliasesCodecV3;
 pub use zstd_codec::ZstdCodec;
 
 pub use crate::metadata_ext::codec::zstd::{
@@ -55,7 +56,10 @@ fn is_identifier_zstd(identifier: &str) -> bool {
     identifier == ZSTD
 }
 
-pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_zstd(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ZstdCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(ZSTD, "codec", metadata.to_string()))?;

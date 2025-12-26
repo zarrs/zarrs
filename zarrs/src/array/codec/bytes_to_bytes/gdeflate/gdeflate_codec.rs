@@ -57,11 +57,7 @@ impl CodecTraits for GDeflateCodec {
         GDEFLATE
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = GDeflateCodecConfiguration::V0(GDeflateCodecConfigurationV0 {
             level: self.compression_level,
         });
