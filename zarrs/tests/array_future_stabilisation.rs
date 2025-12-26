@@ -5,34 +5,28 @@ use std::sync::Arc;
 
 use zarrs::registry::codec::BZ2;
 use zarrs::{
-    array::{
-        Array, ArrayMetadataOptions,
-        codec::{Bz2Codec, CodecTraits},
-    },
-    config::global_config_mut,
+    array::{Array, ArrayMetadataOptions},
+    config::{global_config, global_config_mut},
 };
 use zarrs_filesystem::FilesystemStore;
 
 /// bz2 could stabilise as is, so test supporting that via the codec map
 #[test]
 fn array_future_stabilisation_bz2() {
-    assert_eq!(
-        Bz2Codec::new(5u32.try_into().unwrap()).default_name(),
-        "numcodecs.bz2"
-    );
+    let alias = global_config()
+        .codec_aliases_v3()
+        .default_names
+        .get(BZ2.into())
+        .expect("bz2 in aliases")
+        .to_string();
 
     global_config_mut()
         .codec_aliases_v3_mut()
         .default_names
         .entry(BZ2.into())
         .and_modify(|entry| {
-            *entry = "bz2".into();
+            *entry = "stable.bz2".into();
         });
-
-    assert_eq!(
-        Bz2Codec::new(5u32.try_into().unwrap()).default_name(),
-        "bz2"
-    );
 
     let path = "tests/data/v3/array_bz2.zarr";
     let store = Arc::new(FilesystemStore::new(path).unwrap());
@@ -63,8 +57,26 @@ fn array_future_stabilisation_bz2() {
             .to_string()
             .contains(r#""numcodecs.bz2"#)
     );
-    assert!(!array.metadata_opt(&options).to_string().contains(r#""bz2"#));
+    assert!(
+        !array
+            .metadata_opt(&options)
+            .to_string()
+            .contains(r#""stable.bz2"#)
+    );
 
     options.set_convert_aliased_extension_names(true);
-    assert!(array.metadata_opt(&options).to_string().contains(r#""bz2"#));
+    assert!(
+        array
+            .metadata_opt(&options)
+            .to_string()
+            .contains(r#""stable.bz2"#)
+    );
+
+    global_config_mut()
+        .codec_aliases_v3_mut()
+        .default_names
+        .entry(BZ2.into())
+        .and_modify(|entry| {
+            *entry = alias.into();
+        });
 }

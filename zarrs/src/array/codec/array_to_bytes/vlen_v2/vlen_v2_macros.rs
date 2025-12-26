@@ -6,6 +6,7 @@ macro_rules! vlen_v2_module {
 
         pub use $module_codec::$struct;
 
+        use crate::registry::ExtensionAliasesCodecV3;
         use crate::registry::codec::$identifier;
         use crate::{
             array::codec::{Codec, CodecPlugin},
@@ -22,7 +23,10 @@ macro_rules! vlen_v2_module {
             name.eq($identifier)
         }
 
-        fn create_codec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        fn create_codec(
+            metadata: &MetadataV3,
+            _aliases: &ExtensionAliasesCodecV3,
+        ) -> Result<Codec, PluginCreateError> {
             if metadata.configuration_is_none_or_empty() {
                 let codec = Arc::new($struct::new());
                 Ok(Codec::ArrayToBytes(codec))
@@ -81,12 +85,12 @@ macro_rules! vlen_v2_codec {
                 $identifier
             }
 
-            fn configuration_opt(
+            fn configuration(
                 &self,
                 name: &str,
                 options: &CodecMetadataOptions,
             ) -> Option<Configuration> {
-                self.inner.configuration_opt(name, options)
+                self.inner.configuration(name, options)
             }
 
             fn partial_decoder_capability(&self) -> PartialDecoderCapability {

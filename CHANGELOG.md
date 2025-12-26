@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implements `dlpack::traits::TensorLike`
 - Add `TensorError` type and `ArrayError::TensorError` variant
 - Add `array::ChunkShapeTraits` (supersedes `ChunkShape` newtype)
+- Add `Config::{codec_options,codec_metadata_options,array_metadata_options,group_metadata_options}()` methods
 
 ### Changed
 
@@ -61,10 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.3.0
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
-- Bump `zfp-sys` to 0.4.2
-- Bump `pco` to 0.4.7
 - Bump `zarrs_registry` to 0.1.9
 - Bump `zarrs_filesystem` to 0.3.6
+- Bump `zarrs_plugin` to 0.2.3
+- Bump `zfp-sys` to 0.4.2
+- Bump `pco` to 0.4.7
 - Bump `criterion` (dev) to 0.8.1
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
   - Fixes handling of Zarr V2 arrays with bool fill values
@@ -122,6 +124,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Various `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, `ArrayCodecTraits` methods
 - **Breaking**: Replace `ChunkShape` newtype with `Vec<NonZeroU64>`
 - **Breaking**: Change return type of `Array::chunk_grid_shape()` to `&[u64]` instead of `&ArrayShape`
+- **Breaking**: Refactor low-level codec API to reduce global config retrieval
+  - `CodecOptions` and `CodecMetadataOptions` now implement `Copy` with hardcoded defaults; use `Config::codec_options()` / `Config::codec_metadata_options()` to get options from global config
+  - Remove `CodecOptionsBuilder`, `CodecOptions::builder()`, `CodecOptions::into_builder()`
+  - Rename `ArrayMetadataOptions::codec_options[_mut]()` to `codec_metadata_options[_mut]()`
+  - Rename `CodecTraits::configuration_opt()` to `configuration()`
+  - Rename `CodecChain::create_metadatas_opt()` to `create_metadatas()` (now requires `&CodecMetadataOptions`)
+  - Add `&ExtensionAliasesCodecV3` parameter to `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, `{Sharding,Optional,Vlen}Codec::new_with_configuration()`
+  - Remove `CodecTraits::default_name()`
 
 ### Removed
 

@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use crate::metadata::Endianness;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
@@ -58,7 +59,10 @@ fn is_identifier_bytes(identifier: &str) -> bool {
     identifier == BYTES
 }
 
-pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_bytes(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     if metadata.name() == "binary" {
         crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
     }
@@ -158,7 +162,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShape, ChunkShapeTraits, Endianness, FillValue,
             codec::{
-                ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions, CodecTraits,
+                ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions,
+                CodecOptions, CodecTraits,
             },
         },
         array_subset::ArraySubset,
@@ -169,7 +174,9 @@ mod tests {
         let codec_configuration: BytesCodecConfiguration =
             serde_json::from_str(r#"{"endian":"big"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration(BYTES).unwrap();
+        let configuration = codec
+            .configuration(BYTES, &CodecMetadataOptions::default())
+            .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
             r#"{"endian":"big"}"#
@@ -181,7 +188,9 @@ mod tests {
         let codec_configuration: BytesCodecConfiguration =
             serde_json::from_str(r#"{"endian":"little"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration(BYTES).unwrap();
+        let configuration = codec
+            .configuration(BYTES, &CodecMetadataOptions::default())
+            .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
             r#"{"endian":"little"}"#
@@ -192,7 +201,9 @@ mod tests {
     fn codec_bytes_configuration_none() {
         let codec_configuration: BytesCodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration(BYTES).unwrap();
+        let configuration = codec
+            .configuration(BYTES, &CodecMetadataOptions::default())
+            .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
     }
 

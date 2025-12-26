@@ -40,11 +40,7 @@ impl CodecTraits for Crc32cCodec {
         CRC32C
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = Crc32cCodecConfiguration::V1(Crc32cCodecConfigurationV1 {});
         Some(configuration.into())
     }

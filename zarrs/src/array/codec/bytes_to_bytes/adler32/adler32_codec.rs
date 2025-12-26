@@ -62,11 +62,7 @@ impl CodecTraits for Adler32Codec {
         ADLER32
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = Adler32CodecConfiguration::V1(Adler32CodecConfigurationV1 {
             location: self.location,
         });

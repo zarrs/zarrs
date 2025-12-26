@@ -59,10 +59,10 @@ fn is_name_rectangular(name: &str) -> bool {
 /// # Errors
 /// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
 pub(crate) fn create_chunk_grid_rectangular(
-    metadata_and_array_shape: &(MetadataV3, ArrayShape),
+    metadata: &MetadataV3,
+    array_shape: &ArrayShape,
 ) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata_and_array_shape.0.name(), "chunk grid");
-    let (metadata, array_shape) = metadata_and_array_shape;
+    crate::warn_experimental_extension(metadata.name(), "chunk grid");
     let configuration: RectangularChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(RECTANGULAR, "chunk grid", metadata.to_string())

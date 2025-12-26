@@ -52,11 +52,7 @@ impl CodecTraits for ZlibCodec {
         ZLIB
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 {
             level: ZlibCompressionLevel::try_from(self.compression.level())
                 .expect("checked on init"),

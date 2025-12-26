@@ -32,6 +32,7 @@ mod transpose_codec_partial;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use crate::metadata::DataTypeSize;
 pub use crate::metadata_ext::codec::transpose::{
@@ -59,7 +60,10 @@ fn is_identifier_transpose(identifier: &str) -> bool {
     identifier == TRANSPOSE
 }
 
-pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_transpose(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: TransposeCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(TRANSPOSE, "codec", metadata.to_string()))?;

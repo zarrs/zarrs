@@ -8,8 +8,7 @@ use zarrs::{
     array::{
         ArrayBuilder, DataType,
         codec::{
-            BytesToBytesCodecTraits, CodecOptionsBuilder,
-            array_to_bytes::sharding::ShardingCodecBuilder,
+            BytesToBytesCodecTraits, CodecOptions, array_to_bytes::sharding::ShardingCodecBuilder,
         },
     },
     array_subset::ArraySubset,
@@ -24,9 +23,7 @@ fn array_partial_encode_sharding(
     sharding_index_location: ShardingIndexLocation,
     inner_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = std::sync::Arc::new(MemoryStore::default());
     // let log_writer = Arc::new(std::sync::Mutex::new(
@@ -254,9 +251,7 @@ fn array_partial_encode_sharding_compact(
     // Strategy: Write a large compressible chunk, then overwrite with random data
     // This will create gaps in the shard that need compaction
 
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = std::sync::Arc::new(MemoryStore::default());
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));

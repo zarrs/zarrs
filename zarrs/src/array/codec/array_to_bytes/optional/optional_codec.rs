@@ -5,6 +5,7 @@ use std::{mem::size_of, num::NonZeroU64, sync::Arc};
 
 use zarrs_data_type::FillValue;
 use zarrs_plugin::PluginCreateError;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::{
@@ -42,11 +43,18 @@ impl OptionalCodec {
     /// Returns an error if the configuration is not supported.
     pub fn new_with_configuration(
         configuration: &OptionalCodecConfiguration,
+        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             OptionalCodecConfiguration::V1(configuration) => {
-                let mask_codecs = Arc::new(CodecChain::from_metadata(&configuration.mask_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let mask_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.mask_codecs,
+                    codec_aliases,
+                )?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.data_codecs,
+                    codec_aliases,
+                )?);
                 Ok(Self::new(mask_codecs, data_codecs))
             }
             _ => Err(PluginCreateError::Other(
@@ -274,14 +282,10 @@ impl CodecTraits for OptionalCodec {
         OPTIONAL
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = OptionalCodecConfiguration::V1(OptionalCodecConfigurationV1 {
-            mask_codecs: self.mask_codecs.create_metadatas(),
-            data_codecs: self.data_codecs.create_metadatas(),
+            mask_codecs: self.mask_codecs.create_metadatas(options),
+            data_codecs: self.data_codecs.create_metadatas(options),
         });
         Some(configuration.into())
     }
@@ -514,8 +518,12 @@ mod tests {
                 }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration_opt(OPTIONAL, &CodecMetadataOptions::default());
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )
+        .unwrap();
+        let configuration = codec.configuration(OPTIONAL, &CodecMetadataOptions::default());
         assert!(configuration.is_some());
     }
 
@@ -617,7 +625,10 @@ mod tests {
             data_codecs_config
         ))
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration)?;
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )?;
 
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
@@ -822,7 +833,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )
+        .unwrap();
 
         let encoded = codec
             .encode(
@@ -897,7 +912,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )
+        .unwrap();
 
         let encoded = codec
             .encode(
@@ -1000,7 +1019,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )
+        .unwrap();
 
         let encoded = codec
             .encode(
@@ -1079,7 +1102,11 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = OptionalCodec::new_with_configuration(
+            &codec_configuration,
+            &ExtensionAliasesCodecV3::default(),
+        )
+        .unwrap();
 
         let encoded = codec
             .encode(

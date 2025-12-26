@@ -63,11 +63,7 @@ impl CodecTraits for ReshapeCodec {
         RESHAPE
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = ReshapeCodecConfiguration::V1(ReshapeCodecConfigurationV1 {
             shape: self.shape.clone(),
         });

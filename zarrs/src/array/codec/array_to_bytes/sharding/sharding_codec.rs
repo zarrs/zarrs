@@ -7,6 +7,7 @@ use std::{
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -77,12 +78,18 @@ impl ShardingCodec {
     /// Returns [`PluginCreateError`] if there is a configuration issue.
     pub fn new_with_configuration(
         configuration: &ShardingCodecConfiguration,
+        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             ShardingCodecConfiguration::V1(configuration) => {
-                let inner_codecs = Arc::new(CodecChain::from_metadata(&configuration.codecs)?);
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let inner_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.codecs,
+                    codec_aliases,
+                )?);
+                let index_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.index_codecs,
+                    codec_aliases,
+                )?);
                 Ok(Self::new(
                     configuration.chunk_shape.clone(),
                     inner_codecs,
@@ -102,15 +109,11 @@ impl CodecTraits for ShardingCodec {
         SHARDING
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = ShardingCodecConfiguration::V1(ShardingCodecConfigurationV1 {
             chunk_shape: self.subchunk_shape.clone(),
-            codecs: self.inner_codecs.create_metadatas(),
-            index_codecs: self.index_codecs.create_metadatas(),
+            codecs: self.inner_codecs.create_metadatas(options),
+            index_codecs: self.index_codecs.create_metadatas(options),
             index_location: self.index_location,
         });
         Some(configuration.into())
@@ -224,10 +227,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 .inner_codecs
                 .recommended_concurrency(&self.subchunk_shape, data_type)?,
         );
-        let options = options
-            .into_builder()
-            .concurrent_target(concurrency_limit_inner_chunks)
-            .build();
+        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
 
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
@@ -497,10 +497,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 .inner_codecs
                 .recommended_concurrency(&self.subchunk_shape, data_type)?,
         );
-        let options = options
-            .into_builder()
-            .concurrent_target(concurrency_limit_inner_chunks)
-            .build();
+        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
 
         let decode_chunk = |chunk_index: usize| {
             let chunk_subset = self
@@ -738,10 +735,7 @@ impl ShardingCodec {
                 .inner_codecs
                 .recommended_concurrency(subchunk_shape, data_type)?,
         );
-        let options = options
-            .into_builder()
-            .concurrent_target(concurrency_limit_inner_chunks)
-            .build();
+        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
 
         // Encode the shards and update the shard index
         {
@@ -869,10 +863,7 @@ impl ShardingCodec {
                 .inner_codecs
                 .recommended_concurrency(subchunk_shape, data_type)?,
         );
-        let options_inner = options
-            .into_builder()
-            .concurrent_target(concurrency_limit_inner_chunks)
-            .build();
+        let options_inner = options.with_concurrent_target(concurrency_limit_inner_chunks);
 
         let encode_chunk = |chunk_index| {
             let chunk_subset = self

@@ -32,11 +32,7 @@ impl CodecTraits for TestUnboundedCodec {
         "zarrs.test_unbounded"
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         None
     }
 

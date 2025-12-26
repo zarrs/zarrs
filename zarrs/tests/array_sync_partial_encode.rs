@@ -9,9 +9,7 @@ use zarrs::storage::{
 use zarrs::{
     array::{
         ArrayBuilder, ChunkShapeTraits, DataType,
-        codec::{
-            ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptionsBuilder, ReshapeDim,
-        },
+        codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim},
     },
     array_subset::ArraySubset,
 };
@@ -24,9 +22,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     codec_name: &str,
     supports_partial_encoding: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
@@ -166,9 +162,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     codec_name: &str,
     supports_partial_encoding: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));
@@ -517,9 +511,7 @@ fn test_gdeflate_sync_partial_encoding() {
 // Combined codec chain test
 #[test]
 fn test_codec_chain_sync_partial_encoding() {
-    let opt = CodecOptionsBuilder::new()
-        .experimental_partial_encoding(true)
-        .build();
+    let opt = CodecOptions::default().with_experimental_partial_encoding(true);
 
     let store = Arc::new(MemoryStore::default());
     let store_perf = Arc::new(PerformanceMetricsStorageAdapter::new(store.clone()));

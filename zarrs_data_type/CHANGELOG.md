@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: Rename `FillValue::new_null()` to `new_optional_null()`
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
+- Bump `zarrs_plugin` to 0.2.3
 
 ### Removed
 - **Breaking**: Remove `FillValue::is_null()`

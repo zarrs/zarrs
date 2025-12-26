@@ -12,7 +12,7 @@ use super::{
 use crate::iter_concurrent_limit;
 use crate::{
     array_subset::ArraySubset,
-    config::{MetadataEraseVersion, global_config},
+    config::MetadataEraseVersion,
     node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
     storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits},
 };
@@ -25,7 +25,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&ArrayMetadataOptions::default())
+        self.store_metadata_opt(&self.metadata_options)
     }
 
     /// Store metadata with non-default [`ArrayMetadataOptions`].
@@ -200,8 +200,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.erase_metadata_opt(erase_version)
+        self.erase_metadata_opt(self.metadata_erase_version)
     }
 
     /// Erase the metadata with non-default [`MetadataEraseVersion`] options.

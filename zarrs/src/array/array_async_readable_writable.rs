@@ -32,7 +32,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             chunk_indices,
             chunk_subset,
             chunk_subset_data,
-            &CodecOptions::default(),
+            &self.codec_options,
         )
         .await
     }
@@ -50,7 +50,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             chunk_indices,
             chunk_subset,
             chunk_subset_elements,
-            &CodecOptions::default(),
+            &self.codec_options,
         )
         .await
     }
@@ -80,7 +80,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             chunk_indices,
             &chunk_subset_start,
             chunk_subset_array.as_standard_layout().to_owned(),
-            &CodecOptions::default(),
+            &self.codec_options,
         )
         .await
     }
@@ -92,7 +92,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         array_subset: &ArraySubset,
         subset_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_data, &CodecOptions::default())
+        self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
             .await
     }
 
@@ -104,7 +104,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         array_subset: &ArraySubset,
         subset_elements: &[T],
     ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_elements, &CodecOptions::default())
+        self.async_store_array_subset_opt(array_subset, subset_elements, &self.codec_options)
             .await
     }
 
@@ -127,7 +127,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         self.async_store_array_subset_opt(
             &subset,
             subset_array.as_standard_layout().to_owned(),
-            &CodecOptions::default(),
+            &self.codec_options,
         )
         .await
     }
@@ -363,7 +363,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                         self.data_type(),
                     )
                     .unwrap(); // FIXME: unwrap
-                let options = options.clone();
                 async move {
                     self.async_store_chunk_subset_opt(
                         &chunk_indices,

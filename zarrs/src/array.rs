@@ -94,13 +94,11 @@ pub use self::{
     storage_transformer::StorageTransformerChain,
     tensor::{Tensor, TensorError},
 };
-use crate::metadata::v2::DataTypeMetadataV2;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
 pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness};
-use crate::metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error;
 use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
 use crate::plugin::PluginCreateError;
 use crate::registry::chunk_grid::REGULAR;
@@ -108,12 +106,14 @@ use crate::{
     array::chunk_grid::{RegularBoundedChunkGridConfiguration, RegularChunkGrid},
     config::global_config,
 };
+use crate::{array::codec::CodecOptions, metadata::v2::DataTypeMetadataV2};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     config::MetadataConvertVersion,
     node::{NodePath, data_key},
     storage::StoreKey,
 };
+use crate::{config::MetadataEraseVersion, metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error};
 pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
@@ -190,7 +190,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
 /// Many `retrieve` and `store` methods have a standard and an `_opt` variant.
-/// The latter has an additional [`CodecOptions`](crate::array::codec::CodecOptions) parameter for fine-grained concurrency control and more.
+/// The latter has an additional [`CodecOptions`] parameter for fine-grained concurrency control and more.
 ///
 /// Array `retrieve_*` methods are generic over the return type.
 /// For example, the following variants are available for retrieving chunks or array subsets:
@@ -359,7 +359,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// `zarrs` will automatically choose where to prioritise parallelism between codecs/chunks based on the codecs and number of chunks.
 ///
 /// By default, all available CPU cores will be used (where possible/efficient).
-/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`](crate::array::codec::CodecOptions) manipulated with [`CodecOptions::set_concurrent_target`](crate::array::codec::CodecOptions::set_concurrent_target).
+/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`] manipulated with [`CodecOptions::set_concurrent_target`](crate::array::codec::CodecOptions::set_concurrent_target).
 ///
 /// ### Async API
 /// This crate is async runtime-agnostic.
@@ -392,6 +392,10 @@ pub struct Array<TStorage: ?Sized> {
     dimension_names: Option<Vec<DimensionName>>,
     /// Metadata used to create the array
     metadata: ArrayMetadata,
+    /// Options
+    codec_options: CodecOptions,
+    metadata_options: ArrayMetadataOptions,
+    metadata_erase_version: MetadataEraseVersion,
 }
 
 impl<TStorage: ?Sized> Array<TStorage> {
@@ -408,6 +412,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
+            codec_options: self.codec_options,
+            metadata_options: self.metadata_options,
+            metadata_erase_version: self.metadata_erase_version,
         }
     }
 
@@ -459,7 +466,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .fill_value_from_metadata(&metadata_v3.fill_value)
             .map_err(ArrayCreateError::InvalidFillValueMetadata)?;
         let codecs = Arc::new(
-            CodecChain::from_metadata(&metadata_v3.codecs)
+            CodecChain::from_metadata(&metadata_v3.codecs, global_config().codec_aliases_v3())
                 .map_err(ArrayCreateError::CodecsCreateError)?,
         );
         let storage_transformers =
@@ -490,7 +497,36 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers,
             dimension_names: metadata_v3.dimension_names,
             metadata,
+            codec_options: global_config().codec_options(),
+            metadata_options: global_config().array_metadata_options(),
+            metadata_erase_version: global_config().metadata_erase_version(),
         })
+    }
+
+    /// Set the codec options.
+    #[must_use]
+    pub fn with_codec_options(mut self, codec_options: CodecOptions) -> Self {
+        self.codec_options = codec_options;
+        self
+    }
+
+    /// Set the codec options.
+    pub fn set_codec_options(&mut self, codec_options: CodecOptions) -> &mut Self {
+        self.codec_options = codec_options;
+        self
+    }
+
+    /// Set the metadata options.
+    #[must_use]
+    pub fn with_metadata_options(mut self, metadata_options: ArrayMetadataOptions) -> Self {
+        self.metadata_options = metadata_options;
+        self
+    }
+
+    /// Set the metadata options.
+    pub fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self {
+        self.metadata_options = metadata_options;
+        self
     }
 
     /// Get the underlying storage backing the array.
@@ -709,7 +745,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Codec metadata manipulation
         match &mut metadata {
             ArrayMetadata::V3(metadata) => {
-                metadata.codecs = self.codecs().create_metadatas_opt(options.codec_options());
+                metadata.codecs = self
+                    .codecs()
+                    .create_metadatas(options.codec_metadata_options());
             }
             ArrayMetadata::V2(_metadata) => {
                 // NOTE: The codec related options in ArrayMetadataOptions do not impact V2 codecs
@@ -955,6 +993,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     storage_transformers: self.storage_transformers,
                     dimension_names: self.dimension_names,
                     metadata,
+                    codec_options: self.codec_options,
+                    metadata_options: self.metadata_options,
+                    metadata_erase_version: self.metadata_erase_version,
                 })
             }
             ArrayMetadata::V3(_) => Ok(self),

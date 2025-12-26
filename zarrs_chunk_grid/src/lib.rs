@@ -33,7 +33,7 @@ use array_subset::{
     ArraySubset, IncompatibleDimensionalityError,
 };
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{MaybeSend, MaybeSync, Plugin, PluginCreateError};
+use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError};
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
@@ -41,7 +41,7 @@ pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
 
 /// A chunk grid plugin.
 #[derive(derive_more::Deref)]
-pub struct ChunkGridPlugin(Plugin<ChunkGrid, (MetadataV3, ArrayShape)>);
+pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape>);
 inventory::collect!(ChunkGridPlugin);
 
 impl ChunkGridPlugin {
@@ -50,10 +50,11 @@ impl ChunkGridPlugin {
         identifier: &'static str,
         match_name_fn: fn(name: &str) -> bool,
         create_fn: fn(
-            metadata_and_array_shape: &(MetadataV3, ArrayShape),
+            metadata: &MetadataV3,
+            array_shape: &ArrayShape,
         ) -> Result<ChunkGrid, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(identifier, match_name_fn, create_fn))
+        Self(Plugin2::new(identifier, match_name_fn, create_fn))
     }
 }
 
@@ -75,7 +76,7 @@ impl ChunkGrid {
     ) -> Result<Self, PluginCreateError> {
         for plugin in inventory::iter::<ChunkGridPlugin> {
             if plugin.match_name(metadata.name()) {
-                return plugin.create(&(metadata.clone(), array_shape.to_vec()));
+                return plugin.create(metadata, &array_shape.to_vec());
             }
         }
         #[cfg(miri)]

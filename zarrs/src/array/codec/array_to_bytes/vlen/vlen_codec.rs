@@ -1,6 +1,10 @@
 use std::{num::NonZeroU64, sync::Arc};
 
+use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_registry::codec::BYTES;
+
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
+use crate::array::codec::NamedCodec;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::metadata::Configuration;
@@ -32,12 +36,15 @@ impl Default for VlenCodec {
     fn default() -> Self {
         let index_codecs = Arc::new(CodecChain::new_named(
             vec![],
-            Arc::new(BytesCodec::new(Some(Endianness::Little))).into(),
+            NamedCodec::new(
+                BYTES.to_string(),
+                Arc::new(BytesCodec::new(Some(Endianness::Little))),
+            ),
             vec![],
         ));
         let data_codecs = Arc::new(CodecChain::new_named(
             vec![],
-            Arc::new(BytesCodec::new(None)).into(),
+            NamedCodec::new(BYTES.to_string(), Arc::new(BytesCodec::new(None))),
             vec![],
         ));
         Self {
@@ -79,12 +86,18 @@ impl VlenCodec {
     /// Returns a [`PluginCreateError`] if the codecs cannot be constructed from the codec metadata.
     pub fn new_with_configuration(
         configuration: &VlenCodecConfiguration,
+        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let index_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.index_codecs,
+                    codec_aliases,
+                )?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.data_codecs,
+                    codec_aliases,
+                )?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -93,9 +106,14 @@ impl VlenCodec {
                 ))
             }
             VlenCodecConfiguration::V0(configuration) => {
-                let index_codecs =
-                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
+                let index_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.index_codecs,
+                    codec_aliases,
+                )?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(
+                    &configuration.data_codecs,
+                    codec_aliases,
+                )?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -115,14 +133,10 @@ impl CodecTraits for VlenCodec {
         zarrs_registry::codec::VLEN
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = VlenCodecConfiguration::V0_1(VlenCodecConfigurationV0_1 {
-            index_codecs: self.index_codecs.create_metadatas(),
-            data_codecs: self.data_codecs.create_metadatas(),
+            index_codecs: self.index_codecs.create_metadatas(options),
+            data_codecs: self.data_codecs.create_metadatas(options),
             index_data_type: self.index_data_type,
             index_location: self.index_location,
         });

@@ -145,11 +145,7 @@ impl CodecTraits for BloscCodec {
         BLOSC
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = BloscCodecConfiguration::V1(BloscCodecConfigurationV1 {
             cname: self.cname,
             clevel: self.clevel,

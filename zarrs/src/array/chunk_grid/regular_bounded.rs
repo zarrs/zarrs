@@ -61,10 +61,10 @@ fn is_name_regular_bounded(name: &str) -> bool {
 /// # Errors
 /// Returns a [`PluginCreateError`] if the metadata is invalid for a `regular_bounded` chunk grid.
 pub(crate) fn create_chunk_grid_regular_bounded(
-    metadata_and_array_shape: &(MetadataV3, ArrayShape),
+    metadata: &MetadataV3,
+    array_shape: &ArrayShape,
 ) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata_and_array_shape.0.name(), "chunk grid");
-    let (metadata, array_shape) = metadata_and_array_shape;
+    crate::warn_experimental_extension(metadata.name(), "chunk grid");
     let configuration: RegularBoundedChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(REGULAR_BOUNDED, "chunk grid", metadata.to_string())
@@ -309,7 +309,7 @@ mod tests {
             r#"{"name":"zarrs.regular_bounded","configuration":{"chunk_shape":[1,2,3]}}"#,
         )
         .unwrap();
-        assert!(create_chunk_grid_regular_bounded(&(metadata, vec![3, 3, 3])).is_ok());
+        assert!(create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3]).is_ok());
     }
 
     #[test]
@@ -318,9 +318,9 @@ mod tests {
             r#"{"name":"zarrs.regular_bounded","configuration":{"invalid":[1,2,3]}}"#,
         )
         .unwrap();
-        assert!(create_chunk_grid_regular_bounded(&(metadata.clone(), vec![3, 3, 3])).is_err());
+        assert!(create_chunk_grid_regular_bounded(&metadata.clone(), &vec![3, 3, 3]).is_err());
         assert_eq!(
-            create_chunk_grid_regular_bounded(&(metadata, vec![3, 3, 3]))
+            create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
             r#"chunk grid zarrs.regular_bounded is unsupported with metadata: zarrs.regular_bounded {"invalid":[1,2,3]}"#

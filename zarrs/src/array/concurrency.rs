@@ -135,10 +135,7 @@ pub fn concurrency_chunks_and_codec(
         &RecommendedConcurrency::new(min_concurrent_chunks..max_concurrent_chunks),
         codec_concurrency,
     );
-    let codec_options = codec_options
-        .into_builder()
-        .concurrent_target(codec_concurrent_limit)
-        .build();
+    let codec_options = codec_options.with_concurrent_target(codec_concurrent_limit);
     (self_concurrent_limit, codec_options)
 }
 

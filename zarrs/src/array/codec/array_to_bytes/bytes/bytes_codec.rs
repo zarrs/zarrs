@@ -115,11 +115,7 @@ impl CodecTraits for BytesCodec {
         BYTES
     }
 
-    fn configuration_opt(
-        &self,
-        _name: &str,
-        _options: &CodecMetadataOptions,
-    ) -> Option<Configuration> {
+    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = BytesCodecConfiguration::V1(BytesCodecConfigurationV1 {
             endian: self.endian,
         });

@@ -35,6 +35,7 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use num::Integer;
 pub use reshape_codec::ReshapeCodec;
+use zarrs_registry::ExtensionAliasesCodecV3;
 
 // use itertools::Itertools;
 pub use crate::metadata_ext::codec::reshape::{
@@ -107,7 +108,10 @@ fn is_identifier_reshape(identifier: &str) -> bool {
     identifier == RESHAPE
 }
 
-pub(crate) fn create_codec_reshape(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_reshape(
+    metadata: &MetadataV3,
+    _aliases: &ExtensionAliasesCodecV3,
+) -> Result<Codec, PluginCreateError> {
     let configuration: ReshapeCodecConfiguration = metadata
         .to_configuration()
         .map_err(|_| PluginMetadataInvalidError::new(RESHAPE, "codec", metadata.to_string()))?;
