@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2025-12-26
+
 ### Changed
 - Add `OPTIONAL` codec and data type identifier
 
@@ -67,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release (split from `zarrs_metadata` 0.4.0 during development)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_registry-v0.1.8...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_registry-v0.1.9...HEAD
+[0.1.9]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.9
 [0.1.8]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.8
 [0.1.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.7
 [0.1.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_registry-v0.1.6

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2025-12-26
+
 ### Fixed
 - Improve read performance
 
@@ -84,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.5...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.6...HEAD
+[0.3.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.6
 [0.3.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.5
 [0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.4
 [0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.3
