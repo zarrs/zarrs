@@ -546,6 +546,12 @@ impl<TStorage: ?Sized> Array<TStorage> {
         self.data_type.data_type()
     }
 
+    /// Get the named data type.
+    #[must_use]
+    pub const fn named_data_type(&self) -> &NamedDataType {
+        &self.data_type
+    }
+
     /// Get the fill value.
     #[must_use]
     pub const fn fill_value(&self) -> &FillValue {

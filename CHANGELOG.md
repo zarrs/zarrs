@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `array::ChunkShapeTraits` (supersedes `ChunkShape` newtype)
 - Add `Config::{codec_options,codec_metadata_options,array_metadata_options,group_metadata_options}()` methods
 - Add `Default` implementation for `MetadataConvertVersion` and `MetadataEraseVersion`
+- Add `Array::named_data_type()`
 
 ### Changed
 
