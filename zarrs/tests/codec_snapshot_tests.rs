@@ -1128,7 +1128,6 @@ pub struct CodecDef {
 
 /// Build the codec registry with all available codecs
 fn codec_registry() -> Vec<CodecDef> {
-    use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
     use zarrs::array::codec::*;
     use zarrs::metadata_ext::codec::fixedscaleoffset::{
         FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
@@ -1295,6 +1294,11 @@ fn codec_registry() -> Vec<CodecDef> {
         skip: None,
     });
 
+    // Helper: skip for variable-length and optional data types
+    fn is_vlen_or_optional(dt: &DataType) -> bool {
+        dt.fixed_size().is_none() || dt.optional().is_some()
+    }
+
     #[cfg(feature = "bitround")]
     codecs.push(CodecDef {
         name: "bitround",
@@ -1303,7 +1307,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToArray(Arc::new(BitroundCodec::new(10))),
         lossy: true,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1367,7 +1371,7 @@ fn codec_registry() -> Vec<CodecDef> {
         // Float types may have precision loss
         lossy: true,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
 
     // =========================================================================
@@ -1381,8 +1385,13 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(BytesCodec::default())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
+
+    // Helper: skip for optional data types
+    fn is_optional(dt: &DataType) -> bool {
+        dt.optional().is_some()
+    }
 
     #[cfg(feature = "sharding")]
     codecs.push(CodecDef {
@@ -1396,7 +1405,7 @@ fn codec_registry() -> Vec<CodecDef> {
         },
         lossy: false,
         non_deterministic: false, // Using single-threaded pool makes it deterministic
-        skip: None,
+        skip: Some(is_optional),
     });
 
     #[cfg(feature = "pcodec")]
@@ -1412,7 +1421,7 @@ fn codec_registry() -> Vec<CodecDef> {
         },
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
 
     #[cfg(feature = "zfp")]
@@ -1423,8 +1432,13 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(ZfpCodec::new_reversible())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
+
+    // Helper: skip vlen codecs for fixed-length or optional data types
+    fn is_fixed_length_or_optional(dt: &DataType) -> bool {
+        dt.fixed_size().is_some() || dt.optional().is_some()
+    }
 
     codecs.push(CodecDef {
         name: "vlen",
@@ -1433,7 +1447,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenCodec::default())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_fixed_length_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1443,7 +1457,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenV2Codec::new())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_fixed_length_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1453,7 +1467,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenArrayCodec::new())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_fixed_length_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1463,7 +1477,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenBytesCodec::new())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_fixed_length_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1473,7 +1487,7 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenUtf8Codec::new())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_fixed_length_or_optional),
     });
 
     codecs.push(CodecDef {
@@ -1483,8 +1497,13 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(PackBitsCodec::default())),
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_vlen_or_optional),
     });
+
+    // Helper: skip optional codec for non-optional data types
+    fn is_not_optional(dt: &DataType) -> bool {
+        dt.optional().is_none()
+    }
 
     codecs.push(CodecDef {
         name: "optional",
@@ -1493,31 +1512,13 @@ fn codec_registry() -> Vec<CodecDef> {
         factory: |dt| {
             let aliases = ExtensionAliasesCodecV3::default();
             // For optional types, default_array_to_bytes_codec returns an OptionalCodec
-            if dt.optional().is_some() {
-                CodecInstance::ArrayToBytes(
-                    default_array_to_bytes_codec(dt, &aliases).codec().clone(),
-                )
-            } else {
-                // For non-optional types, manually wrap the default codec in an OptionalCodec
-                let mask_codec_chain = Arc::new(CodecChain::new_named(
-                    vec![],
-                    NamedCodec::new_default_name(Arc::new(PackBitsCodec::default()), &aliases),
-                    vec![],
-                ));
-                let data_codec_chain = Arc::new(CodecChain::new_named(
-                    vec![],
-                    default_array_to_bytes_codec(dt, &aliases),
-                    vec![],
-                ));
-                CodecInstance::ArrayToBytes(Arc::new(OptionalCodec::new(
-                    mask_codec_chain,
-                    data_codec_chain,
-                )))
-            }
+            CodecInstance::ArrayToBytes(
+                default_array_to_bytes_codec(dt, &aliases).codec().clone(),
+            )
         },
         lossy: false,
         non_deterministic: false,
-        skip: None,
+        skip: Some(is_not_optional),
     });
 
     codecs
