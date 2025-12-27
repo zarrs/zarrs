@@ -12,10 +12,6 @@ use crate::{
         codec::{CodecMetadataOptions, CodecOptions},
     },
     group::GroupMetadataOptions,
-    registry::{
-        ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-        ExtensionAliasesDataTypeV3,
-    },
 };
 
 /// Global configuration options for the `zarrs` crate.
@@ -111,29 +107,6 @@ use crate::{
 ///  }
 /// ```
 ///
-/// ### Codec Aliases
-/// > default: see [`ExtensionAliasesCodecV3::default`] and [`ExtensionAliasesCodecV2::default`].
-///
-/// The default codec `name`s used when serialising codecs, and recognised codec `name` aliases when deserialising codecs.
-/// Codec default `name`s and aliases can be modified at runtime.
-///
-/// Note that the [`NamedCodec`](crate::array::codec::NamedCodec) mechanism means that a serialised codec `name` can differ from the default `name`.
-/// By default, updating and storing the metadata of an array will NOT convert aliased codec names to the default codec name.
-/// This behaviour can be changed with the [convert aliased extension names](#convert-aliased-extension-names) configuration option.
-///
-/// The codec maps enable support for unstandardised codecs, such as:
-/// - codecs registered in the official [`zarr-extensions`](https://github.com/zarr-developers/zarr-extensions) repository that are compatible with `zarrs`,
-/// - `zarrs` experimental codecs with `name`s that have since changed, and
-/// - user-defined custom codecs.
-///
-/// If a codec is not present in the codec maps, the `name` will be inferred as the unique codec identifier.
-/// Codecs registered for that identifier work without any changes required for the codec maps.
-///
-/// ### Data Type Aliases
-/// > default: see [`ExtensionAliasesDataTypeV3::default`] and [`ExtensionAliasesDataTypeV2::default`].
-///
-/// These operate similarly to codec maps, but for data types.
-///
 /// ### Convert Aliased Extension Names
 /// > default: [`false`]
 ///
@@ -150,14 +123,6 @@ pub struct Config {
     metadata_convert_version: MetadataConvertVersion,
     metadata_erase_version: MetadataEraseVersion,
     include_zarrs_metadata: bool,
-    #[serde(skip)]
-    codec_aliases_v3: ExtensionAliasesCodecV3,
-    #[serde(skip)]
-    codec_aliases_v2: ExtensionAliasesCodecV2,
-    #[serde(skip)]
-    data_type_aliases_v3: ExtensionAliasesDataTypeV3,
-    #[serde(skip)]
-    data_type_aliases_v2: ExtensionAliasesDataTypeV2,
     experimental_partial_encoding: bool,
     convert_aliased_extension_names: bool,
 }
@@ -174,10 +139,6 @@ impl Default for Config {
             metadata_convert_version: MetadataConvertVersion::default(),
             metadata_erase_version: MetadataEraseVersion::default(),
             include_zarrs_metadata: true,
-            codec_aliases_v3: ExtensionAliasesCodecV3::default(),
-            codec_aliases_v2: ExtensionAliasesCodecV2::default(),
-            data_type_aliases_v3: ExtensionAliasesDataTypeV3::default(),
-            data_type_aliases_v2: ExtensionAliasesDataTypeV2::default(),
             experimental_partial_encoding: false,
             convert_aliased_extension_names: false,
         }
@@ -312,50 +273,6 @@ impl Config {
     pub fn set_include_zarrs_metadata(&mut self, include_zarrs_metadata: bool) -> &mut Self {
         self.include_zarrs_metadata = include_zarrs_metadata;
         self
-    }
-
-    /// Get the Zarr V3 [codec aliases](#codec-aliases) configuration.
-    #[must_use]
-    pub fn codec_aliases_v3(&self) -> &ExtensionAliasesCodecV3 {
-        &self.codec_aliases_v3
-    }
-
-    /// Get a mutable reference to the Zarr V3 [codec aliases](#codec-aliases) configuration.
-    pub fn codec_aliases_v3_mut(&mut self) -> &mut ExtensionAliasesCodecV3 {
-        &mut self.codec_aliases_v3
-    }
-
-    /// Get the Zarr V3 [data type aliases](#data-type-aliases) configuration.
-    #[must_use]
-    pub fn data_type_aliases_v3(&self) -> &ExtensionAliasesDataTypeV3 {
-        &self.data_type_aliases_v3
-    }
-
-    /// Get a mutable reference to the Zarr V3 [data type aliases](#data-type-aliases) configuration.
-    pub fn data_type_aliases_v3_mut(&mut self) -> &mut ExtensionAliasesDataTypeV3 {
-        &mut self.data_type_aliases_v3
-    }
-
-    /// Get the Zarr V2 [codec aliases](#codec-aliases) configuration.
-    #[must_use]
-    pub fn codec_aliases_v2(&self) -> &ExtensionAliasesCodecV2 {
-        &self.codec_aliases_v2
-    }
-
-    /// Get a mutable reference to the Zarr V2 [codec aliases](#codec-aliases) configuration.
-    pub fn codec_aliases_v2_mut(&mut self) -> &mut ExtensionAliasesCodecV2 {
-        &mut self.codec_aliases_v2
-    }
-
-    /// Get the Zarr V2 [data type aliases](#data-type-aliases) configuration.
-    #[must_use]
-    pub fn data_type_aliases_v2(&self) -> &ExtensionAliasesDataTypeV2 {
-        &self.data_type_aliases_v2
-    }
-
-    /// Get a mutable reference to the Zarr V2 [data type aliases](#data-type-aliases) configuration.
-    pub fn data_type_aliases_v2_mut(&mut self) -> &mut ExtensionAliasesDataTypeV2 {
-        &mut self.data_type_aliases_v2
     }
 
     /// Get the [experimental partial encoding](#experimental-partial-encoding) configuration.

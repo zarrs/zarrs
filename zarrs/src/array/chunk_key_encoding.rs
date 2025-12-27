@@ -8,6 +8,7 @@ pub mod default;
 pub mod default_suffix;
 pub mod v2;
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration};
@@ -22,7 +23,7 @@ pub use crate::metadata::ChunkKeySeparator;
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     metadata::v3::MetadataV3,
-    plugin::{Plugin, PluginCreateError},
+    plugin::{Plugin, PluginCreateError, ZarrVersions},
     storage::StoreKey,
 };
 
@@ -39,10 +40,16 @@ impl ChunkKeyEncodingPlugin {
     /// Create a new [`ChunkKeyEncodingPlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
         create_fn: fn(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(identifier, match_name_fn, create_fn))
+        Self(Plugin::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -60,7 +67,7 @@ impl ChunkKeyEncoding {
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered chunk key encoding plugin.
     pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
         for plugin in inventory::iter::<ChunkKeyEncodingPlugin> {
-            if plugin.match_name(metadata.name()) {
+            if plugin.match_name(metadata.name(), ZarrVersions::V3) {
                 return plugin.create(metadata);
             }
         }

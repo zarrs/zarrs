@@ -1,12 +1,11 @@
 use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
 
-use super::{Endianness, reverse_endianness};
+use super::{BytesCodec, Endianness, reverse_endianness};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::registry::codec::BYTES;
 use crate::storage::{StorageError, byte_range::ByteRange};
 use crate::{
     array::{
@@ -19,6 +18,7 @@ use crate::{
     },
     indexer::IncompatibleIndexerError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {
@@ -72,7 +72,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -142,7 +142,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -208,7 +208,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -304,7 +304,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 

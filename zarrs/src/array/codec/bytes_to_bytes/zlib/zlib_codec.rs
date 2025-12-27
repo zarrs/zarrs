@@ -15,7 +15,10 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::ZLIB;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]
@@ -48,8 +51,8 @@ impl ZlibCodec {
 }
 
 impl CodecTraits for ZlibCodec {
-    fn identifier(&self) -> &str {
-        ZLIB
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -129,4 +132,44 @@ impl BytesToBytesCodecTraits for ZlibCodec {
                 )
             })
     }
+}
+
+static ZLIB_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "numcodecs.zlib",
+        vec![],
+        vec![],
+    ))
+});
+
+static ZLIB_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        ZlibCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for ZlibCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        ZLIB_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        ZLIB_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for ZlibCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        ZLIB_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        ZLIB_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for ZlibCodec {
+    const IDENTIFIER: &'static str = "zlib";
 }

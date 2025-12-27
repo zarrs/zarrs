@@ -14,18 +14,34 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
+use std::borrow::Cow;
+
 use thiserror::Error;
 
 mod maybe;
-
 pub use maybe::{MaybeSend, MaybeSync};
+
+mod extension_type;
+pub use extension_type::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ExtensionType,
+    ExtensionTypeChunkGrid, ExtensionTypeChunkKeyEncoding, ExtensionTypeCodec,
+    ExtensionTypeDataType, ExtensionTypeStorageTransformer,
+};
+
+/// Re-export of [`regex::Regex`] for use in extension alias configurations.
+pub use regex::Regex;
+
+mod zarr_version;
+pub use zarr_version::{ZarrVersion, ZarrVersion2, ZarrVersion3, ZarrVersions};
 
 /// A plugin.
 pub struct Plugin<TPlugin, TInput> {
     /// the identifier of the plugin.
     identifier: &'static str,
-    /// Tests if the name is a match for this plugin.
-    match_name_fn: fn(name: &str) -> bool,
+    /// Tests if the name is a match for this plugin for a given Zarr version.
+    match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+    /// Returns the default name for this codec for the given Zarr version.
+    default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
     /// Create an implementation of this plugin from metadata.
     create_fn: fn(input: &TInput) -> Result<TPlugin, PluginCreateError>,
 }
@@ -34,8 +50,10 @@ pub struct Plugin<TPlugin, TInput> {
 pub struct Plugin2<TPlugin, TInput1, TInput2> {
     /// the identifier of the plugin.
     identifier: &'static str,
-    /// Tests if the name is a match for this plugin.
-    match_name_fn: fn(name: &str) -> bool,
+    /// Tests if the name is a match for this plugin for a given Zarr version.
+    match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+    /// Returns the default name for this codec for the given Zarr version.
+    default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
     /// Create an implementation of this plugin from metadata.
     create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError>,
 }
@@ -108,12 +126,14 @@ impl<TPlugin, TInput> Plugin<TPlugin, TInput> {
     /// Create a new plugin for registration.
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
         create_fn: fn(inputs: &TInput) -> Result<TPlugin, PluginCreateError>,
     ) -> Self {
         Self {
             identifier,
             match_name_fn,
+            default_name_fn,
             create_fn,
         }
     }
@@ -130,10 +150,15 @@ impl<TPlugin, TInput> Plugin<TPlugin, TInput> {
         (self.create_fn)(input)
     }
 
-    /// Returns true if this plugin is associated with `name`.
+    /// Returns true if this plugin is associated with `name` for the given Zarr version.
     #[must_use]
-    pub fn match_name(&self, name: &str) -> bool {
-        (self.match_name_fn)(name)
+    pub fn match_name(&self, name: &str, version: impl Into<ZarrVersions>) -> bool {
+        (self.match_name_fn)(name, version.into())
+    }
+
+    /// Return the default name for this plugin for the given Zarr version.
+    pub fn default_name(&self, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
+        (self.default_name_fn)(version.into())
     }
 
     /// Returns the identifier of the plugin.
@@ -147,12 +172,14 @@ impl<TPlugin, TInput1, TInput2> Plugin2<TPlugin, TInput1, TInput2> {
     /// Create a new plugin for registration.
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
         create_fn: fn(input1: &TInput1, input2: &TInput2) -> Result<TPlugin, PluginCreateError>,
     ) -> Self {
         Self {
             identifier,
             match_name_fn,
+            default_name_fn,
             create_fn,
         }
     }
@@ -169,10 +196,15 @@ impl<TPlugin, TInput1, TInput2> Plugin2<TPlugin, TInput1, TInput2> {
         (self.create_fn)(input1, input2)
     }
 
-    /// Returns true if this plugin is associated with `name`.
+    /// Returns true if this plugin is associated with `name` for the given Zarr version.
     #[must_use]
-    pub fn match_name(&self, name: &str) -> bool {
-        (self.match_name_fn)(name)
+    pub fn match_name(&self, name: &str, version: impl Into<ZarrVersions>) -> bool {
+        (self.match_name_fn)(name, version.into())
+    }
+
+    /// Return the default name for this plugin for the given Zarr version.
+    pub fn default_name(&self, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
+        (self.default_name_fn)(version.into())
     }
 
     /// Returns the identifier of the plugin.
@@ -194,8 +226,12 @@ mod tests {
         Reject,
     }
 
-    fn is_test(name: &str) -> bool {
+    fn matches_name_test(name: &str, _version: ZarrVersions) -> bool {
         name == "test"
+    }
+
+    fn default_name_test(_version: ZarrVersions) -> Cow<'static, str> {
+        "test".into()
     }
 
     fn create_test(input: &Input) -> Result<TestPlugin, PluginCreateError> {
@@ -207,9 +243,9 @@ mod tests {
 
     #[test]
     fn plugin() {
-        let plugin = Plugin::new("test", is_test, create_test);
-        assert!(!plugin.match_name("fail"));
-        assert!(plugin.match_name("test"));
+        let plugin = Plugin::new("test", matches_name_test, default_name_test, create_test);
+        assert!(!plugin.match_name("fail", ZarrVersions::V3));
+        assert!(plugin.match_name("test", ZarrVersions::V3));
         assert_eq!(plugin.identifier(), "test");
         assert!(plugin.create(&Input::Accept).is_ok());
         assert!(plugin.create(&Input::Reject).is_err());

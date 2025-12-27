@@ -33,7 +33,7 @@ use array_subset::{
     ArraySubset, IncompatibleDimensionalityError,
 };
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError};
+use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError, ZarrVersions};
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
@@ -48,13 +48,19 @@ impl ChunkGridPlugin {
     /// Create a new [`ChunkGridPlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
         create_fn: fn(
             metadata: &MetadataV3,
             array_shape: &ArrayShape,
         ) -> Result<ChunkGrid, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(identifier, match_name_fn, create_fn))
+        Self(Plugin2::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -75,7 +81,7 @@ impl ChunkGrid {
         array_shape: &[u64],
     ) -> Result<Self, PluginCreateError> {
         for plugin in inventory::iter::<ChunkGridPlugin> {
-            if plugin.match_name(metadata.name()) {
+            if plugin.match_name(metadata.name(), ZarrVersions::V3) {
                 return plugin.create(metadata, &array_shape.to_vec());
             }
         }

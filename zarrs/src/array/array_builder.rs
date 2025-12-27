@@ -307,11 +307,9 @@ impl ArrayBuilder {
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         self.array_to_array_codecs = array_to_array_codecs
             .into_iter()
-            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .map(NamedCodec::new_default_name)
             .collect();
         self
     }
@@ -334,10 +332,7 @@ impl ArrayBuilder {
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
-        self.array_to_bytes_codec =
-            Some(NamedCodec::new_default_name(array_to_bytes_codec, aliases));
+        self.array_to_bytes_codec = Some(NamedCodec::new_default_name(array_to_bytes_codec));
         self
     }
 
@@ -359,11 +354,9 @@ impl ArrayBuilder {
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         self.bytes_to_bytes_codecs = bytes_to_bytes_codecs
             .into_iter()
-            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .map(NamedCodec::new_default_name)
             .collect();
         self
     }
@@ -495,9 +488,7 @@ impl ArrayBuilder {
                     .map_err(ArrayCreateError::ChunkGridCreateError)?
             }
         };
-        let data_type = self
-            .data_type
-            .to_data_type(global_config().data_type_aliases_v3())?;
+        let data_type = self.data_type.to_data_type()?;
         let fill_value = self.fill_value.to_fill_value(&data_type)?;
         if let Some(dimension_names) = &self.dimension_names {
             if dimension_names.len() != chunk_grid.dimensionality() {
@@ -508,12 +499,10 @@ impl ArrayBuilder {
             }
         }
 
-        let array_to_bytes_codec = self.array_to_bytes_codec.clone().unwrap_or_else(|| {
-            super::codec::default_array_to_bytes_codec(
-                &data_type,
-                global_config().codec_aliases_v3(),
-            )
-        });
+        let array_to_bytes_codec = self
+            .array_to_bytes_codec
+            .clone()
+            .unwrap_or_else(|| super::codec::default_array_to_bytes_codec(&data_type));
 
         // If subchunk_shape is set, wrap the codec chain with a sharding codec
         #[cfg(feature = "sharding")]
@@ -538,10 +527,7 @@ impl ArrayBuilder {
 
             CodecChain::new_named(
                 vec![],
-                NamedCodec::new_default_name(
-                    Arc::new(sharding_builder.build()),
-                    global_config().codec_aliases_v3(),
-                ),
+                NamedCodec::new_default_name(Arc::new(sharding_builder.build())),
                 vec![],
             )
         } else {

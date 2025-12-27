@@ -17,7 +17,10 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::FLETCHER32;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `fletcher32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -38,8 +41,8 @@ impl Fletcher32Codec {
 }
 
 impl CodecTraits for Fletcher32Codec {
-    fn identifier(&self) -> &str {
-        FLETCHER32
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -195,4 +198,47 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
             BytesRepresentation::UnboundedSize => BytesRepresentation::UnboundedSize,
         }
     }
+}
+
+static FLETCHER32_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "numcodecs.fletcher32",
+        vec![
+            "numcodecs.fletcher32".into(),
+            "https://codec.zarrs.dev/bytes_to_bytes/fletcher32".into(),
+        ],
+        vec![],
+    ))
+});
+
+static FLETCHER32_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        Fletcher32Codec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for Fletcher32Codec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        FLETCHER32_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        FLETCHER32_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for Fletcher32Codec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        FLETCHER32_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        FLETCHER32_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for Fletcher32Codec {
+    const IDENTIFIER: &'static str = "fletcher32";
 }

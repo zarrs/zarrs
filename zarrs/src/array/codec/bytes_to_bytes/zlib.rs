@@ -34,35 +34,25 @@ mod zlib_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
-
 pub use self::zlib_codec::ZlibCodec;
 pub use crate::metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
-use crate::registry::codec::ZLIB;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
 };
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ZLIB, is_identifier_zlib, create_codec_zlib)
+    CodecPlugin::new(ZlibCodec::IDENTIFIER, ZlibCodec::matches_name, ZlibCodec::default_name, create_codec_zlib)
 }
 
-fn is_identifier_zlib(identifier: &str) -> bool {
-    identifier == ZLIB
-}
-
-pub(crate) fn create_codec_zlib(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ZlibCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZLIB, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZlibCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ZlibCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

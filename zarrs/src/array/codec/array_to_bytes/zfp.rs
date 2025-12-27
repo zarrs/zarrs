@@ -26,7 +26,7 @@
 //! - `https://codec.zarrs.dev/array_to_bytes/zfp`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! None
+//! - `zfp`
 //!
 //! ### Codec `configuration` Examples - [`ZfpCodecConfiguration`]:
 //! #### Encode in fixed rate mode with 10.5 compressed bits per value
@@ -99,7 +99,7 @@ mod zfp_stream;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 pub use zfp_codec::ZfpCodec;
 use zfp_sys::{
     zfp_decompress, zfp_exec_policy_zfp_exec_omp, zfp_field_alloc, zfp_field_free,
@@ -113,7 +113,6 @@ use self::{
 pub use crate::metadata_ext::codec::zfp::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode,
 };
-use crate::registry::codec::ZFP;
 use crate::{
     array::{
         ChunkShapeTraits, DataType,
@@ -126,20 +125,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ZFP, is_identifier_zfp, create_codec_zfp)
+    CodecPlugin::new(ZfpCodec::IDENTIFIER, ZfpCodec::matches_name, ZfpCodec::default_name, create_codec_zfp)
 }
 
-fn is_identifier_zfp(identifier: &str) -> bool {
-    identifier == ZFP
-}
-
-pub(crate) fn create_codec_zfp(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZFP, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_zfp(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZfpCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ZfpCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
@@ -290,7 +282,7 @@ fn promote_before_zfp_encoding(
         ))),
         unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            ZFP.to_string(),
+            ZfpCodec::IDENTIFIER.to_string(),
         )),
     }
 }
@@ -321,7 +313,7 @@ fn init_zfp_decoding_output(
         DataType::Float64 => Ok(ZfpArray::Double(vec![0.0; num_elements])),
         unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            ZFP.to_string(),
+            ZfpCodec::IDENTIFIER.to_string(),
         )),
     }
 }
@@ -369,7 +361,7 @@ fn demote_after_zfp_decoding(array: ZfpArray, data_type: &DataType) -> Result<Ve
         )),
         _ => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            ZFP.to_string(),
+            ZfpCodec::IDENTIFIER.to_string(),
         )),
     }
 }

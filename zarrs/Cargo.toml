@@ -65,6 +65,7 @@ lru = "0.16.0"
 moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = "0.17.1", optional = true }
 num.workspace = true
+paste = "1.0"
 pco = { version = "0.4.7", optional = true }
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.2.0"
@@ -77,7 +78,6 @@ zarrs_filesystem = { workspace = true, optional = true }
 zarrs_data_type.workspace = true
 zarrs_metadata.workspace = true
 zarrs_plugin.workspace = true
-zarrs_registry.workspace = true
 zarrs_storage.workspace = true
 zfp-sys = {version = "0.4.2", features = ["static"], optional = true }
 zstd = { version = "0.13.3", features = ["zstdmt", "experimental"], optional = true }

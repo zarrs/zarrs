@@ -30,35 +30,26 @@ mod gzip_codec;
 use std::sync::Arc;
 
 pub use gzip_codec::GzipCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::registry::codec::GZIP;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
 };
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(GZIP, is_identifier_gzip, create_codec_gzip)
+    CodecPlugin::new(GzipCodec::IDENTIFIER, GzipCodec::matches_name, GzipCodec::default_name, create_codec_gzip)
 }
 
-fn is_identifier_gzip(identifier: &str) -> bool {
-    identifier == GZIP
-}
-
-pub(crate) fn create_codec_gzip(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: GzipCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(GZIP, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: GzipCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(GzipCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

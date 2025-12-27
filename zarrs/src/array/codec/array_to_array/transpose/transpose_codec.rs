@@ -11,7 +11,6 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
-use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         ArrayBytes, ChunkShape,
@@ -22,6 +21,10 @@ use crate::{
         },
     },
     plugin::PluginCreateError,
+};
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
 };
 
 /// A Transpose codec implementation.
@@ -60,7 +63,7 @@ impl TransposeCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                TRANSPOSE.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
         if self.order.0.len() != shape.len() {
@@ -73,8 +76,8 @@ impl TransposeCodec {
 }
 
 impl CodecTraits for TransposeCodec {
-    fn identifier(&self) -> &str {
-        TRANSPOSE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -112,7 +115,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         if decoded_data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
-                TRANSPOSE.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
         Ok(decoded_data_type.clone())
@@ -273,4 +276,34 @@ impl ArrayCodecTraits for TransposeCodec {
         // TODO: This could be increased, need to implement `transpose_array` without ndarray
         Ok(RecommendedConcurrency::new_maximum(1))
     }
+}
+
+static TRANSPOSE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("transpose", vec![], vec![])));
+
+static TRANSPOSE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("transpose", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for TransposeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        TRANSPOSE_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        TRANSPOSE_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for TransposeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        TRANSPOSE_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        TRANSPOSE_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for TransposeCodec {
+    const IDENTIFIER: &'static str = "transpose";
 }

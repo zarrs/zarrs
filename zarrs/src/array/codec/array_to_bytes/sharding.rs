@@ -66,12 +66,11 @@ pub use sharding_codec_builder::ShardingCodecBuilder;
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use crate::registry::codec::SHARDING;
 use crate::{
     array::{
         ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkShape, ChunkShapeTraits,
@@ -90,24 +89,14 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(SHARDING, is_identifier_sharding, create_codec_sharding)
+    CodecPlugin::new(ShardingCodec::IDENTIFIER, ShardingCodec::matches_name, ShardingCodec::default_name, create_codec_sharding)
 }
 
-fn is_identifier_sharding(identifier: &str) -> bool {
-    identifier == SHARDING
-}
-
-pub(crate) fn create_codec_sharding(
-    metadata: &MetadataV3,
-    aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ShardingCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SHARDING, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ShardingCodec::new_with_configuration(
-        &configuration,
-        aliases,
-    )?);
+pub(crate) fn create_codec_sharding(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ShardingCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ShardingCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
+    let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
@@ -295,8 +284,6 @@ async fn decode_shard_index_async_partial_decoder(
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
-
-    use zarrs_registry::ExtensionAliasesCodecV3;
 
     use super::*;
     use crate::{
@@ -713,8 +700,6 @@ mod tests {
     #[cfg(feature = "crc32c")]
     #[test]
     fn codec_sharding_partial_decode2() {
-        use zarrs_registry::ExtensionAliasesCodecV3;
-
         let chunk_shape: ChunkShape = vec![
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(4).unwrap(),
@@ -728,13 +713,7 @@ mod tests {
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
             .encode(
@@ -785,13 +764,7 @@ mod tests {
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
             .encode(
@@ -848,13 +821,7 @@ mod tests {
         // Create a sharding codec with 2x2 inner chunks
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         // Step 1: Fully encode the shard
         let original_encoded = codec

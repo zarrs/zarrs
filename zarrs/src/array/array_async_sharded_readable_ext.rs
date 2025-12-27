@@ -14,7 +14,6 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
-use crate::config::global_config;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::AsyncReadableStorageTraits;
@@ -159,11 +158,9 @@ impl AsyncArrayShardedReadableExtCache {
                 ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)
                     .expect("valid sharding configuration");
             let sharding_codec = Arc::new(
-                ShardingCodec::new_with_configuration(
-                    &sharding_codec_configuration,
-                    global_config().codec_aliases_v3(),
-                )
-                .expect("supported sharding codec configuration, already instantiated in array"),
+                ShardingCodec::new_with_configuration(&sharding_codec_configuration).expect(
+                    "supported sharding codec configuration, already instantiated in array",
+                ),
             );
             let partial_decoder = MaybeShardingPartialDecoder::Sharding(Arc::new(
                 AsyncShardingPartialDecoder::new(

@@ -34,12 +34,11 @@ mod adler32_codec;
 use std::sync::Arc;
 
 pub use adler32_codec::Adler32Codec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
-use crate::registry::codec::ADLER32;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -48,20 +47,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ADLER32, is_identifier_adler32, create_codec_adler32)
+    CodecPlugin::new(Adler32Codec::IDENTIFIER, Adler32Codec::matches_name, Adler32Codec::default_name, create_codec_adler32)
 }
 
-fn is_identifier_adler32(identifier: &str) -> bool {
-    identifier == ADLER32
-}
-
-pub(crate) fn create_codec_adler32(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ADLER32, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_adler32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(Adler32Codec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

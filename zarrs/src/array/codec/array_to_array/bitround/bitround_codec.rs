@@ -16,8 +16,11 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::BITROUND;
 use std::num::NonZeroU64;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `bitround` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -53,8 +56,8 @@ impl BitroundCodec {
 }
 
 impl CodecTraits for BitroundCodec {
-    fn identifier(&self) -> &str {
-        BITROUND
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -194,8 +197,46 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
             super::supported_dtypes!() => Ok(decoded_data_type.clone()),
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
-                BITROUND.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }
+}
+
+static BITROUND_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "bitround",
+        vec![
+            "numcodecs.bitround".into(),
+            "https://codec.zarrs.dev/array_to_bytes/bitround".into(),
+        ],
+        vec![],
+    ))
+});
+
+static BITROUND_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("bitround", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for BitroundCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BITROUND_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BITROUND_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for BitroundCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BITROUND_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BITROUND_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for BitroundCodec {
+    const IDENTIFIER: &'static str = "bitround";
 }

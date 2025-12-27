@@ -4,21 +4,21 @@ use zarrs_plugin::PluginCreateError;
 
 use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
 use crate::array::NamedDataType;
-use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
-use crate::metadata_ext::v2_to_v3::data_type_metadata_v2_to_v3;
-use crate::registry::codec::FIXEDSCALEOFFSET;
-use crate::{
-    array::{
-        DataType, FillValue,
-        codec::{
-            ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
-            CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-            PartialEncoderCapability, RecommendedConcurrency,
-        },
+use crate::array::{
+    DataType, FillValue,
+    codec::{
+        ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions,
+        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+        RecommendedConcurrency,
     },
-    config::global_config,
 };
+use crate::convert::data_type_metadata_v2_to_v3;
+use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use std::num::NonZeroU64;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 macro_rules! unsupported_dtypes {
     // TODO: Add support for all int/float types?
@@ -125,27 +125,12 @@ impl FixedScaleOffsetCodec {
                             .to_string(),
                     )
                 };
-                let config = global_config();
-                let data_type_aliases_v2 = config.data_type_aliases_v2();
-                let data_type_aliases_v3 = config.data_type_aliases_v3();
-                let dtype = NamedDataType::from_metadata(
-                    &data_type_metadata_v2_to_v3(
-                        &dtype,
-                        data_type_aliases_v2,
-                        data_type_aliases_v3,
-                    )
-                    .map_err(dtype_err)?,
-                    data_type_aliases_v3,
+                let dtype = NamedDataType::try_from(
+                    &data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?,
                 )?;
                 let astype = if let Some(astype) = astype {
-                    Some(NamedDataType::from_metadata(
-                        &data_type_metadata_v2_to_v3(
-                            &astype,
-                            data_type_aliases_v2,
-                            data_type_aliases_v3,
-                        )
-                        .map_err(dtype_err)?,
-                        data_type_aliases_v3,
+                    Some(NamedDataType::try_from(
+                        &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
                     )?)
                 } else {
                     None
@@ -168,8 +153,8 @@ impl FixedScaleOffsetCodec {
 }
 
 impl CodecTraits for FixedScaleOffsetCodec {
-    fn identifier(&self) -> &str {
-        super::FIXEDSCALEOFFSET
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -225,7 +210,7 @@ macro_rules! scale_data_type {
             }),*
             unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 $data_type.clone(),
-                FIXEDSCALEOFFSET.to_string(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
             )),
         }
     };
@@ -247,7 +232,7 @@ macro_rules! unscale_data_type {
             }),*
             unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 $data_type.clone(),
-                FIXEDSCALEOFFSET.to_string(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
             )),
         }
     };
@@ -321,7 +306,7 @@ macro_rules! cast_to_float {
             }),*
             _ => Err(CodecError::UnsupportedDataType(
                 $data_type.clone(),
-                FIXEDSCALEOFFSET.to_string(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
             )),
         }
     };
@@ -342,7 +327,7 @@ macro_rules! cast_from_float {
             }),*
             _ => Err(CodecError::UnsupportedDataType(
                 $data_type.clone(),
-                FIXEDSCALEOFFSET.to_string(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
             )),
         }
     };
@@ -485,8 +470,50 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             }
             unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
-                FIXEDSCALEOFFSET.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }
+}
+
+static FIXEDSCALEOFFSET_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| {
+        RwLock::new(ExtensionAliasesConfig::new(
+            "numcodecs.fixedscaleoffset",
+            vec![],
+            vec![],
+        ))
+    });
+
+static FIXEDSCALEOFFSET_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| {
+        RwLock::new(ExtensionAliasesConfig::new(
+            "fixedscaleoffset",
+            vec![],
+            vec![],
+        ))
+    });
+
+impl ExtensionAliases<ZarrVersion3> for FixedScaleOffsetCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        FIXEDSCALEOFFSET_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        FIXEDSCALEOFFSET_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for FixedScaleOffsetCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        FIXEDSCALEOFFSET_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        FIXEDSCALEOFFSET_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for FixedScaleOffsetCodec {
+    const IDENTIFIER: &'static str = "fixedscaleoffset";
 }

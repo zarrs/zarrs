@@ -21,7 +21,7 @@
 //! - `https://codec.zarrs.dev/array_to_bytes/zfpy`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `zfp`
+//! - `zfpy`
 //!
 //! ### Codec `configuration` Example - [`ZfpyCodecConfiguration`]:
 //! #### Encode in fixed rate mode with 10.5 compressed bits per value
@@ -60,35 +60,29 @@
 //! # let configuration: ZfpyCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
+mod zfpy_codec;
+
 use std::sync::Arc;
 
+use zarrs_plugin::ExtensionIdentifier;
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_registry::ExtensionAliasesCodecV3;
 
-use super::zfp::ZfpCodec;
 use crate::array::codec::{Codec, CodecPlugin};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
 };
-use crate::registry::codec::ZFPY;
+pub use zfpy_codec::ZfpyCodec;
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ZFPY, is_identifier_zfpy, create_codec_zfpy)
+    CodecPlugin::new(ZfpyCodec::IDENTIFIER, ZfpyCodec::matches_name, ZfpyCodec::default_name, create_codec_zfpy)
 }
 
-fn is_identifier_zfpy(identifier: &str) -> bool {
-    identifier == ZFPY
-}
-
-pub(crate) fn create_codec_zfpy(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpyCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZFPY, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ZfpCodec::new_with_configuration_zfpy(&configuration)?);
+pub(crate) fn create_codec_zfpy(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZfpyCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ZfpyCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
+    let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

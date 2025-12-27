@@ -29,8 +29,11 @@ use crate::array::{
 };
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use crate::registry::codec::PACKBITS;
 use std::num::NonZeroU64;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]
@@ -99,8 +102,8 @@ impl PackBitsCodec {
 }
 
 impl CodecTraits for PackBitsCodec {
-    fn identifier(&self) -> &str {
-        PACKBITS
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -445,4 +448,34 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             elements_size_bytes + padding_encoding_byte,
         ))
     }
+}
+
+static PACKBITS_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("packbits", vec![], vec![])));
+
+static PACKBITS_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("packbits", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for PackBitsCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        PACKBITS_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        PACKBITS_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for PackBitsCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        PACKBITS_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        PACKBITS_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for PackBitsCodec {
+    const IDENTIFIER: &'static str = "packbits";
 }

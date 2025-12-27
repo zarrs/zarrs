@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: `ChunkGridPlugin::match_name()` now takes a `ZarrVersions` parameter (use `Plugin2::match_name()`)
+
 ## [0.1.0] - 2025-12-26
 
 ### Added

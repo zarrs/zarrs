@@ -37,12 +37,11 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use crate::registry::codec::FIXEDSCALEOFFSET;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -51,20 +50,19 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(FIXEDSCALEOFFSET, is_identifier_fixedscaleoffset, create_codec_fixedscaleoffset)
-}
-
-fn is_identifier_fixedscaleoffset(identifier: &str) -> bool {
-    identifier == FIXEDSCALEOFFSET
+    CodecPlugin::new(FixedScaleOffsetCodec::IDENTIFIER, FixedScaleOffsetCodec::matches_name, FixedScaleOffsetCodec::default_name, create_codec_fixedscaleoffset)
 }
 
 pub(crate) fn create_codec_fixedscaleoffset(
     metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
 ) -> Result<Codec, PluginCreateError> {
     let configuration: FixedScaleOffsetCodecConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(FIXEDSCALEOFFSET, "codec", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                FixedScaleOffsetCodec::IDENTIFIER,
+                "codec",
+                metadata.to_string(),
+            )
         })?;
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
         &configuration,

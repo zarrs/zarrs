@@ -46,7 +46,6 @@
 //!   - Deprecated aliases will not be removed, but are not recommended for use in new arrays.
 //!   - Deprecated extensions may be removed in future releases.
 //!
-//! Extension names and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and similar methods for data types and Zarr V2.
 //! `zarrs` will persist extension names if opening an existing array of creating an array from metadata.
 //!
 //! #### Data Types
@@ -227,6 +226,7 @@
 
 pub mod array;
 pub mod config;
+pub mod convert;
 pub mod group;
 pub mod hierarchy;
 pub mod node;
@@ -239,7 +239,6 @@ pub use zarrs_filesystem as filesystem;
 pub use zarrs_metadata as metadata;
 pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
-pub use zarrs_registry as registry;
 pub use zarrs_storage as storage;
 
 /// Get a mutable slice of the spare capacity in a vector.

@@ -15,7 +15,10 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::CRC32C;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -36,8 +39,8 @@ impl Crc32cCodec {
 }
 
 impl CodecTraits for Crc32cCodec {
-    fn identifier(&self) -> &str {
-        CRC32C
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -157,4 +160,44 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
             BytesRepresentation::UnboundedSize => BytesRepresentation::UnboundedSize,
         }
     }
+}
+
+static CRC32C_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        Crc32cCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+static CRC32C_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        Crc32cCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for Crc32cCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        CRC32C_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        CRC32C_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for Crc32cCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        CRC32C_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        CRC32C_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for Crc32cCodec {
+    const IDENTIFIER: &'static str = "crc32c";
 }

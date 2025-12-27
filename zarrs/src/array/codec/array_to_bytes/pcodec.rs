@@ -42,13 +42,12 @@ mod pcodec_codec;
 use std::sync::Arc;
 
 pub use pcodec_codec::PcodecCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use crate::registry::codec::PCODEC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -57,20 +56,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(PCODEC, is_identifier_pcodec, create_codec_pcodec)
+    CodecPlugin::new(PcodecCodec::IDENTIFIER, PcodecCodec::matches_name, PcodecCodec::default_name, create_codec_pcodec)
 }
 
-fn is_identifier_pcodec(identifier: &str) -> bool {
-    identifier == PCODEC
-}
-
-pub(crate) fn create_codec_pcodec(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(PCODEC, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_pcodec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(PcodecCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

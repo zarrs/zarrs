@@ -55,13 +55,12 @@ use blosc_src::{
 };
 use derive_more::From;
 use thiserror::Error;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
     BloscShuffleMode,
 };
-use crate::registry::codec::BLOSC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -70,20 +69,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BLOSC, is_identifier_blosc, create_codec_blosc)
+    CodecPlugin::new(BloscCodec::IDENTIFIER, BloscCodec::matches_name, BloscCodec::default_name, create_codec_blosc)
 }
 
-fn is_identifier_blosc(identifier: &str) -> bool {
-    identifier == BLOSC
-}
-
-pub(crate) fn create_codec_blosc(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: BloscCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BLOSC, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: BloscCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(BloscCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

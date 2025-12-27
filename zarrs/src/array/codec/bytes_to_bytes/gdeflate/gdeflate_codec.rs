@@ -14,7 +14,10 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::GDEFLATE;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]
@@ -53,8 +56,8 @@ impl GDeflateCodec {
 }
 
 impl CodecTraits for GDeflateCodec {
-    fn identifier(&self) -> &str {
-        GDEFLATE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -151,4 +154,44 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
             BytesRepresentation::UnboundedSize => BytesRepresentation::UnboundedSize,
         }
     }
+}
+
+static GDEFLATE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "zarrs.gdeflate",
+        vec![],
+        vec![],
+    ))
+});
+
+static GDEFLATE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        GDeflateCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for GDeflateCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        GDEFLATE_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        GDEFLATE_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for GDeflateCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        GDEFLATE_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        GDEFLATE_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for GDeflateCodec {
+    const IDENTIFIER: &'static str = "gdeflate";
 }

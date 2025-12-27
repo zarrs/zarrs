@@ -104,7 +104,7 @@ use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_data_type::FillValue;
 use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
@@ -116,7 +116,6 @@ use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use crate::registry::codec::VLEN;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -125,22 +124,15 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(VLEN, is_identifier_vlen, create_codec_vlen)
+    CodecPlugin::new(VlenCodec::IDENTIFIER, VlenCodec::matches_name, VlenCodec::default_name, create_codec_vlen)
 }
 
-fn is_identifier_vlen(identifier: &str) -> bool {
-    identifier == VLEN
-}
-
-pub(crate) fn create_codec_vlen(
-    metadata: &MetadataV3,
-    aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: VlenCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;
-    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration, aliases)?);
+    let configuration: VlenCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(VlenCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
+    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 

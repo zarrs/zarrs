@@ -15,7 +15,6 @@ use crate::metadata::Configuration;
 use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
-use crate::registry::codec::RESHAPE;
 use crate::{
     array::{
         ChunkShape,
@@ -25,6 +24,10 @@ use crate::{
         },
     },
     plugin::PluginCreateError,
+};
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
 };
 
 /// A `reshape` codec implementation.
@@ -59,8 +62,8 @@ impl ReshapeCodec {
 }
 
 impl CodecTraits for ReshapeCodec {
-    fn identifier(&self) -> &str {
-        RESHAPE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -191,4 +194,34 @@ impl ArrayCodecTraits for ReshapeCodec {
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
+}
+
+static RESHAPE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("reshape", vec![], vec![])));
+
+static RESHAPE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("reshape", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for ReshapeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        RESHAPE_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        RESHAPE_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for ReshapeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        RESHAPE_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        RESHAPE_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for ReshapeCodec {
+    const IDENTIFIER: &'static str = "reshape";
 }

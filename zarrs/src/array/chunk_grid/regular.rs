@@ -25,7 +25,6 @@ use std::num::NonZeroU64;
 use thiserror::Error;
 
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::registry::chunk_grid::REGULAR;
 use crate::{
     array::{
         ArrayIndices, ArrayShape, ChunkShape,
@@ -35,14 +34,12 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(REGULAR, is_name_regular, create_chunk_grid_regular)
-}
-
-fn is_name_regular(name: &str) -> bool {
-    name.eq(REGULAR)
+    ChunkGridPlugin::new(RegularChunkGrid::IDENTIFIER, RegularChunkGrid::matches_name, RegularChunkGrid::default_name, create_chunk_grid_regular)
 }
 
 /// Create a `regular` chunk grid from metadata.
@@ -55,7 +52,11 @@ pub(crate) fn create_chunk_grid_regular(
 ) -> Result<ChunkGrid, PluginCreateError> {
     let configuration: RegularChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(REGULAR, "chunk grid", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                RegularChunkGrid::IDENTIFIER,
+                "chunk grid",
+                metadata.to_string(),
+            )
         })?;
     let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
         .map_err(|_| {
@@ -208,8 +209,11 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
         let configuration = RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
         };
-        MetadataV3::new_with_serializable_configuration(REGULAR.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn dimensionality(&self) -> usize {
@@ -297,6 +301,36 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
         self.chunks_in_array_subset(array_subset).map(Option::Some)
     }
+}
+
+static REGULAR_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("regular", vec![], vec![])));
+
+static REGULAR_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("regular", vec![], vec![])));
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for RegularChunkGrid {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for RegularChunkGrid {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for RegularChunkGrid {
+    const IDENTIFIER: &'static str = "regular";
 }
 
 #[cfg(test)]

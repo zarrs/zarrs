@@ -1,10 +1,11 @@
 //! The `default` chunk key encoding.
 
 use itertools::Itertools;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 pub use crate::metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
-use crate::registry::chunk_key_encoding::DEFAULT;
 use crate::{
     array::chunk_key_encoding::ChunkKeyEncodingPlugin,
     metadata::v3::MetadataV3,
@@ -14,11 +15,7 @@ use crate::{
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DEFAULT, is_name_default, create_chunk_key_encoding_default)
-}
-
-fn is_name_default(name: &str) -> bool {
-    name.eq(DEFAULT)
+    ChunkKeyEncodingPlugin::new(DefaultChunkKeyEncoding::IDENTIFIER, DefaultChunkKeyEncoding::matches_name, DefaultChunkKeyEncoding::default_name, create_chunk_key_encoding_default)
 }
 
 pub(crate) fn create_chunk_key_encoding_default(
@@ -26,7 +23,11 @@ pub(crate) fn create_chunk_key_encoding_default(
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
     let configuration: DefaultChunkKeyEncodingConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(DEFAULT, "chunk key encoding", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                DefaultChunkKeyEncoding::IDENTIFIER,
+                "chunk key encoding",
+                metadata.to_string(),
+            )
         })?;
     let default = DefaultChunkKeyEncoding::new(configuration.separator);
     Ok(ChunkKeyEncoding::new(default))
@@ -77,13 +78,46 @@ impl Default for DefaultChunkKeyEncoding {
     }
 }
 
+static DEFAULT_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("default", vec![], vec![])));
+
+static DEFAULT_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("default", vec![], vec![])));
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for DefaultChunkKeyEncoding {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        DEFAULT_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        DEFAULT_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for DefaultChunkKeyEncoding {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        DEFAULT_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        DEFAULT_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for DefaultChunkKeyEncoding {
+    const IDENTIFIER: &'static str = "default";
+}
+
 impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
     fn create_metadata(&self) -> MetadataV3 {
         let configuration = DefaultChunkKeyEncodingConfiguration {
             separator: self.separator,
         };
-        MetadataV3::new_with_serializable_configuration(DEFAULT.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

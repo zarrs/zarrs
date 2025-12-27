@@ -18,3 +18,24 @@ pub struct ZarrVersion2;
 
 impl ZarrVersion for ZarrVersion3 {}
 impl ZarrVersion for ZarrVersion2 {}
+
+/// Zarr versions.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ZarrVersions {
+    /// Zarr Version 2.
+    V2,
+    /// Zarr Version 3.
+    V3,
+}
+
+impl From<ZarrVersion2> for ZarrVersions {
+    fn from(_: ZarrVersion2) -> Self {
+        ZarrVersions::V2
+    }
+}
+
+impl From<ZarrVersion3> for ZarrVersions {
+    fn from(_: ZarrVersion3) -> Self {
+        ZarrVersions::V3
+    }
+}

@@ -34,35 +34,26 @@ mod zstd_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
 pub use zstd_codec::ZstdCodec;
 
 pub use crate::metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
 };
-use crate::registry::codec::ZSTD;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
 };
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ZSTD, is_identifier_zstd, create_codec_zstd)
+    CodecPlugin::new(ZstdCodec::IDENTIFIER, ZstdCodec::matches_name, ZstdCodec::default_name, create_codec_zstd)
 }
 
-fn is_identifier_zstd(identifier: &str) -> bool {
-    identifier == ZSTD
-}
-
-pub(crate) fn create_codec_zstd(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZSTD, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZstdCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ZstdCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

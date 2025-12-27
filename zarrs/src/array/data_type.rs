@@ -9,8 +9,12 @@
 //!
 #![doc = include_str!("../../doc/status/data_types.md")]
 
+mod data_type_types;
 mod named_data_type;
-use std::{fmt::Debug, mem::discriminant, num::NonZeroU32, ops::Deref, sync::Arc};
+use std::{borrow::Cow, fmt::Debug, mem::discriminant, num::NonZeroU32, ops::Deref, sync::Arc};
+
+pub use data_type_types::*;
+use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
@@ -26,7 +30,6 @@ use crate::metadata_ext::data_type::{
     numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
     optional::OptionalDataTypeConfigurationV1,
 };
-use crate::registry::ExtensionAliasesDataTypeV3;
 
 /// A newtype wrapper for optional data types.
 ///
@@ -68,7 +71,7 @@ impl DataTypeOptional {
     #[must_use]
     pub fn configuration(&self) -> Configuration {
         Configuration::from(OptionalDataTypeConfigurationV1 {
-            name: self.0.identifier().to_string(),
+            name: self.0.name().to_string(),
             configuration: self.0.configuration(),
         })
     }
@@ -243,61 +246,61 @@ impl DataType {
     #[must_use]
     pub fn identifier(&self) -> &'static str {
         match self {
-            Self::Bool => zarrs_registry::data_type::BOOL,
-            Self::Int2 => zarrs_registry::data_type::INT2,
-            Self::Int4 => zarrs_registry::data_type::INT4,
-            Self::Int8 => zarrs_registry::data_type::INT8,
-            Self::Int16 => zarrs_registry::data_type::INT16,
-            Self::Int32 => zarrs_registry::data_type::INT32,
-            Self::Int64 => zarrs_registry::data_type::INT64,
-            Self::UInt2 => zarrs_registry::data_type::UINT2,
-            Self::UInt4 => zarrs_registry::data_type::UINT4,
-            Self::UInt8 => zarrs_registry::data_type::UINT8,
-            Self::UInt16 => zarrs_registry::data_type::UINT16,
-            Self::UInt32 => zarrs_registry::data_type::UINT32,
-            Self::UInt64 => zarrs_registry::data_type::UINT64,
-            Self::Float4E2M1FN => zarrs_registry::data_type::FLOAT4_E2M1FN,
-            Self::Float6E2M3FN => zarrs_registry::data_type::FLOAT6_E2M3FN,
-            Self::Float6E3M2FN => zarrs_registry::data_type::FLOAT6_E3M2FN,
-            Self::Float8E3M4 => zarrs_registry::data_type::FLOAT8_E3M4,
-            Self::Float8E4M3 => zarrs_registry::data_type::FLOAT8_E4M3,
-            Self::Float8E4M3B11FNUZ => zarrs_registry::data_type::FLOAT8_E4M3B11FNUZ,
-            Self::Float8E4M3FNUZ => zarrs_registry::data_type::FLOAT8_E4M3FNUZ,
-            Self::Float8E5M2 => zarrs_registry::data_type::FLOAT8_E5M2,
-            Self::Float8E5M2FNUZ => zarrs_registry::data_type::FLOAT8_E5M2FNUZ,
-            Self::Float8E8M0FNU => zarrs_registry::data_type::FLOAT8_E8M0FNU,
-            Self::BFloat16 => zarrs_registry::data_type::BFLOAT16,
-            Self::Float16 => zarrs_registry::data_type::FLOAT16,
-            Self::Float32 => zarrs_registry::data_type::FLOAT32,
-            Self::Float64 => zarrs_registry::data_type::FLOAT64,
-            Self::Complex64 => zarrs_registry::data_type::COMPLEX64,
-            Self::Complex128 => zarrs_registry::data_type::COMPLEX128,
-            Self::ComplexBFloat16 => zarrs_registry::data_type::COMPLEX_BFLOAT16,
-            Self::ComplexFloat16 => zarrs_registry::data_type::COMPLEX_FLOAT16,
-            Self::ComplexFloat32 => zarrs_registry::data_type::COMPLEX_FLOAT32,
-            Self::ComplexFloat64 => zarrs_registry::data_type::COMPLEX_FLOAT64,
-            Self::ComplexFloat4E2M1FN => zarrs_registry::data_type::COMPLEX_FLOAT4_E2M1FN,
-            Self::ComplexFloat6E2M3FN => zarrs_registry::data_type::COMPLEX_FLOAT6_E2M3FN,
-            Self::ComplexFloat6E3M2FN => zarrs_registry::data_type::COMPLEX_FLOAT6_E3M2FN,
-            Self::ComplexFloat8E3M4 => zarrs_registry::data_type::COMPLEX_FLOAT8_E3M4,
-            Self::ComplexFloat8E4M3 => zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3,
-            Self::ComplexFloat8E4M3B11FNUZ => zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3B11FNUZ,
-            Self::ComplexFloat8E4M3FNUZ => zarrs_registry::data_type::COMPLEX_FLOAT8_E4M3FNUZ,
-            Self::ComplexFloat8E5M2 => zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2,
-            Self::ComplexFloat8E5M2FNUZ => zarrs_registry::data_type::COMPLEX_FLOAT8_E5M2FNUZ,
-            Self::ComplexFloat8E8M0FNU => zarrs_registry::data_type::COMPLEX_FLOAT8_E8M0FNU,
-            Self::RawBits(_size) => zarrs_registry::data_type::RAWBITS,
-            Self::String => zarrs_registry::data_type::STRING,
-            Self::Bytes => zarrs_registry::data_type::BYTES,
+            Self::Bool => BoolDataType::IDENTIFIER,
+            Self::Int2 => Int2DataType::IDENTIFIER,
+            Self::Int4 => Int4DataType::IDENTIFIER,
+            Self::Int8 => Int8DataType::IDENTIFIER,
+            Self::Int16 => Int16DataType::IDENTIFIER,
+            Self::Int32 => Int32DataType::IDENTIFIER,
+            Self::Int64 => Int64DataType::IDENTIFIER,
+            Self::UInt2 => UInt2DataType::IDENTIFIER,
+            Self::UInt4 => UInt4DataType::IDENTIFIER,
+            Self::UInt8 => UInt8DataType::IDENTIFIER,
+            Self::UInt16 => UInt16DataType::IDENTIFIER,
+            Self::UInt32 => UInt32DataType::IDENTIFIER,
+            Self::UInt64 => UInt64DataType::IDENTIFIER,
+            Self::Float4E2M1FN => Float4E2M1FNDataType::IDENTIFIER,
+            Self::Float6E2M3FN => Float6E2M3FNDataType::IDENTIFIER,
+            Self::Float6E3M2FN => Float6E3M2FNDataType::IDENTIFIER,
+            Self::Float8E3M4 => Float8E3M4DataType::IDENTIFIER,
+            Self::Float8E4M3 => Float8E4M3DataType::IDENTIFIER,
+            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType::IDENTIFIER,
+            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType::IDENTIFIER,
+            Self::Float8E5M2 => Float8E5M2DataType::IDENTIFIER,
+            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType::IDENTIFIER,
+            Self::Float8E8M0FNU => Float8E8M0FNUDataType::IDENTIFIER,
+            Self::BFloat16 => BFloat16DataType::IDENTIFIER,
+            Self::Float16 => Float16DataType::IDENTIFIER,
+            Self::Float32 => Float32DataType::IDENTIFIER,
+            Self::Float64 => Float64DataType::IDENTIFIER,
+            Self::Complex64 => Complex64DataType::IDENTIFIER,
+            Self::Complex128 => Complex128DataType::IDENTIFIER,
+            Self::ComplexBFloat16 => ComplexBFloat16DataType::IDENTIFIER,
+            Self::ComplexFloat16 => ComplexFloat16DataType::IDENTIFIER,
+            Self::ComplexFloat32 => ComplexFloat32DataType::IDENTIFIER,
+            Self::ComplexFloat64 => ComplexFloat64DataType::IDENTIFIER,
+            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType::IDENTIFIER,
+            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType::IDENTIFIER,
+            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType::IDENTIFIER,
+            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType::IDENTIFIER,
+            Self::ComplexFloat8E4M3 => ComplexFloat8E4M3DataType::IDENTIFIER,
+            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
+            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
+            Self::ComplexFloat8E5M2 => ComplexFloat8E5M2DataType::IDENTIFIER,
+            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
+            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType::IDENTIFIER,
+            Self::RawBits(_size) => RawBitsDataType::IDENTIFIER,
+            Self::String => StringDataType::IDENTIFIER,
+            Self::Bytes => BytesDataType::IDENTIFIER,
             Self::NumpyDateTime64 {
                 unit: _,
                 scale_factor: _,
-            } => zarrs_registry::data_type::NUMPY_DATETIME64,
+            } => NumpyDateTime64DataType::IDENTIFIER,
             Self::NumpyTimeDelta64 {
                 unit: _,
                 scale_factor: _,
-            } => zarrs_registry::data_type::NUMPY_TIMEDELTA64,
-            Self::Optional(_data_type) => zarrs_registry::data_type::OPTIONAL,
+            } => NumpyTimeDelta64DataType::IDENTIFIER,
+            Self::Optional(_data_type) => OptionalDataType::IDENTIFIER,
             Self::Extension(extension) => extension.identifier(),
         }
     }
@@ -438,63 +441,91 @@ impl DataType {
         matches!(self, Self::Optional(_))
     }
 
-    /// Converts this data type into a named data type using the provided aliases.
+    /// Returns the default serialization name for this data type.
+    ///
+    /// This uses the per-data-type [`ExtensionIdentifier`] implementations to get the
+    /// runtime-configurable default name.
     #[must_use]
-    pub fn into_named(self, aliases: &ExtensionAliasesDataTypeV3) -> NamedDataType {
-        // Handle parameterized types that need concrete names
-        let name = match &self {
-            Self::RawBits(size_bytes) => format!("r{}", size_bytes * 8),
-            Self::Bool
-            | Self::Int2
-            | Self::Int4
-            | Self::Int8
-            | Self::Int16
-            | Self::Int32
-            | Self::Int64
-            | Self::UInt2
-            | Self::UInt4
-            | Self::UInt8
-            | Self::UInt16
-            | Self::UInt32
-            | Self::UInt64
-            | Self::Float4E2M1FN
-            | Self::Float6E2M3FN
-            | Self::Float6E3M2FN
-            | Self::Float8E3M4
-            | Self::Float8E4M3
-            | Self::Float8E4M3B11FNUZ
-            | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2
-            | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU
-            | Self::BFloat16
-            | Self::Float16
-            | Self::Float32
-            | Self::Float64
-            | Self::ComplexBFloat16
-            | Self::ComplexFloat16
-            | Self::ComplexFloat32
-            | Self::ComplexFloat64
-            | Self::ComplexFloat4E2M1FN
-            | Self::ComplexFloat6E2M3FN
-            | Self::ComplexFloat6E3M2FN
-            | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3
-            | Self::ComplexFloat8E4M3B11FNUZ
-            | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2
-            | Self::ComplexFloat8E5M2FNUZ
-            | Self::ComplexFloat8E8M0FNU
-            | Self::Complex64
-            | Self::Complex128
-            | Self::String
-            | Self::Bytes
-            | Self::NumpyDateTime64 { .. }
-            | Self::NumpyTimeDelta64 { .. }
-            | Self::Optional(_)
-            | Self::Extension(_) => aliases.default_name(self.identifier()).to_string(),
-        };
+    #[rustfmt::skip]
+    pub fn default_name(&self) -> Cow<'static, str> {
+        match self {
+            Self::Bool => BoolDataType::default_name(ZarrVersions::V3),
+            Self::Int2 => Int2DataType::default_name(ZarrVersions::V3),
+            Self::Int4 => Int4DataType::default_name(ZarrVersions::V3),
+            Self::Int8 => Int8DataType::default_name(ZarrVersions::V3),
+            Self::Int16 => Int16DataType::default_name(ZarrVersions::V3),
+            Self::Int32 => Int32DataType::default_name(ZarrVersions::V3),
+            Self::Int64 => Int64DataType::default_name(ZarrVersions::V3),
+            Self::UInt2 => UInt2DataType::default_name(ZarrVersions::V3),
+            Self::UInt4 => UInt4DataType::default_name(ZarrVersions::V3),
+            Self::UInt8 => UInt8DataType::default_name(ZarrVersions::V3),
+            Self::UInt16 => UInt16DataType::default_name(ZarrVersions::V3),
+            Self::UInt32 => UInt32DataType::default_name(ZarrVersions::V3),
+            Self::UInt64 => UInt64DataType::default_name(ZarrVersions::V3),
+            Self::Float4E2M1FN => Float4E2M1FNDataType::default_name(ZarrVersions::V3),
+            Self::Float6E2M3FN => Float6E2M3FNDataType::default_name(ZarrVersions::V3),
+            Self::Float6E3M2FN => Float6E3M2FNDataType::default_name(ZarrVersions::V3),
+            Self::Float8E3M4 => Float8E3M4DataType::default_name(ZarrVersions::V3),
+            Self::Float8E4M3 => Float8E4M3DataType::default_name(ZarrVersions::V3),
+            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType::default_name(ZarrVersions::V3),
+            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType::default_name(ZarrVersions::V3),
+            Self::Float8E5M2 => Float8E5M2DataType::default_name(ZarrVersions::V3),
+            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType::default_name(ZarrVersions::V3),
+            Self::Float8E8M0FNU => Float8E8M0FNUDataType::default_name(ZarrVersions::V3),
+            Self::BFloat16 => BFloat16DataType::default_name(ZarrVersions::V3),
+            Self::Float16 => Float16DataType::default_name(ZarrVersions::V3),
+            Self::Float32 => Float32DataType::default_name(ZarrVersions::V3),
+            Self::Float64 => Float64DataType::default_name(ZarrVersions::V3),
+            Self::ComplexBFloat16 => ComplexBFloat16DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat16 => ComplexFloat16DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat32 => ComplexFloat32DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat64 => ComplexFloat64DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E4M3 => ComplexFloat8E4M3DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E5M2 => ComplexFloat8E5M2DataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType::default_name(ZarrVersions::V3),
+            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType::default_name(ZarrVersions::V3),
+            Self::Complex64 => Complex64DataType::default_name(ZarrVersions::V3),
+            Self::Complex128 => Complex128DataType::default_name(ZarrVersions::V3),
+            Self::String => StringDataType::default_name(ZarrVersions::V3),
+            Self::Bytes => BytesDataType::default_name(ZarrVersions::V3),
+            Self::RawBits(size_bytes) => Cow::Owned(format!("r{}", size_bytes * 8)),
+            Self::NumpyDateTime64 { .. } => NumpyDateTime64DataType::default_name(ZarrVersions::V3),
+            Self::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::default_name(ZarrVersions::V3),
+            Self::Optional(_) => OptionalDataType::default_name(ZarrVersions::V3),
+            Self::Extension(ext) => Cow::Owned(ext.identifier().to_string()),
+        }
+    }
+
+    /// Converts this data type into a named data type using the default name.
+    #[must_use]
+    pub fn into_named(self) -> NamedDataType {
+        let name = self.default_name().into_owned();
         NamedDataType::new(name, self)
+    }
+
+    /// Wrap this data type in an [`Optional`](DataType::Optional).
+    ///
+    /// Can be chained to create nested optional types.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zarrs::array::{DataType, DataTypeOptional};
+    /// // Single level optional
+    /// let opt_u8 = DataType::UInt8.into_optional();
+    /// # assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named())));
+    ///
+    /// // Nested optional
+    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
+    /// ```
+    #[must_use]
+    pub fn into_optional(self) -> DataType {
+        DataType::Optional(DataTypeOptional::new(self.into_named()))
     }
 
     /// Returns the optional type wrapper if this is an optional data type.
@@ -502,8 +533,7 @@ impl DataType {
     /// # Examples
     /// ```
     /// # use zarrs::array::DataType;
-    /// let aliases = zarrs::registry::ExtensionAliasesDataTypeV3::default();
-    /// let opt_u8 = DataType::UInt8.into_named(&aliases).into_optional();
+    /// let opt_u8 = DataType::UInt8.into_optional();
     /// assert!(opt_u8.optional().is_some());
     /// assert!(DataType::UInt8.optional().is_none());
     /// ```
@@ -879,6 +909,156 @@ fn complex_subfloat_hex_string_to_fill_value(
     None
 }
 
+/// Get the default V3 name for a V3 data type name.
+///
+/// This checks built-in data types (using `ExtensionIdentifier` marker types) and
+/// extension plugins. Returns the default V3 name if a match is found, otherwise
+/// returns the input name unchanged.
+#[must_use]
+pub fn data_type_v3_default_name(v3_name: &str) -> Cow<'static, str> {
+    // Check built-in data types
+    macro_rules! check_type {
+        ($type:ty) => {
+            if <$type>::matches_name(v3_name, ZarrVersions::V3) {
+                return <$type>::default_name(ZarrVersions::V3);
+            }
+        };
+    }
+
+    check_type!(BoolDataType);
+    check_type!(Int2DataType);
+    check_type!(Int4DataType);
+    check_type!(Int8DataType);
+    check_type!(Int16DataType);
+    check_type!(Int32DataType);
+    check_type!(Int64DataType);
+    check_type!(UInt2DataType);
+    check_type!(UInt4DataType);
+    check_type!(UInt8DataType);
+    check_type!(UInt16DataType);
+    check_type!(UInt32DataType);
+    check_type!(UInt64DataType);
+    check_type!(Float4E2M1FNDataType);
+    check_type!(Float6E2M3FNDataType);
+    check_type!(Float6E3M2FNDataType);
+    check_type!(Float8E3M4DataType);
+    check_type!(Float8E4M3DataType);
+    check_type!(Float8E4M3B11FNUZDataType);
+    check_type!(Float8E4M3FNUZDataType);
+    check_type!(Float8E5M2DataType);
+    check_type!(Float8E5M2FNUZDataType);
+    check_type!(Float8E8M0FNUDataType);
+    check_type!(BFloat16DataType);
+    check_type!(Float16DataType);
+    check_type!(Float32DataType);
+    check_type!(Float64DataType);
+    check_type!(ComplexBFloat16DataType);
+    check_type!(ComplexFloat16DataType);
+    check_type!(ComplexFloat32DataType);
+    check_type!(ComplexFloat64DataType);
+    check_type!(ComplexFloat4E2M1FNDataType);
+    check_type!(ComplexFloat6E2M3FNDataType);
+    check_type!(ComplexFloat6E3M2FNDataType);
+    check_type!(ComplexFloat8E3M4DataType);
+    check_type!(ComplexFloat8E4M3DataType);
+    check_type!(ComplexFloat8E4M3B11FNUZDataType);
+    check_type!(ComplexFloat8E4M3FNUZDataType);
+    check_type!(ComplexFloat8E5M2DataType);
+    check_type!(ComplexFloat8E5M2FNUZDataType);
+    check_type!(ComplexFloat8E8M0FNUDataType);
+    check_type!(Complex64DataType);
+    check_type!(Complex128DataType);
+    check_type!(StringDataType);
+    check_type!(BytesDataType);
+    check_type!(NumpyDateTime64DataType);
+    check_type!(NumpyTimeDelta64DataType);
+    check_type!(OptionalDataType);
+
+    // Check extension plugins
+    for plugin in inventory::iter::<DataTypePlugin> {
+        if plugin.match_name(v3_name, ZarrVersions::V3) {
+            return plugin.default_name(ZarrVersions::V3);
+        }
+    }
+
+    Cow::Owned(v3_name.to_string())
+}
+
+/// Get the default V2 name for a V2 data type name.
+///
+/// This checks built-in data types (using `ExtensionIdentifier` marker types) and
+/// extension plugins. Returns the default V2 name if a match is found, otherwise
+/// returns the input name unchanged.
+#[must_use]
+pub fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
+    // Check built-in data types
+    macro_rules! check_type {
+        ($type:ty) => {
+            if <$type>::matches_name(v2_name, ZarrVersions::V2) {
+                return <$type>::default_name(ZarrVersions::V2);
+            }
+        };
+    }
+
+    check_type!(BoolDataType);
+    check_type!(Int2DataType);
+    check_type!(Int4DataType);
+    check_type!(Int8DataType);
+    check_type!(Int16DataType);
+    check_type!(Int32DataType);
+    check_type!(Int64DataType);
+    check_type!(UInt2DataType);
+    check_type!(UInt4DataType);
+    check_type!(UInt8DataType);
+    check_type!(UInt16DataType);
+    check_type!(UInt32DataType);
+    check_type!(UInt64DataType);
+    check_type!(Float4E2M1FNDataType);
+    check_type!(Float6E2M3FNDataType);
+    check_type!(Float6E3M2FNDataType);
+    check_type!(Float8E3M4DataType);
+    check_type!(Float8E4M3DataType);
+    check_type!(Float8E4M3B11FNUZDataType);
+    check_type!(Float8E4M3FNUZDataType);
+    check_type!(Float8E5M2DataType);
+    check_type!(Float8E5M2FNUZDataType);
+    check_type!(Float8E8M0FNUDataType);
+    check_type!(BFloat16DataType);
+    check_type!(Float16DataType);
+    check_type!(Float32DataType);
+    check_type!(Float64DataType);
+    check_type!(ComplexBFloat16DataType);
+    check_type!(ComplexFloat16DataType);
+    check_type!(ComplexFloat32DataType);
+    check_type!(ComplexFloat64DataType);
+    check_type!(ComplexFloat4E2M1FNDataType);
+    check_type!(ComplexFloat6E2M3FNDataType);
+    check_type!(ComplexFloat6E3M2FNDataType);
+    check_type!(ComplexFloat8E3M4DataType);
+    check_type!(ComplexFloat8E4M3DataType);
+    check_type!(ComplexFloat8E4M3B11FNUZDataType);
+    check_type!(ComplexFloat8E4M3FNUZDataType);
+    check_type!(ComplexFloat8E5M2DataType);
+    check_type!(ComplexFloat8E5M2FNUZDataType);
+    check_type!(ComplexFloat8E8M0FNUDataType);
+    check_type!(Complex64DataType);
+    check_type!(Complex128DataType);
+    check_type!(StringDataType);
+    check_type!(BytesDataType);
+    check_type!(NumpyDateTime64DataType);
+    check_type!(NumpyTimeDelta64DataType);
+    check_type!(OptionalDataType);
+
+    // Check extension plugins
+    for plugin in inventory::iter::<DataTypePlugin> {
+        if plugin.match_name(v2_name, ZarrVersions::V2) {
+            return plugin.default_name(ZarrVersions::V2);
+        }
+    }
+
+    Cow::Owned(v2_name.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use half::bf16;
@@ -893,9 +1073,7 @@ mod tests {
         let json = r#""unknown""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .unwrap_err()
-                .to_string(),
+            NamedDataType::try_from(&metadata).unwrap_err().to_string(),
             "data type unknown is not supported"
         );
     }
@@ -905,9 +1083,7 @@ mod tests {
         let json = r#"{"name":"unknown","must_understand": false}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .unwrap_err()
-                .to_string(),
+            NamedDataType::try_from(&metadata).unwrap_err().to_string(),
             r#"data type must not have `"must_understand": false`"#
         );
     }
@@ -916,11 +1092,10 @@ mod tests {
     fn data_type_bool() {
         let json = r#""bool""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             format!("{}", named_data_type.data_type()),
-            zarrs_registry::data_type::BOOL
+            BoolDataType::IDENTIFIER
         );
         assert_eq!(
             json,
@@ -949,8 +1124,7 @@ mod tests {
     fn data_type_int2() {
         let json = r#""int2""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -984,8 +1158,7 @@ mod tests {
     fn data_type_int4() {
         let json = r#""int4""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1019,8 +1192,7 @@ mod tests {
     fn data_type_int8() {
         let json = r#""int8""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1050,8 +1222,7 @@ mod tests {
     fn data_type_int16() {
         let json = r#""int16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1081,8 +1252,7 @@ mod tests {
     fn data_type_int32() {
         let json = r#""int32""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1112,8 +1282,7 @@ mod tests {
     fn data_type_int64() {
         let json = r#""int64""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1143,8 +1312,7 @@ mod tests {
     fn data_type_uint2() {
         let json = r#""uint2""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1169,8 +1337,7 @@ mod tests {
     fn data_type_uint4() {
         let json = r#""uint4""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1194,8 +1361,7 @@ mod tests {
     fn data_type_uint8() {
         let json = r#""uint8""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1215,8 +1381,7 @@ mod tests {
     fn data_type_uint16() {
         let json = r#""uint16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1236,8 +1401,7 @@ mod tests {
     fn data_type_uint32() {
         let json = r#""uint32""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1257,8 +1421,7 @@ mod tests {
     fn data_type_uint64() {
         let json = r#""uint64""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1278,8 +1441,7 @@ mod tests {
     fn data_type_float32() {
         let json = r#""float32""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1339,8 +1501,7 @@ mod tests {
     fn data_type_float64() {
         let json = r#""float64""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1401,8 +1562,7 @@ mod tests {
     fn data_type_float4_e2m1fn() {
         let json = r#""float4_e2m1fn""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1422,8 +1582,7 @@ mod tests {
     fn data_type_float6_e2m3fn() {
         let json = r#""float6_e2m3fn""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1443,8 +1602,7 @@ mod tests {
     fn data_type_float6_e3m2fn() {
         let json = r#""float6_e3m2fn""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1464,8 +1622,7 @@ mod tests {
     fn data_type_float8_e3m4() {
         let json = r#""float8_e3m4""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1486,8 +1643,7 @@ mod tests {
     fn data_type_float8_e4m3() {
         let json = r#""float8_e4m3""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1508,8 +1664,7 @@ mod tests {
     fn data_type_float8_e4m3() {
         let json = r#""float8_e4m3""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1576,8 +1731,7 @@ mod tests {
     fn data_type_float8_e4m3b11fnuz() {
         let json = r#""float8_e4m3b11fnuz""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1597,8 +1751,7 @@ mod tests {
     fn data_type_float8_e4m3fnuz() {
         let json = r#""float8_e4m3fnuz""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1619,8 +1772,7 @@ mod tests {
     fn data_type_float8_e5m2() {
         let json = r#""float8_e5m2""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1641,8 +1793,7 @@ mod tests {
     fn data_type_float8_e5m2() {
         let json = r#""float8_e5m2""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1709,8 +1860,7 @@ mod tests {
     fn data_type_float8_e5m2fnuz() {
         let json = r#""float8_e5m2fnuz""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1730,8 +1880,7 @@ mod tests {
     fn data_type_float8_e8m0fnu() {
         let json = r#""float8_e8m0fnu""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1753,8 +1902,7 @@ mod tests {
 
         let json = r#""float16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1809,8 +1957,7 @@ mod tests {
 
         let json = r#""bfloat16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1874,8 +2021,7 @@ mod tests {
     fn data_type_complex_bfloat16() {
         let json = r#""complex_bfloat16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1907,8 +2053,7 @@ mod tests {
     fn data_type_complex_float16() {
         let json = r#""complex_float16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1940,8 +2085,7 @@ mod tests {
     fn data_type_complex_float32() {
         let json = r#""complex_float32""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -1973,8 +2117,7 @@ mod tests {
     fn data_type_complexfloat64() {
         let json = r#""complex_float64""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2006,8 +2149,7 @@ mod tests {
     fn data_type_complex64() {
         let json = r#""complex64""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2039,8 +2181,7 @@ mod tests {
     fn data_type_complex128() {
         let json = r#""complex128""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2072,8 +2213,7 @@ mod tests {
     fn data_type_r8() {
         let json = r#""r8""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2094,8 +2234,7 @@ mod tests {
     fn data_type_r16() {
         let json = r#""r16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2128,10 +2267,7 @@ mod tests {
         println!("{json:?}");
         println!("{metadata:?}");
         assert_eq!(metadata.name(), "datetime");
-        assert!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .is_err()
-        );
+        assert!(NamedDataType::try_from(&metadata).is_err());
     }
 
     #[test]
@@ -2141,10 +2277,7 @@ mod tests {
         println!("{json:?}");
         println!("{metadata:?}");
         assert_eq!(metadata.name(), "datetime");
-        assert!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .is_err()
-        );
+        assert!(NamedDataType::try_from(&metadata).is_err());
     }
 
     #[test]
@@ -2154,10 +2287,7 @@ mod tests {
         println!("{json:?}");
         println!("{metadata:?}");
         assert_eq!(metadata.name(), "ra");
-        assert!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .is_err()
-        );
+        assert!(NamedDataType::try_from(&metadata).is_err());
     }
 
     #[test]
@@ -2176,9 +2306,7 @@ mod tests {
     fn data_type_raw_bits1() {
         let json = r#""r16""#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
-        let named_data_type =
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.size(), DataTypeSize::Fixed(2));
     }
 
@@ -2189,9 +2317,7 @@ mod tests {
         "name": "r16"
     }"#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
-        let named_data_type =
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.size(), DataTypeSize::Fixed(2));
     }
 
@@ -2202,18 +2328,14 @@ mod tests {
         "name": "r5"
     }"#;
         let metadata = serde_json::from_str::<MetadataV3>(json).unwrap();
-        assert!(
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default())
-                .is_err()
-        );
+        assert!(NamedDataType::try_from(&metadata).is_err());
     }
 
     #[test]
     fn incompatible_fill_value_metadata() {
         let json = r#""bool""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2234,8 +2356,7 @@ mod tests {
     fn incompatible_raw_bits_metadata() {
         let json = r#""r16""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2334,8 +2455,7 @@ mod tests {
 
     #[test]
     fn incompatible_fill_value() {
-        let err =
-            DataTypeFillValueError::new(zarrs_registry::data_type::BOOL.to_string(), 1.0f32.into());
+        let err = DataTypeFillValueError::new(BoolDataType::IDENTIFIER.to_string(), 1.0f32.into());
         assert_eq!(
             err.to_string(),
             "incompatible fill value [0, 0, 128, 63] for data type bool"
@@ -2408,8 +2528,7 @@ mod tests {
     fn data_type_string() {
         let json = r#""string""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2446,8 +2565,7 @@ mod tests {
     fn data_type_bytes() {
         let json = r#""bytes""#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
@@ -2489,13 +2607,12 @@ mod tests {
 
     #[test]
     fn data_type_optional() {
-        let aliases = ExtensionAliasesDataTypeV3::default();
-
         // Test optional int32
-        let json = r#"{"name":"optional","configuration":{"name":"int32","configuration":{}}}"#;
+        let json =
+            r#"{"name":"zarrs.optional","configuration":{"name":"int32","configuration":{}}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
-        assert_eq!(named_data_type.name(), "optional");
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
+        assert_eq!(named_data_type.name(), "zarrs.optional");
         if let Some(opt) = named_data_type.optional() {
             assert_eq!(opt.identifier(), "int32");
             assert_eq!(opt.size(), DataTypeSize::Fixed(4));
@@ -2505,10 +2622,10 @@ mod tests {
         assert_eq!(named_data_type.size(), DataTypeSize::Fixed(4)); // inner type size (mask stored separately)
 
         // Test optional with complex configuration (numpy datetime64)
-        let json = r#"{"name":"optional","configuration":{"name":"numpy.datetime64","configuration":{"unit":"s","scale_factor":1}}}"#;
+        let json = r#"{"name":"zarrs.optional","configuration":{"name":"numpy.datetime64","configuration":{"unit":"s","scale_factor":1}}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
-        assert_eq!(named_data_type.name(), "optional");
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
+        assert_eq!(named_data_type.name(), "zarrs.optional");
         if let Some(opt) = named_data_type.optional() {
             assert_eq!(opt.identifier(), "numpy.datetime64");
             if let DataType::NumpyDateTime64 { unit, scale_factor } = opt.data_type() {
@@ -2522,9 +2639,10 @@ mod tests {
         }
 
         // Test optional string (variable size)
-        let json = r#"{"name":"optional","configuration":{"name":"string","configuration":{}}}"#;
+        let json =
+            r#"{"name":"zarrs.optional","configuration":{"name":"string","configuration":{}}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let named_data_type = NamedDataType::from_metadata(&metadata, &aliases).unwrap();
+        let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         if let Some(opt) = named_data_type.optional() {
             assert_eq!(opt.identifier(), "string");
             assert_eq!(opt.size(), DataTypeSize::Variable);
@@ -2535,111 +2653,80 @@ mod tests {
 
         // Test metadata roundtrip
         let expected_metadata = named_data_type.metadata();
-        let roundtrip_data_type =
-            NamedDataType::from_metadata(&expected_metadata, &aliases).unwrap();
+        let roundtrip_data_type = NamedDataType::try_from(&expected_metadata).unwrap();
         assert_eq!(named_data_type, roundtrip_data_type);
     }
 
     #[test]
     fn data_type_optional_invalid_configuration() {
         // Test missing configuration
-        let json = r#"{"name":"optional"}"#;
+        let json = r#"{"name":"zarrs.optional"}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let result =
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        let result = NamedDataType::try_from(&metadata);
         assert!(result.is_err());
 
         // Test empty configuration
-        let json = r#"{"name":"optional","configuration":{}}"#;
+        let json = r#"{"name":"zarrs.optional","configuration":{}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let result =
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        let result = NamedDataType::try_from(&metadata);
         assert!(result.is_err());
 
         // Test invalid inner data type
-        let json =
-            r#"{"name":"optional","configuration":{"name":"unknown_type","configuration":{}}}"#;
+        let json = r#"{"name":"zarrs.optional","configuration":{"name":"unknown_type","configuration":{}}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let result =
-            NamedDataType::from_metadata(&metadata, &ExtensionAliasesDataTypeV3::default());
+        let result = NamedDataType::try_from(&metadata);
         assert!(result.is_err());
     }
 
     #[test]
     fn data_type_optional_method() {
         // Single level optional
-        let opt_u8 = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional();
+        let opt_u8 = DataType::UInt8.into_optional();
         assert_eq!(
-            opt_u8.data_type(),
-            &DataType::Optional(DataTypeOptional::new(
-                DataType::UInt8.into_named(&ExtensionAliasesDataTypeV3::default())
-            ))
+            opt_u8,
+            DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named()))
         );
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
         assert_eq!(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional()
-                .into_optional()
-                .data_type(),
-            &DataType::Optional(DataTypeOptional::new(
-                DataType::Optional(DataTypeOptional::new(
-                    DataType::UInt8.into_named(&ExtensionAliasesDataTypeV3::default())
-                ))
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            DataType::UInt8.into_optional().into_optional(),
+            DataType::Optional(DataTypeOptional::new(
+                DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named()))
+                    .into_named()
             ))
         );
 
         // Nested optional (3 levels)
         assert_eq!(
             DataType::UInt16
-                .into_named(&ExtensionAliasesDataTypeV3::default())
                 .into_optional()
                 .into_optional()
-                .into_optional()
-                .data_type(),
-            &DataType::Optional(DataTypeOptional::new(
+                .into_optional(),
+            DataType::Optional(DataTypeOptional::new(
                 DataType::Optional(DataTypeOptional::new(
-                    DataType::Optional(DataTypeOptional::new(
-                        DataType::UInt16.into_named(&ExtensionAliasesDataTypeV3::default())
-                    ))
-                    .into_named(&ExtensionAliasesDataTypeV3::default())
+                    DataType::Optional(DataTypeOptional::new(DataType::UInt16.into_named()))
+                        .into_named()
                 ))
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+                .into_named()
             ))
         );
 
         // Works with various inner types
         assert_eq!(
-            DataType::String
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional()
-                .data_type(),
-            &DataType::Optional(DataTypeOptional::new(
-                DataType::String.into_named(&ExtensionAliasesDataTypeV3::default())
-            ))
+            DataType::String.into_optional(),
+            DataType::Optional(DataTypeOptional::new(DataType::String.into_named()))
         );
         assert_eq!(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional()
-                .data_type(),
-            &DataType::Optional(DataTypeOptional::new(
-                DataType::Float64.into_named(&ExtensionAliasesDataTypeV3::default())
-            ))
+            DataType::Float64.into_optional(),
+            DataType::Optional(DataTypeOptional::new(DataType::Float64.into_named()))
         );
     }
 
     #[test]
     fn data_type_optional_fill_value() {
         // Simple optional: None -> null
-        let named_data_type = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional();
+        let named_data_type = DataType::UInt8.into_optional();
         let fill_value = FillValue::new_optional_null();
         let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
@@ -2657,10 +2744,7 @@ mod tests {
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: None -> null
-        let named_data_type = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional()
-            .into_optional();
+        let named_data_type = DataType::UInt8.into_optional().into_optional();
         let fill_value = FillValue::new_optional_null();
         let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
@@ -2691,7 +2775,7 @@ mod tests {
 
         // Triple nested: Some(Some(None)) -> [[null]]
         let named_data_type = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
+            .into_named()
             .into_optional()
             .into_optional()
             .into_optional();

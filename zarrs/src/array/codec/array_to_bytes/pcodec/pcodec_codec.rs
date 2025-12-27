@@ -20,8 +20,11 @@ use crate::metadata::Configuration;
 use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
-use crate::registry::codec::PCODEC;
 use std::num::NonZeroU64;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]
@@ -90,8 +93,8 @@ impl PcodecCodec {
 }
 
 impl CodecTraits for PcodecCodec {
-    fn identifier(&self) -> &str {
-        PCODEC
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -221,7 +224,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             }
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                PCODEC.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }
@@ -280,7 +283,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             }
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                PCODEC.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }?;
         Ok(ArrayBytes::from(bytes))
@@ -331,11 +334,46 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             ),
             super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                PCODEC.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }?;
         Ok(BytesRepresentation::BoundedSize(
             u64::try_from(size).unwrap(),
         ))
     }
+}
+
+static PCODEC_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "numcodecs.pcodec",
+        vec!["https://codec.zarrs.dev/array_to_bytes/pcodec".into()],
+        vec![],
+    ))
+});
+
+static PCODEC_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("pcodec", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for PcodecCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        PCODEC_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        PCODEC_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for PcodecCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        PCODEC_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        PCODEC_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for PcodecCodec {
+    const IDENTIFIER: &'static str = "pcodec";
 }

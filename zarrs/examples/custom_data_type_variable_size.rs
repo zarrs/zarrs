@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use derive_more::Deref;
@@ -94,8 +95,12 @@ struct CustomDataTypeVariableSize;
 
 const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_custom(name: &str, _version: zarrs_plugin::ZarrVersions) -> bool {
     name == CUSTOM_NAME
+}
+
+fn default_name_custom(_version: zarrs_plugin::ZarrVersions) -> Cow<'static, str> {
+    CUSTOM_NAME.into()
 }
 
 fn create_custom_dtype(
@@ -109,7 +114,7 @@ fn create_custom_dtype(
 }
 
 inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(CUSTOM_NAME, matches_name_custom, default_name_custom, create_custom_dtype)
 }
 
 impl DataTypeExtension for CustomDataTypeVariableSize {

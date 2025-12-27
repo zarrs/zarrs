@@ -33,11 +33,11 @@ pub use group_metadata_options::GroupMetadataOptions;
 use thiserror::Error;
 
 pub use self::group_builder::GroupBuilder;
+use crate::convert::group_metadata_v2_to_v3;
 use crate::metadata::NodeMetadata;
 pub use crate::metadata::{GroupMetadata, v3::GroupMetadataV3};
 use crate::metadata::{v2::GroupMetadataV2, v3::AdditionalFieldV3};
 use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
-use crate::metadata_ext::v2_to_v3::group_metadata_v2_to_v3;
 use crate::storage::ListableStorageTraits;
 use crate::{
     array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError},

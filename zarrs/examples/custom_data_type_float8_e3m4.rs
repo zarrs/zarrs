@@ -17,7 +17,7 @@ use zarrs_data_type::{
     DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// A unique identifier for  the custom data type.
 const FLOAT8_E3M4: &'static str = "zarrs.test.float8_e3m4";
@@ -32,11 +32,15 @@ struct CustomDataTypeFloat8e3m4Element(u8);
 
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePlugin::new(FLOAT8_E3M4, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(FLOAT8_E3M4, matches_name_custom_dtype, default_name_custom_dtype, create_custom_dtype)
 }
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_custom_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == FLOAT8_E3M4
+}
+
+fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
+    FLOAT8_E3M4.into()
 }
 
 fn create_custom_dtype(

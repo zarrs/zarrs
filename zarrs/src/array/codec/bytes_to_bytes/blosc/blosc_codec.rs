@@ -10,7 +10,6 @@ use super::{
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::metadata::Configuration;
-use crate::registry::codec::BLOSC;
 use crate::{
     array::{
         ArrayBytesRaw, BytesRepresentation,
@@ -21,6 +20,10 @@ use crate::{
         },
     },
     plugin::PluginCreateError,
+};
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
 };
 
 /// A `blosc` codec implementation.
@@ -141,8 +144,8 @@ impl BloscCodec {
 }
 
 impl CodecTraits for BloscCodec {
-    fn identifier(&self) -> &str {
-        BLOSC
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -256,4 +259,44 @@ impl BytesToBytesCodecTraits for BloscCodec {
                 BytesRepresentation::BoundedSize(size + u64::from(BLOSC_MAX_OVERHEAD))
             })
     }
+}
+
+static BLOSC_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        BloscCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+static BLOSC_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        BloscCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for BloscCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BLOSC_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BLOSC_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for BloscCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BLOSC_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BLOSC_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for BloscCodec {
+    const IDENTIFIER: &'static str = "blosc";
 }

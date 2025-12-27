@@ -3,30 +3,20 @@
 
 use std::sync::Arc;
 
-use zarrs::registry::codec::BZ2;
-use zarrs::{
-    array::{Array, ArrayMetadataOptions},
-    config::{global_config, global_config_mut},
-};
+use zarrs::array::codec::Bz2Codec;
+use zarrs::array::{Array, ArrayMetadataOptions};
 use zarrs_filesystem::FilesystemStore;
+use zarrs_plugin::ExtensionIdentifier;
+use zarrs_plugin::ZarrVersions;
 
 /// bz2 could stabilise as is, so test supporting that via the codec map
 #[test]
 fn array_future_stabilisation_bz2() {
-    let alias = global_config()
-        .codec_aliases_v3()
-        .default_names
-        .get(BZ2.into())
-        .expect("bz2 in aliases")
-        .to_string();
-
-    global_config_mut()
-        .codec_aliases_v3_mut()
-        .default_names
-        .entry(BZ2.into())
-        .and_modify(|entry| {
-            *entry = "stable.bz2".into();
-        });
+    assert_eq!(Bz2Codec::default_name(ZarrVersions::V3), "numcodecs.bz2");
+    Bz2Codec::set_default_name("stable.bz2", ZarrVersions::V3);
+    Bz2Codec::aliases_mut(ZarrVersions::V3)
+        .aliases_str
+        .push("numcodecs.bz2".into());
 
     let path = "tests/data/v3/array_bz2.zarr";
     let store = Arc::new(FilesystemStore::new(path).unwrap());
@@ -72,11 +62,5 @@ fn array_future_stabilisation_bz2() {
             .contains(r#""stable.bz2"#)
     );
 
-    global_config_mut()
-        .codec_aliases_v3_mut()
-        .default_names
-        .entry(BZ2.into())
-        .and_modify(|entry| {
-            *entry = alias.into();
-        });
+    Bz2Codec::set_default_name("numcodecs.bz2", ZarrVersions::V3);
 }

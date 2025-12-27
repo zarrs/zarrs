@@ -35,13 +35,12 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use self::bz2_codec::Bz2Codec;
 pub use crate::metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use crate::registry::codec::BZ2;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -50,20 +49,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BZ2, is_identifier_bz2, create_codec_bz2)
+    CodecPlugin::new(Bz2Codec::IDENTIFIER, Bz2Codec::matches_name, Bz2Codec::default_name, create_codec_bz2)
 }
 
-fn is_identifier_bz2(identifier: &str) -> bool {
-    identifier == BZ2
-}
-
-pub(crate) fn create_codec_bz2(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: Bz2CodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BZ2, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: Bz2CodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(Bz2Codec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

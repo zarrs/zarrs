@@ -5,7 +5,6 @@ use std::{
 };
 
 use flate2::bufread::{GzDecoder, GzEncoder};
-use zarrs_plugin::PluginCreateError;
 
 use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
@@ -19,7 +18,11 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::GZIP;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, PluginCreateError, ZarrVersion2,
+    ZarrVersion3,
+};
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]
@@ -56,8 +59,8 @@ impl GzipCodec {
 }
 
 impl CodecTraits for GzipCodec {
-    fn identifier(&self) -> &str {
-        GZIP
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -139,4 +142,44 @@ impl BytesToBytesCodecTraits for GzipCodec {
                 BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + blocks_overhead)
             })
     }
+}
+
+static GZIP_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        GzipCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+static GZIP_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        GzipCodec::IDENTIFIER,
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for GzipCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        GZIP_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        GZIP_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for GzipCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        GZIP_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        GZIP_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for GzipCodec {
+    const IDENTIFIER: &'static str = "gzip";
 }

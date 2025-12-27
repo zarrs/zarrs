@@ -19,7 +19,6 @@ use zarrs::{
     storage::{ReadableWritableListableStorage, store::MemoryStore},
 };
 use zarrs_filesystem::FilesystemStore;
-use zarrs_registry::ExtensionAliasesCodecV3;
 
 fn read_cities() -> std::io::Result<Vec<String>> {
     let reader = BufReader::new(File::open("tests/data/cities.csv")?);
@@ -98,7 +97,7 @@ fn cities() -> Result<(), Box<dyn Error>> {
         "index_data_type": "uint32",
         "index_location": "start"
     }"#)?;
-    let vlen = Arc::new(VlenCodec::new_with_configuration(&vlen_configuration, &ExtensionAliasesCodecV3::default())?);
+    let vlen = Arc::new(VlenCodec::new_with_configuration(&vlen_configuration)?);
 
     let vlen_compressed_configuration: VlenCodecConfiguration = serde_json::from_str(r#"{
         "data_codecs": [{"name": "bytes"},{"name": "blosc","configuration": {"cname": "zstd", "clevel":5,"shuffle": "bitshuffle", "typesize":1,"blocksize":0}}],
@@ -106,7 +105,7 @@ fn cities() -> Result<(), Box<dyn Error>> {
         "index_data_type": "uint32",
         "index_location": "end"
     }"#)?;
-    let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration, &ExtensionAliasesCodecV3::default())?);
+    let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration)?);
 
     print!("| encoding         | compression | size   |\n");
     print!("| ---------------- | ----------- | ------ |\n");

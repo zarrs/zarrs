@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
+- Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
+- Add `DataType::default_name()` method
+- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type`
+  - These implement `ExtensionIdentifier` for per-data-type alias management
+
+### Changed
+- **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
+  - Extensions now implement `ExtensionIdentifier` and `ExtensionAliases<V>` traits for per-extension alias management
+  - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
+  - Remove `ExtensionAliasesDataTypeV3` parameter from `NamedDataType::from_metadata()` (replaced with `TryFrom<&MetadataV3>`)
+  - Remove aliases parameter from `NamedCodec::new_default_name()`, `NamedDataType::new_default_name()`, and `DataType::into_named()`
+- **Breaking**: Change `CodecTraits::identifier()` return type from `&str` to `&'static str`
+- Bump `zarrs_plugin` to 0.3.0
+- Bump `zarrs_chunk_grid` to 0.2.0
+- Bump `zarrs_data_type` to 0.6.0
+- Bump `zarrs_metadata_ext` to 0.4.0
+
+### Removed
+- **Breaking**: Remove `zarrs_registry` dependency
+- **Breaking**: Remove `Config::codec_aliases_{v2,v3}()` and `Config::data_type_aliases_{v2,v3}()` methods
+
 ## [0.23.0-beta.1] - 2025-12-29
 
 ## [0.23.0-beta.0] - 2025-12-29

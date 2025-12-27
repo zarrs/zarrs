@@ -22,7 +22,7 @@ use crate::storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
 use crate::{
     metadata::v3::MetadataV3,
     node::NodePath,
-    plugin::PluginCreateError,
+    plugin::{PluginCreateError, ZarrVersions},
     storage::{ListableStorage, ReadableStorage, StorageError, WritableStorage},
 };
 
@@ -38,13 +38,19 @@ impl StorageTransformerPlugin {
     /// Create a new [`StorageTransformerPlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
         create_fn: fn(
             metadata: &MetadataV3,
             path: &NodePath,
         ) -> Result<StorageTransformer, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(identifier, match_name_fn, create_fn))
+        Self(Plugin2::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -58,7 +64,7 @@ pub fn try_create_storage_transformer(
     path: &NodePath,
 ) -> Result<StorageTransformer, PluginCreateError> {
     for plugin in inventory::iter::<StorageTransformerPlugin> {
-        if plugin.match_name(metadata.name()) {
+        if plugin.match_name(metadata.name(), ZarrVersions::V3) {
             return plugin.create(metadata, path);
         }
     }

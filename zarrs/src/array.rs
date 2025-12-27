@@ -48,7 +48,7 @@ mod array_sharded_ext;
 #[cfg(feature = "sharding")]
 mod array_sync_sharded_readable_ext;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
 
 #[cfg(all(feature = "sharding", feature = "async"))]
 pub use array_async_sharded_readable_ext::{
@@ -64,6 +64,7 @@ pub use chunk_cache::{
 };
 pub use data_type::{DataType, DataTypeOptional, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
+use zarrs_plugin::ZarrVersions;
 
 #[expect(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
@@ -94,27 +95,25 @@ pub use self::{
     storage_transformer::StorageTransformerChain,
     tensor::{Tensor, TensorError},
 };
+use crate::array::chunk_grid::RegularChunkGrid;
+use crate::convert::array_metadata_v2_to_v3;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
 pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness};
-use crate::metadata_ext::v2_to_v3::array_metadata_v2_to_v3;
-use crate::plugin::PluginCreateError;
-use crate::registry::chunk_grid::REGULAR;
-use crate::{
-    array::chunk_grid::{RegularBoundedChunkGridConfiguration, RegularChunkGrid},
-    config::global_config,
-};
+use crate::{array::chunk_grid::RegularBoundedChunkGridConfiguration, config::global_config};
 use crate::{array::codec::CodecOptions, metadata::v2::DataTypeMetadataV2};
+use crate::{array::codec::CodecPlugin, plugin::PluginCreateError};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     config::MetadataConvertVersion,
     node::{NodePath, data_key},
     storage::StoreKey,
 };
-use crate::{config::MetadataEraseVersion, metadata_ext::v2_to_v3::ArrayMetadataV2ToV3Error};
+use crate::{config::MetadataEraseVersion, convert::ArrayMetadataV2ToV3Error};
 pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -433,26 +432,14 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let path = NodePath::new(path)?;
 
         // Convert V2 metadata to V3 if it is a compatible subset
-        let metadata_v3 = {
-            let config = global_config();
-            match &metadata {
-                ArrayMetadata::V3(v3) => Ok(v3.clone()),
-                ArrayMetadata::V2(v2) => array_metadata_v2_to_v3(
-                    v2,
-                    config.codec_aliases_v2(),
-                    config.codec_aliases_v3(),
-                    config.data_type_aliases_v2(),
-                    config.data_type_aliases_v3(),
-                )
+        let metadata_v3 = match &metadata {
+            ArrayMetadata::V3(v3) => Ok(v3.clone()),
+            ArrayMetadata::V2(v2) => array_metadata_v2_to_v3(v2)
                 .map_err(|err| ArrayCreateError::UnsupportedZarrV2Array(err.to_string())),
-            }?
-        };
+        }?;
 
-        let data_type = NamedDataType::from_metadata(
-            &metadata_v3.data_type,
-            global_config().data_type_aliases_v3(),
-        )
-        .map_err(ArrayCreateError::DataTypeCreateError)?;
+        let data_type = NamedDataType::try_from(&metadata_v3.data_type)
+            .map_err(ArrayCreateError::DataTypeCreateError)?;
         let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         if chunk_grid.dimensionality() != metadata_v3.shape.len() {
@@ -465,7 +452,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .fill_value_from_metadata(&metadata_v3.fill_value)
             .map_err(ArrayCreateError::InvalidFillValueMetadata)?;
         let codecs = Arc::new(
-            CodecChain::from_metadata(&metadata_v3.codecs, global_config().codec_aliases_v3())
+            CodecChain::from_metadata(&metadata_v3.codecs)
                 .map_err(ArrayCreateError::CodecsCreateError)?,
         );
         let storage_transformers =
@@ -624,7 +611,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                         "Only regular chunk grids are supported in Zarr V2".to_string(),
                     ))
                 };
-                if chunk_grid_metadata.name() != REGULAR {
+                if chunk_grid_metadata.name() != RegularChunkGrid::IDENTIFIER {
                     return Err(err());
                 }
                 let regular_chunk_grid_configuration = chunk_grid_metadata
@@ -718,7 +705,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Return a new [`ArrayMetadata`] with [`ArrayMetadataOptions`] applied.
     ///
     /// This method is used internally by [`Array::store_metadata`] and [`Array::store_metadata_opt`].
-    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
     #[must_use]
     pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
         use ArrayMetadata as AM;
@@ -764,64 +751,75 @@ impl<TStorage: ?Sized> Array<TStorage> {
             (AM::V3(metadata), V::Default | V::V3) => ArrayMetadata::V3(metadata),
             (AM::V2(metadata), V::Default) => ArrayMetadata::V2(metadata),
             (AM::V2(metadata), V::V3) => {
-                let metadata = {
-                    let config = global_config();
-                    array_metadata_v2_to_v3(
-                        &metadata,
-                        config.codec_aliases_v2(),
-                        config.codec_aliases_v3(),
-                        config.data_type_aliases_v2(),
-                        config.data_type_aliases_v3(),
-                    )
-                    .expect("conversion succeeded on array creation")
-                };
+                let metadata = array_metadata_v2_to_v3(&metadata)
+                    .expect("conversion succeeded on array creation");
                 AM::V3(metadata)
             }
         };
 
         // Convert aliased extension names
         if options.convert_aliased_extension_names() {
-            let config = global_config();
             match &mut metadata {
                 AM::V3(metadata) => {
-                    let codec_aliases = config.codec_aliases_v3();
+                    // Codecs
                     metadata.codecs.iter_mut().for_each(|codec| {
-                        let identifier = codec_aliases.identifier(codec.name());
-                        codec.set_name(codec_aliases.default_name(identifier).to_string());
+                        codec.set_name(
+                            codec_default_name(codec.name(), ZarrVersions::V3).into_owned(),
+                        );
                     });
-                    let data_type_aliases = config.data_type_aliases_v3();
+                    // Data type
                     {
                         let name = metadata.data_type.name();
-                        let identifier = data_type_aliases.identifier(name);
                         metadata
                             .data_type
-                            .set_name(data_type_aliases.default_name(identifier).to_string());
+                            .set_name(data_type::data_type_v3_default_name(name).into_owned());
                     }
+                    // Chunk grid
+                    metadata.chunk_grid.set_name(
+                        chunk_grid_default_name(metadata.chunk_grid.name(), ZarrVersions::V3)
+                            .into_owned(),
+                    );
+                    // Chunk key encoding
+                    metadata.chunk_key_encoding.set_name(
+                        chunk_key_encoding_default_name(
+                            metadata.chunk_key_encoding.name(),
+                            ZarrVersions::V3,
+                        )
+                        .into_owned(),
+                    );
+                    // Storage transformers
+                    metadata
+                        .storage_transformers
+                        .iter_mut()
+                        .for_each(|transformer| {
+                            transformer.set_name(
+                                storage_transformer_default_name(
+                                    transformer.name(),
+                                    ZarrVersions::V3,
+                                )
+                                .into_owned(),
+                            );
+                        });
                 }
                 AM::V2(metadata) => {
-                    let codec_aliases = config.codec_aliases_v2();
-                    {
-                        if let Some(filters) = &mut metadata.filters {
-                            for filter in filters.iter_mut() {
-                                let identifier = codec_aliases.identifier(filter.id());
-                                filter.set_id(codec_aliases.default_name(identifier).to_string());
-                            }
-                        }
-                        if let Some(compressor) = &mut metadata.compressor {
-                            let identifier = codec_aliases.identifier(compressor.id());
-                            compressor.set_id(codec_aliases.default_name(identifier).to_string());
+                    if let Some(filters) = &mut metadata.filters {
+                        for filter in filters.iter_mut() {
+                            filter.set_id(
+                                codec_default_name(filter.id(), ZarrVersions::V2).into_owned(),
+                            );
                         }
                     }
-                    let data_type_aliases = config.data_type_aliases_v2();
-                    {
-                        match &mut metadata.dtype {
-                            DataTypeMetadataV2::Simple(dtype) => {
-                                let identifier = data_type_aliases.identifier(dtype);
-                                *dtype = data_type_aliases.default_name(identifier).to_string();
-                            }
-                            DataTypeMetadataV2::Structured(_) => {
-                                // FIXME: structured data type support
-                            }
+                    if let Some(compressor) = &mut metadata.compressor {
+                        compressor.set_id(
+                            codec_default_name(compressor.id(), ZarrVersions::V2).into_owned(),
+                        );
+                    }
+                    match &mut metadata.dtype {
+                        DataTypeMetadataV2::Simple(dtype) => {
+                            *dtype = data_type::data_type_v2_default_name(dtype).into_owned();
+                        }
+                        DataTypeMetadataV2::Structured(_) => {
+                            // FIXME: structured data type support
                         }
                     }
                 }
@@ -976,17 +974,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     pub fn to_v3(self) -> Result<Self, ArrayMetadataV2ToV3Error> {
         match self.metadata {
             ArrayMetadata::V2(metadata) => {
-                let metadata: ArrayMetadata = {
-                    let config = global_config();
-                    array_metadata_v2_to_v3(
-                        &metadata,
-                        config.codec_aliases_v2(),
-                        config.codec_aliases_v3(),
-                        config.data_type_aliases_v2(),
-                        config.data_type_aliases_v3(),
-                    )?
-                    .into()
-                };
+                let metadata: ArrayMetadata = array_metadata_v2_to_v3(&metadata)?.into();
                 Ok(Self {
                     storage: self.storage,
                     path: self.path,
@@ -1048,6 +1036,68 @@ impl<TStorage: ?Sized> Array<TStorage> {
         }
         Ok(())
     }
+}
+
+/// Get the default name for a codec by iterating over registered plugins.
+///
+/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+#[must_use]
+fn codec_default_name(name: &str, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
+    let version = version.into();
+    for plugin in inventory::iter::<CodecPlugin> {
+        if plugin.match_name(name, version) {
+            return plugin.default_name(version);
+        }
+    }
+    Cow::Owned(name.to_string())
+}
+
+/// Get the default name for a chunk grid by iterating over registered plugins.
+///
+/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+#[must_use]
+fn chunk_grid_default_name(name: &str, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
+    let version = version.into();
+    for plugin in inventory::iter::<chunk_grid::ChunkGridPlugin> {
+        if plugin.match_name(name, version) {
+            return plugin.default_name(version);
+        }
+    }
+    Cow::Owned(name.to_string())
+}
+
+/// Get the default name for a chunk key encoding by iterating over registered plugins.
+///
+/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+#[must_use]
+fn chunk_key_encoding_default_name(
+    name: &str,
+    version: impl Into<ZarrVersions>,
+) -> Cow<'static, str> {
+    let version = version.into();
+    for plugin in inventory::iter::<chunk_key_encoding::ChunkKeyEncodingPlugin> {
+        if plugin.match_name(name, version) {
+            return plugin.default_name(version);
+        }
+    }
+    Cow::Owned(name.to_string())
+}
+
+/// Get the default name for a storage transformer by iterating over registered plugins.
+///
+/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+#[must_use]
+fn storage_transformer_default_name(
+    name: &str,
+    version: impl Into<ZarrVersions>,
+) -> Cow<'static, str> {
+    let version = version.into();
+    for plugin in inventory::iter::<storage_transformer::StorageTransformerPlugin> {
+        if plugin.match_name(name, version) {
+            return plugin.default_name(version);
+        }
+    }
+    Cow::Owned(name.to_string())
 }
 
 mod array_sync_readable;

@@ -27,8 +27,11 @@ use crate::array::{
     codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::BYTES;
 use std::num::NonZeroU64;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]
@@ -87,7 +90,7 @@ impl BytesCodec {
         let Some(data_type_size) = data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BYTES.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         };
 
@@ -111,8 +114,8 @@ impl BytesCodec {
 }
 
 impl CodecTraits for BytesCodec {
-    fn identifier(&self) -> &str {
-        BYTES
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -181,7 +184,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BYTES.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -210,7 +213,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BYTES.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -304,18 +307,53 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BYTES.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
         match data_type.size() {
             DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BYTES.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
             DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
                 shape.num_elements_u64() * data_type_size as u64,
             )),
         }
     }
+}
+
+static BYTES_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "bytes",
+        vec!["endian".into()],
+        vec![],
+    ))
+});
+
+static BYTES_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("bytes", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for BytesCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BYTES_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BYTES_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for BytesCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        BYTES_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        BYTES_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for BytesCodec {
+    const IDENTIFIER: &'static str = "bytes";
 }

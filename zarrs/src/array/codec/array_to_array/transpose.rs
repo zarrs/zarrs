@@ -32,13 +32,12 @@ mod transpose_codec_partial;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 use crate::metadata::DataTypeSize;
 pub use crate::metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         ArrayBytes, ArrayBytesRaw, DataType,
@@ -53,20 +52,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(TRANSPOSE, is_identifier_transpose, create_codec_transpose)
+    CodecPlugin::new(TransposeCodec::IDENTIFIER, TransposeCodec::matches_name, TransposeCodec::default_name, create_codec_transpose)
 }
 
-fn is_identifier_transpose(identifier: &str) -> bool {
-    identifier == TRANSPOSE
-}
-
-pub(crate) fn create_codec_transpose(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: TransposeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(TRANSPOSE, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: TransposeCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(TransposeCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }
@@ -237,7 +229,7 @@ pub(crate) fn apply_permutation<'a>(
         }
         (ArrayBytes::Optional(..), _) => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            TRANSPOSE.to_string(),
+            TransposeCodec::IDENTIFIER.to_string(),
         )),
         (_, _) => Err(CodecError::Other(
             "dev error: transpose data type mismatch".to_string(),

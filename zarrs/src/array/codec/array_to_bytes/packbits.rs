@@ -31,14 +31,13 @@ use std::sync::Arc;
 
 use num::Integer;
 pub use packbits_codec::PackBitsCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::DataType;
 use crate::array::codec::CodecError;
 pub use crate::metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
-use crate::registry::codec::PACKBITS;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -47,20 +46,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(PACKBITS, is_identifier_packbits, create_codec_packbits)
+    CodecPlugin::new(PackBitsCodec::IDENTIFIER, PackBitsCodec::matches_name, PackBitsCodec::default_name, create_codec_packbits)
 }
 
-fn is_identifier_packbits(identifier: &str) -> bool {
-    identifier == PACKBITS
-}
-
-pub(crate) fn create_codec_packbits(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: PackBitsCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(PACKBITS, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: PackBitsCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(PackBitsCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
@@ -208,9 +200,12 @@ fn pack_bits_components(
                 sign_extension: packbits.sign_extension(),
             })
         }
-        DT::String | DT::Bytes | DT::RawBits(_) | DT::Optional(_) => Err(
-            CodecError::UnsupportedDataType(data_type.clone(), PACKBITS.to_string()),
-        ),
+        DT::String | DT::Bytes | DT::RawBits(_) | DT::Optional(_) => {
+            Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                PackBitsCodec::IDENTIFIER.to_string(),
+            ))
+        }
     }
 }
 

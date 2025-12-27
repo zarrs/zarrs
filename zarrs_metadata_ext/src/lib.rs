@@ -7,8 +7,6 @@
 //! - _Registered_ extensions defined at [zarr-developers/zarr-extensions](https://github.com/zarr-developers/zarr-extensions/), and
 //! - `numcodecs` codecs and _experimental_ extensions in `zarrs` that have yet to be registered.
 //!
-//! Functions for converting Zarr V2 to equivalent Zarr V3 metadata are included.
-//!
 //! ## Licence
 //! `zarrs_metadata_ext` is licensed under either of
 //!  - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_metadata_ext/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
@@ -25,7 +23,5 @@ pub mod chunk_key_encoding;
 pub mod codec;
 pub mod data_type;
 
-pub mod v2_to_v3;
-
 /// A chunk shape. Dimensions must be non-zero.
-type ChunkShape = Vec<std::num::NonZeroU64>;
+pub type ChunkShape = Vec<std::num::NonZeroU64>;

@@ -8,7 +8,6 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
-use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
         ChunkShape,
@@ -19,6 +18,10 @@ use crate::{
         },
     },
     plugin::PluginCreateError,
+};
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
 };
 
 /// A Squeeze codec implementation.
@@ -55,8 +58,8 @@ impl Default for SqueezeCodec {
 }
 
 impl CodecTraits for SqueezeCodec {
-    fn identifier(&self) -> &str {
-        SQUEEZE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -225,4 +228,34 @@ impl ArrayCodecTraits for SqueezeCodec {
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
+}
+
+static SQUEEZE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zarrs.squeeze", vec![], vec![])));
+
+static SQUEEZE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zarrs.squeeze", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for SqueezeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        SQUEEZE_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        SQUEEZE_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for SqueezeCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        SQUEEZE_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        SQUEEZE_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for SqueezeCodec {
+    const IDENTIFIER: &'static str = "zarrs.squeeze";
 }

@@ -1,7 +1,9 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use zarrs_registry::ExtensionAliasesCodecV3;
-use zarrs_registry::codec::BYTES;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::NamedCodec;
@@ -37,14 +39,17 @@ impl Default for VlenCodec {
         let index_codecs = Arc::new(CodecChain::new_named(
             vec![],
             NamedCodec::new(
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
                 Arc::new(BytesCodec::new(Some(Endianness::Little))),
             ),
             vec![],
         ));
         let data_codecs = Arc::new(CodecChain::new_named(
             vec![],
-            NamedCodec::new(BYTES.to_string(), Arc::new(BytesCodec::new(None))),
+            NamedCodec::new(
+                BytesCodec::IDENTIFIER.to_string(),
+                Arc::new(BytesCodec::new(None)),
+            ),
             vec![],
         ));
         Self {
@@ -86,18 +91,12 @@ impl VlenCodec {
     /// Returns a [`PluginCreateError`] if the codecs cannot be constructed from the codec metadata.
     pub fn new_with_configuration(
         configuration: &VlenCodecConfiguration,
-        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.data_codecs,
-                    codec_aliases,
-                )?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -106,14 +105,9 @@ impl VlenCodec {
                 ))
             }
             VlenCodecConfiguration::V0(configuration) => {
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.data_codecs,
-                    codec_aliases,
-                )?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -129,8 +123,8 @@ impl VlenCodec {
 }
 
 impl CodecTraits for VlenCodec {
-    fn identifier(&self) -> &str {
-        zarrs_registry::codec::VLEN
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -338,7 +332,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -346,8 +340,43 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }
+}
+
+static VLEN_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "zarrs.vlen",
+        vec!["https://codec.zarrs.dev/array_to_bytes/vlen".into()],
+        vec![],
+    ))
+});
+
+static VLEN_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
+    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zarrs.vlen", vec![], vec![])));
+
+impl ExtensionAliases<ZarrVersion3> for VlenCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        VLEN_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        VLEN_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for VlenCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        VLEN_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        VLEN_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for VlenCodec {
+    const IDENTIFIER: &'static str = "zarrs.vlen";
 }

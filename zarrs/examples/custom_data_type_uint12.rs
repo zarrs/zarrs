@@ -19,7 +19,7 @@ use zarrs_data_type::{
     DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// A unique identifier for  the custom data type.
 const UINT12: &'static str = "zarrs.test.uint12";
@@ -34,11 +34,15 @@ struct CustomDataTypeUInt12Element(u16);
 
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePlugin::new(UINT12, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(UINT12, matches_name_custom_dtype, default_name_custom_dtype, create_custom_dtype)
 }
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_custom_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == UINT12
+}
+
+fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
+    UINT12.into()
 }
 
 fn create_custom_dtype(

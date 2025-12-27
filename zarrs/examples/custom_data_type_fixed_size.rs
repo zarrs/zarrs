@@ -27,7 +27,7 @@ use zarrs_data_type::{
     DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -153,8 +153,12 @@ struct CustomDataTypeFixedSize;
 /// A custom unique identifier
 const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeFixedSize";
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == CUSTOM_NAME
+}
+
+fn default_name_dtype(_version: ZarrVersions) -> Cow<'static, str> {
+    CUSTOM_NAME.into()
 }
 
 fn create_custom_dtype(
@@ -169,7 +173,7 @@ fn create_custom_dtype(
 
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(CUSTOM_NAME, matches_name_dtype, default_name_dtype, create_custom_dtype)
 }
 
 /// Implement the core data type extension methods

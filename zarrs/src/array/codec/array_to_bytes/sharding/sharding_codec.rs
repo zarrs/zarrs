@@ -6,8 +6,11 @@ use std::{
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
+};
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -20,7 +23,6 @@ use super::{
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::metadata::Configuration;
-use crate::registry::codec::SHARDING;
 use crate::{
     array::{
         ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkShape,
@@ -78,18 +80,12 @@ impl ShardingCodec {
     /// Returns [`PluginCreateError`] if there is a configuration issue.
     pub fn new_with_configuration(
         configuration: &ShardingCodecConfiguration,
-        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             ShardingCodecConfiguration::V1(configuration) => {
-                let inner_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.codecs,
-                    codec_aliases,
-                )?);
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
+                let inner_codecs = Arc::new(CodecChain::from_metadata(&configuration.codecs)?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
                 Ok(Self::new(
                     configuration.chunk_shape.clone(),
                     inner_codecs,
@@ -105,8 +101,8 @@ impl ShardingCodec {
 }
 
 impl CodecTraits for ShardingCodec {
-    fn identifier(&self) -> &str {
-        SHARDING
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -232,7 +228,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::SHARDING.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -475,7 +471,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             ArrayBytesDecodeIntoTarget::Optional(..) => {
                 return Err(CodecError::UnsupportedDataType(
                     data_type.clone(),
-                    zarrs_registry::codec::SHARDING.to_string(),
+                    Self::IDENTIFIER.to_string(),
                 ));
             }
         };
@@ -1014,4 +1010,44 @@ impl ShardingCodec {
             options,
         )
     }
+}
+
+static SHARDING_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "sharding_indexed",
+        vec![],
+        vec![],
+    ))
+});
+
+static SHARDING_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "sharding_indexed",
+        vec![],
+        vec![],
+    ))
+});
+
+impl ExtensionAliases<ZarrVersion3> for ShardingCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        SHARDING_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        SHARDING_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl ExtensionAliases<ZarrVersion2> for ShardingCodec {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        SHARDING_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        SHARDING_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for ShardingCodec {
+    const IDENTIFIER: &'static str = "sharding_indexed";
 }

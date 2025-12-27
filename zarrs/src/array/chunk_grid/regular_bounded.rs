@@ -29,10 +29,8 @@
 use std::num::NonZeroU64;
 
 use itertools::izip;
-
-// use crate::registry::chunk_grid::REGULAR_BOUNDED;
-/// Unique identifier for the `regular_bounded` chunk grid (extension).
-const REGULAR_BOUNDED: &str = "zarrs.regular_bounded"; // TODO: Move to zarrs_registry on stabilisation
+use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
 
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
@@ -49,11 +47,7 @@ use crate::{
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(REGULAR_BOUNDED, is_name_regular_bounded, create_chunk_grid_regular_bounded)
-}
-
-fn is_name_regular_bounded(name: &str) -> bool {
-    name.eq(REGULAR_BOUNDED)
+    ChunkGridPlugin::new(RegularBoundedChunkGrid::IDENTIFIER, RegularBoundedChunkGrid::matches_name, RegularBoundedChunkGrid::default_name, create_chunk_grid_regular_bounded)
 }
 
 /// Create a `regular_bounded` chunk grid from metadata.
@@ -67,7 +61,11 @@ pub(crate) fn create_chunk_grid_regular_bounded(
     crate::warn_experimental_extension(metadata.name(), "chunk grid");
     let configuration: RegularBoundedChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(REGULAR_BOUNDED, "chunk grid", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                RegularBoundedChunkGrid::IDENTIFIER,
+                "chunk grid",
+                metadata.to_string(),
+            )
         })?;
     let chunk_grid = RegularBoundedChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
         .map_err(|_| {
@@ -122,8 +120,11 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         let configuration = RegularBoundedChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
         };
-        MetadataV3::new_with_serializable_configuration(REGULAR_BOUNDED.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn dimensionality(&self) -> usize {
@@ -293,6 +294,46 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
             ))
         }
     }
+}
+
+static REGULAR_BOUNDED_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "zarrs.regular_bounded",
+        vec![],
+        vec![],
+    ))
+});
+
+static REGULAR_BOUNDED_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
+    RwLock::new(ExtensionAliasesConfig::new(
+        "zarrs.regular_bounded",
+        vec![],
+        vec![],
+    ))
+});
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for RegularBoundedChunkGrid {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_BOUNDED_ALIASES_V3.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_BOUNDED_ALIASES_V3.write().unwrap()
+    }
+}
+
+impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for RegularBoundedChunkGrid {
+    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_BOUNDED_ALIASES_V2.read().unwrap()
+    }
+
+    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+        REGULAR_BOUNDED_ALIASES_V2.write().unwrap()
+    }
+}
+
+impl ExtensionIdentifier for RegularBoundedChunkGrid {
+    const IDENTIFIER: &'static str = "zarrs.regular_bounded";
 }
 
 #[cfg(test)]

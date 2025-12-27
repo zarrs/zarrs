@@ -29,12 +29,11 @@ mod crc32c_codec;
 use std::sync::Arc;
 
 pub use crc32c_codec::Crc32cCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
 };
-use crate::registry::codec::CRC32C;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -43,20 +42,13 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(CRC32C, is_identifier_crc32c, create_codec_crc32c)
+    CodecPlugin::new(Crc32cCodec::IDENTIFIER, Crc32cCodec::matches_name, Crc32cCodec::default_name, create_codec_crc32c)
 }
 
-fn is_identifier_crc32c(identifier: &str) -> bool {
-    identifier == CRC32C
-}
-
-pub(crate) fn create_codec_crc32c(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(CRC32C, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_crc32c(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(Crc32cCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
     Ok(Codec::BytesToBytes(codec))
 }

@@ -7,15 +7,28 @@ use zarrs_metadata::{
     ConfigurationSerialize,
     v3::{FillValueMetadataV3, MetadataV3},
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError};
-use zarrs_registry::ExtensionAliasesDataTypeV3;
+use zarrs_plugin::{
+    ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, PluginUnsupportedError,
+    ZarrVersions,
+};
 
-use crate::{
-    array::{
-        DataType, DataTypeOptional,
-        data_type::{complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value},
+use crate::array::{
+    DataType, DataTypeOptional,
+    data_type::{
+        BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
+        ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
+        ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType,
+        ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType, ComplexFloat8E5M2DataType,
+        ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType, ComplexFloat16DataType,
+        ComplexFloat32DataType, ComplexFloat64DataType, Float4E2M1FNDataType, Float6E2M3FNDataType,
+        Float6E3M2FNDataType, Float8E3M4DataType, Float8E4M3B11FNUZDataType, Float8E4M3DataType,
+        Float8E4M3FNUZDataType, Float8E5M2DataType, Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
+        Float16DataType, Float32DataType, Float64DataType, Int2DataType, Int4DataType,
+        Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
+        NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
+        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
+        complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value,
     },
-    config::global_config,
 };
 
 /// A named data type.
@@ -34,248 +47,9 @@ impl NamedDataType {
 
     /// Create a new [`NamedDataType`] with the default name for the data type.
     #[must_use]
-    pub fn new_default_name(data_type: DataType, aliases: &ExtensionAliasesDataTypeV3) -> Self {
-        let name = aliases.default_name(data_type.identifier()).to_string();
+    pub fn new_default_name(data_type: DataType) -> Self {
+        let name = data_type.default_name().into_owned();
         Self { name, data_type }
-    }
-
-    /// Create a [`NamedDataType`] from metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
-    #[allow(clippy::too_many_lines)]
-    pub fn from_metadata(
-        metadata: &MetadataV3,
-        data_type_aliases: &ExtensionAliasesDataTypeV3,
-    ) -> Result<Self, PluginCreateError> {
-        if !metadata.must_understand() {
-            return Err(PluginCreateError::Other(
-                r#"data type must not have `"must_understand": false`"#.to_string(),
-            ));
-        }
-
-        let identifier = data_type_aliases.identifier(metadata.name());
-        if metadata.name() != identifier {
-            log::info!(
-                "Using data type alias `{}` for `{}`",
-                metadata.name(),
-                identifier
-            );
-        }
-
-        let name = metadata.name().to_string();
-        if let Some(configuration) = metadata.configuration() {
-            match identifier {
-                zarrs_registry::data_type::NUMPY_DATETIME64 => {
-                    use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
-                    let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
-                        NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(
-                            configuration.clone(),
-                        )
-                        .map_err(|_| {
-                            PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                                zarrs_registry::data_type::NUMPY_DATETIME64,
-                                "data_type",
-                                metadata.to_string(),
-                            ))
-                        })?;
-                    return Ok(Self::new(
-                        name,
-                        DataType::NumpyDateTime64 { unit, scale_factor },
-                    ));
-                }
-                zarrs_registry::data_type::NUMPY_TIMEDELTA64 => {
-                    use crate::metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
-                    let NumpyTimeDelta64DataTypeConfigurationV1 { unit, scale_factor } =
-                        NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(
-                            configuration.clone(),
-                        )
-                        .map_err(|_| {
-                            PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                                zarrs_registry::data_type::NUMPY_TIMEDELTA64,
-                                "data_type",
-                                metadata.to_string(),
-                            ))
-                        })?;
-                    return Ok(Self::new(
-                        name,
-                        DataType::NumpyTimeDelta64 { unit, scale_factor },
-                    ));
-                }
-                zarrs_registry::data_type::OPTIONAL => {
-                    use crate::metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
-                    let OptionalDataTypeConfigurationV1 {
-                        name: inner_name,
-                        configuration,
-                    } = OptionalDataTypeConfigurationV1::try_from_configuration(
-                        configuration.clone(),
-                    )
-                    .map_err(|_| {
-                        PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                            zarrs_registry::data_type::OPTIONAL,
-                            "data_type",
-                            metadata.to_string(),
-                        ))
-                    })?;
-
-                    // Create metadata for the inner data type
-                    let inner_metadata = if configuration.is_empty() {
-                        MetadataV3::new(inner_name)
-                    } else {
-                        MetadataV3::new_with_configuration(inner_name, configuration)
-                    };
-
-                    // Recursively parse the inner data type
-                    let inner_data_type = Self::from_metadata(&inner_metadata, data_type_aliases)?;
-                    let data_type = DataType::Optional(DataTypeOptional::new(inner_data_type));
-                    return Ok(Self::new(name, data_type));
-                }
-                _ => {}
-            }
-        }
-
-        if metadata.configuration_is_none_or_empty() {
-            use zarrs_registry::data_type as dt;
-            // Data types with no configuration
-            match identifier {
-                dt::BOOL => return Ok(Self::new(name, DataType::Bool)),
-                dt::INT2 => return Ok(Self::new(name, DataType::Int2)),
-                dt::INT4 => return Ok(Self::new(name, DataType::Int4)),
-                dt::INT8 => return Ok(Self::new(name, DataType::Int8)),
-                dt::INT16 => return Ok(Self::new(name, DataType::Int16)),
-                dt::INT32 => return Ok(Self::new(name, DataType::Int32)),
-                dt::INT64 => return Ok(Self::new(name, DataType::Int64)),
-                dt::UINT2 => return Ok(Self::new(name, DataType::UInt2)),
-                dt::UINT4 => return Ok(Self::new(name, DataType::UInt4)),
-                dt::UINT8 => return Ok(Self::new(name, DataType::UInt8)),
-                dt::UINT16 => return Ok(Self::new(name, DataType::UInt16)),
-                dt::UINT32 => return Ok(Self::new(name, DataType::UInt32)),
-                dt::UINT64 => return Ok(Self::new(name, DataType::UInt64)),
-                dt::FLOAT4_E2M1FN => {
-                    return Ok(Self::new(name, DataType::Float4E2M1FN));
-                }
-                dt::FLOAT6_E2M3FN => {
-                    return Ok(Self::new(name, DataType::Float6E2M3FN));
-                }
-                dt::FLOAT6_E3M2FN => {
-                    return Ok(Self::new(name, DataType::Float6E3M2FN));
-                }
-                dt::FLOAT8_E3M4 => {
-                    return Ok(Self::new(name, DataType::Float8E3M4));
-                }
-                dt::FLOAT8_E4M3 => {
-                    return Ok(Self::new(name, DataType::Float8E4M3));
-                }
-                dt::FLOAT8_E4M3B11FNUZ => {
-                    return Ok(Self::new(name, DataType::Float8E4M3B11FNUZ));
-                }
-                dt::FLOAT8_E4M3FNUZ => {
-                    return Ok(Self::new(name, DataType::Float8E4M3FNUZ));
-                }
-                dt::FLOAT8_E5M2 => {
-                    return Ok(Self::new(name, DataType::Float8E5M2));
-                }
-                dt::FLOAT8_E5M2FNUZ => {
-                    return Ok(Self::new(name, DataType::Float8E5M2FNUZ));
-                }
-                dt::FLOAT8_E8M0FNU => {
-                    return Ok(Self::new(name, DataType::Float8E8M0FNU));
-                }
-                dt::BFLOAT16 => {
-                    return Ok(Self::new(name, DataType::BFloat16));
-                }
-                dt::FLOAT16 => {
-                    return Ok(Self::new(name, DataType::Float16));
-                }
-                dt::FLOAT32 => {
-                    return Ok(Self::new(name, DataType::Float32));
-                }
-                dt::FLOAT64 => {
-                    return Ok(Self::new(name, DataType::Float64));
-                }
-                dt::COMPLEX_BFLOAT16 => {
-                    return Ok(Self::new(name, DataType::ComplexBFloat16));
-                }
-                dt::COMPLEX_FLOAT16 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat16));
-                }
-                dt::COMPLEX_FLOAT32 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat32));
-                }
-                dt::COMPLEX_FLOAT64 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat64));
-                }
-                dt::COMPLEX64 => {
-                    return Ok(Self::new(name, DataType::Complex64));
-                }
-                dt::COMPLEX128 => {
-                    return Ok(Self::new(name, DataType::Complex128));
-                }
-                dt::COMPLEX_FLOAT4_E2M1FN => {
-                    return Ok(Self::new(name, DataType::ComplexFloat4E2M1FN));
-                }
-                dt::COMPLEX_FLOAT6_E2M3FN => {
-                    return Ok(Self::new(name, DataType::ComplexFloat6E2M3FN));
-                }
-                dt::COMPLEX_FLOAT6_E3M2FN => {
-                    return Ok(Self::new(name, DataType::ComplexFloat6E3M2FN));
-                }
-                dt::COMPLEX_FLOAT8_E3M4 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E3M4));
-                }
-                dt::COMPLEX_FLOAT8_E4M3 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E4M3));
-                }
-                dt::COMPLEX_FLOAT8_E4M3B11FNUZ => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E4M3B11FNUZ));
-                }
-                dt::COMPLEX_FLOAT8_E4M3FNUZ => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E4M3FNUZ));
-                }
-                dt::COMPLEX_FLOAT8_E5M2 => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E5M2));
-                }
-                dt::COMPLEX_FLOAT8_E5M2FNUZ => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E5M2FNUZ));
-                }
-                dt::COMPLEX_FLOAT8_E8M0FNU => {
-                    return Ok(Self::new(name, DataType::ComplexFloat8E8M0FNU));
-                }
-                dt::STRING => return Ok(Self::new(name, DataType::String)),
-                dt::BYTES => return Ok(Self::new(name, DataType::Bytes)),
-                _ => {
-                    if name.starts_with('r') && name.len() > 1 {
-                        if let Ok(size_bits) = metadata.name()[1..].parse::<usize>() {
-                            if size_bits % 8 == 0 {
-                                let size_bytes = size_bits / 8;
-                                return Ok(Self::new(name, DataType::RawBits(size_bytes)));
-                            }
-                            return Err(PluginUnsupportedError::new(
-                                name.clone(),
-                                "data type".to_string(),
-                            )
-                            .into());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Try an extension
-        for plugin in inventory::iter::<DataTypePlugin> {
-            if plugin.match_name(identifier) {
-                return plugin.create(metadata).map(|dt| {
-                    NamedDataType::new(metadata.name().to_string(), DataType::Extension(dt))
-                });
-            }
-        }
-
-        // The data type is not supported
-        Err(
-            PluginUnsupportedError::new(metadata.name().to_string(), "data type".to_string())
-                .into(),
-        )
     }
 
     /// The name of the data type.
@@ -298,20 +72,16 @@ impl NamedDataType {
     /// ```
     /// # use zarrs::array::{DataType, DataTypeOptional};
     /// // Single level optional
-    /// let aliases = zarrs::registry::ExtensionAliasesDataTypeV3::default();
-    /// let opt_u8 = DataType::UInt8.into_named(&aliases).into_optional();
-    /// # assert_eq!(opt_u8.data_type(), &DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named(&aliases))));
+    /// let opt_u8 = DataType::UInt8.into_optional();
+    /// # assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named())));
     ///
     /// // Nested optional
-    /// let opt_opt_u8 = DataType::UInt8.into_named(&aliases).into_optional().into_optional();
+    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
     /// ```
     #[must_use]
     pub fn into_optional(self) -> Self {
         let data_type = DataType::Optional(DataTypeOptional::new(self));
-        let name = global_config()
-            .codec_aliases_v3()
-            .default_name(data_type.identifier())
-            .to_string();
+        let name = data_type.default_name().into_owned();
         Self::new(name, data_type)
     }
 
@@ -615,5 +385,277 @@ impl Deref for NamedDataType {
 impl From<NamedDataType> for DataType {
     fn from(value: NamedDataType) -> Self {
         value.data_type
+    }
+}
+
+impl TryFrom<&MetadataV3> for NamedDataType {
+    type Error = PluginCreateError;
+
+    /// Create a [`NamedDataType`] from metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
+    #[allow(clippy::too_many_lines)]
+    fn try_from(metadata: &MetadataV3) -> Result<Self, Self::Error> {
+        if !metadata.must_understand() {
+            return Err(PluginCreateError::Other(
+                r#"data type must not have `"must_understand": false`"#.to_string(),
+            ));
+        }
+
+        let name = metadata.name();
+
+        // Handle data types with configuration
+        if let Some(configuration) = metadata.configuration() {
+            if NumpyDateTime64DataType::matches_name(name, ZarrVersions::V3) {
+                use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
+                let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
+                    NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(
+                        configuration.clone(),
+                    )
+                    .map_err(|_| {
+                        PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                            NumpyDateTime64DataType::IDENTIFIER,
+                            "data_type",
+                            metadata.to_string(),
+                        ))
+                    })?;
+                return Ok(Self::new(
+                    name.to_string(),
+                    DataType::NumpyDateTime64 { unit, scale_factor },
+                ));
+            }
+
+            if NumpyTimeDelta64DataType::matches_name(name, ZarrVersions::V3) {
+                use crate::metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
+                let NumpyTimeDelta64DataTypeConfigurationV1 { unit, scale_factor } =
+                    NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(
+                        configuration.clone(),
+                    )
+                    .map_err(|_| {
+                        PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                            NumpyTimeDelta64DataType::IDENTIFIER,
+                            "data_type",
+                            metadata.to_string(),
+                        ))
+                    })?;
+                return Ok(Self::new(
+                    name.to_string(),
+                    DataType::NumpyTimeDelta64 { unit, scale_factor },
+                ));
+            }
+
+            if OptionalDataType::matches_name(name, ZarrVersions::V3) {
+                use crate::metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
+                let OptionalDataTypeConfigurationV1 {
+                    name: inner_name,
+                    configuration,
+                } = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
+                    .map_err(|_| {
+                        PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                            OptionalDataType::IDENTIFIER,
+                            "data_type",
+                            metadata.to_string(),
+                        ))
+                    })?;
+
+                // Create metadata for the inner data type
+                let inner_metadata = if configuration.is_empty() {
+                    MetadataV3::new(inner_name)
+                } else {
+                    MetadataV3::new_with_configuration(inner_name, configuration)
+                };
+
+                // Recursively parse the inner data type
+                let inner_data_type = Self::try_from(&inner_metadata)?;
+                let data_type = DataType::Optional(DataTypeOptional::new(inner_data_type));
+                return Ok(Self::new(name.to_string(), data_type));
+            }
+        }
+
+        // Handle data types with no configuration
+        if metadata.configuration_is_none_or_empty() {
+            // Boolean
+            if BoolDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Bool));
+            }
+
+            // Signed integers
+            if Int2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int2));
+            }
+            if Int4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int4));
+            }
+            if Int8DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int8));
+            }
+            if Int16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int16));
+            }
+            if Int32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int32));
+            }
+            if Int64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Int64));
+            }
+
+            // Unsigned integers
+            if UInt2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt2));
+            }
+            if UInt4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt4));
+            }
+            if UInt8DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt8));
+            }
+            if UInt16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt16));
+            }
+            if UInt32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt32));
+            }
+            if UInt64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::UInt64));
+            }
+
+            // Subfloats
+            if Float4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float4E2M1FN));
+            }
+            if Float6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float6E2M3FN));
+            }
+            if Float6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float6E3M2FN));
+            }
+            if Float8E3M4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E3M4));
+            }
+            if Float8E4M3DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E4M3));
+            }
+            if Float8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E4M3B11FNUZ));
+            }
+            if Float8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E4M3FNUZ));
+            }
+            if Float8E5M2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E5M2));
+            }
+            if Float8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E5M2FNUZ));
+            }
+            if Float8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float8E8M0FNU));
+            }
+
+            // Standard floats
+            if BFloat16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::BFloat16));
+            }
+            if Float16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float16));
+            }
+            if Float32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float32));
+            }
+            if Float64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Float64));
+            }
+
+            // Complex subfloats
+            if ComplexFloat4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat4E2M1FN));
+            }
+            if ComplexFloat6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat6E2M3FN));
+            }
+            if ComplexFloat6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat6E3M2FN));
+            }
+            if ComplexFloat8E3M4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E3M4));
+            }
+            if ComplexFloat8E4M3DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E4M3));
+            }
+            if ComplexFloat8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    DataType::ComplexFloat8E4M3B11FNUZ,
+                ));
+            }
+            if ComplexFloat8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E4M3FNUZ));
+            }
+            if ComplexFloat8E5M2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E5M2));
+            }
+            if ComplexFloat8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E5M2FNUZ));
+            }
+            if ComplexFloat8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E8M0FNU));
+            }
+
+            // Complex floats
+            if ComplexBFloat16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexBFloat16));
+            }
+            if ComplexFloat16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat16));
+            }
+            if ComplexFloat32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat32));
+            }
+            if ComplexFloat64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::ComplexFloat64));
+            }
+            if Complex64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Complex64));
+            }
+            if Complex128DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Complex128));
+            }
+
+            // Variable-length types
+            if StringDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::String));
+            }
+            if BytesDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(name.to_string(), DataType::Bytes));
+            }
+
+            // RawBits (r8, r16, r24, etc.)
+            if RawBitsDataType::matches_name(name, ZarrVersions::V3) {
+                if let Ok(size_bits) = name[1..].parse::<usize>() {
+                    if size_bits % 8 == 0 {
+                        let size_bytes = size_bits / 8;
+                        return Ok(Self::new(name.to_string(), DataType::RawBits(size_bytes)));
+                    }
+                    return Err(PluginUnsupportedError::new(
+                        name.to_string(),
+                        "data type".to_string(),
+                    )
+                    .into());
+                }
+            }
+        }
+
+        // Try an extension plugin
+        for plugin in inventory::iter::<DataTypePlugin> {
+            if plugin.match_name(name, ZarrVersions::V3) {
+                return plugin.create(metadata).map(|dt| {
+                    NamedDataType::new(metadata.name().to_string(), DataType::Extension(dt))
+                });
+            }
+        }
+
+        // The data type is not supported
+        Err(PluginUnsupportedError::new(name.to_string(), "data type".to_string()).into())
     }
 }
