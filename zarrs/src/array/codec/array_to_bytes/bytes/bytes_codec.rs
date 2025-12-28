@@ -28,10 +28,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]
@@ -323,37 +320,6 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     }
 }
 
-static BYTES_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "bytes",
-        vec!["endian".into()],
-        vec![],
-    ))
-});
-
-static BYTES_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("bytes", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for BytesCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BYTES_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BYTES_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for BytesCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BYTES_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BYTES_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for BytesCodec {
-    const IDENTIFIER: &'static str = "bytes";
-}
+zarrs_plugin::impl_extension_aliases!(BytesCodec, "bytes",
+    v3: "bytes", ["endian"]
+);

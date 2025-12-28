@@ -12,10 +12,6 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
 
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
@@ -120,42 +116,4 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
     }
 }
 
-static TEST_UNBOUNDED_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.test_unbounded",
-        vec![],
-        vec![],
-    ))
-});
-
-static TEST_UNBOUNDED_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.test_unbounded",
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for TestUnboundedCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        TEST_UNBOUNDED_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        TEST_UNBOUNDED_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for TestUnboundedCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        TEST_UNBOUNDED_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        TEST_UNBOUNDED_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for TestUnboundedCodec {
-    const IDENTIFIER: &'static str = "zarrs.test_unbounded";
-}
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");

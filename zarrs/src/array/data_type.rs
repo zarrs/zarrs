@@ -9,11 +9,18 @@
 //!
 #![doc = include_str!("../../doc/status/data_types.md")]
 
-mod data_type_types;
+mod macros;
 mod named_data_type;
-use std::{borrow::Cow, fmt::Debug, mem::discriminant, num::NonZeroU32, ops::Deref, sync::Arc};
 
-pub use data_type_types::*;
+mod complex;
+mod float;
+mod integer;
+mod optional;
+mod special;
+mod subfloat;
+
+use std::{borrow::Cow, fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
+
 use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
 pub use named_data_type::NamedDataType;
@@ -28,62 +35,30 @@ use crate::metadata::{DataTypeSize, v3::FillValueMetadataV3};
 use crate::metadata_ext::data_type::{
     NumpyTimeUnit, numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
     numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
-    optional::OptionalDataTypeConfigurationV1,
 };
 
-/// A newtype wrapper for optional data types.
-///
-/// This wraps the inner [`NamedDataType`] and provides methods specific to optional types,
-/// such as checking if a fill value represents null and extracting inner fill value bytes.
-///
-/// The newtype implements [`Deref`] to the inner [`NamedDataType`], so methods on the inner
-/// type can be called directly.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DataTypeOptional(Box<NamedDataType>);
-
-impl DataTypeOptional {
-    /// Create a new optional data type wrapper.
-    #[must_use]
-    pub fn new(inner: NamedDataType) -> Self {
-        Self(Box::new(inner))
-    }
-
-    /// Check if the fill value represents null (last byte is `0x00`).
-    #[must_use]
-    pub fn is_fill_value_null(&self, fill_value: &FillValue) -> bool {
-        fill_value.as_ne_bytes().last() == Some(&0)
-    }
-
-    /// Get the inner fill value bytes (without optional suffix).
-    ///
-    /// For optional data types, returns all bytes except the last suffix byte.
-    #[must_use]
-    pub fn fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
-        let bytes = fill_value.as_ne_bytes();
-        if bytes.is_empty() {
-            &[]
-        } else {
-            &bytes[..bytes.len() - 1]
-        }
-    }
-
-    /// Returns the configuration for this optional data type.
-    #[must_use]
-    pub fn configuration(&self) -> Configuration {
-        Configuration::from(OptionalDataTypeConfigurationV1 {
-            name: self.0.name().to_string(),
-            configuration: self.0.configuration(),
-        })
-    }
-}
-
-impl Deref for DataTypeOptional {
-    type Target = NamedDataType;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+pub use complex::{
+    Complex64DataType, Complex128DataType, ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType,
+    ComplexFloat6E2M3FNDataType, ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType,
+    ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType,
+    ComplexFloat8E5M2DataType, ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType,
+    ComplexFloat16DataType, ComplexFloat32DataType, ComplexFloat64DataType,
+};
+pub use float::{BFloat16DataType, Float16DataType, Float32DataType, Float64DataType};
+pub use integer::{
+    Int2DataType, Int4DataType, Int8DataType, Int16DataType, Int32DataType, Int64DataType,
+    UInt2DataType, UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
+};
+pub use optional::OptionalDataType;
+pub use special::{
+    BoolDataType, BytesDataType, NumpyDateTime64DataType, NumpyTimeDelta64DataType,
+    RawBitsDataType, StringDataType,
+};
+pub use subfloat::{
+    Float4E2M1FNDataType, Float6E2M3FNDataType, Float6E3M2FNDataType, Float8E3M4DataType,
+    Float8E4M3B11FNUZDataType, Float8E4M3DataType, Float8E4M3FNUZDataType, Float8E5M2DataType,
+    Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
+};
 
 /// A data type.
 #[derive(Clone, Debug)]
@@ -221,7 +196,7 @@ pub enum DataType {
         scale_factor: NonZeroU32,
     },
     /// An optional data type.
-    Optional(DataTypeOptional),
+    Optional(OptionalDataType),
     /// An extension data type.
     Extension(Arc<dyn DataTypeExtension>),
 }
@@ -515,17 +490,17 @@ impl DataType {
     ///
     /// # Examples
     /// ```
-    /// # use zarrs::array::{DataType, DataTypeOptional};
+    /// # use zarrs::array::{DataType, data_type::OptionalDataType};
     /// // Single level optional
     /// let opt_u8 = DataType::UInt8.into_optional();
-    /// # assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named())));
+    /// # assert_eq!(opt_u8, DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named())));
     ///
     /// // Nested optional
     /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
     /// ```
     #[must_use]
     pub fn into_optional(self) -> DataType {
-        DataType::Optional(DataTypeOptional::new(self.into_named()))
+        DataType::Optional(OptionalDataType::new(self.into_named()))
     }
 
     /// Returns the optional type wrapper if this is an optional data type.
@@ -538,7 +513,7 @@ impl DataType {
     /// assert!(DataType::UInt8.optional().is_none());
     /// ```
     #[must_use]
-    pub fn optional(&self) -> Option<&DataTypeOptional> {
+    pub fn optional(&self) -> Option<&OptionalDataType> {
         if let Self::Optional(opt) = self {
             Some(opt)
         } else {
@@ -911,151 +886,29 @@ fn complex_subfloat_hex_string_to_fill_value(
 
 /// Get the default V3 name for a V3 data type name.
 ///
-/// This checks built-in data types (using `ExtensionIdentifier` marker types) and
-/// extension plugins. Returns the default V3 name if a match is found, otherwise
-/// returns the input name unchanged.
+/// This checks registered data type plugins (which include both built-in types and extensions).
+/// Returns the default V3 name if a match is found, otherwise returns the input name unchanged.
 #[must_use]
-pub fn data_type_v3_default_name(v3_name: &str) -> Cow<'static, str> {
-    // Check built-in data types
-    macro_rules! check_type {
-        ($type:ty) => {
-            if <$type>::matches_name(v3_name, ZarrVersions::V3) {
-                return <$type>::default_name(ZarrVersions::V3);
-            }
-        };
-    }
-
-    check_type!(BoolDataType);
-    check_type!(Int2DataType);
-    check_type!(Int4DataType);
-    check_type!(Int8DataType);
-    check_type!(Int16DataType);
-    check_type!(Int32DataType);
-    check_type!(Int64DataType);
-    check_type!(UInt2DataType);
-    check_type!(UInt4DataType);
-    check_type!(UInt8DataType);
-    check_type!(UInt16DataType);
-    check_type!(UInt32DataType);
-    check_type!(UInt64DataType);
-    check_type!(Float4E2M1FNDataType);
-    check_type!(Float6E2M3FNDataType);
-    check_type!(Float6E3M2FNDataType);
-    check_type!(Float8E3M4DataType);
-    check_type!(Float8E4M3DataType);
-    check_type!(Float8E4M3B11FNUZDataType);
-    check_type!(Float8E4M3FNUZDataType);
-    check_type!(Float8E5M2DataType);
-    check_type!(Float8E5M2FNUZDataType);
-    check_type!(Float8E8M0FNUDataType);
-    check_type!(BFloat16DataType);
-    check_type!(Float16DataType);
-    check_type!(Float32DataType);
-    check_type!(Float64DataType);
-    check_type!(ComplexBFloat16DataType);
-    check_type!(ComplexFloat16DataType);
-    check_type!(ComplexFloat32DataType);
-    check_type!(ComplexFloat64DataType);
-    check_type!(ComplexFloat4E2M1FNDataType);
-    check_type!(ComplexFloat6E2M3FNDataType);
-    check_type!(ComplexFloat6E3M2FNDataType);
-    check_type!(ComplexFloat8E3M4DataType);
-    check_type!(ComplexFloat8E4M3DataType);
-    check_type!(ComplexFloat8E4M3B11FNUZDataType);
-    check_type!(ComplexFloat8E4M3FNUZDataType);
-    check_type!(ComplexFloat8E5M2DataType);
-    check_type!(ComplexFloat8E5M2FNUZDataType);
-    check_type!(ComplexFloat8E8M0FNUDataType);
-    check_type!(Complex64DataType);
-    check_type!(Complex128DataType);
-    check_type!(StringDataType);
-    check_type!(BytesDataType);
-    check_type!(NumpyDateTime64DataType);
-    check_type!(NumpyTimeDelta64DataType);
-    check_type!(OptionalDataType);
-
-    // Check extension plugins
+pub(crate) fn data_type_v3_default_name(v3_name: &str) -> Cow<'static, str> {
     for plugin in inventory::iter::<DataTypePlugin> {
         if plugin.match_name(v3_name, ZarrVersions::V3) {
             return plugin.default_name(ZarrVersions::V3);
         }
     }
-
     Cow::Owned(v3_name.to_string())
 }
 
 /// Get the default V2 name for a V2 data type name.
 ///
-/// This checks built-in data types (using `ExtensionIdentifier` marker types) and
-/// extension plugins. Returns the default V2 name if a match is found, otherwise
-/// returns the input name unchanged.
+/// This checks registered data type plugins (which include both built-in types and extensions).
+/// Returns the default V2 name if a match is found, otherwise returns the input name unchanged.
 #[must_use]
-pub fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
-    // Check built-in data types
-    macro_rules! check_type {
-        ($type:ty) => {
-            if <$type>::matches_name(v2_name, ZarrVersions::V2) {
-                return <$type>::default_name(ZarrVersions::V2);
-            }
-        };
-    }
-
-    check_type!(BoolDataType);
-    check_type!(Int2DataType);
-    check_type!(Int4DataType);
-    check_type!(Int8DataType);
-    check_type!(Int16DataType);
-    check_type!(Int32DataType);
-    check_type!(Int64DataType);
-    check_type!(UInt2DataType);
-    check_type!(UInt4DataType);
-    check_type!(UInt8DataType);
-    check_type!(UInt16DataType);
-    check_type!(UInt32DataType);
-    check_type!(UInt64DataType);
-    check_type!(Float4E2M1FNDataType);
-    check_type!(Float6E2M3FNDataType);
-    check_type!(Float6E3M2FNDataType);
-    check_type!(Float8E3M4DataType);
-    check_type!(Float8E4M3DataType);
-    check_type!(Float8E4M3B11FNUZDataType);
-    check_type!(Float8E4M3FNUZDataType);
-    check_type!(Float8E5M2DataType);
-    check_type!(Float8E5M2FNUZDataType);
-    check_type!(Float8E8M0FNUDataType);
-    check_type!(BFloat16DataType);
-    check_type!(Float16DataType);
-    check_type!(Float32DataType);
-    check_type!(Float64DataType);
-    check_type!(ComplexBFloat16DataType);
-    check_type!(ComplexFloat16DataType);
-    check_type!(ComplexFloat32DataType);
-    check_type!(ComplexFloat64DataType);
-    check_type!(ComplexFloat4E2M1FNDataType);
-    check_type!(ComplexFloat6E2M3FNDataType);
-    check_type!(ComplexFloat6E3M2FNDataType);
-    check_type!(ComplexFloat8E3M4DataType);
-    check_type!(ComplexFloat8E4M3DataType);
-    check_type!(ComplexFloat8E4M3B11FNUZDataType);
-    check_type!(ComplexFloat8E4M3FNUZDataType);
-    check_type!(ComplexFloat8E5M2DataType);
-    check_type!(ComplexFloat8E5M2FNUZDataType);
-    check_type!(ComplexFloat8E8M0FNUDataType);
-    check_type!(Complex64DataType);
-    check_type!(Complex128DataType);
-    check_type!(StringDataType);
-    check_type!(BytesDataType);
-    check_type!(NumpyDateTime64DataType);
-    check_type!(NumpyTimeDelta64DataType);
-    check_type!(OptionalDataType);
-
-    // Check extension plugins
+pub(crate) fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
     for plugin in inventory::iter::<DataTypePlugin> {
         if plugin.match_name(v2_name, ZarrVersions::V2) {
             return plugin.default_name(ZarrVersions::V2);
         }
     }
-
     Cow::Owned(v2_name.to_string())
 }
 
@@ -2684,15 +2537,15 @@ mod tests {
         let opt_u8 = DataType::UInt8.into_optional();
         assert_eq!(
             opt_u8,
-            DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named()))
+            DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named()))
         );
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
         assert_eq!(
             DataType::UInt8.into_optional().into_optional(),
-            DataType::Optional(DataTypeOptional::new(
-                DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named()))
+            DataType::Optional(OptionalDataType::new(
+                DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named()))
                     .into_named()
             ))
         );
@@ -2703,9 +2556,9 @@ mod tests {
                 .into_optional()
                 .into_optional()
                 .into_optional(),
-            DataType::Optional(DataTypeOptional::new(
-                DataType::Optional(DataTypeOptional::new(
-                    DataType::Optional(DataTypeOptional::new(DataType::UInt16.into_named()))
+            DataType::Optional(OptionalDataType::new(
+                DataType::Optional(OptionalDataType::new(
+                    DataType::Optional(OptionalDataType::new(DataType::UInt16.into_named()))
                         .into_named()
                 ))
                 .into_named()
@@ -2715,11 +2568,11 @@ mod tests {
         // Works with various inner types
         assert_eq!(
             DataType::String.into_optional(),
-            DataType::Optional(DataTypeOptional::new(DataType::String.into_named()))
+            DataType::Optional(OptionalDataType::new(DataType::String.into_named()))
         );
         assert_eq!(
             DataType::Float64.into_optional(),
-            DataType::Optional(DataTypeOptional::new(DataType::Float64.into_named()))
+            DataType::Optional(OptionalDataType::new(DataType::Float64.into_named()))
         );
     }
 

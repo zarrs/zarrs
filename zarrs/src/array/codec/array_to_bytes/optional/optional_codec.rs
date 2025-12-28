@@ -17,10 +17,7 @@ use crate::array::{
     },
 };
 use crate::metadata::{Configuration, DataTypeSize};
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -496,45 +493,7 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
     }
 }
 
-static OPTIONAL_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.optional",
-        vec![],
-        vec![],
-    ))
-});
-
-static OPTIONAL_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.optional",
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for OptionalCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        OPTIONAL_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        OPTIONAL_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for OptionalCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        OPTIONAL_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        OPTIONAL_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for OptionalCodec {
-    const IDENTIFIER: &'static str = "zarrs.optional";
-}
+zarrs_plugin::impl_extension_aliases!(OptionalCodec, "zarrs.optional");
 
 #[cfg(test)]
 mod tests {

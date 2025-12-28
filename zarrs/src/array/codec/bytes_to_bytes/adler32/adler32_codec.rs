@@ -24,10 +24,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `adler32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -213,42 +210,6 @@ impl BytesToBytesCodecTraits for Adler32Codec {
     }
 }
 
-static ADLER32_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "numcodecs.adler32",
-        vec![],
-        vec![],
-    ))
-});
-
-static ADLER32_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        Adler32Codec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for Adler32Codec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ADLER32_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ADLER32_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for Adler32Codec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ADLER32_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ADLER32_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for Adler32Codec {
-    const IDENTIFIER: &'static str = "adler32";
-}
+zarrs_plugin::impl_extension_aliases!(Adler32Codec, "adler32",
+    v3: "numcodecs.adler32", []
+);

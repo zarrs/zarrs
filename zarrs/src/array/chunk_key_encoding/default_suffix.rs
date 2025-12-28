@@ -3,8 +3,7 @@
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 use crate::metadata::ConfigurationSerialize;
@@ -76,45 +75,7 @@ impl DefaultSuffixChunkKeyEncoding {
     }
 }
 
-static DEFAULT_SUFFIX_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.default_suffix",
-        vec![],
-        vec![],
-    ))
-});
-
-static DEFAULT_SUFFIX_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.default_suffix",
-        vec![],
-        vec![],
-    ))
-});
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for DefaultSuffixChunkKeyEncoding {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        DEFAULT_SUFFIX_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        DEFAULT_SUFFIX_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for DefaultSuffixChunkKeyEncoding {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        DEFAULT_SUFFIX_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        DEFAULT_SUFFIX_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for DefaultSuffixChunkKeyEncoding {
-    const IDENTIFIER: &'static str = "zarrs.default_suffix";
-}
+zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding, "zarrs.default_suffix");
 
 impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
     fn create_metadata(&self) -> MetadataV3 {

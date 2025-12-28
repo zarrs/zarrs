@@ -21,12 +21,7 @@ use crate::{
         chunk_grid::RegularChunkGrid,
         chunk_key_encoding::V2ChunkKeyEncoding,
         codec::{BytesCodec, CodecPlugin, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec},
-        data_type::{
-            BoolDataType, BytesDataType, Complex64DataType, Complex128DataType, Float16DataType,
-            Float32DataType, Float64DataType, Int8DataType, Int16DataType, Int32DataType,
-            Int64DataType, StringDataType, UInt8DataType, UInt16DataType, UInt32DataType,
-            UInt64DataType,
-        },
+        data_type::{BoolDataType, DataTypePlugin, RawBitsDataType, StringDataType},
     },
     metadata_ext::{
         chunk_grid::regular::RegularChunkGridConfiguration,
@@ -34,9 +29,6 @@ use crate::{
         codec::bytes::BytesCodecConfigurationV1,
     },
 };
-
-#[cfg(feature = "blosc")]
-use crate::array::data_type::{BFloat16DataType, RawBitsDataType};
 
 #[cfg(feature = "blosc")]
 use crate::{
@@ -63,6 +55,33 @@ use crate::{
     array::codec::ZstdCodec,
     metadata_ext::codec::zstd::{ZstdCodecConfiguration, codec_zstd_v2_numcodecs_to_v3},
 };
+
+/// Try to find a V3 default name for a V2 data type name by iterating over registered data type plugins.
+///
+/// Returns `Some(default_v3_name)` if a match is found, `None` otherwise.
+#[must_use]
+fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
+    // Special handling for RawBits V2 format (|V8 -> r64)
+    // Must be checked before plugin iteration since the plugin won't know the size
+    if RawBitsDataType::matches_name(v2_name, ZarrVersions::V2) {
+        if let Some(size_str) = v2_name.strip_prefix("|V") {
+            if let Ok(size_bytes) = size_str.parse::<usize>() {
+                return Some(Cow::Owned(format!("r{}", size_bytes * 8)));
+            }
+        }
+        // If it's already in r* format, return as-is
+        return Some(Cow::Owned(v2_name.to_string()));
+    }
+
+    // Check plugins (all registered data types including bool, string, bytes, numeric, etc.)
+    for plugin in inventory::iter::<DataTypePlugin> {
+        if plugin.match_name(v2_name, ZarrVersions::V2) {
+            return Some(plugin.default_name(ZarrVersions::V3));
+        }
+    }
+
+    None
+}
 
 /// Try to find a V3 default name for a V2 codec name by iterating over registered plugins.
 ///
@@ -299,6 +318,14 @@ pub fn codec_metadata_v2_to_v3(
 fn get_data_type_size_for_blosc(
     name: &str,
 ) -> Result<Option<DataTypeSize>, ArrayMetadataV2ToV3Error> {
+    use crate::array::data_type::{
+        BFloat16DataType, BytesDataType, Complex64DataType, Complex128DataType, Float16DataType,
+        Float32DataType, Float64DataType, Int8DataType, Int16DataType, Int32DataType,
+        Int64DataType, RawBitsDataType, UInt8DataType, UInt16DataType, UInt32DataType,
+        UInt64DataType,
+    };
+    use zarrs_plugin::ExtensionIdentifier;
+
     // Check using ExtensionIdentifier matches for known data types
     if BoolDataType::matches_name(name, ZarrVersions::V3)
         || Int8DataType::matches_name(name, ZarrVersions::V3)
@@ -412,47 +439,15 @@ pub fn data_type_metadata_v2_to_v3(
 ) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
     match data_type {
         DataTypeMetadataV2::Simple(name) => {
-            // Check each known data type using ExtensionIdentifier
-            let v3_name = if BoolDataType::matches_name(name, ZarrVersions::V2) {
-                BoolDataType::default_name(ZarrVersions::V3)
-            } else if Int8DataType::matches_name(name, ZarrVersions::V2) {
-                Int8DataType::default_name(ZarrVersions::V3)
-            } else if Int16DataType::matches_name(name, ZarrVersions::V2) {
-                Int16DataType::default_name(ZarrVersions::V3)
-            } else if Int32DataType::matches_name(name, ZarrVersions::V2) {
-                Int32DataType::default_name(ZarrVersions::V3)
-            } else if Int64DataType::matches_name(name, ZarrVersions::V2) {
-                Int64DataType::default_name(ZarrVersions::V3)
-            } else if UInt8DataType::matches_name(name, ZarrVersions::V2) {
-                UInt8DataType::default_name(ZarrVersions::V3)
-            } else if UInt16DataType::matches_name(name, ZarrVersions::V2) {
-                UInt16DataType::default_name(ZarrVersions::V3)
-            } else if UInt32DataType::matches_name(name, ZarrVersions::V2) {
-                UInt32DataType::default_name(ZarrVersions::V3)
-            } else if UInt64DataType::matches_name(name, ZarrVersions::V2) {
-                UInt64DataType::default_name(ZarrVersions::V3)
-            } else if Float16DataType::matches_name(name, ZarrVersions::V2) {
-                Float16DataType::default_name(ZarrVersions::V3)
-            } else if Float32DataType::matches_name(name, ZarrVersions::V2) {
-                Float32DataType::default_name(ZarrVersions::V3)
-            } else if Float64DataType::matches_name(name, ZarrVersions::V2) {
-                Float64DataType::default_name(ZarrVersions::V3)
-            } else if Complex64DataType::matches_name(name, ZarrVersions::V2) {
-                Complex64DataType::default_name(ZarrVersions::V3)
-            } else if Complex128DataType::matches_name(name, ZarrVersions::V2) {
-                Complex128DataType::default_name(ZarrVersions::V3)
-            } else if StringDataType::matches_name(name, ZarrVersions::V2) {
-                StringDataType::default_name(ZarrVersions::V3)
-            } else if BytesDataType::matches_name(name, ZarrVersions::V2) {
-                BytesDataType::default_name(ZarrVersions::V3)
+            // Look up the V3 name using the built-in data type registry
+            if let Some(v3_name) = data_type_v2_to_v3_name(name) {
+                Ok(MetadataV3::new(v3_name.to_string()))
             } else {
-                // Unknown data type - use the name as-is
-                return Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
+                // Unknown data type
+                Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
                     data_type.clone(),
-                ));
-            };
-
-            Ok(MetadataV3::new(v3_name.to_string()))
+                ))
+            }
         }
         DataTypeMetadataV2::Structured(_) => Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
             data_type.clone(),
@@ -479,6 +474,9 @@ pub fn fill_value_metadata_v2_to_v3(
 
     let data_type_name = data_type.name();
 
+    let is_string = StringDataType::matches_name(data_type_name, ZarrVersions::V3);
+    let is_bool = BoolDataType::matches_name(data_type_name, ZarrVersions::V3);
+
     // We add some special cases which are supported in v2 but not v3
     let converted_value = match converted_value {
         // A missing fill value is "undefined", so we choose something reasonable
@@ -486,10 +484,10 @@ pub fn fill_value_metadata_v2_to_v3(
             log::warn!(
                 "Fill value of `null` specified for data type {data_type_name}. This is unsupported in Zarr V3; mapping to a default value."
             );
-            if StringDataType::matches_name(data_type_name, ZarrVersions::V3) {
+            if is_string {
                 // Support zarr-python encoded string arrays with a `null` fill value
                 FillValueMetadataV3::from("")
-            } else if BoolDataType::matches_name(data_type_name, ZarrVersions::V3) {
+            } else if is_bool {
                 // Any other null fill value is "undefined"; we pick false for bools
                 FillValueMetadataV3::from(false)
             } else {
@@ -499,7 +497,7 @@ pub fn fill_value_metadata_v2_to_v3(
         }
         Some(value) => {
             // Add a special case for `zarr-python` string data with a 0 fill value -> empty string
-            if StringDataType::matches_name(data_type_name, ZarrVersions::V3) {
+            if is_string {
                 if let FillValueMetadataV3::Number(n) = value {
                     if n.as_u64() == Some(0) {
                         log::warn!(
@@ -511,7 +509,7 @@ pub fn fill_value_metadata_v2_to_v3(
             }
 
             // Map a 0/1 scalar fill value to a bool
-            if BoolDataType::matches_name(data_type_name, ZarrVersions::V3) {
+            if is_bool {
                 if let FillValueMetadataV3::Number(n) = value {
                     if n.as_u64() == Some(0) {
                         return Ok(FillValueMetadataV3::from(false));

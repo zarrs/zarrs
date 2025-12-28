@@ -6,11 +6,8 @@ use std::{
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -1012,42 +1009,4 @@ impl ShardingCodec {
     }
 }
 
-static SHARDING_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "sharding_indexed",
-        vec![],
-        vec![],
-    ))
-});
-
-static SHARDING_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "sharding_indexed",
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for ShardingCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        SHARDING_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        SHARDING_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for ShardingCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        SHARDING_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        SHARDING_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for ShardingCodec {
-    const IDENTIFIER: &'static str = "sharding_indexed";
-}
+zarrs_plugin::impl_extension_aliases!(ShardingCodec, "sharding_indexed");

@@ -11,10 +11,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -141,42 +138,6 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
     }
 }
 
-static SHUFFLE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "numcodecs.shuffle",
-        vec![],
-        vec![],
-    ))
-});
-
-static SHUFFLE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        ShuffleCodec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for ShuffleCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        SHUFFLE_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        SHUFFLE_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for ShuffleCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        SHUFFLE_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        SHUFFLE_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for ShuffleCodec {
-    const IDENTIFIER: &'static str = "shuffle";
-}
+zarrs_plugin::impl_extension_aliases!(ShuffleCodec, "shuffle",
+    v3: "numcodecs.shuffle", []
+);

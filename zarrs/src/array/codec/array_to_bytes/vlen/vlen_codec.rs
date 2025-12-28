@@ -1,9 +1,6 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::NamedCodec;
@@ -346,37 +343,6 @@ impl ArrayToBytesCodecTraits for VlenCodec {
     }
 }
 
-static VLEN_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.vlen",
-        vec!["https://codec.zarrs.dev/array_to_bytes/vlen".into()],
-        vec![],
-    ))
-});
-
-static VLEN_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zarrs.vlen", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for VlenCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        VLEN_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        VLEN_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for VlenCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        VLEN_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        VLEN_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for VlenCodec {
-    const IDENTIFIER: &'static str = "zarrs.vlen";
-}
+zarrs_plugin::impl_extension_aliases!(VlenCodec, "zarrs.vlen",
+    v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
+);

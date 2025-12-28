@@ -43,8 +43,7 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
+use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.
 inventory::submit! {
@@ -364,35 +363,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
     }
 }
 
-static RECTANGULAR_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("rectangular", vec![], vec![])));
-
-static RECTANGULAR_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("rectangular", vec![], vec![])));
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for RectangularChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        RECTANGULAR_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        RECTANGULAR_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for RectangularChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        RECTANGULAR_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        RECTANGULAR_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for RectangularChunkGrid {
-    const IDENTIFIER: &'static str = "rectangular";
-}
+zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, "rectangular");
 
 #[cfg(test)]
 mod tests {

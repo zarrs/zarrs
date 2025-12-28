@@ -1,10 +1,8 @@
 use std::num::NonZeroU64;
-use std::sync::{Arc, LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
+use zarrs_plugin::ExtensionIdentifier;
 use zarrs_plugin::PluginCreateError;
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
 
 use super::super::zfp::ZfpCodec;
 use crate::array::codec::{
@@ -199,37 +197,6 @@ impl ArrayToBytesCodecTraits for ZfpyCodec {
     }
 }
 
-static ZFPY_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "numcodecs.zfpy",
-        vec!["https://codec.zarrs.dev/array_to_bytes/zfpy".into()],
-        vec![],
-    ))
-});
-
-static ZFPY_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zfpy", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for ZfpyCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZFPY_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZFPY_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for ZfpyCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZFPY_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZFPY_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for ZfpyCodec {
-    const IDENTIFIER: &'static str = "zfpy";
-}
+zarrs_plugin::impl_extension_aliases!(ZfpyCodec, "zfpy",
+    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"]
+);

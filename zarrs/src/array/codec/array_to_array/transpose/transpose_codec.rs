@@ -22,10 +22,7 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A Transpose codec implementation.
 #[derive(Clone, Debug)]
@@ -278,32 +275,4 @@ impl ArrayCodecTraits for TransposeCodec {
     }
 }
 
-static TRANSPOSE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("transpose", vec![], vec![])));
-
-static TRANSPOSE_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("transpose", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for TransposeCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        TRANSPOSE_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        TRANSPOSE_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for TransposeCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        TRANSPOSE_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        TRANSPOSE_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for TransposeCodec {
-    const IDENTIFIER: &'static str = "transpose";
-}
+zarrs_plugin::impl_extension_aliases!(TransposeCodec, "transpose");

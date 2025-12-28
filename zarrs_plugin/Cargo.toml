@@ -16,5 +16,6 @@ categories = ["encoding"]
 workspace = true
 
 [dependencies]
+paste = "1.0.15"
 regex = "1.12.2"
 thiserror.workspace = true

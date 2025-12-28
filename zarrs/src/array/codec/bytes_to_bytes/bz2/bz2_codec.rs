@@ -15,10 +15,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bz2` codec implementation.
 #[derive(Clone, Debug)]
@@ -132,37 +129,6 @@ impl BytesToBytesCodecTraits for Bz2Codec {
     }
 }
 
-static BZ2_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("numcodecs.bz2", vec![], vec![])));
-
-static BZ2_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        Bz2Codec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for Bz2Codec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BZ2_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BZ2_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for Bz2Codec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BZ2_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BZ2_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for Bz2Codec {
-    const IDENTIFIER: &'static str = "bz2";
-}
+zarrs_plugin::impl_extension_aliases!(Bz2Codec, "bz2",
+    v3: "numcodecs.bz2", []
+);

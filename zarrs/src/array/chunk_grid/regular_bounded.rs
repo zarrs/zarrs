@@ -29,8 +29,7 @@
 use std::num::NonZeroU64;
 
 use itertools::izip;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
@@ -296,45 +295,7 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
     }
 }
 
-static REGULAR_BOUNDED_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.regular_bounded",
-        vec![],
-        vec![],
-    ))
-});
-
-static REGULAR_BOUNDED_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zarrs.regular_bounded",
-        vec![],
-        vec![],
-    ))
-});
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for RegularBoundedChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_BOUNDED_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_BOUNDED_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for RegularBoundedChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_BOUNDED_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_BOUNDED_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for RegularBoundedChunkGrid {
-    const IDENTIFIER: &'static str = "zarrs.regular_bounded";
-}
+zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "zarrs.regular_bounded");
 
 #[cfg(test)]
 mod tests {

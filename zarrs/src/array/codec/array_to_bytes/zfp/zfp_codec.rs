@@ -26,10 +26,7 @@ use crate::array::{
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::zfp::ZfpMode;
 use std::num::NonZeroU64;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]
@@ -321,40 +318,6 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
     }
 }
 
-static ZFP_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "zfp",
-        vec![
-            "zarrs.zfp".into(),
-            "https://codec.zarrs.dev/array_to_bytes/zfp".into(),
-        ],
-        vec![],
-    ))
-});
-
-static ZFP_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("zfp", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for ZfpCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZFP_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZFP_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for ZfpCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZFP_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZFP_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for ZfpCodec {
-    const IDENTIFIER: &'static str = "zfp";
-}
+zarrs_plugin::impl_extension_aliases!(ZfpCodec, "zfp",
+    v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
+);

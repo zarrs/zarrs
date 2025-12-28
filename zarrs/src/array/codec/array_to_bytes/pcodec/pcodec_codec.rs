@@ -21,10 +21,7 @@ use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use std::num::NonZeroU64;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]
@@ -343,37 +340,6 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     }
 }
 
-static PCODEC_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "numcodecs.pcodec",
-        vec!["https://codec.zarrs.dev/array_to_bytes/pcodec".into()],
-        vec![],
-    ))
-});
-
-static PCODEC_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("pcodec", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for PcodecCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        PCODEC_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        PCODEC_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for PcodecCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        PCODEC_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        PCODEC_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for PcodecCodec {
-    const IDENTIFIER: &'static str = "pcodec";
-}
+zarrs_plugin::impl_extension_aliases!(PcodecCodec, "pcodec",
+    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"]
+);

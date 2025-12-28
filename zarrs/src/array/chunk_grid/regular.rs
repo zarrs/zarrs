@@ -34,8 +34,7 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3};
+use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.
 inventory::submit! {
@@ -303,35 +302,7 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     }
 }
 
-static REGULAR_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("regular", vec![], vec![])));
-
-static REGULAR_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("regular", vec![], vec![])));
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion3> for RegularChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl zarrs_plugin::ExtensionAliases<ZarrVersion2> for RegularChunkGrid {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        REGULAR_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for RegularChunkGrid {
-    const IDENTIFIER: &'static str = "regular";
-}
+zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, "regular");
 
 #[cfg(test)]
 mod tests {

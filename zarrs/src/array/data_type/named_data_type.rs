@@ -13,7 +13,7 @@ use zarrs_plugin::{
 };
 
 use crate::array::{
-    DataType, DataTypeOptional,
+    DataType,
     data_type::{
         BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
         ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
@@ -70,17 +70,17 @@ impl NamedDataType {
     ///
     /// # Examples
     /// ```
-    /// # use zarrs::array::{DataType, DataTypeOptional};
+    /// # use zarrs::array::{DataType, data_type::OptionalDataType};
     /// // Single level optional
     /// let opt_u8 = DataType::UInt8.into_optional();
-    /// # assert_eq!(opt_u8, DataType::Optional(DataTypeOptional::new(DataType::UInt8.into_named())));
+    /// # assert_eq!(opt_u8, DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named())));
     ///
     /// // Nested optional
     /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
     /// ```
     #[must_use]
     pub fn into_optional(self) -> Self {
-        let data_type = DataType::Optional(DataTypeOptional::new(self));
+        let data_type = DataType::Optional(OptionalDataType::new(self));
         let name = data_type.default_name().into_owned();
         Self::new(name, data_type)
     }
@@ -469,7 +469,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
 
                 // Recursively parse the inner data type
                 let inner_data_type = Self::try_from(&inner_metadata)?;
-                let data_type = DataType::Optional(DataTypeOptional::new(inner_data_type));
+                let data_type = DataType::Optional(OptionalDataType::new(inner_data_type));
                 return Ok(Self::new(name.to_string(), data_type));
             }
         }

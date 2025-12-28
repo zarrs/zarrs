@@ -17,10 +17,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bitround` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -203,40 +200,6 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     }
 }
 
-static BITROUND_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        "bitround",
-        vec![
-            "numcodecs.bitround".into(),
-            "https://codec.zarrs.dev/array_to_bytes/bitround".into(),
-        ],
-        vec![],
-    ))
-});
-
-static BITROUND_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> =
-    LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new("bitround", vec![], vec![])));
-
-impl ExtensionAliases<ZarrVersion3> for BitroundCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BITROUND_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BITROUND_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for BitroundCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        BITROUND_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        BITROUND_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for BitroundCodec {
-    const IDENTIFIER: &'static str = "bitround";
-}
+zarrs_plugin::impl_extension_aliases!(BitroundCodec, "bitround",
+    v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
+);

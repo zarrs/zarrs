@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
@@ -12,10 +12,6 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2, ZarrVersion3,
-};
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
@@ -152,42 +148,4 @@ impl BytesToBytesCodecTraits for ZstdCodec {
     }
 }
 
-static ZSTD_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        ZstdCodec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-static ZSTD_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        ZstdCodec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for ZstdCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZSTD_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZSTD_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for ZstdCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        ZSTD_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        ZSTD_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for ZstdCodec {
-    const IDENTIFIER: &'static str = "zstd";
-}
+zarrs_plugin::impl_extension_aliases!(ZstdCodec, "zstd");

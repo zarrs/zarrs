@@ -46,8 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add support for the `optional` data type and codec:
   - Add `OptionalCodec`
   - Add `ArrayBytesOptional`
-  - Add `DataTypeOptional`
-  - Add `DataType::Optional` variant holding a `DataTypeOptional`
+  - Add `OptionalDataType`
+  - Add `DataType::Optional` variant holding an `OptionalDataType`
   - Add `NamedDataType::into_optional()`
   - Add `DataType::optional()`
   - Implement `Element` for `Option<T>` where `T: Element`

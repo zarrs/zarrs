@@ -18,11 +18,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use zarrs_plugin::{
-    ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, PluginCreateError, ZarrVersion2,
-    ZarrVersion3,
-};
+use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]
@@ -144,42 +140,4 @@ impl BytesToBytesCodecTraits for GzipCodec {
     }
 }
 
-static GZIP_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        GzipCodec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-static GZIP_ALIASES_V2: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {
-    RwLock::new(ExtensionAliasesConfig::new(
-        GzipCodec::IDENTIFIER,
-        vec![],
-        vec![],
-    ))
-});
-
-impl ExtensionAliases<ZarrVersion3> for GzipCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        GZIP_ALIASES_V3.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        GZIP_ALIASES_V3.write().unwrap()
-    }
-}
-
-impl ExtensionAliases<ZarrVersion2> for GzipCodec {
-    fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-        GZIP_ALIASES_V2.read().unwrap()
-    }
-
-    fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-        GZIP_ALIASES_V2.write().unwrap()
-    }
-}
-
-impl ExtensionIdentifier for GzipCodec {
-    const IDENTIFIER: &'static str = "gzip";
-}
+zarrs_plugin::impl_extension_aliases!(GzipCodec, "gzip");
