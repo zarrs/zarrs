@@ -15,14 +15,10 @@ use std::sync::Arc;
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
 
+pub use zarrs_metadata::{ArrayShape, ChunkShape};
+
 /// An ND index to an element in an array or chunk.
 pub type ArrayIndices = Vec<u64>;
-
-/// An array shape. Dimensions may be zero.
-pub type ArrayShape = Vec<u64>;
-
-/// A chunk shape. Dimensions must be non-zero.
-pub type ChunkShape = Vec<std::num::NonZeroU64>;
 
 /// An ND index to an element in an array or chunk.
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.

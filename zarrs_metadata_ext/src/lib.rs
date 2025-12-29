@@ -22,6 +22,3 @@ pub mod chunk_grid;
 pub mod chunk_key_encoding;
 pub mod codec;
 pub mod data_type;
-
-/// A chunk shape. Dimensions must be non-zero.
-pub type ChunkShape = Vec<std::num::NonZeroU64>;
