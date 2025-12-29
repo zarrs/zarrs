@@ -25,8 +25,10 @@ use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
+    DataTypeExtension, DataTypeExtensionBitroundCodec, DataTypeExtensionBytesCodec,
+    DataTypeExtensionBytesCodecError, DataTypeExtensionError,
+    DataTypeExtensionFixedScaleOffsetCodec, DataTypeExtensionPackBitsCodec,
+    DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
 use zarrs_metadata::Configuration;
@@ -59,6 +61,155 @@ pub use subfloat::{
     Float8E4M3B11FNUZDataType, Float8E4M3DataType, Float8E4M3FNUZDataType, Float8E5M2DataType,
     Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
 };
+
+/// Factory functions for creating built-in data types.
+///
+/// These functions create [`DataType`] enum variants for built-in types.
+/// This module provides a more ergonomic API and will remain stable
+/// when the internal representation changes.
+///
+/// # Example
+/// ```
+/// use zarrs::array::data_types;
+///
+/// let dt = data_types::float32();
+/// assert_eq!(dt.identifier(), "float32");
+/// ```
+#[rustfmt::skip]
+#[allow(clippy::wildcard_imports)]
+pub mod data_types {
+    use super::*;
+
+    // Integers
+    /// Create a `bool` data type.
+    #[must_use] pub fn bool() -> DataType { DataType::Bool }
+    /// Create an `int2` data type.
+    #[must_use] pub fn int2() -> DataType { DataType::Int2 }
+    /// Create an `int4` data type.
+    #[must_use] pub fn int4() -> DataType { DataType::Int4 }
+    /// Create an `int8` data type.
+    #[must_use] pub fn int8() -> DataType { DataType::Int8 }
+    /// Create an `int16` data type.
+    #[must_use] pub fn int16() -> DataType { DataType::Int16 }
+    /// Create an `int32` data type.
+    #[must_use] pub fn int32() -> DataType { DataType::Int32 }
+    /// Create an `int64` data type.
+    #[must_use] pub fn int64() -> DataType { DataType::Int64 }
+    /// Create a `uint2` data type.
+    #[must_use] pub fn uint2() -> DataType { DataType::UInt2 }
+    /// Create a `uint4` data type.
+    #[must_use] pub fn uint4() -> DataType { DataType::UInt4 }
+    /// Create a `uint8` data type.
+    #[must_use] pub fn uint8() -> DataType { DataType::UInt8 }
+    /// Create a `uint16` data type.
+    #[must_use] pub fn uint16() -> DataType { DataType::UInt16 }
+    /// Create a `uint32` data type.
+    #[must_use] pub fn uint32() -> DataType { DataType::UInt32 }
+    /// Create a `uint64` data type.
+    #[must_use] pub fn uint64() -> DataType { DataType::UInt64 }
+
+    // Standard floats
+    /// Create a `bfloat16` data type.
+    #[must_use] pub fn bfloat16() -> DataType { DataType::BFloat16 }
+    /// Create a `float16` data type.
+    #[must_use] pub fn float16() -> DataType { DataType::Float16 }
+    /// Create a `float32` data type.
+    #[must_use] pub fn float32() -> DataType { DataType::Float32 }
+    /// Create a `float64` data type.
+    #[must_use] pub fn float64() -> DataType { DataType::Float64 }
+
+    // Subfloats
+    /// Create a `float4_e2m1fn` data type.
+    #[must_use] pub fn float4_e2m1fn() -> DataType { DataType::Float4E2M1FN }
+    /// Create a `float6_e2m3fn` data type.
+    #[must_use] pub fn float6_e2m3fn() -> DataType { DataType::Float6E2M3FN }
+    /// Create a `float6_e3m2fn` data type.
+    #[must_use] pub fn float6_e3m2fn() -> DataType { DataType::Float6E3M2FN }
+    /// Create a `float8_e3m4` data type.
+    #[must_use] pub fn float8_e3m4() -> DataType { DataType::Float8E3M4 }
+    /// Create a `float8_e4m3` data type.
+    #[must_use] pub fn float8_e4m3() -> DataType { DataType::Float8E4M3 }
+    /// Create a `float8_e4m3b11fnuz` data type.
+    #[must_use] pub fn float8_e4m3b11fnuz() -> DataType { DataType::Float8E4M3B11FNUZ }
+    /// Create a `float8_e4m3fnuz` data type.
+    #[must_use] pub fn float8_e4m3fnuz() -> DataType { DataType::Float8E4M3FNUZ }
+    /// Create a `float8_e5m2` data type.
+    #[must_use] pub fn float8_e5m2() -> DataType { DataType::Float8E5M2 }
+    /// Create a `float8_e5m2fnuz` data type.
+    #[must_use] pub fn float8_e5m2fnuz() -> DataType { DataType::Float8E5M2FNUZ }
+    /// Create a `float8_e8m0fnu` data type.
+    #[must_use] pub fn float8_e8m0fnu() -> DataType { DataType::Float8E8M0FNU }
+
+    // Standard complex
+    /// Create a `complex64` data type.
+    #[must_use] pub fn complex64() -> DataType { DataType::Complex64 }
+    /// Create a `complex128` data type.
+    #[must_use] pub fn complex128() -> DataType { DataType::Complex128 }
+    /// Create a `complex_bfloat16` data type.
+    #[must_use] pub fn complex_bfloat16() -> DataType { DataType::ComplexBFloat16 }
+    /// Create a `complex_float16` data type.
+    #[must_use] pub fn complex_float16() -> DataType { DataType::ComplexFloat16 }
+    /// Create a `complex_float32` data type.
+    #[must_use] pub fn complex_float32() -> DataType { DataType::ComplexFloat32 }
+    /// Create a `complex_float64` data type.
+    #[must_use] pub fn complex_float64() -> DataType { DataType::ComplexFloat64 }
+
+    // Complex subfloats
+    /// Create a `complex_float4_e2m1fn` data type.
+    #[must_use] pub fn complex_float4_e2m1fn() -> DataType { DataType::ComplexFloat4E2M1FN }
+    /// Create a `complex_float6_e2m3fn` data type.
+    #[must_use] pub fn complex_float6_e2m3fn() -> DataType { DataType::ComplexFloat6E2M3FN }
+    /// Create a `complex_float6_e3m2fn` data type.
+    #[must_use] pub fn complex_float6_e3m2fn() -> DataType { DataType::ComplexFloat6E3M2FN }
+    /// Create a `complex_float8_e3m4` data type.
+    #[must_use] pub fn complex_float8_e3m4() -> DataType { DataType::ComplexFloat8E3M4 }
+    /// Create a `complex_float8_e4m3` data type.
+    #[must_use] pub fn complex_float8_e4m3() -> DataType { DataType::ComplexFloat8E4M3 }
+    /// Create a `complex_float8_e4m3b11fnuz` data type.
+    #[must_use] pub fn complex_float8_e4m3b11fnuz() -> DataType { DataType::ComplexFloat8E4M3B11FNUZ }
+    /// Create a `complex_float8_e4m3fnuz` data type.
+    #[must_use] pub fn complex_float8_e4m3fnuz() -> DataType { DataType::ComplexFloat8E4M3FNUZ }
+    /// Create a `complex_float8_e5m2` data type.
+    #[must_use] pub fn complex_float8_e5m2() -> DataType { DataType::ComplexFloat8E5M2 }
+    /// Create a `complex_float8_e5m2fnuz` data type.
+    #[must_use] pub fn complex_float8_e5m2fnuz() -> DataType { DataType::ComplexFloat8E5M2FNUZ }
+    /// Create a `complex_float8_e8m0fnu` data type.
+    #[must_use] pub fn complex_float8_e8m0fnu() -> DataType { DataType::ComplexFloat8E8M0FNU }
+
+    // Special types
+    /// Create a `string` data type.
+    #[must_use] pub fn string() -> DataType { DataType::String }
+    /// Create a `bytes` data type.
+    #[must_use] pub fn bytes() -> DataType { DataType::Bytes }
+    /// Create an `r*` (raw bits) data type with the given size in bytes.
+    #[must_use] pub fn raw_bits(size_bytes: usize) -> DataType { DataType::RawBits(size_bytes) }
+
+    // NumPy time types
+    /// Create a `numpy.datetime64` data type.
+    #[must_use]
+    pub fn numpy_datetime64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
+        DataType::NumpyDateTime64 { unit, scale_factor }
+    }
+    /// Create a `numpy.timedelta64` data type.
+    #[must_use]
+    pub fn numpy_timedelta64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
+        DataType::NumpyTimeDelta64 { unit, scale_factor }
+    }
+
+    // Optional
+    /// Create an optional data type wrapping the given inner type.
+    #[must_use]
+    pub fn optional(inner: NamedDataType) -> DataType {
+        DataType::Optional(OptionalDataType::new(inner))
+    }
+
+    // Extension
+    /// Create an extension data type from an [`Arc<dyn DataTypeExtension>`].
+    #[must_use]
+    pub fn extension(ext: Arc<dyn DataTypeExtension>) -> DataType {
+        DataType::Extension(ext)
+    }
+}
 
 /// A data type.
 #[derive(Clone, Debug)]
@@ -469,11 +620,11 @@ impl DataType {
             Self::Complex128 => Complex128DataType::default_name(ZarrVersions::V3),
             Self::String => StringDataType::default_name(ZarrVersions::V3),
             Self::Bytes => BytesDataType::default_name(ZarrVersions::V3),
-            Self::RawBits(size_bytes) => Cow::Owned(format!("r{}", size_bytes * 8)),
+            Self::RawBits(size_bytes) => RawBitsDataType::new(*size_bytes).metadata_name(ZarrVersions::V3),
             Self::NumpyDateTime64 { .. } => NumpyDateTime64DataType::default_name(ZarrVersions::V3),
             Self::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::default_name(ZarrVersions::V3),
             Self::Optional(_) => OptionalDataType::default_name(ZarrVersions::V3),
-            Self::Extension(ext) => Cow::Owned(ext.identifier().to_string()),
+            Self::Extension(ext) => ext.metadata_name(ZarrVersions::V3),
         }
     }
 
@@ -561,7 +712,6 @@ impl DataType {
     /// # Errors
     ///
     /// Returns an [`DataTypeFillValueError`] if the metadata cannot be created from the fill value.
-    #[allow(clippy::too_many_lines)]
     pub fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
@@ -569,90 +719,25 @@ impl DataType {
         let error =
             || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
         match self {
-            Self::Bool => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                match bytes[0] {
-                    0 => Ok(FillValueMetadataV3::from(false)),
-                    1 => Ok(FillValueMetadataV3::from(true)),
-                    _ => Err(error()),
-                }
-            }
-            Self::Int2 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i8::from_ne_bytes(bytes);
-                if (-2..2).contains(&number) {
-                    Ok(FillValueMetadataV3::from(number))
-                } else {
-                    Err(error())
-                }
-            }
-            Self::Int4 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i8::from_ne_bytes(bytes);
-                if (-8..8).contains(&number) {
-                    Ok(FillValueMetadataV3::from(number))
-                } else {
-                    Err(error())
-                }
-            }
-            Self::Int8 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i8::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Int16 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i16::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Int32 => {
-                let bytes: [u8; 4] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i32::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Int64 => {
-                let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i64::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::UInt2 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u8::from_ne_bytes(bytes);
-                if (0..4).contains(&number) {
-                    Ok(FillValueMetadataV3::from(number))
-                } else {
-                    Err(error())
-                }
-            }
-            Self::UInt4 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u8::from_ne_bytes(bytes);
-                if (0..16).contains(&number) {
-                    Ok(FillValueMetadataV3::from(number))
-                } else {
-                    Err(error())
-                }
-            }
-            Self::UInt8 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u8::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::UInt16 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u16::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::UInt32 => {
-                let bytes: [u8; 4] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u32::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::UInt64 => {
-                let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = u64::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
+            // Delegate to marker types for standard numeric types
+            Self::Bool => BoolDataType.metadata_fill_value(fill_value),
+            Self::Int2 => Int2DataType.metadata_fill_value(fill_value),
+            Self::Int4 => Int4DataType.metadata_fill_value(fill_value),
+            Self::Int8 => Int8DataType.metadata_fill_value(fill_value),
+            Self::Int16 => Int16DataType.metadata_fill_value(fill_value),
+            Self::Int32 => Int32DataType.metadata_fill_value(fill_value),
+            Self::Int64 => Int64DataType.metadata_fill_value(fill_value),
+            Self::UInt2 => UInt2DataType.metadata_fill_value(fill_value),
+            Self::UInt4 => UInt4DataType.metadata_fill_value(fill_value),
+            Self::UInt8 => UInt8DataType.metadata_fill_value(fill_value),
+            Self::UInt16 => UInt16DataType.metadata_fill_value(fill_value),
+            Self::UInt32 => UInt32DataType.metadata_fill_value(fill_value),
+            Self::UInt64 => UInt64DataType.metadata_fill_value(fill_value),
+            Self::Float4E2M1FN => Float4E2M1FNDataType.metadata_fill_value(fill_value),
+            Self::Float6E2M3FN => Float6E2M3FNDataType.metadata_fill_value(fill_value),
+            Self::Float6E3M2FN => Float6E3M2FNDataType.metadata_fill_value(fill_value),
+            Self::Float8E3M4 => Float8E3M4DataType.metadata_fill_value(fill_value),
+            // Float8E4M3 and Float8E5M2 have special handling when float8 feature is enabled
             Self::Float8E4M3 => {
                 let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
                 #[cfg(feature = "float8")]
@@ -663,6 +748,8 @@ impl DataType {
                 #[cfg(not(feature = "float8"))]
                 Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
             }
+            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType.metadata_fill_value(fill_value),
+            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType.metadata_fill_value(fill_value),
             Self::Float8E5M2 => {
                 let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
                 #[cfg(feature = "float8")]
@@ -673,18 +760,16 @@ impl DataType {
                 #[cfg(not(feature = "float8"))]
                 Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
             }
-            Self::Float4E2M1FN
-            | Self::Float6E2M3FN
-            | Self::Float6E3M2FN
-            | Self::Float8E3M4
-            | Self::Float8E4M3B11FNUZ
-            | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
-            }
+            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType.metadata_fill_value(fill_value),
+            Self::Float8E8M0FNU => Float8E8M0FNUDataType.metadata_fill_value(fill_value),
+            Self::BFloat16 => BFloat16DataType.metadata_fill_value(fill_value),
+            Self::Float16 => Float16DataType.metadata_fill_value(fill_value),
+            Self::Float32 => Float32DataType.metadata_fill_value(fill_value),
+            Self::Float64 => Float64DataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType.metadata_fill_value(fill_value),
             Self::ComplexFloat8E4M3 => {
                 let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
                 #[cfg(feature = "float8")]
@@ -702,6 +787,8 @@ impl DataType {
                     Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
                 }
             }
+            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType.metadata_fill_value(fill_value),
             Self::ComplexFloat8E5M2 => {
                 let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
                 #[cfg(feature = "float8")]
@@ -719,76 +806,19 @@ impl DataType {
                     Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
                 }
             }
-            Self::ComplexFloat4E2M1FN
-            | Self::ComplexFloat6E2M3FN
-            | Self::ComplexFloat6E3M2FN
-            | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3B11FNUZ
-            | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2FNUZ
-            | Self::ComplexFloat8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
-                let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
-                Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
-            }
-            Self::BFloat16 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = half::bf16::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Float16 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = half::f16::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Float32 => {
-                let bytes: [u8; 4] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = f32::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::Float64 => {
-                let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = f64::from_ne_bytes(bytes);
-                Ok(FillValueMetadataV3::from(number))
-            }
-            Self::ComplexBFloat16 => {
-                let bytes: &[u8; 4] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let re =
-                    half::bf16::from_ne_bytes(unsafe { bytes[0..2].try_into().unwrap_unchecked() });
-                let im =
-                    half::bf16::from_ne_bytes(unsafe { bytes[2..4].try_into().unwrap_unchecked() });
-                let re = FillValueMetadataV3::from(re);
-                let im = FillValueMetadataV3::from(im);
-                Ok(FillValueMetadataV3::from([re, im]))
-            }
-            Self::ComplexFloat16 => {
-                let bytes: &[u8; 4] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let re =
-                    half::f16::from_ne_bytes(unsafe { bytes[0..2].try_into().unwrap_unchecked() });
-                let im =
-                    half::f16::from_ne_bytes(unsafe { bytes[2..4].try_into().unwrap_unchecked() });
-                let re = FillValueMetadataV3::from(re);
-                let im = FillValueMetadataV3::from(im);
-                Ok(FillValueMetadataV3::from([re, im]))
-            }
-            Self::Complex64 | Self::ComplexFloat32 => {
-                let bytes: &[u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let re = f32::from_ne_bytes(unsafe { bytes[0..4].try_into().unwrap_unchecked() });
-                let im = f32::from_ne_bytes(unsafe { bytes[4..8].try_into().unwrap_unchecked() });
-                let re = FillValueMetadataV3::from(re);
-                let im = FillValueMetadataV3::from(im);
-                Ok(FillValueMetadataV3::from([re, im]))
-            }
-            Self::Complex128 | Self::ComplexFloat64 => {
-                let bytes: &[u8; 16] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let re = f64::from_ne_bytes(unsafe { bytes[0..8].try_into().unwrap_unchecked() });
-                let im = f64::from_ne_bytes(unsafe { bytes[8..16].try_into().unwrap_unchecked() });
-                let re = FillValueMetadataV3::from(re);
-                let im = FillValueMetadataV3::from(im);
-                Ok(FillValueMetadataV3::from([re, im]))
-            }
+            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType.metadata_fill_value(fill_value),
+            Self::ComplexBFloat16 => ComplexBFloat16DataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat16 => ComplexFloat16DataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat32 => ComplexFloat32DataType.metadata_fill_value(fill_value),
+            Self::ComplexFloat64 => ComplexFloat64DataType.metadata_fill_value(fill_value),
+            Self::Complex64 => Complex64DataType.metadata_fill_value(fill_value),
+            Self::Complex128 => Complex128DataType.metadata_fill_value(fill_value),
+            Self::String => StringDataType.metadata_fill_value(fill_value),
+            Self::NumpyDateTime64 { .. } => NumpyDateTime64DataType::STATIC.metadata_fill_value(fill_value),
+            Self::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::STATIC.metadata_fill_value(fill_value),
+            // RawBits uses array representation (legacy behavior)
+            // TODO: Switch to base64 when zarr-extensions PR 38 and zarr-python PR 3559 land
             Self::RawBits(size) => {
                 let bytes = fill_value.as_ne_bytes();
                 if bytes.len() == *size {
@@ -797,35 +827,11 @@ impl DataType {
                     Err(error())
                 }
             }
-            Self::String => Ok(FillValueMetadataV3::from(
-                String::from_utf8(fill_value.as_ne_bytes().to_vec()).map_err(|_| error())?,
-            )),
-            // Array representation [0, 255, 13, 74].
-            // Replace with base64 implementation below when these land:
-            // - https://github.com/zarr-developers/zarr-extensions/pull/38
-            // - https://github.com/zarr-developers/zarr-python/pull/3559
+            // Bytes uses array representation (legacy behavior)
+            // TODO: Switch to base64 when zarr-extensions PR 38 and zarr-python PR 3559 land
             Self::Bytes => Ok(FillValueMetadataV3::from(fill_value.as_ne_bytes().to_vec())),
-            // Self::Bytes => {
-            //     let s = BASE64_STANDARD.encode(fill_value.as_ne_bytes());
-            //     Ok(FillValueMetadataV3::from(s))
-            // }
-            Self::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | Self::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => {
-                let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                let number = i64::from_ne_bytes(bytes);
-                if number == i64::MIN {
-                    Ok(FillValueMetadataV3::from("NaT"))
-                } else {
-                    Ok(FillValueMetadataV3::from(number))
-                }
-            }
-            Self::Optional(data_type) => {
+            // Optional has special recursive handling
+            Self::Optional(opt) => {
                 let bytes = fill_value.as_ne_bytes();
                 if bytes.is_empty() {
                     // Invalid: optional fill value must have at least the suffix byte
@@ -835,8 +841,9 @@ impl DataType {
                     Ok(FillValueMetadataV3::Null)
                 } else {
                     // Non-null fill value: strip the suffix byte and recurse
+                    // Use the inner NamedDataType's data_type() to avoid calling OptionalDataType's method
                     let inner_fill_value = FillValue::new(bytes[..bytes.len() - 1].to_vec());
-                    let inner_metadata = data_type.metadata_fill_value(&inner_fill_value)?;
+                    let inner_metadata = opt.data_type().metadata_fill_value(&inner_fill_value)?;
                     // Wrap in single-element array for Some(x)
                     Ok(FillValueMetadataV3::Array(vec![inner_metadata]))
                 }
@@ -852,6 +859,205 @@ impl core::fmt::Display for DataType {
     }
 }
 
+/// Implementation of [`DataTypeExtension`] for [`DataType`] enum.
+///
+/// This bridges the enum-based and trait-based approaches, allowing `DataType`
+/// to be used anywhere a `dyn DataTypeExtension` is expected.
+impl DataTypeExtension for DataType {
+    fn identifier(&self) -> &'static str {
+        // Delegate to the existing method
+        DataType::identifier(self)
+    }
+
+    fn configuration(&self) -> Configuration {
+        // Delegate to the existing method
+        DataType::configuration(self)
+    }
+
+    fn size(&self) -> DataTypeSize {
+        // Delegate to the existing method
+        DataType::size(self)
+    }
+
+    fn fill_value(
+        &self,
+        fill_value_metadata: &FillValueMetadataV3,
+    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+        // Delegate to the existing method
+        DataType::fill_value_from_metadata(self, fill_value_metadata)
+    }
+
+    fn metadata_fill_value(
+        &self,
+        fill_value: &FillValue,
+    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+        // Delegate to the existing method
+        DataType::metadata_fill_value(self, fill_value)
+    }
+
+    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+        match self {
+            Self::Bool => Some(&BoolDataType),
+            Self::Int2 => Some(&Int2DataType),
+            Self::Int4 => Some(&Int4DataType),
+            Self::Int8 => Some(&Int8DataType),
+            Self::Int16 => Some(&Int16DataType),
+            Self::Int32 => Some(&Int32DataType),
+            Self::Int64 => Some(&Int64DataType),
+            Self::UInt2 => Some(&UInt2DataType),
+            Self::UInt4 => Some(&UInt4DataType),
+            Self::UInt8 => Some(&UInt8DataType),
+            Self::UInt16 => Some(&UInt16DataType),
+            Self::UInt32 => Some(&UInt32DataType),
+            Self::UInt64 => Some(&UInt64DataType),
+            Self::Float4E2M1FN => Some(&Float4E2M1FNDataType),
+            Self::Float6E2M3FN => Some(&Float6E2M3FNDataType),
+            Self::Float6E3M2FN => Some(&Float6E3M2FNDataType),
+            Self::Float8E3M4 => Some(&Float8E3M4DataType),
+            Self::Float8E4M3 => Some(&Float8E4M3DataType),
+            Self::Float8E4M3B11FNUZ => Some(&Float8E4M3B11FNUZDataType),
+            Self::Float8E4M3FNUZ => Some(&Float8E4M3FNUZDataType),
+            Self::Float8E5M2 => Some(&Float8E5M2DataType),
+            Self::Float8E5M2FNUZ => Some(&Float8E5M2FNUZDataType),
+            Self::Float8E8M0FNU => Some(&Float8E8M0FNUDataType),
+            Self::BFloat16 => Some(&BFloat16DataType),
+            Self::Float16 => Some(&Float16DataType),
+            Self::Float32 => Some(&Float32DataType),
+            Self::Float64 => Some(&Float64DataType),
+            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
+            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
+            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
+            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
+            Self::ComplexFloat4E2M1FN => Some(&ComplexFloat4E2M1FNDataType),
+            Self::ComplexFloat6E2M3FN => Some(&ComplexFloat6E2M3FNDataType),
+            Self::ComplexFloat6E3M2FN => Some(&ComplexFloat6E3M2FNDataType),
+            Self::ComplexFloat8E3M4 => Some(&ComplexFloat8E3M4DataType),
+            Self::ComplexFloat8E4M3 => Some(&ComplexFloat8E4M3DataType),
+            Self::ComplexFloat8E4M3B11FNUZ => Some(&ComplexFloat8E4M3B11FNUZDataType),
+            Self::ComplexFloat8E4M3FNUZ => Some(&ComplexFloat8E4M3FNUZDataType),
+            Self::ComplexFloat8E5M2 => Some(&ComplexFloat8E5M2DataType),
+            Self::ComplexFloat8E5M2FNUZ => Some(&ComplexFloat8E5M2FNUZDataType),
+            Self::ComplexFloat8E8M0FNU => Some(&ComplexFloat8E8M0FNUDataType),
+            Self::Complex64 => Some(&Complex64DataType),
+            Self::Complex128 => Some(&Complex128DataType),
+            Self::RawBits(_) => Some(&RawBitsDataType::STATIC),
+            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
+            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
+            // Variable size or special handling types
+            Self::String | Self::Bytes | Self::Optional(_) => None,
+            Self::Extension(ext) => ext.codec_bytes(),
+        }
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        match self {
+            Self::Extension(ext) => ext.codec_packbits(),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn codec_bitround(&self) -> Option<&dyn DataTypeExtensionBitroundCodec> {
+        match self {
+            Self::Int8 => Some(&Int8DataType),
+            Self::Int16 => Some(&Int16DataType),
+            Self::Int32 => Some(&Int32DataType),
+            Self::Int64 => Some(&Int64DataType),
+            Self::UInt8 => Some(&UInt8DataType),
+            Self::UInt16 => Some(&UInt16DataType),
+            Self::UInt32 => Some(&UInt32DataType),
+            Self::UInt64 => Some(&UInt64DataType),
+            Self::BFloat16 => Some(&BFloat16DataType),
+            Self::Float16 => Some(&Float16DataType),
+            Self::Float32 => Some(&Float32DataType),
+            Self::Float64 => Some(&Float64DataType),
+            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
+            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
+            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
+            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
+            Self::Complex64 => Some(&Complex64DataType),
+            Self::Complex128 => Some(&Complex128DataType),
+            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
+            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
+            Self::Extension(ext) => ext.codec_bitround(),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn codec_pcodec(&self) -> Option<&dyn DataTypeExtensionPcodecCodec> {
+        match self {
+            Self::Int16 => Some(&Int16DataType),
+            Self::Int32 => Some(&Int32DataType),
+            Self::Int64 => Some(&Int64DataType),
+            Self::UInt16 => Some(&UInt16DataType),
+            Self::UInt32 => Some(&UInt32DataType),
+            Self::UInt64 => Some(&UInt64DataType),
+            Self::BFloat16 => Some(&BFloat16DataType),
+            Self::Float16 => Some(&Float16DataType),
+            Self::Float32 => Some(&Float32DataType),
+            Self::Float64 => Some(&Float64DataType),
+            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
+            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
+            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
+            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
+            Self::Complex64 => Some(&Complex64DataType),
+            Self::Complex128 => Some(&Complex128DataType),
+            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
+            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
+            Self::Extension(ext) => ext.codec_pcodec(),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn codec_fixedscaleoffset(&self) -> Option<&dyn DataTypeExtensionFixedScaleOffsetCodec> {
+        match self {
+            // Integers
+            Self::Int8 => Some(&Int8DataType),
+            Self::Int16 => Some(&Int16DataType),
+            Self::Int32 => Some(&Int32DataType),
+            Self::Int64 => Some(&Int64DataType),
+            Self::UInt8 => Some(&UInt8DataType),
+            Self::UInt16 => Some(&UInt16DataType),
+            Self::UInt32 => Some(&UInt32DataType),
+            Self::UInt64 => Some(&UInt64DataType),
+            // Floats (not complex types)
+            Self::BFloat16 => Some(&BFloat16DataType),
+            Self::Float16 => Some(&Float16DataType),
+            Self::Float32 => Some(&Float32DataType),
+            Self::Float64 => Some(&Float64DataType),
+            Self::Extension(ext) => ext.codec_fixedscaleoffset(),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    fn codec_zfp(&self) -> Option<&dyn DataTypeExtensionZfpCodec> {
+        match self {
+            // Integers that promote to Int32
+            Self::Int8 => Some(&Int8DataType),
+            Self::Int16 => Some(&Int16DataType),
+            Self::Int32 => Some(&Int32DataType),
+            Self::UInt8 => Some(&UInt8DataType),
+            Self::UInt16 => Some(&UInt16DataType),
+            Self::UInt32 => Some(&UInt32DataType),
+            // Integers that promote to Int64
+            Self::Int64 => Some(&Int64DataType),
+            Self::UInt64 => Some(&UInt64DataType),
+            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
+            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
+            // Native float types
+            Self::Float32 => Some(&Float32DataType),
+            Self::Float64 => Some(&Float64DataType),
+            Self::Extension(ext) => ext.codec_zfp(),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(not(feature = "float8"))]
 fn byte_to_hex_string(byte: u8) -> String {
     let mut string = String::with_capacity(4);
     string.push('0');
@@ -865,20 +1071,6 @@ fn subfloat_hex_string_to_fill_value(fill_value: &FillValueMetadataV3) -> Option
     if let Some(s) = fill_value.as_str() {
         if s.starts_with("0x") && s.len() == 4 {
             return u8::from_str_radix(&s[2..4], 16).ok().map(FillValue::from);
-        }
-    }
-    None
-}
-
-fn complex_subfloat_hex_string_to_fill_value(
-    fill_value: &FillValueMetadataV3,
-) -> Option<FillValue> {
-    if let Some([re, im]) = fill_value.as_array() {
-        if let (Some(re), Some(im)) = (
-            subfloat_hex_string_to_fill_value(re),
-            subfloat_hex_string_to_fill_value(im),
-        ) {
-            return Some(FillValue::from([re.as_ne_bytes()[0], im.as_ne_bytes()[0]]));
         }
     }
     None
@@ -2467,8 +2659,9 @@ mod tests {
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.name(), "zarrs.optional");
         if let Some(opt) = named_data_type.optional() {
-            assert_eq!(opt.identifier(), "int32");
-            assert_eq!(opt.size(), DataTypeSize::Fixed(4));
+            // Use data_type().identifier() to get the inner type's identifier
+            assert_eq!(opt.data_type().identifier(), "int32");
+            assert_eq!(opt.data_type().size(), DataTypeSize::Fixed(4));
         } else {
             panic!("Expected Optional data type");
         }
@@ -2480,7 +2673,7 @@ mod tests {
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.name(), "zarrs.optional");
         if let Some(opt) = named_data_type.optional() {
-            assert_eq!(opt.identifier(), "numpy.datetime64");
+            assert_eq!(opt.data_type().identifier(), "numpy.datetime64");
             if let DataType::NumpyDateTime64 { unit, scale_factor } = opt.data_type() {
                 assert_eq!(*unit, NumpyTimeUnit::Second);
                 assert_eq!(scale_factor.get(), 1);
@@ -2497,8 +2690,8 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         if let Some(opt) = named_data_type.optional() {
-            assert_eq!(opt.identifier(), "string");
-            assert_eq!(opt.size(), DataTypeSize::Variable);
+            assert_eq!(opt.data_type().identifier(), "string");
+            assert_eq!(opt.data_type().size(), DataTypeSize::Variable);
         } else {
             panic!("Expected Optional data type");
         }

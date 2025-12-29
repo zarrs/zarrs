@@ -16,8 +16,8 @@ use zarrs::{
 };
 use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataTypeExtensionPackBitsCodec, DataTypeFillValueError, DataTypeFillValueMetadataError,
+    DataTypePlugin, FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -98,14 +98,12 @@ impl DataTypeExtension for CustomDataTypeUInt4 {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 
-    fn codec_packbits(
-        &self,
-    ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        Some(self)
     }
 }
 

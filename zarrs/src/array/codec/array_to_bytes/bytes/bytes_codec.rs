@@ -2,13 +2,10 @@
 
 use std::sync::Arc;
 
-use zarrs_data_type::DataTypeExtensionError;
+use zarrs_data_type::{DataTypeExtension, DataTypeExtensionError};
 use zarrs_plugin::PluginCreateError;
 
-use super::{
-    BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial,
-    reverse_endianness,
-};
+use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -19,7 +16,7 @@ use crate::array::{
     codec::{
         ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, PartialDecoderCapability, RecommendedConcurrency,
+        PartialDecoderCapability, RecommendedConcurrency,
     },
 };
 use crate::array::{
@@ -76,37 +73,6 @@ impl BytesCodec {
                 "this bytes codec configuration variant is unsupported".to_string(),
             )),
         }
-    }
-
-    fn do_encode_or_decode<'a>(
-        &self,
-        mut value: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let Some(data_type_size) = data_type.fixed_size() else {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::IDENTIFIER.to_string(),
-            ));
-        };
-
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        let array_size = usize::try_from(num_elements * data_type_size as u64).unwrap();
-        if value.len() != array_size {
-            return Err(InvalidBytesLengthError::new(value.len(), array_size).into());
-        } else if data_type_size > 1 && self.endian.is_none() {
-            return Err(CodecError::Other(format!(
-                "tried to encode an array with element size {data_type_size} with endianness None"
-            )));
-        }
-
-        if let Some(endian) = &self.endian {
-            if !endian.is_native() {
-                reverse_endianness(value.to_mut(), data_type);
-            }
-        }
-        Ok(value)
     }
 }
 
@@ -188,20 +154,22 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes.validate(num_elements, data_type)?;
         let bytes = bytes.into_fixed()?;
-        let bytes_encoded = if let DataType::Extension(ext) = data_type {
-            ext.codec_bytes()?
-                .encode(bytes, self.endian)
-                .map_err(DataTypeExtensionError::from)?
-        } else {
-            self.do_encode_or_decode(bytes, shape, data_type)?
-        };
+
+        // Use codec_bytes() from DataTypeExtension trait for all types
+        let bytes_encoded = data_type
+            .codec_bytes()
+            .ok_or_else(|| {
+                CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            })?
+            .encode(bytes, self.endian)
+            .map_err(DataTypeExtensionError::from)?;
         Ok(bytes_encoded)
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
+        _shape: &[NonZeroU64],
         data_type: &DataType,
         _fill_value: &FillValue,
         _options: &CodecOptions,
@@ -214,13 +182,14 @@ impl ArrayToBytesCodecTraits for BytesCodec {
             ));
         }
 
-        let bytes_decoded = if let DataType::Extension(ext) = data_type {
-            ext.codec_bytes()?
-                .decode(bytes, self.endian)
-                .map_err(DataTypeExtensionError::from)?
-        } else {
-            self.do_encode_or_decode(bytes, shape, data_type)?
-        };
+        // Use codec_bytes() from DataTypeExtension trait for all types
+        let bytes_decoded = data_type
+            .codec_bytes()
+            .ok_or_else(|| {
+                CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            })?
+            .decode(bytes, self.endian)
+            .map_err(DataTypeExtensionError::from)?;
         Ok(ArrayBytes::from(bytes_decoded))
     }
 

@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_chunk_grid` to 0.2.0
 - Bump `zarrs_data_type` to 0.6.0
 - Bump `zarrs_metadata_ext` to 0.4.0
+- **Breaking**: Bump MSRV to 1.88
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency

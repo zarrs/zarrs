@@ -1,6 +1,12 @@
 //! Integer data type markers and implementations.
 
 use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin};
+use zarrs_data_type::{
+    DataTypeExtensionBitroundCodec, DataTypeExtensionFixedScaleOffsetCodec,
+    DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, FixedScaleOffsetElementType,
+    PcodecElementType, ZfpPromotion, ZfpType, round_bytes_int8, round_bytes_int16,
+    round_bytes_int32, round_bytes_int64,
+};
 
 // Signed integers - V2: |i1, <i2, <i4, <i8 (and > variants)
 
@@ -141,13 +147,8 @@ impl zarrs_data_type::DataTypeExtension for Int2DataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }
 
-    fn codec_bytes(
-        &self,
-    ) -> Result<
-        &dyn zarrs_data_type::DataTypeExtensionBytesCodec,
-        zarrs_data_type::DataTypeExtensionError,
-    > {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 
@@ -217,13 +218,8 @@ impl zarrs_data_type::DataTypeExtension for Int4DataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }
 
-    fn codec_bytes(
-        &self,
-    ) -> Result<
-        &dyn zarrs_data_type::DataTypeExtensionBytesCodec,
-        zarrs_data_type::DataTypeExtensionError,
-    > {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 
@@ -293,13 +289,8 @@ impl zarrs_data_type::DataTypeExtension for UInt2DataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }
 
-    fn codec_bytes(
-        &self,
-    ) -> Result<
-        &dyn zarrs_data_type::DataTypeExtensionBytesCodec,
-        zarrs_data_type::DataTypeExtensionError,
-    > {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 
@@ -369,13 +360,8 @@ impl zarrs_data_type::DataTypeExtension for UInt4DataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }
 
-    fn codec_bytes(
-        &self,
-    ) -> Result<
-        &dyn zarrs_data_type::DataTypeExtensionBytesCodec,
-        zarrs_data_type::DataTypeExtensionError,
-    > {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 
@@ -420,3 +406,262 @@ register_data_type_plugin!(UInt8DataType);
 register_data_type_plugin!(UInt16DataType);
 register_data_type_plugin!(UInt32DataType);
 register_data_type_plugin!(UInt64DataType);
+
+// Bitround codec implementations for 8-bit integers
+impl DataTypeExtensionBitroundCodec for Int8DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None // Integers round from MSB
+    }
+    fn component_size(&self) -> usize {
+        1
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int8(bytes, keepbits);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for UInt8DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        1
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int8(bytes, keepbits);
+    }
+}
+
+// Bitround codec implementations for 16-bit integers
+impl DataTypeExtensionBitroundCodec for Int16DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        2
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int16(bytes, keepbits);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for UInt16DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        2
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int16(bytes, keepbits);
+    }
+}
+
+// Bitround codec implementations for 32-bit integers
+impl DataTypeExtensionBitroundCodec for Int32DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        4
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int32(bytes, keepbits);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for UInt32DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        4
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int32(bytes, keepbits);
+    }
+}
+
+// Bitround codec implementations for 64-bit integers
+impl DataTypeExtensionBitroundCodec for Int64DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        8
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int64(bytes, keepbits);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for UInt64DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        None
+    }
+    fn component_size(&self) -> usize {
+        8
+    }
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_int64(bytes, keepbits);
+    }
+}
+
+// Pcodec implementations (16-bit and larger only)
+impl DataTypeExtensionPcodecCodec for Int16DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::I16)
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for Int32DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::I32)
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for Int64DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::I64)
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for UInt16DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::U16)
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for UInt32DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::U32)
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for UInt64DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::U64)
+    }
+}
+
+// FixedScaleOffset implementations
+impl DataTypeExtensionFixedScaleOffsetCodec for Int8DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::I8)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for Int16DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::I16)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for Int32DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::I32)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for Int64DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::I64)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for UInt8DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::U8)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for UInt16DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::U16)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for UInt32DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::U32)
+    }
+}
+
+impl DataTypeExtensionFixedScaleOffsetCodec for UInt64DataType {
+    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType> {
+        Some(FixedScaleOffsetElementType::U64)
+    }
+}
+
+// Zfp implementations
+impl DataTypeExtensionZfpCodec for Int8DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::I8ToI32
+    }
+}
+
+impl DataTypeExtensionZfpCodec for Int16DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::I16ToI32
+    }
+}
+
+impl DataTypeExtensionZfpCodec for Int32DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::None
+    }
+}
+
+impl DataTypeExtensionZfpCodec for Int64DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int64)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::None
+    }
+}
+
+impl DataTypeExtensionZfpCodec for UInt8DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::U8ToI32
+    }
+}
+
+impl DataTypeExtensionZfpCodec for UInt16DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::U16ToI32
+    }
+}
+
+impl DataTypeExtensionZfpCodec for UInt32DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int32)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::U32ToI32
+    }
+}
+
+impl DataTypeExtensionZfpCodec for UInt64DataType {
+    fn zfp_type(&self) -> Option<ZfpType> {
+        Some(ZfpType::Int64)
+    }
+    fn zfp_promotion(&self) -> ZfpPromotion {
+        ZfpPromotion::U64ToI64
+    }
+}

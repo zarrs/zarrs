@@ -24,8 +24,7 @@ use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
-    FillValue,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -217,8 +216,8 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
         DataTypeSize::Fixed(size_of::<CustomDataTypeFixedSizeBytes>())
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 

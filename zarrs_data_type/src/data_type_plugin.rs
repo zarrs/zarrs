@@ -108,8 +108,8 @@ mod tests {
                         .unwrap(),
                     FillValueMetadataV3::Null
                 );
-                assert!(data_type.codec_bytes().is_err());
-                assert!(data_type.codec_packbits().is_err());
+                assert!(data_type.codec_bytes().is_none());
+                assert!(data_type.codec_packbits().is_none());
             }
         }
         assert!(found);

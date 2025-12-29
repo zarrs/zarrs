@@ -193,7 +193,12 @@ fn pack_bits_components(
             sign_extension: false,
         }),
         DT::Extension(ext) => {
-            let packbits = ext.codec_packbits()?;
+            let packbits = ext.codec_packbits().ok_or_else(|| {
+                CodecError::UnsupportedDataType(
+                    data_type.clone(),
+                    PackBitsCodec::IDENTIFIER.to_string(),
+                )
+            })?;
             Ok(DataTypeExtensionPackBitsCodecComponents {
                 component_size_bits: packbits.component_size_bits(),
                 num_components: packbits.num_components(),

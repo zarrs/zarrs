@@ -21,8 +21,8 @@ use crate::{
 /// Count the nesting depth of optional types.
 /// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
 pub(super) fn optional_nesting_depth(data_type: &DataType) -> usize {
-    if let DataType::Optional(inner) = data_type {
-        1 + optional_nesting_depth(inner)
+    if let DataType::Optional(opt) = data_type {
+        1 + optional_nesting_depth(opt.data_type())
     } else {
         0
     }
@@ -158,19 +158,23 @@ impl<'a> ArrayBytes<'a> {
                     FillValue::from(&[])
                 };
                 let mask = vec![0u8; num_elements_usize];
-                return Ok(
-                    ArrayBytes::new_fill_value(opt, num_elements, &inner_fill_value)?
-                        .with_optional_mask(mask),
-                );
+                return Ok(ArrayBytes::new_fill_value(
+                    opt.data_type(),
+                    num_elements,
+                    &inner_fill_value,
+                )?
+                .with_optional_mask(mask));
             }
             // Non-null fill value for optional type: strip suffix and use inner bytes
             let inner_bytes = opt.fill_value_inner_bytes(fill_value);
             let inner_fill_value = FillValue::new(inner_bytes.to_vec());
             let mask = vec![1u8; num_elements_usize]; // all non-null
-            return Ok(
-                ArrayBytes::new_fill_value(opt, num_elements, &inner_fill_value)?
-                    .with_optional_mask(mask),
-            );
+            return Ok(ArrayBytes::new_fill_value(
+                opt.data_type(),
+                num_elements,
+                &inner_fill_value,
+            )?
+            .with_optional_mask(mask));
         }
 
         match data_type.size() {
@@ -390,10 +394,11 @@ impl<'a> ArrayBytes<'a> {
                 };
 
                 // Extract subset of the inner data recursively
-                let subset_data =
-                    optional_bytes
-                        .data()
-                        .extract_array_subset(indexer, array_shape, opt)?;
+                let subset_data = optional_bytes.data().extract_array_subset(
+                    indexer,
+                    array_shape,
+                    opt.data_type(),
+                )?;
 
                 // Extract subset of the mask (1 byte per element)
                 let byte_ranges = indexer.iter_contiguous_byte_ranges(array_shape, 1)?; // mask is 1 byte per element
@@ -478,14 +483,14 @@ fn validate_bytes(
             }
         }
         ArrayBytes::Optional(optional_bytes) => {
-            let DataType::Optional(inner_type) = data_type else {
+            let DataType::Optional(opt) = data_type else {
                 return Err(CodecError::Other(
                     "Used optional array bytes with a non-optional data type.".to_string(),
                 ));
             };
             // Mask validation is already done at construction time
             // Just validate the underlying data with the inner type
-            validate_bytes(optional_bytes.data(), num_elements, inner_type)
+            validate_bytes(optional_bytes.data(), num_elements, opt.data_type())
         }
     }
 }

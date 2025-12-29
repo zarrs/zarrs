@@ -407,7 +407,7 @@ where
     T: Element + Default,
 {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        T::validate_data_type(data_type.optional().ok_or(IET)?)
+        T::validate_data_type(data_type.optional().ok_or(IET)?.data_type())
     }
 
     fn to_array_bytes<'a>(
@@ -439,7 +439,7 @@ where
         }
 
         // Convert all elements (dense) to ArrayBytes
-        let data = T::into_array_bytes(opt, dense_elements)?.into_owned();
+        let data = T::into_array_bytes(opt.data_type(), dense_elements)?.into_owned();
 
         // Create optional ArrayBytes by adding mask to the data
         Ok(data.with_optional_mask(mask))
@@ -474,7 +474,7 @@ where
         let (data, mask) = optional_bytes.into_parts();
 
         // Convert the dense inner data to a Vec<T>
-        let dense_values = T::from_array_bytes(opt, *data)?;
+        let dense_values = T::from_array_bytes(opt.data_type(), *data)?;
 
         // Build the result vector using mask to determine Some vs None
         let mut elements = Vec::with_capacity(mask.len());

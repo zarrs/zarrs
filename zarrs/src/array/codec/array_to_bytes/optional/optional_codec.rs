@@ -114,7 +114,7 @@ impl OptionalCodec {
 
                 // Recursively extract sparse data from the inner data
                 let sparse_inner_data =
-                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt)?;
+                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt.data_type())?;
 
                 Ok(sparse_inner_data.with_optional_mask(sparse_inner_mask))
             }
@@ -193,7 +193,8 @@ impl OptionalCodec {
                 let (sparse_inner_data, sparse_inner_mask) = sparse_optional_bytes.into_parts();
 
                 // Recursively expand the inner data
-                let dense_inner_data = Self::expand_to_dense(*sparse_inner_data, mask, inner_opt)?;
+                let dense_inner_data =
+                    Self::expand_to_dense(*sparse_inner_data, mask, inner_opt.data_type())?;
 
                 // Expand the sparse inner mask to dense format
                 let num_elements = mask.len();
@@ -249,7 +250,7 @@ impl OptionalCodec {
             let inner_opt = inner_type.optional().ok_or(CodecError::Other(
                 "nested optional requires nested optional DataType".to_string(),
             ))?;
-            let inner_data = Self::create_empty_dense_data(mask, inner_opt)?;
+            let inner_data = Self::create_empty_dense_data(mask, inner_opt.data_type())?;
             let inner_mask = vec![0u8; num_elements];
             Ok(inner_data.with_optional_mask(inner_mask))
         } else {
@@ -363,15 +364,20 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt)?;
+        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(opt);
-            self.data_codecs
-                .encode(sparse_data, &data_shape, opt, &fill_value, options)?
+            let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
+            self.data_codecs.encode(
+                sparse_data,
+                &data_shape,
+                opt.data_type(),
+                &fill_value,
+                options,
+            )?
         } else {
             ArrayBytesRaw::from(vec![])
         };
@@ -431,17 +437,23 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let dense_data = if valid_count > 0 {
             let sparse_data = {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-                let fill_value = Self::create_fill_value_for_inner_type(opt);
+                let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
                 self.data_codecs
-                    .decode(encoded_data.into(), &data_shape, opt, &fill_value, options)?
+                    .decode(
+                        encoded_data.into(),
+                        &data_shape,
+                        opt.data_type(),
+                        &fill_value,
+                        options,
+                    )?
                     .into_owned()
             };
 
             // Expand sparse data to dense format (supports nested optional types)
-            Self::expand_to_dense(sparse_data, &mask, opt)?
+            Self::expand_to_dense(sparse_data, &mask, opt.data_type())?
         } else {
             // No valid elements - create empty dense data of the right type/size
-            Self::create_empty_dense_data(&mask, opt)?
+            Self::create_empty_dense_data(&mask, opt.data_type())?
         };
 
         // Return ArrayBytes with mask and dense data
@@ -472,10 +484,10 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         )?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
-        let fill_value = Self::create_fill_value_for_inner_type(inner_type);
+        let fill_value = Self::create_fill_value_for_inner_type(inner_type.data_type());
         let data_bytes_repr =
             self.data_codecs
-                .encoded_representation(shape, inner_type, &fill_value)?;
+                .encoded_representation(shape, inner_type.data_type(), &fill_value)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
         match (mask_bytes_repr.size(), data_bytes_repr.size()) {
@@ -521,9 +533,9 @@ mod tests {
     /// Helper to build codec config recursively for nested optional types
     fn build_codec_config_for_type(data_type: &DataType) -> String {
         match data_type {
-            DataType::Optional(opt) if opt.is_optional() => {
+            DataType::Optional(opt) if opt.data_type().is_optional() => {
                 // Nested optional - need another optional codec
-                let inner_config = build_codec_config_for_type(opt);
+                let inner_config = build_codec_config_for_type(opt.data_type());
                 format!(
                     r#"[{{"name": "zarrs.optional", "configuration": {{
                         "mask_codecs": [{{"name": "packbits", "configuration": {{}}}}],
@@ -554,9 +566,9 @@ mod tests {
     /// Helper to build nested ArrayBytes for testing
     fn build_nested_array_bytes(data_type: &DataType, num_elements: usize) -> ArrayBytes<'_> {
         match data_type {
-            DataType::Optional(opt) if opt.is_optional() => {
+            DataType::Optional(opt) if opt.data_type().is_optional() => {
                 // Build nested optional structure
-                let inner_array_bytes = build_nested_array_bytes(opt, num_elements);
+                let inner_array_bytes = build_nested_array_bytes(opt.data_type(), num_elements);
 
                 // Create outer mask (every third element is invalid at this level)
                 let outer_mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 3 != 0)).collect();

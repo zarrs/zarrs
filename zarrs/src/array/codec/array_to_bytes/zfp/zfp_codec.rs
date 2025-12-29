@@ -291,30 +291,9 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
             }
         };
 
-        match data_type {
-            DataType::Int8
-            | DataType::UInt8
-            | DataType::Int16
-            | DataType::UInt16
-            | DataType::Int32
-            | DataType::UInt32
-            | DataType::Int64
-            | DataType::UInt64
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => Ok(BytesRepresentation::BoundedSize(bufsize as u64)),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::IDENTIFIER.to_string(),
-            )),
-        }
+        // If we got a valid zfp_type, the data type is supported
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }
 }
 

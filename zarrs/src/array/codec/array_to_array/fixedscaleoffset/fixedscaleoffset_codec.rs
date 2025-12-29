@@ -15,60 +15,8 @@ use crate::array::{
 use crate::convert::data_type_metadata_v2_to_v3;
 use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use std::num::NonZeroU64;
+use zarrs_data_type::{DataTypeExtension, FixedScaleOffsetElementType, FixedScaleOffsetFloatType};
 use zarrs_plugin::ExtensionIdentifier;
-
-macro_rules! unsupported_dtypes {
-    // TODO: Add support for all int/float types?
-    // TODO: Add support for extensions?
-    () => {
-        DataType::Bool
-            | DataType::Int2
-            | DataType::Int4
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::BFloat16
-            | DataType::Float16
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::RawBits(_)
-            | DataType::String
-            | DataType::Bytes
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::Optional(_)
-            | DataType::Extension(_)
-    };
-}
 
 /// A `fixedscaleoffset` codec implementation.
 #[derive(Clone, Debug)]
@@ -191,48 +139,19 @@ impl ArrayCodecTraits for FixedScaleOffsetCodec {
     }
 }
 
-macro_rules! scale_data_type {
-    ($data_type:expr, $bytes:expr, $offset:expr, $scale:expr, {
-        $($variant:ident => $ty:ty, $float:ty),* $(,)?
-    }) => {
-        match $data_type {
-            $(DataType::$variant => {
-                let round = |chunk: &mut [u8]| {
-                    let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
-                    let element = ((element as $float - $offset as $float) * $scale as $float).round() as $ty;
-                    chunk.copy_from_slice(&element.to_ne_bytes());
-                };
-                $bytes.chunks_exact_mut(std::mem::size_of::<$ty>()).for_each(round);
-                Ok(())
-            }),*
-            unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                $data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            )),
-        }
-    };
-}
-
-macro_rules! unscale_data_type {
-    ($data_type:expr, $bytes:expr, $offset:expr, $scale:expr, {
-        $($variant:ident => $ty:ty, $float:ty),* $(,)?
-    }) => {
-        match $data_type {
-            $(DataType::$variant => {
-                let round = |chunk: &mut [u8]| {
-                    let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
-                    let element = ((element as $float / $scale as $float) + $offset as $float) as $ty;
-                    chunk.copy_from_slice(&element.to_ne_bytes());
-                };
-                $bytes.chunks_exact_mut(std::mem::size_of::<$ty>()).for_each(round);
-                Ok(())
-            }),*
-            unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                $data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            )),
-        }
-    };
+fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType, CodecError> {
+    let fso = data_type.codec_fixedscaleoffset().ok_or_else(|| {
+        CodecError::UnsupportedDataType(
+            data_type.clone(),
+            FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+        )
+    })?;
+    fso.fixedscaleoffset_element_type().ok_or_else(|| {
+        CodecError::UnsupportedDataType(
+            data_type.clone(),
+            FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+        )
+    })
 }
 
 #[allow(
@@ -247,19 +166,39 @@ fn scale_array(
     offset: f32,
     scale: f32,
 ) -> Result<(), CodecError> {
-    scale_data_type!(data_type, bytes, offset, scale, {
-        Int8 => i8, f32,
-        Int16 => i16, f32,
-        Int32 => i32, f64,
-        Int64 => i64, f64,
-        UInt8 => u8, f32,
-        UInt16 => u16, f32,
-        UInt32 => u32, f64,
-        UInt64 => u64, f64,
-        Float32 => f32, f32,
-        Float64 => f64, f64,
-    })
-    // FIXME: Half types, complex types
+    let element_type = get_element_type(data_type)?;
+    let float_type = element_type.intermediate_float();
+
+    macro_rules! scale_impl {
+        ($ty:ty, $float:ty) => {{
+            for chunk in bytes.chunks_exact_mut(std::mem::size_of::<$ty>()) {
+                let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
+                let element =
+                    ((element as $float - offset as $float) * scale as $float).round() as $ty;
+                chunk.copy_from_slice(&element.to_ne_bytes());
+            }
+        }};
+    }
+
+    match (element_type, float_type) {
+        (FixedScaleOffsetElementType::I8, FixedScaleOffsetFloatType::F32) => scale_impl!(i8, f32),
+        (FixedScaleOffsetElementType::I16, FixedScaleOffsetFloatType::F32) => scale_impl!(i16, f32),
+        (FixedScaleOffsetElementType::I32, FixedScaleOffsetFloatType::F64) => scale_impl!(i32, f64),
+        (FixedScaleOffsetElementType::I64, FixedScaleOffsetFloatType::F64) => scale_impl!(i64, f64),
+        (FixedScaleOffsetElementType::U8, FixedScaleOffsetFloatType::F32) => scale_impl!(u8, f32),
+        (FixedScaleOffsetElementType::U16, FixedScaleOffsetFloatType::F32) => scale_impl!(u16, f32),
+        (FixedScaleOffsetElementType::U32, FixedScaleOffsetFloatType::F64) => scale_impl!(u32, f64),
+        (FixedScaleOffsetElementType::U64, FixedScaleOffsetFloatType::F64) => scale_impl!(u64, f64),
+        (FixedScaleOffsetElementType::F32, FixedScaleOffsetFloatType::F32) => scale_impl!(f32, f32),
+        (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => scale_impl!(f64, f64),
+        _ => {
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[allow(
@@ -274,60 +213,54 @@ fn unscale_array(
     offset: f32,
     scale: f32,
 ) -> Result<(), CodecError> {
-    unscale_data_type!(data_type, bytes, offset, scale, {
-        Int8 => i8, f32,
-        Int16 => i16, f32,
-        Int32 => i32, f64,
-        Int64 => i64, f64,
-        UInt8 => u8, f32,
-        UInt16 => u16, f32,
-        UInt32 => u32, f64,
-        UInt64 => u64, f64,
-        Float32 => f32, f32,
-        Float64 => f64, f64,
-    })
-    // FIXME: Half types, complex types
-}
+    let element_type = get_element_type(data_type)?;
+    let float_type = element_type.intermediate_float();
 
-macro_rules! cast_to_float {
-    ($data_type:expr, $bytes:expr, {
-        $($variant:ident => $ty:ty),* $(,)?
-    }) => {
-        match $data_type {
-            $(DataType::$variant => {
-                let from_bytes = |chunk: &[u8]| {
-                    let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
-                    element as f32
-                };
-                Ok($bytes.chunks_exact(std::mem::size_of::<$ty>()).map(from_bytes).collect())
-            }),*
-            _ => Err(CodecError::UnsupportedDataType(
-                $data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            )),
-        }
-    };
-}
+    macro_rules! unscale_impl {
+        ($ty:ty, $float:ty) => {{
+            for chunk in bytes.chunks_exact_mut(std::mem::size_of::<$ty>()) {
+                let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
+                let element = ((element as $float / scale as $float) + offset as $float) as $ty;
+                chunk.copy_from_slice(&element.to_ne_bytes());
+            }
+        }};
+    }
 
-macro_rules! cast_from_float {
-    ($data_type:expr, $float_iter:expr, {
-        $($variant:ident => $ty:ty),* $(,)?
-    }) => {
-        match $data_type {
-            $(DataType::$variant => {
-                let to_bytes = |element: f32| {
-                    let element = element as $ty;
-                    let bytes = <$ty>::to_ne_bytes(element);
-                    bytes
-                };
-                Ok($float_iter.map(to_bytes).flatten().collect())
-            }),*
-            _ => Err(CodecError::UnsupportedDataType(
-                $data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            )),
+    match (element_type, float_type) {
+        (FixedScaleOffsetElementType::I8, FixedScaleOffsetFloatType::F32) => unscale_impl!(i8, f32),
+        (FixedScaleOffsetElementType::I16, FixedScaleOffsetFloatType::F32) => {
+            unscale_impl!(i16, f32);
         }
-    };
+        (FixedScaleOffsetElementType::I32, FixedScaleOffsetFloatType::F64) => {
+            unscale_impl!(i32, f64);
+        }
+        (FixedScaleOffsetElementType::I64, FixedScaleOffsetFloatType::F64) => {
+            unscale_impl!(i64, f64);
+        }
+        (FixedScaleOffsetElementType::U8, FixedScaleOffsetFloatType::F32) => unscale_impl!(u8, f32),
+        (FixedScaleOffsetElementType::U16, FixedScaleOffsetFloatType::F32) => {
+            unscale_impl!(u16, f32);
+        }
+        (FixedScaleOffsetElementType::U32, FixedScaleOffsetFloatType::F64) => {
+            unscale_impl!(u32, f64);
+        }
+        (FixedScaleOffsetElementType::U64, FixedScaleOffsetFloatType::F64) => {
+            unscale_impl!(u64, f64);
+        }
+        (FixedScaleOffsetElementType::F32, FixedScaleOffsetFloatType::F32) => {
+            unscale_impl!(f32, f32);
+        }
+        (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => {
+            unscale_impl!(f64, f64);
+        }
+        _ => {
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[allow(
@@ -341,33 +274,109 @@ fn cast_array(
     data_type: &DataType,
     as_type: &DataType,
 ) -> Result<Vec<u8>, CodecError> {
-    let elements: Vec<f32> = cast_to_float!(data_type, bytes, {
-        Int8 => i8,
-        Int16 => i16,
-        Int32 => i32,
-        Int64 => i64,
-        UInt8 => u8,
-        UInt16 => u16,
-        UInt32 => u32,
-        UInt64 => u64,
-        Float32 => f32,
-        Float64 => f64,
-    })?;
-    // FIXME: Half types, complex types
+    let from_type = get_element_type(data_type)?;
+    let to_type = get_element_type(as_type)?;
 
-    cast_from_float!(as_type, elements.into_iter(), {
-        Int8 => i8,
-        Int16 => i16,
-        Int32 => i32,
-        Int64 => i64,
-        UInt8 => u8,
-        UInt16 => u16,
-        UInt32 => u32,
-        UInt64 => u64,
-        Float32 => f32,
-        Float64 => f64,
-    })
-    // FIXME: Half types, complex types
+    // First cast to f32
+    let elements: Vec<f32> = match from_type {
+        FixedScaleOffsetElementType::I8 => bytes
+            .chunks_exact(1)
+            .map(|c| i8::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::I16 => bytes
+            .chunks_exact(2)
+            .map(|c| i16::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::I32 => bytes
+            .chunks_exact(4)
+            .map(|c| i32::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::I64 => bytes
+            .chunks_exact(8)
+            .map(|c| i64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::U8 => bytes
+            .chunks_exact(1)
+            .map(|c| u8::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::U16 => bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::U32 => bytes
+            .chunks_exact(4)
+            .map(|c| u32::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::U64 => bytes
+            .chunks_exact(8)
+            .map(|c| u64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        FixedScaleOffsetElementType::F32 => bytes
+            .chunks_exact(4)
+            .map(|c| f32::from_ne_bytes(c.try_into().unwrap()))
+            .collect(),
+        FixedScaleOffsetElementType::F64 => bytes
+            .chunks_exact(8)
+            .map(|c| f64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .collect(),
+        _ => {
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
+        }
+    };
+
+    // Then cast from f32 to target type
+    let result: Vec<u8> = match to_type {
+        FixedScaleOffsetElementType::I8 => elements
+            .into_iter()
+            .flat_map(|e| (e as i8).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::I16 => elements
+            .into_iter()
+            .flat_map(|e| (e as i16).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::I32 => elements
+            .into_iter()
+            .flat_map(|e| (e as i32).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::I64 => elements
+            .into_iter()
+            .flat_map(|e| (e as i64).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::U8 => elements
+            .into_iter()
+            .flat_map(|e| (e as u8).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::U16 => elements
+            .into_iter()
+            .flat_map(|e| (e as u16).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::U32 => elements
+            .into_iter()
+            .flat_map(|e| (e as u32).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::U64 => elements
+            .into_iter()
+            .flat_map(|e| (e as u64).to_ne_bytes())
+            .collect(),
+        FixedScaleOffsetElementType::F32 => {
+            elements.into_iter().flat_map(f32::to_ne_bytes).collect()
+        }
+        FixedScaleOffsetElementType::F64 => elements
+            .into_iter()
+            .flat_map(|e| (e as f64).to_ne_bytes())
+            .collect(),
+        _ => {
+            return Err(CodecError::UnsupportedDataType(
+                as_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
+        }
+    };
+
+    Ok(result)
 }
 
 fn do_encode<'a>(
@@ -448,27 +457,13 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        match decoded_data_type {
-            DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::Float32
-            | DataType::Float64 => {
-                if let Some(astype) = &self.astype {
-                    Ok(astype.data_type().clone())
-                } else {
-                    Ok(decoded_data_type.clone())
-                }
-            }
-            unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                decoded_data_type.clone(),
-                Self::IDENTIFIER.to_string(),
-            )),
+        // Check if the data type is supported by checking the trait
+        get_element_type(decoded_data_type)?;
+
+        if let Some(astype) = &self.astype {
+            Ok(astype.data_type().clone())
+        } else {
+            Ok(decoded_data_type.clone())
         }
     }
 }

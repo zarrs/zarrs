@@ -30,8 +30,8 @@ macro_rules! impl_data_type_extension_numeric {
                 impl_data_type_extension_numeric!(@metadata_fill_value self, fill_value, $rust_type, $size)
             }
 
-            fn codec_bytes(&self) -> Result<&dyn zarrs_data_type::DataTypeExtensionBytesCodec, zarrs_data_type::DataTypeExtensionError> {
-                Ok(self)
+            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+                Some(self)
             }
         }
 
@@ -313,8 +313,8 @@ macro_rules! impl_complex_data_type {
                 impl_complex_data_type!(@to_metadata self, fill_value, $component_type, $size, error)
             }
 
-            fn codec_bytes(&self) -> Result<&dyn zarrs_data_type::DataTypeExtensionBytesCodec, zarrs_data_type::DataTypeExtensionError> {
-                Ok(self)
+            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+                Some(self)
             }
         }
 
@@ -465,10 +465,8 @@ macro_rules! impl_subfloat_data_type {
                 Ok(zarrs_metadata::v3::FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])))
             }
 
-            fn codec_bytes(
-                &self,
-            ) -> Result<&dyn zarrs_data_type::DataTypeExtensionBytesCodec, zarrs_data_type::DataTypeExtensionError> {
-                Ok(self)
+            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+                Some(self)
             }
         }
 
@@ -555,10 +553,8 @@ macro_rules! impl_complex_subfloat_data_type {
                 ]))
             }
 
-            fn codec_bytes(
-                &self,
-            ) -> Result<&dyn zarrs_data_type::DataTypeExtensionBytesCodec, zarrs_data_type::DataTypeExtensionError> {
-                Ok(self)
+            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
+                Some(self)
             }
         }
 

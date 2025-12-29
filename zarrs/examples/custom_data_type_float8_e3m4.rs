@@ -14,8 +14,7 @@ use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
-    FillValue,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -94,8 +93,8 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+        Some(self)
     }
 }
 

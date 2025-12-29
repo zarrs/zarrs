@@ -1880,7 +1880,7 @@ pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCo
         // For data codec chain, recursively handle nested data types
         let data_codec_chain = Arc::new(CodecChain::new_named(
             vec![],
-            default_array_to_bytes_codec(opt), // Recursive call handles nested Optional types
+            default_array_to_bytes_codec(opt.data_type()), // Recursive call handles nested Optional types
             vec![],
         ));
 

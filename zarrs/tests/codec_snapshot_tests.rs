@@ -413,8 +413,8 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Optional types - wrap inner data with validity mask
-        DataType::Optional(inner) => {
-            let inner_bytes = generate_test_data(inner, num_elements);
+        DataType::Optional(opt) => {
+            let inner_bytes = generate_test_data(opt.data_type(), num_elements);
             // Create validity mask - every 4th element is null
             let mask: Vec<u8> = (0..num_elements)
                 .map(|i| if i % 4 == 3 { 0u8 } else { 1u8 })
@@ -442,11 +442,11 @@ pub fn snapshots_dir() -> PathBuf {
 /// Sanitize a data type name for use in file paths
 pub fn sanitize_data_type_name(data_type: &DataType) -> String {
     // For optional types, use the default name and include the inner type name
-    let name = if let Some(inner) = data_type.optional() {
+    let name = if let Some(opt) = data_type.optional() {
         format!(
             "{}({})",
             OptionalCodec::default_name(ZarrVersions::V3),
-            sanitize_data_type_name(inner)
+            sanitize_data_type_name(opt.data_type())
         )
     } else {
         data_type.clone().into_named().name().to_string()

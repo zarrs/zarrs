@@ -27,7 +27,7 @@ use crate::array::{
         Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
         NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
         UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-        complex_subfloat_hex_string_to_fill_value, subfloat_hex_string_to_fill_value,
+        subfloat_hex_string_to_fill_value,
     },
 };
 
@@ -100,103 +100,54 @@ impl NamedDataType {
     ///
     /// # Errors
     /// Returns [`DataTypeFillValueMetadataError`] if the fill value is incompatible with the data type.
-    #[allow(clippy::too_many_lines)]
     pub fn fill_value_from_metadata(
         &self,
         fill_value: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        use FillValue as FV;
+        use zarrs_data_type::DataTypeExtension;
         let name = self.name();
         let err0 = || DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone());
-        let err = |_| DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone());
         match self.data_type() {
-            DataType::Bool => Ok(FV::from(fill_value.as_bool().ok_or_else(err0)?)),
-            DataType::Int2 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                if (-2..2).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            DataType::Int4 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                if (-8..8).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            DataType::Int8 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i8::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::Int16 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i16::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::Int32 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                let int = i32::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::Int64 => {
-                let int = fill_value.as_i64().ok_or_else(err0)?;
-                Ok(FV::from(int))
-            }
-            DataType::UInt2 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                if (0..4).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            DataType::UInt4 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                if (0..16).contains(&int) {
-                    Ok(FV::from(int))
-                } else {
-                    Err(err0())
-                }
-            }
-            DataType::UInt8 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u8::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::UInt16 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u16::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::UInt32 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                let int = u32::try_from(int).map_err(err)?;
-                Ok(FV::from(int))
-            }
-            DataType::UInt64 => {
-                let int = fill_value.as_u64().ok_or_else(err0)?;
-                Ok(FV::from(int))
-            }
+            // Delegate to marker types for standard numeric types
+            DataType::Bool => BoolDataType.fill_value(fill_value),
+            DataType::Int2 => Int2DataType.fill_value(fill_value),
+            DataType::Int4 => Int4DataType.fill_value(fill_value),
+            DataType::Int8 => Int8DataType.fill_value(fill_value),
+            DataType::Int16 => Int16DataType.fill_value(fill_value),
+            DataType::Int32 => Int32DataType.fill_value(fill_value),
+            DataType::Int64 => Int64DataType.fill_value(fill_value),
+            DataType::UInt2 => UInt2DataType.fill_value(fill_value),
+            DataType::UInt4 => UInt4DataType.fill_value(fill_value),
+            DataType::UInt8 => UInt8DataType.fill_value(fill_value),
+            DataType::UInt16 => UInt16DataType.fill_value(fill_value),
+            DataType::UInt32 => UInt32DataType.fill_value(fill_value),
+            DataType::UInt64 => UInt64DataType.fill_value(fill_value),
+            DataType::BFloat16 => BFloat16DataType.fill_value(fill_value),
+            DataType::Float16 => Float16DataType.fill_value(fill_value),
+            DataType::Float32 => Float32DataType.fill_value(fill_value),
+            DataType::Float64 => Float64DataType.fill_value(fill_value),
+            DataType::ComplexBFloat16 => ComplexBFloat16DataType.fill_value(fill_value),
+            DataType::ComplexFloat16 => ComplexFloat16DataType.fill_value(fill_value),
+            DataType::ComplexFloat32 => ComplexFloat32DataType.fill_value(fill_value),
+            DataType::ComplexFloat64 => ComplexFloat64DataType.fill_value(fill_value),
+            DataType::Complex64 => Complex64DataType.fill_value(fill_value),
+            DataType::Complex128 => Complex128DataType.fill_value(fill_value),
+            DataType::String => StringDataType.fill_value(fill_value),
+            DataType::NumpyDateTime64 { .. } => NumpyDateTime64DataType::STATIC.fill_value(fill_value),
+            DataType::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::STATIC.fill_value(fill_value),
+            // Float8E4M3 and Float8E5M2 support float values when float8 feature is enabled
             DataType::Float8E4M3 => {
                 #[cfg(feature = "float8")]
                 {
                     subfloat_hex_string_to_fill_value(fill_value)
                         .or_else(|| {
                             let number = float8::F8E4M3::from_f64(fill_value.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)
                 }
                 #[cfg(not(feature = "float8"))]
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+                Float8E4M3DataType.fill_value(fill_value)
             }
             DataType::Float8E5M2 => {
                 #[cfg(feature = "float8")]
@@ -204,85 +155,44 @@ impl NamedDataType {
                     subfloat_hex_string_to_fill_value(fill_value)
                         .or_else(|| {
                             let number = float8::F8E5M2::from_f64(fill_value.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)
                 }
                 #[cfg(not(feature = "float8"))]
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+                Float8E5M2DataType.fill_value(fill_value)
             }
-            DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
-            DataType::BFloat16 => Ok(FV::from(fill_value.as_bf16().ok_or_else(err0)?)),
-            DataType::Float16 => Ok(FV::from(fill_value.as_f16().ok_or_else(err0)?)),
-            DataType::Float32 => Ok(FV::from(fill_value.as_f32().ok_or_else(err0)?)),
-            DataType::Float64 => Ok(FV::from(fill_value.as_f64().ok_or_else(err0)?)),
-            DataType::ComplexBFloat16 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_bf16().ok_or_else(err0)?;
-                    let im = im.as_bf16().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::<half::bf16>::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            DataType::ComplexFloat16 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f16().ok_or_else(err0)?;
-                    let im = im.as_f16().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::<half::f16>::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            DataType::Complex64 | DataType::ComplexFloat32 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f32().ok_or_else(err0)?;
-                    let im = im.as_f32().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex32::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
-            DataType::Complex128 | DataType::ComplexFloat64 => {
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = re.as_f64().ok_or_else(err0)?;
-                    let im = im.as_f64().ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex64::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-            }
+            // Other subfloats use marker types directly
+            DataType::Float4E2M1FN => Float4E2M1FNDataType.fill_value(fill_value),
+            DataType::Float6E2M3FN => Float6E2M3FNDataType.fill_value(fill_value),
+            DataType::Float6E3M2FN => Float6E3M2FNDataType.fill_value(fill_value),
+            DataType::Float8E3M4 => Float8E3M4DataType.fill_value(fill_value),
+            DataType::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType.fill_value(fill_value),
+            DataType::Float8E4M3FNUZ => Float8E4M3FNUZDataType.fill_value(fill_value),
+            DataType::Float8E5M2FNUZ => Float8E5M2FNUZDataType.fill_value(fill_value),
+            DataType::Float8E8M0FNU => Float8E8M0FNUDataType.fill_value(fill_value),
+            // ComplexFloat8E4M3 and ComplexFloat8E5M2 support float values when float8 feature is enabled
             DataType::ComplexFloat8E4M3 => {
                 #[cfg(feature = "float8")]
                 if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
                     let re = subfloat_hex_string_to_fill_value(re)
                         .or_else(|| {
                             let number = float8::F8E4M3::from_f64(re.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)?;
                     let im = subfloat_hex_string_to_fill_value(im)
                         .or_else(|| {
                             let number = float8::F8E4M3::from_f64(im.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::new(re, im)))
+                    Ok(FillValue::from(num::complex::Complex::new(re, im)))
                 } else {
                     Err(err0())?
                 }
                 #[cfg(not(feature = "float8"))]
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+                ComplexFloat8E4M3DataType.fill_value(fill_value)
             }
             DataType::ComplexFloat8E5M2 => {
                 #[cfg(feature = "float8")]
@@ -290,70 +200,54 @@ impl NamedDataType {
                     let re = subfloat_hex_string_to_fill_value(re)
                         .or_else(|| {
                             let number = float8::F8E5M2::from_f64(re.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)?;
                     let im = subfloat_hex_string_to_fill_value(im)
                         .or_else(|| {
                             let number = float8::F8E5M2::from_f64(im.as_f64()?);
-                            Some(FV::from(number.to_bits()))
+                            Some(FillValue::from(number.to_bits()))
                         })
                         .ok_or_else(err0)?;
-                    Ok(FV::from(num::complex::Complex::new(re, im)))
+                    Ok(FillValue::from(num::complex::Complex::new(re, im)))
                 } else {
                     Err(err0())?
                 }
                 #[cfg(not(feature = "float8"))]
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
+                ComplexFloat8E5M2DataType.fill_value(fill_value)
             }
-            DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU => {
-                // FIXME: Support normal floating point fill value metadata for these data types.
-                complex_subfloat_hex_string_to_fill_value(fill_value).ok_or_else(err0)
-            }
+            // Other complex subfloats use marker types directly
+            DataType::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType.fill_value(fill_value),
+            DataType::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType.fill_value(fill_value),
+            DataType::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType.fill_value(fill_value),
+            DataType::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType.fill_value(fill_value),
+            DataType::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType.fill_value(fill_value),
+            DataType::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType.fill_value(fill_value),
+            DataType::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType.fill_value(fill_value),
+            DataType::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType.fill_value(fill_value),
+            // RawBits uses array representation (legacy behavior)
             DataType::RawBits(size) => {
                 let bytes = fill_value.as_bytes().ok_or_else(err0)?;
                 if bytes.len() == *size {
-                    Ok(FV::from(bytes))
+                    Ok(FillValue::from(bytes))
                 } else {
                     Err(err0())?
                 }
             }
+            // Bytes supports both array and base64 (legacy behavior)
             DataType::Bytes => {
                 if let Some(bytes) = fill_value.as_bytes() {
                     // Permit bytes for any data type alias of `bytes`
-                    Ok(FV::from(bytes))
+                    Ok(FillValue::from(bytes))
                 } else if let Some(string) = fill_value.as_str() {
-                    Ok(FV::from(
+                    Ok(FillValue::from(
                         BASE64_STANDARD.decode(string).map_err(|_| err0())?,
                     ))
                 } else {
                     Err(err0())?
                 }
             }
-            DataType::String => Ok(FV::from(fill_value.as_str().ok_or_else(err0)?)),
-            DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => {
-                if let Some("NaT") = fill_value.as_str() {
-                    Ok(FV::from(i64::MIN))
-                } else if let Some(i) = fill_value.as_i64() {
-                    Ok(FV::from(i))
-                } else {
-                    Err(err0())?
-                }
-            }
+            // Optional has special recursive handling
             DataType::Optional(opt) => {
                 if fill_value.is_null() {
                     // Null fill value for optional type: single 0x00 byte

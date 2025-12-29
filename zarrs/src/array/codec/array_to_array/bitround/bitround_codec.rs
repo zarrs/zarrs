@@ -17,6 +17,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
+use zarrs_data_type::DataTypeExtension;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bitround` codec implementation.
@@ -190,12 +191,14 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        match decoded_data_type {
-            super::supported_dtypes!() => Ok(decoded_data_type.clone()),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
+        // Use codec_bitround() from DataTypeExtension trait to check support
+        if decoded_data_type.codec_bitround().is_some() {
+            Ok(decoded_data_type.clone())
+        } else {
+            Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
                 Self::IDENTIFIER.to_string(),
-            )),
+            ))
         }
     }
 }

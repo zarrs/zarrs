@@ -62,7 +62,7 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
 };
-pub use data_type::{DataType, FillValue, NamedDataType};
+pub use data_type::{DataType, FillValue, NamedDataType, data_types};
 pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 use zarrs_plugin::ZarrVersions;
 

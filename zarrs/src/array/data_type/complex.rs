@@ -3,6 +3,10 @@
 use super::macros::{
     impl_complex_data_type, impl_complex_subfloat_data_type, register_data_type_plugin,
 };
+use zarrs_data_type::{
+    DataTypeExtensionBitroundCodec, DataTypeExtensionPcodecCodec, PcodecElementType,
+    round_bytes_float16, round_bytes_float32, round_bytes_float64,
+};
 
 // Complex floats - V2: <c8, <c16 (and > variants)
 
@@ -134,3 +138,157 @@ register_data_type_plugin!(ComplexFloat8E4M3FNUZDataType);
 register_data_type_plugin!(ComplexFloat8E5M2DataType);
 register_data_type_plugin!(ComplexFloat8E5M2FNUZDataType);
 register_data_type_plugin!(ComplexFloat8E8M0FNUDataType);
+
+// ============================================================================
+// Codec extension trait implementations
+// ============================================================================
+
+// --- Bitround codec ---
+// Complex types apply rounding component-wise. component_size is the size of each component.
+// For complex64 (f32+f32), component_size=4, mantissa_bits=23
+// For complex128 (f64+f64), component_size=8, mantissa_bits=52
+// For complex_bfloat16, component_size=2, mantissa_bits=7
+// For complex_float16, component_size=2, mantissa_bits=10
+
+impl DataTypeExtensionBitroundCodec for ComplexBFloat16DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(7)
+    }
+
+    fn component_size(&self) -> usize {
+        2
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float16(bytes, keepbits, 7);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for ComplexFloat16DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(10)
+    }
+
+    fn component_size(&self) -> usize {
+        2
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float16(bytes, keepbits, 10);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for ComplexFloat32DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(23)
+    }
+
+    fn component_size(&self) -> usize {
+        4
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float32(bytes, keepbits, 23);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for ComplexFloat64DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(52)
+    }
+
+    fn component_size(&self) -> usize {
+        8
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float64(bytes, keepbits, 52);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for Complex64DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(23)
+    }
+
+    fn component_size(&self) -> usize {
+        4
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float32(bytes, keepbits, 23);
+    }
+}
+
+impl DataTypeExtensionBitroundCodec for Complex128DataType {
+    fn mantissa_bits(&self) -> Option<u32> {
+        Some(52)
+    }
+
+    fn component_size(&self) -> usize {
+        8
+    }
+
+    fn round(&self, bytes: &mut [u8], keepbits: u32) {
+        round_bytes_float64(bytes, keepbits, 52);
+    }
+}
+
+// --- Pcodec codec ---
+// Pcodec supports complex types by treating them as pairs of float components
+
+impl DataTypeExtensionPcodecCodec for ComplexBFloat16DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        None // bfloat16 not supported by pcodec
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for ComplexFloat16DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::F16)
+    }
+
+    fn pcodec_elements_per_element(&self) -> usize {
+        2 // complex = 2 components
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for ComplexFloat32DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::F32)
+    }
+
+    fn pcodec_elements_per_element(&self) -> usize {
+        2
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for ComplexFloat64DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::F64)
+    }
+
+    fn pcodec_elements_per_element(&self) -> usize {
+        2
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for Complex64DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::F32)
+    }
+
+    fn pcodec_elements_per_element(&self) -> usize {
+        2
+    }
+}
+
+impl DataTypeExtensionPcodecCodec for Complex128DataType {
+    fn pcodec_element_type(&self) -> Option<PcodecElementType> {
+        Some(PcodecElementType::F64)
+    }
+
+    fn pcodec_elements_per_element(&self) -> usize {
+        2
+    }
+}

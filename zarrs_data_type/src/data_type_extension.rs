@@ -1,12 +1,16 @@
-use std::fmt::Debug;
+use std::{borrow::Cow, fmt::Debug};
 
 use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-use zarrs_plugin::{MaybeSend, MaybeSync};
+use zarrs_plugin::{MaybeSend, MaybeSync, ZarrVersions};
 
 use crate::{
+    data_type_extension_bitround_codec::DataTypeExtensionBitroundCodec,
+    data_type_extension_fixedscaleoffset_codec::DataTypeExtensionFixedScaleOffsetCodec,
     data_type_extension_packbits_codec::DataTypeExtensionPackBitsCodec,
-    DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, FillValue,
+    data_type_extension_pcodec_codec::DataTypeExtensionPcodecCodec,
+    data_type_extension_zfp_codec::DataTypeExtensionZfpCodec, DataTypeExtensionBytesCodec,
+    DataTypeExtensionBytesCodecError, DataTypeFillValueError, DataTypeFillValueMetadataError,
+    FillValue,
 };
 
 /// Traits for a data type extension.
@@ -26,6 +30,20 @@ use crate::{
 pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     /// The identifier of the data type.
     fn identifier(&self) -> &'static str;
+
+    /// The name to use when creating metadata for this data type.
+    ///
+    /// This is used when creating metadata. Most data types return their identifier,
+    /// but some (like `RawBitsDataType`) return a version-specific name like `r{bits}`.
+    ///
+    /// The default implementation returns the identifier.
+    ///
+    /// Note: This is distinct from `ExtensionIdentifier::default_name()` which operates
+    /// on the type level. This method operates on the instance level, allowing for
+    /// data types that have instance-specific names (like `r16`, `r32`, etc.).
+    fn metadata_name(&self, _zarr_version: ZarrVersions) -> Cow<'static, str> {
+        Cow::Borrowed(self.identifier())
+    }
 
     /// The configuration of the data type.
     fn configuration(&self) -> Configuration;
@@ -58,32 +76,55 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     ///
     /// Fixed-size data types are expected to support the `bytes` codec, even if bytes pass through it unmodified.
     ///
-    /// The default implementation returns [`DataTypeExtensionError::CodecUnsupported`].
-    ///
-    /// # Errors
-    /// Returns [`DataTypeExtensionError::CodecUnsupported`] if the `bytes` codec is unsupported.
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.identifier().to_string(),
-            codec: "bytes".to_string(),
-        })
+    /// The default implementation returns `None`.
+    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+        None
     }
 
     /// Return [`DataTypeExtensionPackBitsCodec`] if the data type supports the `packbits` codec.
     ///
     /// Types that can be encoded smaller in less than a byte should support the `packbits` codec.
     ///
-    /// The default implementation returns [`DataTypeExtensionError::CodecUnsupported`].
+    /// The default implementation returns `None`.
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        None
+    }
+
+    /// Return [`DataTypeExtensionBitroundCodec`] if the data type supports the `bitround` codec.
     ///
-    /// # Errors
-    /// Returns [`DataTypeExtensionError::CodecUnsupported`] if the `packbits` codec is unsupported.
-    fn codec_packbits(
-        &self,
-    ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
-        Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.identifier().to_string(),
-            codec: "packbits".to_string(),
-        })
+    /// Integer and floating-point types should support the `bitround` codec.
+    ///
+    /// The default implementation returns `None`.
+    fn codec_bitround(&self) -> Option<&dyn DataTypeExtensionBitroundCodec> {
+        None
+    }
+
+    /// Return [`DataTypeExtensionPcodecCodec`] if the data type supports the `pcodec` codec.
+    ///
+    /// 16-bit and larger numeric types should support the `pcodec` codec.
+    ///
+    /// The default implementation returns `None`.
+    fn codec_pcodec(&self) -> Option<&dyn DataTypeExtensionPcodecCodec> {
+        None
+    }
+
+    /// Return [`DataTypeExtensionFixedScaleOffsetCodec`] if the data type supports the `fixedscaleoffset` codec.
+    ///
+    /// Numeric types should support the `fixedscaleoffset` codec.
+    ///
+    /// The default implementation returns `None`.
+    fn codec_fixedscaleoffset(&self) -> Option<&dyn DataTypeExtensionFixedScaleOffsetCodec> {
+        None
+    }
+
+    /// Return [`DataTypeExtensionZfpCodec`] if the data type supports the `zfp` codec.
+    ///
+    /// 32-bit and 64-bit integer and floating-point types should support the `zfp` codec.
+    /// 8-bit and 16-bit types are supported through promotion.
+    ///
+    /// The default implementation returns `None`.
+    fn codec_zfp(&self) -> Option<&dyn DataTypeExtensionZfpCodec> {
+        None
     }
 }
 
