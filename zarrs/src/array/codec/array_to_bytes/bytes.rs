@@ -78,25 +78,22 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
         // Single-byte types don't need endianness reversal
         1 => {}
         2 => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u16::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(2).for_each(swap);
+            for chunk in v.as_chunks_mut::<2>().0 {
+                let bytes = u16::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
         4 => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u32::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(4).for_each(swap);
+            for chunk in v.as_chunks_mut::<4>().0 {
+                let bytes = u32::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
         8 => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u64::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(8).for_each(swap);
+            for chunk in v.as_chunks_mut::<8>().0 {
+                let bytes = u64::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
         // Other sizes: swap bytes pairwise for each element
         _ => {
@@ -306,8 +303,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);
@@ -353,8 +352,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);

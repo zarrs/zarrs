@@ -211,10 +211,8 @@ impl ElementOwned for CustomDataTypeUInt12Element {
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt12Element>());
-        for chunk in bytes.chunks_exact(2) {
-            elements.push(CustomDataTypeUInt12Element::from_le_bytes(
-                chunk.try_into().unwrap(),
-            ))
+        for chunk in bytes.as_chunks::<2>().0 {
+            elements.push(CustomDataTypeUInt12Element::from_le_bytes(*chunk))
         }
         Ok(elements)
     }

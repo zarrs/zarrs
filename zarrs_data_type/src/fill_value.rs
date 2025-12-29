@@ -266,8 +266,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(2)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             4 => {
@@ -278,8 +280,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(4)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             8 => {
@@ -290,8 +294,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(8)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             16 => {
@@ -302,8 +308,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(16)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             _ => bytes

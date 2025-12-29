@@ -368,10 +368,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         // Check if compaction is needed (no-op optimization)
         let mut needs_compaction = false;
         let mut chunks_size = 0;
-        for chunk in shard_index.chunks_exact(2) {
-            let offset = chunk[0];
-            let size = chunk[1];
-
+        for &[offset, size] in shard_index.as_chunks::<2>().0 {
             if offset != u64::MAX && size != u64::MAX {
                 chunks_size += size;
             }
@@ -386,7 +383,9 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
 
         // Calculate compact size
         let data_size: usize = shard_index
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .filter(|chunk| chunk[0] != u64::MAX)
             .map(|chunk| usize::try_from(chunk[1]).unwrap())
             .sum();
@@ -402,10 +401,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             ShardingIndexLocation::End => 0,
         };
 
-        for (i, chunk) in shard_index.chunks_exact(2).enumerate() {
-            let old_offset = chunk[0];
-            let size = chunk[1];
-
+        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
             if old_offset != u64::MAX && size != u64::MAX {
                 let old_offset_usize = usize::try_from(old_offset).unwrap();
                 let size_usize = usize::try_from(size).unwrap();

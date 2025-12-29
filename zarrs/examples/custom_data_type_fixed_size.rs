@@ -136,10 +136,11 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
         let bytes_len = bytes.len();
         let mut elements =
             Vec::with_capacity(bytes_len / size_of::<CustomDataTypeFixedSizeBytes>());
-        for bytes in bytes.chunks_exact(size_of::<CustomDataTypeFixedSizeBytes>()) {
-            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(unsafe {
-                bytes.try_into().unwrap_unchecked()
-            }))
+        for bytes in bytes
+            .as_chunks::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
+            .0
+        {
+            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(bytes))
         }
         Ok(elements)
     }
@@ -235,14 +236,15 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
-                for bytes in bytes.chunks_exact_mut(size_of::<CustomDataTypeFixedSizeBytes>()) {
-                    let value = CustomDataTypeFixedSizeElement::from_ne_bytes(&unsafe {
-                        bytes.try_into().unwrap_unchecked()
-                    });
+                for bytes in bytes
+                    .as_chunks_mut::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
+                    .0
+                {
+                    let value = CustomDataTypeFixedSizeElement::from_ne_bytes(bytes);
                     if endianness == Endianness::Little {
-                        bytes.copy_from_slice(&value.to_le_bytes());
+                        *bytes = value.to_le_bytes();
                     } else {
-                        bytes.copy_from_slice(&value.to_be_bytes());
+                        *bytes = value.to_be_bytes();
                     }
                 }
                 Ok(Cow::Owned(bytes))
@@ -262,17 +264,16 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
-                for bytes in bytes.chunks_exact_mut(size_of::<u64>() + size_of::<f32>()) {
+                for bytes in bytes
+                    .as_chunks_mut::<{ size_of::<u64>() + size_of::<f32>() }>()
+                    .0
+                {
                     let value = if endianness == Endianness::Little {
-                        CustomDataTypeFixedSizeElement::from_le_bytes(&unsafe {
-                            bytes.try_into().unwrap_unchecked()
-                        })
+                        CustomDataTypeFixedSizeElement::from_le_bytes(bytes)
                     } else {
-                        CustomDataTypeFixedSizeElement::from_be_bytes(&unsafe {
-                            bytes.try_into().unwrap_unchecked()
-                        })
+                        CustomDataTypeFixedSizeElement::from_be_bytes(bytes)
                     };
-                    bytes.copy_from_slice(&value.to_ne_bytes());
+                    *bytes = value.to_ne_bytes();
                 }
                 Ok(Cow::Owned(bytes))
             } else {

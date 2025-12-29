@@ -403,8 +403,10 @@ mod tests {
 
         let decoded: Vec<u16> = decoded
             .clone()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];
@@ -455,8 +457,10 @@ mod tests {
 
         let decoded: Vec<u16> = decoded
             .clone()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];

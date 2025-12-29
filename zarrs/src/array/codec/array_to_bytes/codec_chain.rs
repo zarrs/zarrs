@@ -1051,8 +1051,10 @@ mod tests {
         let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<f32>())
-            .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_ne_bytes(*b))
             .collect();
         println!("decoded_partial_chunk {decoded_partial_chunk:?}");
         assert_eq!(decoded_partial_chunk_true, decoded_partial_chunk);

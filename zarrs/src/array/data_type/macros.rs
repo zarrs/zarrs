@@ -290,7 +290,7 @@ macro_rules! impl_data_type_extension_numeric {
         } else {
             // Swap endianness
             let mut result = $bytes.into_owned();
-            for chunk in result.chunks_exact_mut($size) {
+            for chunk in result.as_chunks_mut::<$size>().0 {
                 chunk.reverse();
             }
             Ok(std::borrow::Cow::Owned(result))

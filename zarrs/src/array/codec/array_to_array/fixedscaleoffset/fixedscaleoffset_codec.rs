@@ -171,11 +171,11 @@ fn scale_array(
 
     macro_rules! scale_impl {
         ($ty:ty, $float:ty) => {{
-            for chunk in bytes.chunks_exact_mut(std::mem::size_of::<$ty>()) {
-                let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
+            for chunk in bytes.as_chunks_mut::<{ std::mem::size_of::<$ty>() }>().0 {
+                let element = <$ty>::from_ne_bytes(*chunk);
                 let element =
                     ((element as $float - offset as $float) * scale as $float).round() as $ty;
-                chunk.copy_from_slice(&element.to_ne_bytes());
+                *chunk = element.to_ne_bytes();
             }
         }};
     }
@@ -218,10 +218,10 @@ fn unscale_array(
 
     macro_rules! unscale_impl {
         ($ty:ty, $float:ty) => {{
-            for chunk in bytes.chunks_exact_mut(std::mem::size_of::<$ty>()) {
-                let element = <$ty>::from_ne_bytes(chunk.try_into().unwrap());
+            for chunk in bytes.as_chunks_mut::<{ std::mem::size_of::<$ty>() }>().0 {
+                let element = <$ty>::from_ne_bytes(*chunk);
                 let element = ((element as $float / scale as $float) + offset as $float) as $ty;
-                chunk.copy_from_slice(&element.to_ne_bytes());
+                *chunk = element.to_ne_bytes();
             }
         }};
     }
@@ -267,7 +267,8 @@ fn unscale_array(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_lossless,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    clippy::too_many_lines
 )]
 fn cast_array(
     bytes: &[u8],
@@ -280,44 +281,64 @@ fn cast_array(
     // First cast to f32
     let elements: Vec<f32> = match from_type {
         FixedScaleOffsetElementType::I8 => bytes
-            .chunks_exact(1)
-            .map(|c| i8::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|c| i8::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::I16 => bytes
-            .chunks_exact(2)
-            .map(|c| i16::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| i16::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::I32 => bytes
-            .chunks_exact(4)
-            .map(|c| i32::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| i32::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::I64 => bytes
-            .chunks_exact(8)
-            .map(|c| i64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| i64::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::U8 => bytes
-            .chunks_exact(1)
-            .map(|c| u8::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|c| u8::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::U16 => bytes
-            .chunks_exact(2)
-            .map(|c| u16::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::U32 => bytes
-            .chunks_exact(4)
-            .map(|c| u32::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::U64 => bytes
-            .chunks_exact(8)
-            .map(|c| u64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| u64::from_ne_bytes(*c) as f32)
             .collect(),
         FixedScaleOffsetElementType::F32 => bytes
-            .chunks_exact(4)
-            .map(|c| f32::from_ne_bytes(c.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_ne_bytes(*c))
             .collect(),
         FixedScaleOffsetElementType::F64 => bytes
-            .chunks_exact(8)
-            .map(|c| f64::from_ne_bytes(c.try_into().unwrap()) as f32)
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| f64::from_ne_bytes(*c) as f32)
             .collect(),
         _ => {
             return Err(CodecError::UnsupportedDataType(

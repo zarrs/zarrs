@@ -342,8 +342,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u32> = vec![4, 8];
         assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);
@@ -393,8 +395,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u32> = vec![4, 8];
         assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);

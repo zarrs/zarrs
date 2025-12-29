@@ -127,7 +127,7 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyTimeDelta64DataType {
             Ok(bytes)
         } else {
             let mut result = bytes.into_owned();
-            for chunk in result.chunks_exact_mut(8) {
+            for chunk in result.as_chunks_mut::<8>().0 {
                 chunk.reverse();
             }
             Ok(std::borrow::Cow::Owned(result))

@@ -161,8 +161,10 @@ fn decode_shard_index(
     )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
-        .chunks_exact(size_of::<u64>())
-        .map(|v| u64::from_ne_bytes(v.try_into().unwrap() /* safe */))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|v| u64::from_ne_bytes(*v))
         .collect())
 }
 
@@ -580,8 +582,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         assert_eq!(answer, decoded_partial_chunk);
     }
@@ -668,8 +672,10 @@ mod tests {
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         assert_eq!(answer, decoded_partial_chunk);
     }
@@ -747,8 +753,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![16, 17, 18, 20, 21, 22];
@@ -798,8 +806,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);
