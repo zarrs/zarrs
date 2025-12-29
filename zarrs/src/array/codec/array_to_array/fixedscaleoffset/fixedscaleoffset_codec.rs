@@ -146,12 +146,7 @@ fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType,
             FixedScaleOffsetCodec::IDENTIFIER.to_string(),
         )
     })?;
-    fso.fixedscaleoffset_element_type().ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-        )
-    })
+    Ok(fso.fixedscaleoffset_element_type())
 }
 
 #[allow(

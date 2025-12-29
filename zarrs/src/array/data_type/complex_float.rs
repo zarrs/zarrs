@@ -222,7 +222,7 @@ zarrs_plugin::impl_extension_aliases!(Complex128DataType, "complex128",
 );
 
 // DataTypeExtension implementations for standard complex types
-impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16; pcodec, bitround, packbits);
+impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16; bitround, packbits);
 impl_complex_data_type!(ComplexFloat16DataType, 4, f16; pcodec, bitround, packbits);
 impl_complex_data_type!(ComplexFloat32DataType, 8, f32; pcodec, bitround, packbits);
 impl_complex_data_type!(ComplexFloat64DataType, 16, f64; pcodec, bitround, packbits);
@@ -238,7 +238,7 @@ impl_bitround_codec!(Complex64DataType, 4, float32, 23);
 impl_bitround_codec!(Complex128DataType, 8, float64, 52);
 
 // Pcodec implementations for standard complex types
-impl_pcodec_codec!(ComplexBFloat16DataType, None);
+// impl_pcodec_codec!(ComplexBFloat16DataType, BF16, 2);
 impl_pcodec_codec!(ComplexFloat16DataType, F16, 2);
 impl_pcodec_codec!(ComplexFloat32DataType, F32, 2);
 impl_pcodec_codec!(ComplexFloat64DataType, F64, 2);

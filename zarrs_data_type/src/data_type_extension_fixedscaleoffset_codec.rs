@@ -64,7 +64,5 @@ pub enum FixedScaleOffsetFloatType {
 /// The fixedscaleoffset codec applies a linear transformation to numerical data.
 pub trait DataTypeExtensionFixedScaleOffsetCodec {
     /// Returns the element type for this data type.
-    ///
-    /// Returns `None` if the data type is not supported by fixedscaleoffset.
-    fn fixedscaleoffset_element_type(&self) -> Option<FixedScaleOffsetElementType>;
+    fn fixedscaleoffset_element_type(&self) -> FixedScaleOffsetElementType;
 }

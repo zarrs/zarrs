@@ -381,38 +381,15 @@ pub(crate) use impl_packbits_codec;
 ///
 /// # Usage
 /// ```ignore
-/// // Unsupported type:
-/// impl_pcodec_codec!(BFloat16DataType, None);
-///
-/// // Supported type:
-/// impl_pcodec_codec!(Int32DataType, I32);
-/// impl_pcodec_codec!(Float32DataType, F32);
-///
-/// // Complex type (2 elements per element):
+/// impl_pcodec_codec!(Int32DataType, I32, 1);
+/// impl_pcodec_codec!(Float32DataType, F32, 1);
 /// impl_pcodec_codec!(Complex64DataType, F32, 2);
 /// ```
 macro_rules! impl_pcodec_codec {
-    // Unsupported type
-    ($marker:ty, None) => {
-        impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
-            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
-                None
-            }
-        }
-    };
-    // Single element type
-    ($marker:ty, $element_type:ident) => {
-        impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
-            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
-                Some(zarrs_data_type::PcodecElementType::$element_type)
-            }
-        }
-    };
-    // Multi-element type (e.g., complex numbers)
     ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
         impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
-            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
-                Some(zarrs_data_type::PcodecElementType::$element_type)
+            fn pcodec_element_type(&self) -> zarrs_data_type::PcodecElementType {
+                zarrs_data_type::PcodecElementType::$element_type
             }
             fn pcodec_elements_per_element(&self) -> usize {
                 $elements_per_element
@@ -427,31 +404,16 @@ pub(crate) use impl_pcodec_codec;
 ///
 /// # Usage
 /// ```ignore
-/// // Unsupported type:
-/// impl_fixedscaleoffset_codec!(BFloat16DataType, None);
-///
-/// // Supported type:
 /// impl_fixedscaleoffset_codec!(Int32DataType, I32);
 /// impl_fixedscaleoffset_codec!(Float32DataType, F32);
 /// ```
 macro_rules! impl_fixedscaleoffset_codec {
-    // Unsupported type
-    ($marker:ty, None) => {
-        impl zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec for $marker {
-            fn fixedscaleoffset_element_type(
-                &self,
-            ) -> Option<zarrs_data_type::FixedScaleOffsetElementType> {
-                None
-            }
-        }
-    };
-    // Supported type
     ($marker:ty, $element_type:ident) => {
         impl zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec for $marker {
             fn fixedscaleoffset_element_type(
                 &self,
-            ) -> Option<zarrs_data_type::FixedScaleOffsetElementType> {
-                Some(zarrs_data_type::FixedScaleOffsetElementType::$element_type)
+            ) -> zarrs_data_type::FixedScaleOffsetElementType {
+                zarrs_data_type::FixedScaleOffsetElementType::$element_type
             }
         }
     };

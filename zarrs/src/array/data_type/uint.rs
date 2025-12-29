@@ -52,9 +52,9 @@ impl_bitround_codec!(UInt32DataType, 4, uint32);
 impl_bitround_codec!(UInt64DataType, 8, uint64);
 
 // Pcodec implementations for standard unsigned integers (uint8 not supported)
-impl_pcodec_codec!(UInt16DataType, U16);
-impl_pcodec_codec!(UInt32DataType, U32);
-impl_pcodec_codec!(UInt64DataType, U64);
+impl_pcodec_codec!(UInt16DataType, U16, 1);
+impl_pcodec_codec!(UInt32DataType, U32, 1);
+impl_pcodec_codec!(UInt64DataType, U64, 1);
 
 // FixedScaleOffset implementations for standard unsigned integers
 impl_fixedscaleoffset_codec!(UInt8DataType, U8);

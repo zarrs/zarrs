@@ -52,9 +52,9 @@ impl_bitround_codec!(Int32DataType, 4, int32);
 impl_bitround_codec!(Int64DataType, 8, int64);
 
 // Pcodec implementations for standard integers (int8 not supported)
-impl_pcodec_codec!(Int16DataType, I16);
-impl_pcodec_codec!(Int32DataType, I32);
-impl_pcodec_codec!(Int64DataType, I64);
+impl_pcodec_codec!(Int16DataType, I16, 1);
+impl_pcodec_codec!(Int32DataType, I32, 1);
+impl_pcodec_codec!(Int64DataType, I64, 1);
 
 // FixedScaleOffset implementations for standard integers
 impl_fixedscaleoffset_codec!(Int8DataType, I8);

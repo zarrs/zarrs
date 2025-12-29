@@ -39,8 +39,8 @@ zarrs_plugin::impl_extension_aliases!(Float64DataType, "float64",
 );
 
 // DataTypeExtension implementations for standard floats
-impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
-impl_data_type_extension_numeric!(Float16DataType, 2, f16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16; bitround, zfp, packbits);
+impl_data_type_extension_numeric!(Float16DataType, 2, f16; pcodec, bitround, zfp, packbits);
 impl_data_type_extension_numeric!(Float32DataType, 4, f32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 impl_data_type_extension_numeric!(Float64DataType, 8, f64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
@@ -51,14 +51,14 @@ impl_bitround_codec!(Float32DataType, 4, float32, 23);
 impl_bitround_codec!(Float64DataType, 8, float64, 52);
 
 // Pcodec implementations for standard floats
-impl_pcodec_codec!(BFloat16DataType, None);
-impl_pcodec_codec!(Float16DataType, F16);
-impl_pcodec_codec!(Float32DataType, F32);
-impl_pcodec_codec!(Float64DataType, F64);
+// impl_pcodec_codec!(BFloat16DataType, BF16, 1);
+impl_pcodec_codec!(Float16DataType, F16, 1);
+impl_pcodec_codec!(Float32DataType, F32, 1);
+impl_pcodec_codec!(Float64DataType, F64, 1);
 
 // FixedScaleOffset implementations for standard floats
-impl_fixedscaleoffset_codec!(BFloat16DataType, None);
-impl_fixedscaleoffset_codec!(Float16DataType, None);
+// impl_fixedscaleoffset_codec!(BFloat16DataType, BF16);
+// impl_fixedscaleoffset_codec!(Float16DataType, F16);
 impl_fixedscaleoffset_codec!(Float32DataType, F32);
 impl_fixedscaleoffset_codec!(Float64DataType, F64);
 

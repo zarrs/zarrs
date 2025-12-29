@@ -169,7 +169,7 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyDateTime64DataType {
     }
 }
 
-impl_pcodec_codec!(NumpyDateTime64DataType, I64);
+impl_pcodec_codec!(NumpyDateTime64DataType, I64, 1);
 impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
 impl_zfp_codec!(NumpyDateTime64DataType, Int64);
 impl_packbits_codec!(NumpyDateTime64DataType, 64, signed, 1);

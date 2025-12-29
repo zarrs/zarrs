@@ -176,9 +176,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         let pcodec = data_type.codec_pcodec().ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
-        let element_type = pcodec.pcodec_element_type().ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
-        })?;
+        let element_type = pcodec.pcodec_element_type();
 
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
@@ -221,9 +219,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         let pcodec = data_type.codec_pcodec().ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
-        let element_type = pcodec.pcodec_element_type().ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
-        })?;
+        let element_type = pcodec.pcodec_element_type();
 
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
@@ -263,9 +259,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         let pcodec = data_type.codec_pcodec().ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
-        let element_type = pcodec.pcodec_element_type().ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
-        })?;
+        let element_type = pcodec.pcodec_element_type();
 
         let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();
 

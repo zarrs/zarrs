@@ -39,15 +39,8 @@ impl PcodecElementType {
 /// The pcodec codec losslessly compresses numerical data with high compression ratio.
 pub trait DataTypeExtensionPcodecCodec {
     /// Returns the pcodec element type for this data type.
-    ///
-    /// Returns `None` if the data type is not supported by pcodec.
-    fn pcodec_element_type(&self) -> Option<PcodecElementType>;
+    fn pcodec_element_type(&self) -> PcodecElementType;
 
     /// Returns the number of elements per data type element.
-    ///
-    /// For complex types, this returns 2 (real and imaginary components).
-    /// For non-complex types, this returns 1.
-    fn pcodec_elements_per_element(&self) -> usize {
-        1
-    }
+    fn pcodec_elements_per_element(&self) -> usize;
 }
