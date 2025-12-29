@@ -17,9 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ExtensionType*` and `ZarrVersion{2,3}` types (moved from `zarrs_registry`)
 
 ### Changed
-- **Breaking**: `Plugin::match_name()` now takes a `ZarrVersions` parameter
-- **Breaking**: `Plugin::new()` now takes a `default_name_fn` parameter
-- **Breaking**: `Plugin2::match_name()` now takes a `ZarrVersions` parameter
+- **Breaking**: `Plugin[2]::new()` now takes a `default_name_fn` parameter
+- **Breaking**: `Plugin[2]::match_name()` now takes a `ZarrVersions` parameter
 
 ## [0.2.3] - 2025-12-26
 

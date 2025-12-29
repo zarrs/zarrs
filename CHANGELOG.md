@@ -18,9 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
   - Extensions now implement `ExtensionIdentifier` and `ExtensionAliases<V>` traits for per-extension alias management
   - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
-  - Remove `ExtensionAliasesDataTypeV3` parameter from `NamedDataType::from_metadata()` (replaced with `TryFrom<&MetadataV3>`)
+  - Remove `NamedDataType::from_metadata()` (replaced with `TryFrom<&MetadataV3>`)
   - Remove aliases parameter from `NamedCodec::new_default_name()`, `NamedDataType::new_default_name()`, and `DataType::into_named()`
 - **Breaking**: Change `CodecTraits::identifier()` return type from `&str` to `&'static str`
+- **Breaking**: Change `StorageTransformerPlugin::new()` to take a `default_name_fn` parameter
 - Bump `zarrs_plugin` to 0.3.0
 - Bump `zarrs_chunk_grid` to 0.2.0
 - Bump `zarrs_data_type` to 0.6.0
@@ -28,8 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump MSRV to 1.88
 
 ### Removed
+- **Breaking**: Remove `DataType` enum (replaced by `Arc<dyn DataTypeExtension>`)
 - **Breaking**: Remove `zarrs_registry` dependency
 - **Breaking**: Remove `Config::codec_aliases_{v2,v3}()` and `Config::data_type_aliases_{v2,v3}()` methods
+- **Breaking**: Remove `ZfpCodec::new_with_configuration_zfpy()` (use `ZfpyCodec` instead)
 
 ## [0.23.0-beta.1] - 2025-12-29
 

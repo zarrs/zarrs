@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: `DataTypePlugin::new()` now takes a `default_name_fn` parameter
+- **Breaking**: `DataTypePlugin::match_name()` now takes a `ZarrVersions` parameter
 - Bump the MSRV to 1.88
 
 ## [0.5.0] - 2025-12-26
