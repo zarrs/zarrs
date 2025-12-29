@@ -26,7 +26,7 @@ use zarrs::array::codec::{
 };
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, DataTypeExt,
-    FillValue, data_types,
+    FillValue, data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_filesystem::FilesystemStore;
@@ -79,7 +79,7 @@ pub struct TestConfig {
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
-            data_type: data_types::uint8(),
+            data_type: data_type::uint8(),
             fill_value: 0u8.into(),
             array_shape: vec![8, 24],
             chunk_shape: vec![4, 6],
@@ -102,93 +102,89 @@ impl Default for TestConfig {
 pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
     vec![
         // Core integers
-        (data_types::bool(), false.into(), "fill_false"),
-        (data_types::int8(), 0i8.into(), "fill_0"),
-        (data_types::int16(), 0i16.into(), "fill_0"),
-        (data_types::int32(), 0i32.into(), "fill_0"),
-        (data_types::int64(), 0i64.into(), "fill_0"),
-        (data_types::uint8(), 0u8.into(), "fill_0"),
-        (data_types::uint16(), 0u16.into(), "fill_0"),
-        (data_types::uint32(), 0u32.into(), "fill_0"),
-        (data_types::uint64(), 0u64.into(), "fill_0"),
+        (data_type::bool(), false.into(), "fill_false"),
+        (data_type::int8(), 0i8.into(), "fill_0"),
+        (data_type::int16(), 0i16.into(), "fill_0"),
+        (data_type::int32(), 0i32.into(), "fill_0"),
+        (data_type::int64(), 0i64.into(), "fill_0"),
+        (data_type::uint8(), 0u8.into(), "fill_0"),
+        (data_type::uint16(), 0u16.into(), "fill_0"),
+        (data_type::uint32(), 0u32.into(), "fill_0"),
+        (data_type::uint64(), 0u64.into(), "fill_0"),
         // Sub-byte integers (fill value should be 1 byte packed value)
-        (data_types::int2(), FillValue::new(vec![0u8]), "fill_0"),
-        (data_types::int4(), FillValue::new(vec![0u8]), "fill_0"),
-        (data_types::uint2(), FillValue::new(vec![0u8]), "fill_0"),
-        (data_types::uint4(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::int2(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::int4(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::uint2(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::uint4(), FillValue::new(vec![0u8]), "fill_0"),
         // Half-precision floats (2 bytes)
         (
-            data_types::bfloat16(),
+            data_type::bfloat16(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
-        (
-            data_types::float16(),
-            FillValue::new(vec![0u8; 2]),
-            "fill_0",
-        ),
+        (data_type::float16(), FillValue::new(vec![0u8; 2]), "fill_0"),
         // Float8 variants (1 byte each)
         (
-            data_types::float8_e4m3(),
+            data_type::float8_e4m3(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
         (
-            data_types::float8_e5m2(),
+            data_type::float8_e5m2(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
         // Standard floats
-        (data_types::float32(), 0.0f32.into(), "fill_0"),
-        (data_types::float32(), f32::NAN.into(), "fill_nan"),
-        (data_types::float64(), 0.0f64.into(), "fill_0"),
-        (data_types::float64(), f64::NAN.into(), "fill_nan"),
+        (data_type::float32(), 0.0f32.into(), "fill_0"),
+        (data_type::float32(), f32::NAN.into(), "fill_nan"),
+        (data_type::float64(), 0.0f64.into(), "fill_0"),
+        (data_type::float64(), f64::NAN.into(), "fill_nan"),
         // Complex half-precision (2 bytes each = 4 bytes total)
         (
-            data_types::complex_bfloat16(),
+            data_type::complex_bfloat16(),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         (
-            data_types::complex_float16(),
+            data_type::complex_float16(),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         // Complex float8 (1 byte each = 2 bytes total)
         (
-            data_types::complex_float8_e4m3(),
+            data_type::complex_float8_e4m3(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         (
-            data_types::complex_float8_e5m2(),
+            data_type::complex_float8_e5m2(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         // Complex standard (8 and 16 bytes)
         (
-            data_types::complex_float32(),
+            data_type::complex_float32(),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            data_types::complex_float64(),
+            data_type::complex_float64(),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
         (
-            data_types::complex64(),
+            data_type::complex64(),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            data_types::complex128(),
+            data_type::complex128(),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
         // NumPy datetime/timedelta (8 bytes - stored as i64)
         (
-            data_types::numpy_datetime64(
+            data_type::numpy_datetime64(
                 NumpyTimeUnit::Second,
                 std::num::NonZeroU32::new(1).unwrap(),
             ),
@@ -196,7 +192,7 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             "fill_0",
         ),
         (
-            data_types::numpy_timedelta64(
+            data_type::numpy_timedelta64(
                 NumpyTimeUnit::Second,
                 std::num::NonZeroU32::new(1).unwrap(),
             ),
@@ -204,34 +200,34 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             "fill_0",
         ),
         // Variable-length
-        (data_types::string(), "".into(), "fill_empty"),
-        (data_types::bytes(), FillValue::new(vec![]), "fill_empty"),
+        (data_type::string(), "".into(), "fill_empty"),
+        (data_type::bytes(), FillValue::new(vec![]), "fill_empty"),
         // RawBits
         (
-            data_types::raw_bits(3),
+            data_type::raw_bits(3),
             FillValue::new(vec![0, 0, 0]),
             "fill_zeros",
         ),
         // Optional types
         (
-            data_types::uint8().to_optional(),
+            data_type::uint8().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         (
-            data_types::float32().to_optional(),
+            data_type::float32().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Nested optional (Optional<Optional<Float32>>)
         (
-            data_types::float32().to_optional().to_optional(),
+            data_type::float32().to_optional().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Optional string
         (
-            data_types::string().to_optional(),
+            data_type::string().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),

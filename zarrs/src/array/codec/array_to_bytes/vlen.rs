@@ -110,7 +110,7 @@ use super::bytes::reverse_endianness;
 use crate::array::{
     ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness,
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice, data_types,
+    convert_from_bytes_slice, data_type,
 };
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
@@ -149,8 +149,8 @@ fn get_vlen_bytes_and_offsets(
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
     let (data_type, fill_value) = match index_data_type {
-        VlenIndexDataType::UInt32 => (data_types::uint32(), FillValue::from(0u32)),
-        VlenIndexDataType::UInt64 => (data_types::uint64(), FillValue::from(0u64)),
+        VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
+        VlenIndexDataType::UInt64 => (data_type::uint64(), FillValue::from(0u64)),
     };
 
     // Get the index length
@@ -188,7 +188,7 @@ fn get_vlen_bytes_and_offsets(
         )?
         .into_fixed()?;
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &data_types::uint64());
+        reverse_endianness(index.to_mut(), &data_type::uint64());
     }
     let index = match index_data_type {
         VlenIndexDataType::UInt32 => {
@@ -214,7 +214,7 @@ fn get_vlen_bytes_and_offsets(
             .decode(
                 data_enc.into(),
                 &[data_len_expected],
-                &data_types::uint8(),
+                &data_type::uint8(),
                 &0u8.into(),
                 options,
             )?

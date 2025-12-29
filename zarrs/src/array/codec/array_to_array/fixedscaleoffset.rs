@@ -82,7 +82,7 @@ mod tests {
             ArrayToArrayCodecTraits, CodecOptions,
             array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
         },
-        data_types,
+        data_type,
     };
     use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
@@ -91,7 +91,7 @@ mod tests {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
         let shape = [NonZeroU64::new(4).unwrap()];
-        let data_type = data_types::float64();
+        let data_type = data_type::float64();
         let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,

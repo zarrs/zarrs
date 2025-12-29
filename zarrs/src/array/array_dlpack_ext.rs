@@ -63,7 +63,7 @@ impl TensorLike<RowMajorCompactLayout> for Tensor {
 mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
-    use crate::array::{Tensor, data_types, transmute_to_bytes};
+    use crate::array::{Tensor, data_type, transmute_to_bytes};
     use crate::storage::store::MemoryStore;
     use crate::{
         array::{ArrayBuilder, codec::CodecOptions},
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_types::float32(), -1.0f32)
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::float32(), -1.0f32)
             .build(store.into(), "/")
             .unwrap();
         array

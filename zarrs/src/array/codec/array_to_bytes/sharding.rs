@@ -132,7 +132,7 @@ fn compute_index_encoded_size(
 ) -> Result<u64, CodecError> {
     let bytes_representation = index_codecs.encoded_representation(
         sharding_index_shape,
-        &crate::array::data_types::uint64(),
+        &crate::array::data_type::uint64(),
         &FillValue::from(u64::MAX),
     )?;
     match bytes_representation {
@@ -155,7 +155,7 @@ fn decode_shard_index(
     let decoded_shard_index = index_codecs.decode(
         Cow::Borrowed(encoded_shard_index),
         index_shape,
-        &crate::array::data_types::uint64(),
+        &crate::array::data_type::uint64(),
         &FillValue::from(u64::MAX),
         options,
     )?;
@@ -292,7 +292,7 @@ mod tests {
         array::{
             ArrayBytes,
             codec::{BytesToBytesCodecTraits, bytes_to_bytes::test_unbounded::TestUnboundedCodec},
-            data_types,
+            data_type,
         },
         array_subset::ArraySubset,
     };
@@ -362,7 +362,7 @@ mod tests {
     ) {
         let chunk_shape = vec![NonZeroU64::new(4).unwrap(); 2];
         let subchunk_shape = vec![NonZeroU64::new(2).unwrap(); 2];
-        let data_type = data_types::uint16();
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -375,7 +375,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_types::uint16())
+        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
             .index_location(if index_at_end {
                 ShardingIndexLocation::End
             } else {
@@ -466,7 +466,7 @@ mod tests {
         mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) {
         let shape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint16();
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = if all_fill_value {
             vec![0; shape.num_elements_usize()]
@@ -480,7 +480,7 @@ mod tests {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
         let codec =
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_types::uint16())
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {
@@ -530,7 +530,7 @@ mod tests {
         all_fill_value: bool,
     ) {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -619,7 +619,7 @@ mod tests {
         all_fill_value: bool,
     ) {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -639,7 +639,7 @@ mod tests {
             vec![]
         };
         let codec = Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_types::uint8())
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint8())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {
@@ -712,7 +712,7 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let data_type = data_types::uint16();
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn codec_sharding_partial_decode3() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = (0..chunk_shape.num_elements_usize() as u8).collect();
         let bytes: ArrayBytes = elements.into();
@@ -823,7 +823,7 @@ mod tests {
         // 3. Compact and check that the size matches the original fully encoded shard
 
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint16();
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);

@@ -10,7 +10,7 @@ use zarrs::{
     array::{
         ArrayBuilder, ChunkShapeTraits, DataTypeExt,
         codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim},
-        data_types,
+        data_type,
     },
     array_subset::ArraySubset,
 };
@@ -32,7 +32,7 @@ fn test_array_to_array_codec_sync_partial_encoding<
     let mut builder = ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 4], // chunk shape
-        data_types::float32(),
+        data_type::float32(),
         -1.0,
     );
 
@@ -153,7 +153,7 @@ fn test_bytes_to_bytes_codec_sync_partial_encoding<
     let mut builder = ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 4], // chunk shape
-        data_types::float32(),
+        data_type::float32(),
         -1.0,
     );
 
@@ -489,7 +489,7 @@ fn test_codec_chain_sync_partial_encoding() {
     let mut builder = ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 4], // chunk shape
-        data_types::float32(),
+        data_type::float32(),
         -1.0,
     );
 

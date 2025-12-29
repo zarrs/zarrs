@@ -116,8 +116,8 @@ mod tests {
                 ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions,
                 CodecOptions, CodecTraits,
             },
+            data_type,
             data_type::DataTypeExt,
-            data_types,
         },
         array_subset::ArraySubset,
     };
@@ -197,52 +197,52 @@ mod tests {
 
     #[test]
     fn codec_bytes_round_trip_f32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), data_types::float32(), 0.0f32).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), data_types::float32(), 0.0f32)
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::float32(), 0.0f32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::float32(), 0.0f32)
             .unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), data_types::uint32(), 0u32).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), data_types::uint32(), 0u32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint32(), 0u32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint32(), 0u32).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u16() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), data_types::uint16(), 0u16).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), data_types::uint16(), 0u16).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint16(), 0u16).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint16(), 0u16).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u8() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), data_types::uint8(), 0u8).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), data_types::uint8(), 0u8).unwrap();
-        codec_bytes_round_trip_impl(None, data_types::uint8(), 0u8).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint8(), 0u8).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint8(), 0u8).unwrap();
+        codec_bytes_round_trip_impl(None, data_type::uint8(), 0u8).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), data_types::int32(), 0).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), data_types::int32(), 0).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::int32(), 0).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::int32(), 0).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32_endianness_none() {
-        assert!(codec_bytes_round_trip_impl(None, data_types::int32(), 0).is_err());
+        assert!(codec_bytes_round_trip_impl(None, data_type::int32(), 0).is_err());
     }
 
     #[test]
     fn codec_bytes_round_trip_complex64() {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
-            data_types::complex64(),
+            data_type::complex64(),
             num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
-            data_types::complex64(),
+            data_type::complex64(),
             num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
@@ -252,13 +252,13 @@ mod tests {
     fn codec_bytes_round_trip_complex128() {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
-            data_types::complex128(),
+            data_type::complex128(),
             num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
-            data_types::complex128(),
+            data_type::complex128(),
             num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn codec_bytes_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
 
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
@@ -316,7 +316,7 @@ mod tests {
     #[tokio::test]
     async fn codec_bytes_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();

@@ -431,7 +431,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         let encoded_index = self.index_codecs.encode(
             ArrayBytes::from(index_bytes),
             &index_shape,
-            &crate::array::data_types::uint64(),
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;
@@ -795,7 +795,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             shard_index_bytes.into(),
             &index_shape,
-            &crate::array::data_types::uint64(),
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             &options,
         )?;
@@ -945,7 +945,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
             &index_shape,
-            &crate::array::data_types::uint64(),
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;

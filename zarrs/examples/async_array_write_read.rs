@@ -11,7 +11,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     use futures::StreamExt;
     use zarrs::{
-        array::{ZARR_NAN_F32, data_types},
+        array::{ZARR_NAN_F32, data_type},
         array_subset::ArraySubset,
         node::Node,
     };
@@ -57,7 +57,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 4], // regular chunk shape
-        data_types::float32(),
+        data_type::float32(),
         ZARR_NAN_F32,
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed

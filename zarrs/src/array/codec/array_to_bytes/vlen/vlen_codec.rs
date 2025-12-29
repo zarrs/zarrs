@@ -201,7 +201,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &crate::array::data_types::uint32(),
+                    &crate::array::data_type::uint32(),
                     &FillValue::from(0u32),
                     options,
                 )?
@@ -216,7 +216,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &crate::array::data_types::uint64(),
+                    &crate::array::data_type::uint64(),
                     &FillValue::from(0u64),
                     options,
                 )?
@@ -229,7 +229,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.data_codecs.encode(
                 data.into(),
                 &data_shape,
-                &crate::array::data_types::uint8(),
+                &crate::array::data_type::uint8(),
                 &FillValue::from(0u8),
                 options,
             )?

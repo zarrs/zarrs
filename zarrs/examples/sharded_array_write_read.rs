@@ -16,7 +16,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::{
         array::{
             codec::{self},
-            data_types,
+            data_type,
         },
         array_subset::ArraySubset,
         node::Node,
@@ -63,7 +63,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 8], // chunk (shard) shape
-        data_types::uint16(),
+        data_type::uint16(),
         0u16,
     )
     .subchunk_shape(inner_chunk_shape.clone())

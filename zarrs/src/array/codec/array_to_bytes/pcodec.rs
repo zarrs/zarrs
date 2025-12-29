@@ -76,8 +76,9 @@ mod tests {
         array::{
             ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
+            data_type,
             data_type::DataTypeExt,
-            data_types, transmute_to_bytes_vec,
+            transmute_to_bytes_vec,
         },
         array_subset::ArraySubset,
     };
@@ -135,7 +136,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::uint16(),
+            data_type::uint16(),
             0u16,
         )
         .unwrap();
@@ -146,7 +147,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::uint32(),
+            data_type::uint32(),
             0u32,
         )
         .unwrap();
@@ -157,7 +158,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::uint64(),
+            data_type::uint64(),
             0u64,
         )
         .unwrap();
@@ -168,7 +169,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::int16(),
+            data_type::int16(),
             0i16,
         )
         .unwrap();
@@ -179,7 +180,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::int32(),
+            data_type::int32(),
             0i32,
         )
         .unwrap();
@@ -190,7 +191,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::int64(),
+            data_type::int64(),
             0i64,
         )
         .unwrap();
@@ -201,7 +202,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::float16(),
+            data_type::float16(),
             half::f16::from_f32(0.0),
         )
         .unwrap();
@@ -212,7 +213,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::float32(),
+            data_type::float32(),
             0f32,
         )
         .unwrap();
@@ -223,7 +224,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::float64(),
+            data_type::float64(),
             0f64,
         )
         .unwrap();
@@ -234,7 +235,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::complex_float16(),
+            data_type::complex_float16(),
             num::complex::Complex::<half::f16>::new(
                 half::f16::from_f32(0f32),
                 half::f16::from_f32(0f32),
@@ -248,7 +249,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::complex_float32(),
+            data_type::complex_float32(),
             num::complex::Complex::<f32>::new(0f32, 0f32),
         )
         .unwrap();
@@ -259,7 +260,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::complex_float64(),
+            data_type::complex_float64(),
             num::complex::Complex::<f64>::new(0f64, 0f64),
         )
         .unwrap();
@@ -270,7 +271,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::complex64(),
+            data_type::complex64(),
             num::complex::Complex32::new(0f32, 0f32),
         )
         .unwrap();
@@ -281,7 +282,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            data_types::complex128(),
+            data_type::complex128(),
             num::complex::Complex64::new(0f64, 0f64),
         )
         .unwrap();
@@ -293,7 +294,7 @@ mod tests {
             codec_pcodec_round_trip_impl(
                 &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                     .unwrap(),
-                data_types::uint8(),
+                data_type::uint8(),
                 0u8,
             )
             .is_err()
@@ -303,7 +304,7 @@ mod tests {
     #[test]
     fn codec_pcodec_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint32();
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
@@ -355,7 +356,7 @@ mod tests {
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = data_types::uint32();
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);

@@ -685,7 +685,7 @@ mod tests {
         array::{
             ArrayBuilder,
             codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
-            data_types,
+            data_type,
         },
         array_subset::ArraySubset,
         storage::{
@@ -700,7 +700,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // regular chunk shape
-            data_types::uint16(),
+            data_type::uint16(),
             0u16,
         );
         builder.bytes_to_bytes_codecs(vec![
@@ -865,7 +865,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![16, 16, 9], // array shape
             vec![8, 4, 3],   // regular chunk shape
-            data_types::uint32(),
+            data_type::uint32(),
             0u32,
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
@@ -883,7 +883,7 @@ mod tests {
                     NonZeroU64::new(3).unwrap(),
                 ]
                 .try_into()?,
-                &data_types::uint32(),
+                &data_type::uint32(),
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]

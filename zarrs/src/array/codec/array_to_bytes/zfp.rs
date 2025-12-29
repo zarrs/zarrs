@@ -385,7 +385,7 @@ mod tests {
                 ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
                 array_to_array::squeeze::SqueezeCodec,
             },
-            data_types,
+            data_type,
             element::ElementOwned,
         },
         array_subset::ArraySubset,
@@ -465,7 +465,7 @@ mod tests {
     fn codec_zfp_round_trip_i8() {
         codec_zfp_round_trip::<i8>(
             &chunk_shape(),
-            &data_types::int8(),
+            &data_type::int8(),
             &0i8.into(),
             JSON_REVERSIBLE,
         );
@@ -476,7 +476,7 @@ mod tests {
     fn codec_zfp_round_trip_u8() {
         codec_zfp_round_trip::<u8>(
             &chunk_shape(),
-            &data_types::uint8(),
+            &data_type::uint8(),
             &0u8.into(),
             JSON_REVERSIBLE,
         );
@@ -487,7 +487,7 @@ mod tests {
     fn codec_zfp_round_trip_i16() {
         codec_zfp_round_trip::<i16>(
             &chunk_shape(),
-            &data_types::int16(),
+            &data_type::int16(),
             &0i16.into(),
             JSON_REVERSIBLE,
         );
@@ -498,7 +498,7 @@ mod tests {
     fn codec_zfp_round_trip_u16() {
         codec_zfp_round_trip::<u16>(
             &chunk_shape(),
-            &data_types::uint16(),
+            &data_type::uint16(),
             &0u16.into(),
             JSON_REVERSIBLE,
         );
@@ -509,7 +509,7 @@ mod tests {
     fn codec_zfp_round_trip_i32() {
         codec_zfp_round_trip::<i32>(
             &chunk_shape(),
-            &data_types::int32(),
+            &data_type::int32(),
             &0i32.into(),
             JSON_REVERSIBLE,
         );
@@ -520,7 +520,7 @@ mod tests {
     fn codec_zfp_round_trip_u32() {
         codec_zfp_round_trip::<u32>(
             &chunk_shape(),
-            &data_types::uint32(),
+            &data_type::uint32(),
             &0u32.into(),
             JSON_REVERSIBLE,
         );
@@ -531,7 +531,7 @@ mod tests {
     fn codec_zfp_round_trip_i64() {
         codec_zfp_round_trip::<i64>(
             &chunk_shape(),
-            &data_types::int64(),
+            &data_type::int64(),
             &0i64.into(),
             JSON_REVERSIBLE,
         );
@@ -542,7 +542,7 @@ mod tests {
     fn codec_zfp_round_trip_u64() {
         codec_zfp_round_trip::<u64>(
             &chunk_shape(),
-            &data_types::uint64(),
+            &data_type::uint64(),
             &0u64.into(),
             JSON_REVERSIBLE,
         );
@@ -553,25 +553,25 @@ mod tests {
     fn codec_zfp_round_trip_f32() {
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedprecision(13),
         );
@@ -582,25 +582,25 @@ mod tests {
     fn codec_zfp_round_trip_f64() {
         codec_zfp_round_trip::<f64>(
             &chunk_shape(),
-            &data_types::float64(),
+            &data_type::float64(),
             &0.0f64.into(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f64>(
             &chunk_shape(),
-            &data_types::float64(),
+            &data_type::float64(),
             &0.0f64.into(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f64>(
             &chunk_shape(),
-            &data_types::float64(),
+            &data_type::float64(),
             &0.0f64.into(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f64>(
             &chunk_shape(),
-            &data_types::float64(),
+            &data_type::float64(),
             &0.0f64.into(),
             &json_fixedprecision(16),
         );
@@ -614,7 +614,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ]);
-        let data_type = data_types::float32();
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -678,7 +678,7 @@ mod tests {
             NonZeroU64::new(3).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ]);
-        let data_type = data_types::float32();
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = (0..27).map(|i| i as f32).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -755,25 +755,25 @@ mod tests {
 
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             JSON_REVERSIBLE,
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedrate(2.5),
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedaccuracy(1.0),
         );
         codec_zfp_round_trip::<f32>(
             &chunk_shape(),
-            &data_types::float32(),
+            &data_type::float32(),
             &0.0f32.into(),
             &json_fixedprecision(13),
         );

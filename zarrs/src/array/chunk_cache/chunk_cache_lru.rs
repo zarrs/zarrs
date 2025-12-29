@@ -425,7 +425,7 @@ mod tests {
         array::{
             Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
             ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, chunk_cache::ChunkCache,
-            codec::CodecOptions, data_types,
+            codec::CodecOptions, data_type,
         },
         array_subset::ArraySubset,
         storage::{
@@ -444,7 +444,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![12, 8], // array shape
             vec![4, 4],  // regular chunk shape
-            data_types::uint8(),
+            data_type::uint8(),
             0u8,
         )
         .subchunk_shape(vec![2, 2])
@@ -766,7 +766,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![12, 8], // array shape
             vec![4, 4],  // regular chunk shape
-            data_types::string(),
+            data_type::string(),
             "",
         )
         // Note: Default codec for String is VlenUtf8Codec, no need to set explicitly

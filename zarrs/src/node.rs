@@ -558,7 +558,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![1, 2, 3],
             vec![1, 1, 1],
-            crate::array::data_types::float32(),
+            crate::array::data_type::float32(),
             0.0f32,
         )
         .build(store.clone(), node_path)

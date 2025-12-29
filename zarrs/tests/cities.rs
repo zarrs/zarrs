@@ -15,7 +15,7 @@ use zarrs::{
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
             array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
         },
-        data_types,
+        data_type,
     },
     storage::{ReadableWritableListableStorage, store::MemoryStore},
 };
@@ -48,7 +48,7 @@ fn cities_impl(
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
         vec![chunk_size],          // regular chunk shape
-        data_types::string(),
+        data_type::string(),
         "",
     );
     builder.array_to_bytes_codec(vlen_codec);

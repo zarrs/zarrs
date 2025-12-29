@@ -14,7 +14,7 @@ use zarrs_plugin::{
 use crate::array::{
     DataType, DataTypeExt,
     data_type::{
-        BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
+        self, BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
         ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
         ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType,
         ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType, ComplexFloat8E5M2DataType,
@@ -25,7 +25,7 @@ use crate::array::{
         Float16DataType, Float32DataType, Float64DataType, Int2DataType, Int4DataType,
         Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
         NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
-        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType, data_types,
+        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
     },
 };
 
@@ -76,9 +76,9 @@ impl NamedDataType {
     ///
     /// # Examples
     /// ```
-    /// # use zarrs::array::{data_types, DataTypeExt};
+    /// # use zarrs::array::{data_type, DataTypeExt};
     /// // Single level optional
-    /// let opt_u8 = data_types::uint8().to_named().into_optional();
+    /// let opt_u8 = data_type::uint8().to_named().into_optional();
     /// assert_eq!(opt_u8.identifier(), "zarrs.optional");
     ///
     /// // Nested optional
@@ -86,7 +86,7 @@ impl NamedDataType {
     /// ```
     #[must_use]
     pub fn into_optional(self) -> Self {
-        let data_type = data_types::optional(self);
+        let data_type = data_type::optional(self);
         let name = data_type.default_name().into_owned();
         Self::new(name, data_type)
     }
@@ -210,7 +210,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
 
                 // Recursively parse the inner data type
                 let inner_data_type = Self::try_from(&inner_metadata)?;
-                let data_type = data_types::optional(inner_data_type);
+                let data_type = data_type::optional(inner_data_type);
                 return Ok(Self::new(name.to_string(), data_type));
             }
         }

@@ -291,7 +291,7 @@ mod tests {
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::data_types::float32(),
+            crate::array::data_type::float32(),
             0.0f32,
         );
 
@@ -317,12 +317,8 @@ mod tests {
     #[test]
     fn hierarchy_try_from_array() {
         let store = Arc::new(MemoryStore::new());
-        let array_builder = ArrayBuilder::new(
-            vec![1],
-            vec![1],
-            crate::array::data_types::float32(),
-            0.0f32,
-        );
+        let array_builder =
+            ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -340,12 +336,8 @@ mod tests {
         let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
             object_store::memory::InMemory::new(),
         ));
-        let array_builder = ArrayBuilder::new(
-            vec![1],
-            vec![1],
-            crate::array::data_types::float32(),
-            0.0f32,
-        );
+        let array_builder =
+            ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -383,7 +375,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::data_types::float32(),
+            crate::array::data_type::float32(),
             0.0f32,
         )
         .build(store.clone(), "/group/subgroup/array")
@@ -548,7 +540,7 @@ mod tests {
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::data_types::float32(),
+            crate::array::data_type::float32(),
             0.0f32,
         );
 

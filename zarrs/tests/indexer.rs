@@ -17,7 +17,7 @@ use zarrs::{
             ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
         },
-        data_types,
+        data_type,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -431,7 +431,7 @@ async fn async_indexer_array_subsets_fixed() {
                 ],
                 ShardingCodecBuilder::new(
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()],
-                    &data_types::float32(),
+                    &data_type::float32(),
                 )
                 .build_arc(),
                 vec![],
@@ -446,7 +446,7 @@ async fn async_indexer_array_subsets_fixed() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                data_types::float32(),
+                data_type::float32(),
                 &elements
             ),
             expected
@@ -457,7 +457,7 @@ async fn async_indexer_array_subsets_fixed() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                data_types::float32(),
+                data_type::float32(),
                 &elements
             )
             .await,
@@ -470,7 +470,7 @@ async fn async_indexer_array_subsets_fixed() {
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    data_types::float32(),
+                    data_type::float32(),
                     &elements,
                 ),
                 expected_partial_encode
@@ -559,7 +559,7 @@ async fn async_indexer_array_subsets_variable() {
                 ],
                 ShardingCodecBuilder::new(
                     vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()],
-                    &data_types::string(),
+                    &data_type::string(),
                 )
                 .array_to_bytes_codec(Arc::new(VlenCodec::default()))
                 .build_arc(),
@@ -575,7 +575,7 @@ async fn async_indexer_array_subsets_variable() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                data_types::string(),
+                data_type::string(),
                 &elements
             ),
             expected
@@ -585,7 +585,7 @@ async fn async_indexer_array_subsets_variable() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                data_types::string(),
+                data_type::string(),
                 &elements
             )
             .await,
@@ -598,7 +598,7 @@ async fn async_indexer_array_subsets_variable() {
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    data_types::string(),
+                    data_type::string(),
                     &elements
                 ),
                 expected_partial_encode

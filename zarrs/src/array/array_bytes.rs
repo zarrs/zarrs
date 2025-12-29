@@ -1146,13 +1146,13 @@ mod tests {
     use std::error::Error;
 
     use super::*;
-    use crate::array::{Element, data_types};
+    use crate::array::{Element, data_type};
 
     #[test]
     fn array_bytes_flen() -> Result<(), Box<dyn Error>> {
         let data = vec![0u32, 1, 2, 3, 4];
         let n_elements = data.len();
-        let bytes = Element::into_array_bytes(&data_types::uint32(), data)?;
+        let bytes = Element::into_array_bytes(&data_type::uint32(), data)?;
         let ArrayBytes::Fixed(bytes) = bytes else {
             panic!()
         };
@@ -1175,7 +1175,7 @@ mod tests {
     #[test]
     fn array_bytes_str() -> Result<(), Box<dyn Error>> {
         let data = vec!["a", "bb", "ccc"];
-        let bytes = Element::into_array_bytes(&data_types::string(), data)?;
+        let bytes = Element::into_array_bytes(&data_type::string(), data)?;
         let (bytes, offsets) = bytes.into_variable().unwrap().into_parts();
         assert_eq!(bytes, "abbccc".as_bytes());
         assert_eq!(*offsets, [0, 1, 3, 6]);

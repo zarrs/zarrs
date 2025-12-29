@@ -119,7 +119,7 @@
 //! let array = zarrs::array::ArrayBuilder::new(
 //!     vec![3, 4], // array shape
 //!     vec![2, 2], // regular chunk (shard) shape
-//!     zarrs::array::data_types::float32(),
+//!     zarrs::array::data_type::float32(),
 //!     0.0f32, // fill value
 //! )
 //! .subchunk_shape(vec![2, 1]) // inner chunk shape

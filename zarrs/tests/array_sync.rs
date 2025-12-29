@@ -5,13 +5,13 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArrayCodecTraits, data_types};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArrayCodecTraits, data_type};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]
 fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
-    assert!(array.data_type().data_type_eq(data_types::uint8().as_ref()));
+    assert!(array.data_type().data_type_eq(data_type::uint8().as_ref()));
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
@@ -108,7 +108,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     let array = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::uint8(),
+        data_type::uint8(),
         0u8,
     )
     .bytes_to_bytes_codecs(vec![])
@@ -139,7 +139,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::uint8(),
+        data_type::uint8(),
         0u8,
     );
     builder
@@ -272,7 +272,7 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::string(),
+        data_type::string(),
         "",
     );
     builder.bytes_to_bytes_codecs(vec![
@@ -295,7 +295,7 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::string(),
+        data_type::string(),
         "",
     );
     builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
@@ -304,7 +304,7 @@ fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> 
     builder.array_to_bytes_codec(Arc::new(
         zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
             vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(1).unwrap()],
-            &data_types::string(),
+            &data_type::string(),
         )
         .array_to_bytes_codec(Arc::<VlenCodec>::default())
         .build(),
@@ -327,7 +327,7 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::bytes(),
+        data_type::bytes(),
         [],
     );
     builder.bytes_to_bytes_codecs(vec![
@@ -390,7 +390,7 @@ fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4, 4, 4, 4],
         vec![1, 1, 4, 4, 4],
-        data_types::uint32(),
+        data_type::uint32(),
         FillValue::from(0u32),
     );
     builder.array_to_array_codecs(vec![Arc::new(zarrs::array::codec::ReshapeCodec::new(

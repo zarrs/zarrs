@@ -3,7 +3,7 @@
 
 use std::{error::Error, sync::Arc};
 
-use zarrs::array::data_types;
+use zarrs::array::data_type;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 
 #[cfg(feature = "jiff")]
@@ -183,7 +183,7 @@ fn zarr_python_v3_numpy_datetime_write() -> Result<(), Box<dyn Error>> {
         let array = ArrayBuilder::new(
             vec![6],
             vec![5],
-            data_types::numpy_datetime64(unit, 1.try_into().unwrap()),
+            data_type::numpy_datetime64(unit, 1.try_into().unwrap()),
             i64::MIN,
         )
         .build(store.clone(), "/")?;
@@ -378,7 +378,7 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
             let array = ArrayBuilder::new(
                 vec![11],
                 vec![5],
-                data_types::numpy_timedelta64(unit, scale_factor.try_into().unwrap()),
+                data_type::numpy_timedelta64(unit, scale_factor.try_into().unwrap()),
                 i64::MIN,
             )
             .build(store.clone(), "/")?;

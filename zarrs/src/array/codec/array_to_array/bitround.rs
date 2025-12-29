@@ -82,7 +82,7 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
-    use crate::array::data_types;
+    use crate::array::data_type;
     use crate::{
         array::{
             ArrayBytes,
@@ -96,7 +96,7 @@ mod tests {
         // 1 sign bit, 8 exponent, 3 mantissa
         const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(4).unwrap()];
-        let data_type = data_types::float32();
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = vec![
             //                         |
@@ -145,7 +145,7 @@ mod tests {
     fn codec_bitround_uint() {
         const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(7).unwrap()];
-        let data_type = data_types::uint32();
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -188,7 +188,7 @@ mod tests {
     fn codec_bitround_uint8() {
         const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(9).unwrap()];
-        let data_type = data_types::uint8();
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -232,7 +232,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = data_types::float32();
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
 
@@ -294,7 +294,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = data_types::float32();
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);

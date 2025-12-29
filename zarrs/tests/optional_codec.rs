@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, DataType, DataTypeExt, FillValue, data_types};
+use zarrs::array::{Array, ArrayBuilder, DataType, DataTypeExt, FillValue, data_type};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
@@ -27,7 +27,7 @@ fn create_optional_array(data_type: DataType, fill_value: FillValue) -> Array<Me
 fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(data_types::uint8().to_optional(), None::<u8>.into());
+    let array = create_optional_array(data_type::uint8().to_optional(), None::<u8>.into());
 
     // Store different patterns in different chunks
     // Chunk [0,0]: mostly Some values
@@ -140,7 +140,7 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<u8>>
     let array = create_optional_array(
-        data_types::uint8().to_optional().to_optional(),
+        data_type::uint8().to_optional().to_optional(),
         None::<Option<u8>>.into(),
     );
 
@@ -176,7 +176,7 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<Option<u16>>>
     let array = create_optional_array(
-        data_types::uint16()
+        data_type::uint16()
             .to_optional()
             .to_optional()
             .to_optional(),
@@ -224,7 +224,7 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
 
     // Create an optional array with a non-null fill value
     let array = create_optional_array(
-        data_types::uint8().to_optional(),
+        data_type::uint8().to_optional(),
         FillValue::from(Some(255u8)),
     );
 
@@ -256,7 +256,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
     // The ArrayBuilder automatically handles optional strings with the correct vlen codec
-    let array = create_optional_array(data_types::string().to_optional(), None::<String>.into());
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store chunk with Option<String>
     let data = array![
@@ -345,7 +345,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
     use ndarray::{Array2, array};
 
     // 8x8 array with 4x4 chunks = 4 chunks total
-    let array = create_optional_array(data_types::string().to_optional(), None::<String>.into());
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store data in all 4 chunks with varying patterns
     // Chunk [0,0]: mixed Some/None with various string lengths
@@ -490,7 +490,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
 fn optional_array_string_partial_subset() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(data_types::string().to_optional(), None::<String>.into());
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store chunks
     let data0 = array![
@@ -556,7 +556,7 @@ fn optional_array_string_partial_subset() -> Result<(), Box<dyn std::error::Erro
 fn optional_array_bytes_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(data_types::bytes().to_optional(), None::<Vec<u8>>.into());
+    let array = create_optional_array(data_type::bytes().to_optional(), None::<Vec<u8>>.into());
 
     // Store with varying byte lengths
     let data0 = array![
@@ -616,7 +616,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
 
     // Option<Option<String>> - testing nested optionals with variable-length inner type
     let array = create_optional_array(
-        data_types::string().to_optional().to_optional(),
+        data_type::string().to_optional().to_optional(),
         None::<Option<String>>.into(),
     );
 

@@ -10,7 +10,7 @@ use zarrs::{
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::{array::ArrayBytes, array::data_types, array_subset::ArraySubset, storage::store};
+    use zarrs::{array::ArrayBytes, array::data_type, array_subset::ArraySubset, storage::store};
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
@@ -56,7 +56,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        data_types::string(),
+        data_type::string(),
         "_",
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed

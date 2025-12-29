@@ -62,7 +62,7 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
 };
-pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType, data_types};
+pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 use zarrs_plugin::ZarrVersions;
 
@@ -1234,7 +1234,7 @@ mod tests {
         let store = Arc::new(MemoryStore::new());
 
         let array_path = "/array";
-        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_types::uint8(), 0u8)
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint8(), 0u8)
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
@@ -1251,7 +1251,7 @@ mod tests {
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4],
-            data_types::float32(),
+            data_type::float32(),
             ZARR_NAN_F32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1286,7 +1286,7 @@ mod tests {
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // chunk shape
-            data_types::uint8(),
+            data_type::uint8(),
             0u8,
         )
         .build(store.into(), array_path)
@@ -1351,7 +1351,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // regular chunk shape
-            data_types::float32(),
+            data_type::float32(),
             1f32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1704,7 +1704,7 @@ mod tests {
             let array = ArrayBuilder::new(
                 vec![8, 8], // array shape
                 vec![4, 4],
-                data_types::float32(),
+                data_type::float32(),
                 ZARR_NAN_F32,
             )
             .bytes_to_bytes_codecs(vec![

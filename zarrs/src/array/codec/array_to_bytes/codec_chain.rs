@@ -882,7 +882,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        array::{ChunkShapeTraits, data_types},
+        array::{ChunkShapeTraits, data_type},
         array_subset::ArraySubset,
     };
 
@@ -1077,7 +1077,7 @@ mod tests {
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             &chunk_shape,
-            &data_types::float32(),
+            &data_type::float32(),
             &FillValue::from(0f32),
             elements,
             JSON_BYTES,
@@ -1102,7 +1102,7 @@ mod tests {
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             &chunk_shape,
-            &data_types::float32(),
+            &data_type::float32(),
             &FillValue::from(0f32),
             elements,
             JSON_PCODEC,
