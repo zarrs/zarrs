@@ -43,7 +43,7 @@ macro_rules! vlen_v2_module {
 }
 
 macro_rules! vlen_v2_codec {
-    ($struct:ident,$identifier:literal,$static_name:ident) => {
+    ($struct:ident, $identifier:literal) => {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -214,29 +214,29 @@ macro_rules! vlen_v2_codec {
         }
 
         paste::paste! {
-            static [<$static_name _V3>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
+            static [<$struct:upper _ALIASES_V3>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
                 LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($identifier, vec![], vec![])));
 
-            static [<$static_name _V2>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
+            static [<$struct:upper _ALIASES_V2>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
                 LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($identifier, vec![], vec![])));
 
             impl ExtensionAliases<ZarrVersion3> for $struct {
                 fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-                    [<$static_name _V3>].read().unwrap()
+                    [<$struct:upper _ALIASES_V3>].read().unwrap()
                 }
 
                 fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-                    [<$static_name _V3>].write().unwrap()
+                    [<$struct:upper _ALIASES_V3>].write().unwrap()
                 }
             }
 
             impl ExtensionAliases<ZarrVersion2> for $struct {
                 fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
-                    [<$static_name _V2>].read().unwrap()
+                    [<$struct:upper _ALIASES_V2>].read().unwrap()
                 }
 
                 fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
-                    [<$static_name _V2>].write().unwrap()
+                    [<$struct:upper _ALIASES_V2>].write().unwrap()
                 }
             }
 
