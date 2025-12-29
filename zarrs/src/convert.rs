@@ -210,6 +210,7 @@ pub fn codec_metadata_v2_to_v3(
 
     // Compressor (array to bytes codec)
     if let Some(compressor) = compressor {
+        #[allow(unused_variables)]
         let id = compressor.id();
 
         #[cfg(feature = "zfp")]
