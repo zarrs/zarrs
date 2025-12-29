@@ -8,11 +8,6 @@ pub trait DataTypeExtensionBitroundCodec {
     /// Returns `None` for integer types where rounding is from the MSB.
     fn mantissa_bits(&self) -> Option<u32>;
 
-    /// The size in bytes of each component to round.
-    ///
-    /// For complex types, this should be the size of each component (e.g., 4 for Complex64).
-    fn component_size(&self) -> usize;
-
     /// Apply bit rounding to the bytes in-place.
     ///
     /// # Arguments

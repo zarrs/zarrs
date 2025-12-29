@@ -530,9 +530,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
             }
-            fn component_size(&self) -> usize {
-                2
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_float16(bytes, keepbits, $mantissa_bits);
             }
@@ -543,9 +540,6 @@ macro_rules! impl_bitround_codec {
         impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
-            }
-            fn component_size(&self) -> usize {
-                4
             }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_float32(bytes, keepbits, $mantissa_bits);
@@ -558,9 +552,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
             }
-            fn component_size(&self) -> usize {
-                8
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_float64(bytes, keepbits, $mantissa_bits);
             }
@@ -571,9 +562,6 @@ macro_rules! impl_bitround_codec {
         impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
-            }
-            fn component_size(&self) -> usize {
-                1
             }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int8(bytes, keepbits);
@@ -586,9 +574,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
-            fn component_size(&self) -> usize {
-                2
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int16(bytes, keepbits);
             }
@@ -599,9 +584,6 @@ macro_rules! impl_bitround_codec {
         impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
-            }
-            fn component_size(&self) -> usize {
-                4
             }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int32(bytes, keepbits);
@@ -614,9 +596,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
-            fn component_size(&self) -> usize {
-                8
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int64(bytes, keepbits);
             }
@@ -627,9 +606,6 @@ macro_rules! impl_bitround_codec {
         impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
-            }
-            fn component_size(&self) -> usize {
-                1
             }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int8(bytes, keepbits);
@@ -642,9 +618,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
-            fn component_size(&self) -> usize {
-                2
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int16(bytes, keepbits);
             }
@@ -656,9 +629,6 @@ macro_rules! impl_bitround_codec {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
-            fn component_size(&self) -> usize {
-                4
-            }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int32(bytes, keepbits);
             }
@@ -669,9 +639,6 @@ macro_rules! impl_bitround_codec {
         impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
-            }
-            fn component_size(&self) -> usize {
-                8
             }
             fn round(&self, bytes: &mut [u8], keepbits: u32) {
                 zarrs_data_type::round_bytes_int64(bytes, keepbits);
