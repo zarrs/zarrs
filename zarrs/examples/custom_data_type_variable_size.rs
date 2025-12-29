@@ -103,9 +103,7 @@ fn default_name_custom(_version: zarrs_plugin::ZarrVersions) -> Cow<'static, str
     CUSTOM_NAME.into()
 }
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeVariableSize))
     } else {

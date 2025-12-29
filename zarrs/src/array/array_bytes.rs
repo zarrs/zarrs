@@ -5,7 +5,6 @@ use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::DataTypeFillValueError;
-use zarrs_plugin::ExtensionIdentifier;
 
 use super::{
     ArrayBytesFixedDisjointView, DataType, DataTypeExt, FillValue,
@@ -13,7 +12,6 @@ use super::{
     ravel_indices,
 };
 use crate::{
-    array::data_type::OptionalDataType,
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
     metadata::DataTypeSize,
@@ -24,24 +22,7 @@ use crate::{
 /// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
 pub(super) fn optional_nesting_depth(data_type: &DataType) -> usize {
     if let Some(inner) = data_type.optional_inner() {
-        // Get inner as DataType Arc by creating a new Arc
-        // For now, we use identifier matching - if inner is also optional, recurse
-        if inner.identifier() == OptionalDataType::IDENTIFIER {
-            // We need to get the inner's inner, but we only have &dyn DataTypeExtension
-            // Use the trait method to check nesting
-            1 + count_optional_depth(inner)
-        } else {
-            1
-        }
-    } else {
-        0
-    }
-}
-
-/// Helper to count optional depth from a `DataTypeExtension` reference
-fn count_optional_depth(dt: &dyn zarrs_data_type::DataTypeExtension) -> usize {
-    if let Some(inner) = dt.optional_inner_data_type() {
-        1 + count_optional_depth(inner)
+        1 + optional_nesting_depth(inner)
     } else {
         0
     }

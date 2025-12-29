@@ -88,9 +88,6 @@ impl OptionalDataType {
     }
 }
 
-/// Note: We intentionally don't implement `Deref<Target = NamedDataType>` to avoid
-/// method resolution ambiguity with `DataTypeExtension` methods. Use the explicit
-/// accessor methods below instead.
 impl OptionalDataType {
     /// Returns a reference to the inner named data type.
     #[must_use]
@@ -213,18 +210,6 @@ impl zarrs_data_type::DataTypeExtension for OptionalDataType {
         // For now, return None to indicate no direct bytes codec support
         // (the bytes codec needs to handle the optional suffix byte)
         None
-    }
-
-    fn optional_inner_data_type(&self) -> Option<&dyn zarrs_data_type::DataTypeExtension> {
-        Some(self.0.data_type().as_ref())
-    }
-
-    fn optional_is_fill_value_null(&self, fill_value: &FillValue) -> bool {
-        self.is_fill_value_null(fill_value)
-    }
-
-    fn optional_fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
-        self.fill_value_inner_bytes(fill_value)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

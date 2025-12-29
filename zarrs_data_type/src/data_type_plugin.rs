@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{Plugin, PluginCreateError, ZarrVersions};
 
-use crate::DataTypeExtension;
+use crate::DataType;
 
 /// A data type plugin.
 #[derive(derive_more::Deref)]
-pub struct DataTypePlugin(Plugin<Arc<dyn DataTypeExtension>, MetadataV3>);
+pub struct DataTypePlugin(Plugin<DataType, MetadataV3>);
 
 inventory::collect!(DataTypePlugin);
 
@@ -17,9 +15,7 @@ impl DataTypePlugin {
         identifier: &'static str,
         match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
         default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
-        create_fn: fn(
-            metadata: &MetadataV3,
-        ) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError>,
+        create_fn: fn(metadata: &MetadataV3) -> Result<DataType, PluginCreateError>,
     ) -> Self {
         Self(Plugin::new(
             identifier,
@@ -89,9 +85,7 @@ mod tests {
         "zarrs.test_void".into()
     }
 
-    fn create_test_void(
-        _metadata: &MetadataV3,
-    ) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+    fn create_test_void(_metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
         Ok(Arc::new(TestVoidDataType))
     }
 

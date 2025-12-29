@@ -42,9 +42,7 @@ fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
     FLOAT8_E3M4.into()
 }
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeFloat8e3m4))
     } else {

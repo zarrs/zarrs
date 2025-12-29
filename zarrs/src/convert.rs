@@ -478,7 +478,7 @@ pub fn fill_value_metadata_v2_to_v3(
     let is_string = StringDataType::matches_name(data_type_name, ZarrVersions::V3);
     let is_bool = BoolDataType::matches_name(data_type_name, ZarrVersions::V3);
 
-    // We add some special cases which are supported in v2 but not v3
+    // Add some special cases which are supported in v2 but not v3
     let converted_value = match converted_value {
         // A missing fill value is "undefined", so we choose something reasonable
         None => {

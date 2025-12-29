@@ -17,7 +17,7 @@ mod data_type_extension_zfp_codec;
 mod data_type_plugin;
 mod fill_value;
 
-pub use data_type_extension::{DataTypeExtension, DataTypeExtensionError};
+pub use data_type_extension::{DataType, DataTypeExtension, DataTypeExtensionError};
 pub use data_type_extension_bitround_codec::{
     round_bytes_float16, round_bytes_float32, round_bytes_float64, round_bytes_int16,
     round_bytes_int32, round_bytes_int64, round_bytes_int8, DataTypeExtensionBitroundCodec,

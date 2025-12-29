@@ -4,6 +4,8 @@
 //!
 //! This submodule re-exports much of the [`zarrs_data_type`] crate.
 //!
+//! Use the factory functions (e.g. [`int8`], [`float32`], etc.) to create instances of built-in data types.
+//!
 //! Custom data types can be implemented by registering structs that implement the traits of [`zarrs_data_type`].
 //! A custom data type guide can be found in [The `zarrs` book](https://book.zarrs.dev).
 //!
@@ -43,7 +45,7 @@ use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 use crate::metadata_ext::data_type::NumpyTimeUnit;
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBitroundCodec, DataTypeExtensionBytesCodec,
+    DataType, DataTypeExtension, DataTypeExtensionBitroundCodec, DataTypeExtensionBytesCodec,
     DataTypeExtensionBytesCodecError, DataTypeExtensionError,
     DataTypeExtensionFixedScaleOffsetCodec, DataTypeExtensionPackBitsCodec,
     DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, DataTypeFillValueError,
@@ -344,14 +346,6 @@ pub fn optional(inner: NamedDataType) -> DataType {
     Arc::new(OptionalDataType::new(inner))
 }
 
-/// A data type.
-///
-/// This is a type alias for `Arc<dyn DataTypeExtension>`, providing a unified
-/// interface for all data types (both built-in and custom extensions).
-///
-/// Use the factory functions (e.g. [`int8`], [`float32`], etc.) to create instances of built-in data types.
-pub type DataType = Arc<dyn DataTypeExtension>;
-
 /// Extension trait providing convenience methods for [`DataType`].
 ///
 /// This trait adds methods that are not part of [`DataTypeExtension`] but are
@@ -366,7 +360,7 @@ pub trait DataTypeExt {
     /// For optional types: returns the inner data type.
     ///
     /// Returns `None` if this is not an optional type.
-    fn optional_inner(&self) -> Option<&dyn DataTypeExtension>;
+    fn optional_inner(&self) -> Option<&DataType>;
 
     /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
     fn fixed_size(&self) -> Option<usize>;
@@ -393,16 +387,11 @@ impl DataTypeExt for DataType {
     }
 
     fn as_optional(&self) -> Option<&OptionalDataType> {
-        // Check identifier first, then use downcasting
-        if self.identifier() == OptionalDataType::IDENTIFIER {
-            self.as_any().downcast_ref::<OptionalDataType>()
-        } else {
-            None
-        }
+        self.as_any().downcast_ref::<OptionalDataType>()
     }
 
-    fn optional_inner(&self) -> Option<&dyn DataTypeExtension> {
-        self.optional_inner_data_type()
+    fn optional_inner(&self) -> Option<&DataType> {
+        self.as_optional().map(OptionalDataType::data_type)
     }
 
     fn fixed_size(&self) -> Option<usize> {
