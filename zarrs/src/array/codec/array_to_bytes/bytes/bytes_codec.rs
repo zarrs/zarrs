@@ -170,7 +170,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
-        _shape: &[NonZeroU64],
+        shape: &[NonZeroU64],
         data_type: &DataType,
         _fill_value: &FillValue,
         _options: &CodecOptions,
@@ -184,14 +184,19 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         }
 
         // Use codec_bytes() from DataTypeExtension trait for all types
-        let bytes_decoded = data_type
+        let bytes_decoded: ArrayBytes = data_type
             .codec_bytes()
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
             .decode(bytes, self.endian)
-            .map_err(DataTypeExtensionError::from)?;
-        Ok(ArrayBytes::from(bytes_decoded))
+            .map_err(DataTypeExtensionError::from)?
+            .into();
+
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        bytes_decoded.validate(num_elements, data_type)?;
+
+        Ok(bytes_decoded)
     }
 
     fn partial_decoder(
