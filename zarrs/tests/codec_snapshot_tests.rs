@@ -5,6 +5,10 @@
 //!
 //! Run with: `cargo test --all-features -p zarrs codec_snapshot_tests`
 //! Update snapshots: `UPDATE_SNAPSHOTS=1 cargo test --all-features -p zarrs codec_snapshot_tests`
+//! Add newly supported: `ADD_SNAPSHOTS=1 cargo test --all-features -p zarrs codec_snapshot_tests`
+//!
+//! The `ADD_SNAPSHOTS` mode only permits adding new snapshots for combinations that were
+//! previously marked as unsupported but now succeed. It will not update existing snapshots.
 
 #![allow(missing_docs)]
 
@@ -866,6 +870,16 @@ fn compare_directories(gen_dir: &Path, ref_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Check if we're in update mode (full updates allowed)
+fn update_mode() -> bool {
+    std::env::var("UPDATE_SNAPSHOTS").is_ok()
+}
+
+/// Check if we're in add mode (only add newly supported snapshots)
+fn add_mode() -> bool {
+    std::env::var("ADD_SNAPSHOTS").is_ok()
+}
+
 /// Run a test and verify/update snapshot using new nested directory structure
 pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotPath) {
     let snapshots = snapshots_dir();
@@ -924,7 +938,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
             let reference_dir = snapshot_path.supported_path(&snapshots, &checksum);
 
             // Check if we should update snapshots
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Supported);
 
                 // Update the reference snapshot
@@ -948,21 +962,49 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                         }
                     }
                     Some(SnapshotStatus::Unsupported) => {
-                        // panic!(
-                        //     "Test {} was previously unsupported but now succeeds. Run with UPDATE_SNAPSHOTS=1 to update.",
-                        //     display_path
-                        // );
+                        // In add mode, promote unsupported to supported
+                        if add_mode() {
+                            cleanup_old_markers(SnapshotStatus::Supported);
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!("Added newly supported snapshot: {display_path}/{checksum}");
+                        } else {
+                            panic!(
+                                "Test {} was previously unsupported but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update.",
+                                display_path
+                            );
+                        }
                     }
                     Some(SnapshotStatus::Failure) => {
-                        panic!(
-                            "Test {display_path} was previously a failure but now succeeds. Run with UPDATE_SNAPSHOTS=1 to update."
-                        );
+                        // In add mode, promote failure to supported
+                        if add_mode() {
+                            cleanup_old_markers(SnapshotStatus::Supported);
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!(
+                                "Added newly supported snapshot (was failure): {display_path}/{checksum}"
+                            );
+                        } else {
+                            panic!(
+                                "Test {display_path} was previously a failure but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update."
+                            );
+                        }
                     }
                     None => {
                         // No reference exists - this is a new test
-                        panic!(
-                            "No reference snapshot found for {display_path}/{checksum}. Run with UPDATE_SNAPSHOTS=1 to create it."
-                        );
+                        // In add mode, we also allow adding completely new snapshots
+                        if add_mode() {
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!("Added new snapshot: {display_path}/{checksum}");
+                        } else {
+                            panic!(
+                                "No reference snapshot found for {display_path}/{checksum}. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to create it."
+                            );
+                        }
                     }
                 }
             }
@@ -970,7 +1012,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         CodecTestResult::Unsupported { reason } => {
             let marker_path = snapshot_path.unsupported_path(&snapshots, &checksum);
 
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Unsupported);
 
                 fs::create_dir_all(marker_path.parent().unwrap()).ok();
@@ -1016,7 +1058,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         CodecTestResult::Failure { reason } => {
             let marker_path = snapshot_path.failure_path(&snapshots, &checksum);
 
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Failure);
 
                 fs::create_dir_all(marker_path.parent().unwrap()).ok();

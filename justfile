@@ -72,3 +72,8 @@ clean_snapshots:
 update_snapshots: clean_snapshots
     UPDATE_SNAPSHOTS=1 cargo +{{TOOLCHAIN}} test --all-features -p zarrs --test codec_snapshot_tests
     @echo "Snapshot data updated. Check and commit as required."
+
+# Add newly supported codec snapshots (previously unsupported combinations that now work)
+add_snapshots:
+    ADD_SNAPSHOTS=1 cargo +{{TOOLCHAIN}} test --all-features -p zarrs --test codec_snapshot_tests
+    @echo "Newly supported snapshots added. Check and commit as required."
