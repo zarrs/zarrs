@@ -344,7 +344,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let bytes = self
                 .codecs()
                 .decode(
-                    Cow::Borrowed(&chunk_encoded),
+                    Cow::Owned(chunk_encoded.into()),
                     &chunk_shape,
                     self.data_type(),
                     self.fill_value(),
@@ -416,7 +416,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             self.codecs()
                 .decode_into(
-                    Cow::Borrowed(&chunk_encoded),
+                    Cow::Owned(chunk_encoded.into()),
                     &chunk_shape,
                     self.data_type(),
                     self.fill_value(),
