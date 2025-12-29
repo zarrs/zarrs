@@ -27,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump `zarrs_data_type` to 0.6.0
 - Bump `zarrs_metadata_ext` to 0.4.0
 - **Breaking**: Bump MSRV to 1.88
+- **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
+  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
 
 ### Removed
-- **Breaking**: Remove `DataType` enum (replaced by `Arc<dyn DataTypeExtension>`)
 - **Breaking**: Remove `zarrs_registry` dependency
 - **Breaking**: Remove `Config::codec_aliases_{v2,v3}()` and `Config::data_type_aliases_{v2,v3}()` methods
 - **Breaking**: Remove `ZfpCodec::new_with_configuration_zfpy()` (use `ZfpyCodec` instead)
