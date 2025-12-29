@@ -26,6 +26,7 @@ use crate::array::{
         RecommendedConcurrency,
         array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
@@ -63,12 +64,12 @@ impl PackBitsCodec {
         first_bit: Option<u64>,
         last_bit: Option<u64>,
     ) -> Result<Self, PluginCreateError> {
-        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit) {
-            if last_bit < first_bit {
-                return Err(PluginCreateError::from(
-                    "packbits codec `last_bit` is less than `first_bit`",
-                ));
-            }
+        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit)
+            && last_bit < first_bit
+        {
+            return Err(PluginCreateError::from(
+                "packbits codec `last_bit` is less than `first_bit`",
+            ));
         }
 
         Ok(Self {

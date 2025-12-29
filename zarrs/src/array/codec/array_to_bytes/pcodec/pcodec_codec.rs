@@ -21,7 +21,7 @@ use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use std::num::NonZeroU64;
-use zarrs_data_type::{DataTypeExtension, PcodecElementType};
+use zarrs_data_type::PcodecElementType;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `pcodec` codec implementation.

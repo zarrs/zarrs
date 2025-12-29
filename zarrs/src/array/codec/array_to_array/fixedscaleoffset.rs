@@ -77,21 +77,21 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use crate::array::{
-        ArrayBytes, DataType,
+        ArrayBytes,
         codec::{
             ArrayToArrayCodecTraits, CodecOptions,
             array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
         },
+        data_types,
     };
     use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
     fn codec_fixedscaleoffset() {
         // 1 sign bit, 8 exponent, 3 mantissa
-        const JSON: &'static str =
-            r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
+        const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
         let shape = [NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float64;
+        let data_type = data_types::float64();
         let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,

@@ -3,9 +3,9 @@
 use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin};
 use zarrs_data_type::{
     DataTypeExtensionBitroundCodec, DataTypeExtensionFixedScaleOffsetCodec,
-    DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, FixedScaleOffsetElementType,
-    PcodecElementType, ZfpPromotion, ZfpType, round_bytes_int8, round_bytes_int16,
-    round_bytes_int32, round_bytes_int64,
+    DataTypeExtensionPackBitsCodec, DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec,
+    FixedScaleOffsetElementType, PcodecElementType, ZfpPromotion, ZfpType, round_bytes_int8,
+    round_bytes_int16, round_bytes_int32, round_bytes_int64,
 };
 
 // Signed integers - V2: |i1, <i2, <i4, <i8 (and > variants)
@@ -150,6 +150,26 @@ impl zarrs_data_type::DataTypeExtension for Int2DataType {
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Int2DataType {
+    fn component_size_bits(&self) -> u64 {
+        2
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for Int2DataType {
@@ -220,6 +240,26 @@ impl zarrs_data_type::DataTypeExtension for Int4DataType {
 
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
+    }
+
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Int4DataType {
+    fn component_size_bits(&self) -> u64 {
+        4
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
     }
 }
 
@@ -292,6 +332,26 @@ impl zarrs_data_type::DataTypeExtension for UInt2DataType {
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt2DataType {
+    fn component_size_bits(&self) -> u64 {
+        2
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for UInt2DataType {
@@ -363,6 +423,26 @@ impl zarrs_data_type::DataTypeExtension for UInt4DataType {
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt4DataType {
+    fn component_size_bits(&self) -> u64 {
+        4
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for UInt4DataType {
@@ -384,14 +464,18 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for UInt4DataType {
 }
 
 // DataTypeExtension implementations for standard integers using macro
-impl_data_type_extension_numeric!(Int8DataType, 1, i8);
-impl_data_type_extension_numeric!(Int16DataType, 2, i16);
-impl_data_type_extension_numeric!(Int32DataType, 4, i32);
-impl_data_type_extension_numeric!(Int64DataType, 8, i64);
-impl_data_type_extension_numeric!(UInt8DataType, 1, u8);
-impl_data_type_extension_numeric!(UInt16DataType, 2, u16);
-impl_data_type_extension_numeric!(UInt32DataType, 4, u32);
-impl_data_type_extension_numeric!(UInt64DataType, 8, u64);
+// Int8/UInt8: bitround, fixedscaleoffset, zfp, packbits
+impl_data_type_extension_numeric!(Int8DataType, 1, i8; bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt8DataType, 1, u8; bitround, fixedscaleoffset, zfp, packbits);
+// Int16/UInt16: pcodec, bitround, fixedscaleoffset, zfp, packbits
+impl_data_type_extension_numeric!(Int16DataType, 2, i16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt16DataType, 2, u16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+// Int32/UInt32: pcodec, bitround, fixedscaleoffset, zfp, packbits
+impl_data_type_extension_numeric!(Int32DataType, 4, i32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt32DataType, 4, u32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+// Int64/UInt64: pcodec, bitround, fixedscaleoffset, zfp, packbits
+impl_data_type_extension_numeric!(Int64DataType, 8, i64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt64DataType, 8, u64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 // Plugin registrations
 register_data_type_plugin!(Int2DataType);
@@ -663,5 +747,102 @@ impl DataTypeExtensionZfpCodec for UInt64DataType {
     }
     fn zfp_promotion(&self) -> ZfpPromotion {
         ZfpPromotion::U64ToI64
+    }
+}
+
+// PackBits implementations for standard integers
+impl DataTypeExtensionPackBitsCodec for Int8DataType {
+    fn component_size_bits(&self) -> u64 {
+        8
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt8DataType {
+    fn component_size_bits(&self) -> u64 {
+        8
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Int16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Int32DataType {
+    fn component_size_bits(&self) -> u64 {
+        32
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt32DataType {
+    fn component_size_bits(&self) -> u64 {
+        32
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Int64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        true
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for UInt64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
     }
 }

@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn codec_crc32c_config1() {
-        serde_json::from_str::<Crc32cCodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<Crc32cCodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

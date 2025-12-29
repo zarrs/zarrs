@@ -9,7 +9,7 @@ use zarrs::storage::{
     storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
 };
 use zarrs::{
-    array::{DataType, ZARR_NAN_F32},
+    array::{ZARR_NAN_F32, data_types},
     array_subset::ArraySubset,
 };
 
@@ -48,11 +48,15 @@ fn array_read_and_write_async_storage_adapter() {
     assert_eq!(group.attributes().get("foo"), Some(&json!("bar")));
 
     // Create an array
-    let array =
-        zarrs::array::ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::Float32, ZARR_NAN_F32)
-            .dimension_names(["y", "x"].into())
-            .build(store.clone(), ARRAY_PATH)
-            .unwrap();
+    let array = zarrs::array::ArrayBuilder::new(
+        vec![8, 8],
+        vec![4, 4],
+        data_types::float32(),
+        ZARR_NAN_F32,
+    )
+    .dimension_names(["y", "x"].into())
+    .build(store.clone(), ARRAY_PATH)
+    .unwrap();
     array.store_metadata().unwrap();
     assert_eq!(array.shape(), &[8, 8]);
 

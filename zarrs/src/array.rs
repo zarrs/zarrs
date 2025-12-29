@@ -62,7 +62,7 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
 };
-pub use data_type::{DataType, FillValue, NamedDataType, data_types};
+pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType, data_types};
 pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 use zarrs_plugin::ZarrVersions;
 
@@ -460,13 +460,13 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 .map_err(ArrayCreateError::StorageTransformersCreateError)?;
         let chunk_key_encoding = ChunkKeyEncoding::from_metadata(&metadata_v3.chunk_key_encoding)
             .map_err(ArrayCreateError::ChunkKeyEncodingCreateError)?;
-        if let Some(dimension_names) = &metadata_v3.dimension_names {
-            if dimension_names.len() != metadata_v3.shape.len() {
-                return Err(ArrayCreateError::InvalidDimensionNames(
-                    dimension_names.len(),
-                    metadata_v3.shape.len(),
-                ));
-            }
+        if let Some(dimension_names) = &metadata_v3.dimension_names
+            && dimension_names.len() != metadata_v3.shape.len()
+        {
+            return Err(ArrayCreateError::InvalidDimensionNames(
+                dimension_names.len(),
+                metadata_v3.shape.len(),
+            ));
         }
 
         Ok(Self {
@@ -1234,7 +1234,7 @@ mod tests {
         let store = Arc::new(MemoryStore::new());
 
         let array_path = "/array";
-        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::UInt8, 0u8)
+        let array = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_types::uint8(), 0u8)
             .build(store.clone(), array_path)
             .unwrap();
         array.store_metadata().unwrap();
@@ -1251,7 +1251,7 @@ mod tests {
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4],
-            DataType::Float32,
+            data_types::float32(),
             ZARR_NAN_F32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1286,7 +1286,7 @@ mod tests {
         let mut array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // chunk shape
-            DataType::UInt8,
+            data_types::uint8(),
             0u8,
         )
         .build(store.into(), array_path)
@@ -1351,7 +1351,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // regular chunk shape
-            DataType::Float32,
+            data_types::float32(),
             1f32,
         )
         .bytes_to_bytes_codecs(vec![
@@ -1454,7 +1454,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_none_C.zarr",
             "tests/data/v3/array_none.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "transpose")]
@@ -1463,7 +1463,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_none_F.zarr",
             "tests/data/v3/array_none_transpose.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "blosc")]
@@ -1473,7 +1473,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_blosc_C.zarr",
             "tests/data/v3/array_blosc.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "blosc")]
@@ -1483,7 +1483,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_blosc_F.zarr",
             "tests/data/v3/array_blosc_transpose.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "gzip")]
@@ -1493,7 +1493,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_gzip_C.zarr",
             "tests/data/v3/array_gzip.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "bz2")]
@@ -1503,7 +1503,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_bz2_C.zarr",
             "tests/data/v3/array_bz2.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "zfp")]
@@ -1513,7 +1513,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_zfpy_C.zarr",
             "tests/data/v3/array_zfpy.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "zstd")]
@@ -1523,7 +1523,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_zstd_C.zarr",
             "tests/data/v3/array_zstd.zarr",
-        )
+        );
     }
 
     #[cfg(feature = "pcodec")]
@@ -1533,7 +1533,7 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_pcodec_C.zarr",
             "tests/data/v3/array_pcodec.zarr",
-        )
+        );
     }
 
     #[allow(dead_code)]
@@ -1575,70 +1575,70 @@ mod tests {
 
     #[test]
     fn array_v3_none() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_none.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_none.zarr");
     }
 
     #[cfg(feature = "blosc")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_blosc() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_blosc.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_blosc.zarr");
     }
 
     #[cfg(feature = "bz2")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_bz2() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_bz2.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_bz2.zarr");
     }
 
     #[cfg(feature = "fletcher32")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_fletcher32() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_fletcher32.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_fletcher32.zarr");
     }
 
     #[cfg(feature = "adler32")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_adler32() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_adler32.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_adler32.zarr");
     }
 
     #[cfg(feature = "zlib")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_zlib() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_zlib.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_zlib.zarr");
     }
 
     #[cfg(feature = "gzip")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_gzip() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_gzip.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_gzip.zarr");
     }
 
     #[cfg(feature = "pcodec")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_pcodec() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_pcodec.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_pcodec.zarr");
     }
 
     #[cfg(feature = "zfp")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_zfpy() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_zfpy.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_zfpy.zarr");
     }
 
     #[cfg(feature = "zstd")]
     #[test]
     #[cfg_attr(miri, ignore)]
     fn array_v3_zstd() {
-        array_v3_numcodecs("tests/data/v3_zarr_python/array_zstd.zarr")
+        array_v3_numcodecs("tests/data/v3_zarr_python/array_zstd.zarr");
     }
 
     // fn array_subset_locking(locks: StoreLocks, expect_equal: bool) {
@@ -1704,7 +1704,7 @@ mod tests {
             let array = ArrayBuilder::new(
                 vec![8, 8], // array shape
                 vec![4, 4],
-                DataType::Float32,
+                data_types::float32(),
                 ZARR_NAN_F32,
             )
             .bytes_to_bytes_codecs(vec![

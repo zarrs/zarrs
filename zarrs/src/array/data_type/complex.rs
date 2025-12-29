@@ -4,8 +4,8 @@ use super::macros::{
     impl_complex_data_type, impl_complex_subfloat_data_type, register_data_type_plugin,
 };
 use zarrs_data_type::{
-    DataTypeExtensionBitroundCodec, DataTypeExtensionPcodecCodec, PcodecElementType,
-    round_bytes_float16, round_bytes_float32, round_bytes_float64,
+    DataTypeExtensionBitroundCodec, DataTypeExtensionPackBitsCodec, DataTypeExtensionPcodecCodec,
+    PcodecElementType, round_bytes_float16, round_bytes_float32, round_bytes_float64,
 };
 
 // Complex floats - V2: <c8, <c16 (and > variants)
@@ -102,24 +102,304 @@ pub struct ComplexFloat8E8M0FNUDataType;
 zarrs_plugin::impl_extension_aliases!(ComplexFloat8E8M0FNUDataType, "complex_float8_e8m0fnu");
 
 // DataTypeExtension implementations for standard complex floats
-impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16);
-impl_complex_data_type!(ComplexFloat16DataType, 4, f16);
-impl_complex_data_type!(ComplexFloat32DataType, 8, f32);
-impl_complex_data_type!(ComplexFloat64DataType, 16, f64);
-impl_complex_data_type!(Complex64DataType, 8, f32);
-impl_complex_data_type!(Complex128DataType, 16, f64);
+// All complex types support: pcodec, bitround, packbits
+impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16; pcodec, bitround, packbits);
+impl_complex_data_type!(ComplexFloat16DataType, 4, f16; pcodec, bitround, packbits);
+impl_complex_data_type!(ComplexFloat32DataType, 8, f32; pcodec, bitround, packbits);
+impl_complex_data_type!(ComplexFloat64DataType, 16, f64; pcodec, bitround, packbits);
+impl_complex_data_type!(Complex64DataType, 8, f32; pcodec, bitround, packbits);
+impl_complex_data_type!(Complex128DataType, 16, f64; pcodec, bitround, packbits);
 
 // DataTypeExtension implementations for complex subfloats
-impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E3M4DataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E4M3DataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E4M3B11FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E4M3FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E5M2DataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType);
+// The second parameter is the bit size of each component for packbits codec
+impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType, 4);
+impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType, 6);
+impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType, 6);
+impl_complex_subfloat_data_type!(ComplexFloat8E3M4DataType, 8);
+impl_complex_subfloat_data_type!(ComplexFloat8E4M3B11FNUZDataType, 8);
+impl_complex_subfloat_data_type!(ComplexFloat8E4M3FNUZDataType, 8);
+impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType, 8);
+impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType, 8);
+
+// ComplexFloat8E4M3 and ComplexFloat8E5M2 have special implementations when float8 feature is enabled
+#[cfg(not(feature = "float8"))]
+impl_complex_subfloat_data_type!(ComplexFloat8E4M3DataType, 8);
+#[cfg(not(feature = "float8"))]
+impl_complex_subfloat_data_type!(ComplexFloat8E5M2DataType, 8);
+
+// Special ComplexFloat8E4M3 implementation with float8 feature support
+#[cfg(feature = "float8")]
+mod complex_float8_e4m3_impl {
+    use super::ComplexFloat8E4M3DataType;
+    use std::borrow::Cow;
+    use zarrs_data_type::{
+        DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
+        DataTypeExtensionPackBitsCodec, DataTypeFillValueError, DataTypeFillValueMetadataError,
+        FillValue,
+    };
+    use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
+    use zarrs_plugin::ExtensionIdentifier;
+
+    impl DataTypeExtension for ComplexFloat8E4M3DataType {
+        fn identifier(&self) -> &'static str {
+            <Self as ExtensionIdentifier>::IDENTIFIER
+        }
+
+        fn configuration(&self) -> Configuration {
+            Configuration::default()
+        }
+
+        fn size(&self) -> DataTypeSize {
+            DataTypeSize::Fixed(2)
+        }
+
+        fn fill_value(
+            &self,
+            fill_value_metadata: &FillValueMetadataV3,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            let err = || {
+                DataTypeFillValueMetadataError::new(
+                    self.identifier().to_string(),
+                    fill_value_metadata.clone(),
+                )
+            };
+
+            // Complex fill values are arrays of two elements [re, im]
+            if let Some([re, im]) = fill_value_metadata.as_array() {
+                let parse_component = |v: &FillValueMetadataV3| -> Option<u8> {
+                    // Handle hex string like "0xaa"
+                    if let Some(s) = v.as_str() {
+                        if let Some(hex) = s.strip_prefix("0x") {
+                            return u8::from_str_radix(hex, 16).ok();
+                        }
+                        // Handle special float values
+                        match s {
+                            "NaN" => return Some(float8::F8E4M3::NAN.to_bits()),
+                            "Infinity" => return Some(float8::F8E4M3::INFINITY.to_bits()),
+                            "-Infinity" => return Some(float8::F8E4M3::NEG_INFINITY.to_bits()),
+                            _ => {}
+                        }
+                    }
+                    // Handle numeric values (float or integer) - convert via float8
+                    if let Some(f) = v.as_f64() {
+                        return Some(float8::F8E4M3::from_f64(f).to_bits());
+                    }
+                    None
+                };
+                if let (Some(re_byte), Some(im_byte)) = (parse_component(re), parse_component(im)) {
+                    return Ok(FillValue::from([re_byte, im_byte]));
+                }
+            }
+            Err(err())
+        }
+
+        fn metadata_fill_value(
+            &self,
+            fill_value: &FillValue,
+        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+            let error =
+                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
+            let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+
+            let component_to_metadata = |byte: u8| -> FillValueMetadataV3 {
+                let f8 = float8::F8E4M3::from_bits(byte);
+                if f8.is_nan() {
+                    FillValueMetadataV3::from("NaN".to_string())
+                } else if f8 == float8::F8E4M3::INFINITY {
+                    FillValueMetadataV3::from("Infinity".to_string())
+                } else if f8 == float8::F8E4M3::NEG_INFINITY {
+                    FillValueMetadataV3::from("-Infinity".to_string())
+                } else {
+                    FillValueMetadataV3::from(f8.to_f64())
+                }
+            };
+
+            Ok(FillValueMetadataV3::from(vec![
+                component_to_metadata(bytes[0]),
+                component_to_metadata(bytes[1]),
+            ]))
+        }
+
+        fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+            Some(self)
+        }
+
+        fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+            Some(self)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    impl DataTypeExtensionBytesCodec for ComplexFloat8E4M3DataType {
+        fn encode<'a>(
+            &self,
+            bytes: Cow<'a, [u8]>,
+            _endianness: Option<zarrs_metadata::Endianness>,
+        ) -> Result<Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+            Ok(bytes)
+        }
+
+        fn decode<'a>(
+            &self,
+            bytes: Cow<'a, [u8]>,
+            _endianness: Option<zarrs_metadata::Endianness>,
+        ) -> Result<Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+            Ok(bytes)
+        }
+    }
+
+    impl DataTypeExtensionPackBitsCodec for ComplexFloat8E4M3DataType {
+        fn component_size_bits(&self) -> u64 {
+            8
+        }
+        fn num_components(&self) -> u64 {
+            2
+        }
+        fn sign_extension(&self) -> bool {
+            false
+        }
+    }
+}
+
+// Special ComplexFloat8E5M2 implementation with float8 feature support
+#[cfg(feature = "float8")]
+mod complex_float8_e5m2_impl {
+    use super::ComplexFloat8E5M2DataType;
+    use std::borrow::Cow;
+    use zarrs_data_type::{
+        DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
+        DataTypeExtensionPackBitsCodec, DataTypeFillValueError, DataTypeFillValueMetadataError,
+        FillValue,
+    };
+    use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
+    use zarrs_plugin::ExtensionIdentifier;
+
+    impl DataTypeExtension for ComplexFloat8E5M2DataType {
+        fn identifier(&self) -> &'static str {
+            <Self as ExtensionIdentifier>::IDENTIFIER
+        }
+
+        fn configuration(&self) -> Configuration {
+            Configuration::default()
+        }
+
+        fn size(&self) -> DataTypeSize {
+            DataTypeSize::Fixed(2)
+        }
+
+        fn fill_value(
+            &self,
+            fill_value_metadata: &FillValueMetadataV3,
+        ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+            let err = || {
+                DataTypeFillValueMetadataError::new(
+                    self.identifier().to_string(),
+                    fill_value_metadata.clone(),
+                )
+            };
+
+            // Complex fill values are arrays of two elements [re, im]
+            if let Some([re, im]) = fill_value_metadata.as_array() {
+                let parse_component = |v: &FillValueMetadataV3| -> Option<u8> {
+                    // Handle hex string like "0xaa"
+                    if let Some(s) = v.as_str() {
+                        if let Some(hex) = s.strip_prefix("0x") {
+                            return u8::from_str_radix(hex, 16).ok();
+                        }
+                        // Handle special float values
+                        match s {
+                            "NaN" => return Some(float8::F8E5M2::NAN.to_bits()),
+                            "Infinity" => return Some(float8::F8E5M2::INFINITY.to_bits()),
+                            "-Infinity" => return Some(float8::F8E5M2::NEG_INFINITY.to_bits()),
+                            _ => {}
+                        }
+                    }
+                    // Handle numeric values (float or integer) - convert via float8
+                    if let Some(f) = v.as_f64() {
+                        return Some(float8::F8E5M2::from_f64(f).to_bits());
+                    }
+                    None
+                };
+                if let (Some(re_byte), Some(im_byte)) = (parse_component(re), parse_component(im)) {
+                    return Ok(FillValue::from([re_byte, im_byte]));
+                }
+            }
+            Err(err())
+        }
+
+        fn metadata_fill_value(
+            &self,
+            fill_value: &FillValue,
+        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+            let error =
+                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
+            let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+
+            let component_to_metadata = |byte: u8| -> FillValueMetadataV3 {
+                let f8 = float8::F8E5M2::from_bits(byte);
+                if f8.is_nan() {
+                    FillValueMetadataV3::from("NaN".to_string())
+                } else if f8 == float8::F8E5M2::INFINITY {
+                    FillValueMetadataV3::from("Infinity".to_string())
+                } else if f8 == float8::F8E5M2::NEG_INFINITY {
+                    FillValueMetadataV3::from("-Infinity".to_string())
+                } else {
+                    FillValueMetadataV3::from(f8.to_f64())
+                }
+            };
+
+            Ok(FillValueMetadataV3::from(vec![
+                component_to_metadata(bytes[0]),
+                component_to_metadata(bytes[1]),
+            ]))
+        }
+
+        fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
+            Some(self)
+        }
+
+        fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
+            Some(self)
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    impl DataTypeExtensionBytesCodec for ComplexFloat8E5M2DataType {
+        fn encode<'a>(
+            &self,
+            bytes: Cow<'a, [u8]>,
+            _endianness: Option<zarrs_metadata::Endianness>,
+        ) -> Result<Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+            Ok(bytes)
+        }
+
+        fn decode<'a>(
+            &self,
+            bytes: Cow<'a, [u8]>,
+            _endianness: Option<zarrs_metadata::Endianness>,
+        ) -> Result<Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+            Ok(bytes)
+        }
+    }
+
+    impl DataTypeExtensionPackBitsCodec for ComplexFloat8E5M2DataType {
+        fn component_size_bits(&self) -> u64 {
+            8
+        }
+        fn num_components(&self) -> u64 {
+            2
+        }
+        fn sign_extension(&self) -> bool {
+            false
+        }
+    }
+}
 
 // Plugin registrations
 register_data_type_plugin!(ComplexBFloat16DataType);
@@ -290,5 +570,92 @@ impl DataTypeExtensionPcodecCodec for Complex128DataType {
 
     fn pcodec_elements_per_element(&self) -> usize {
         2
+    }
+}
+
+// --- PackBits codec ---
+// Complex types have two components, so num_components = 2
+
+impl DataTypeExtensionPackBitsCodec for ComplexBFloat16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for ComplexFloat16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for ComplexFloat32DataType {
+    fn component_size_bits(&self) -> u64 {
+        32
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for ComplexFloat64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Complex64DataType {
+    fn component_size_bits(&self) -> u64 {
+        32
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Complex128DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+
+    fn num_components(&self) -> u64 {
+        2
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
     }
 }

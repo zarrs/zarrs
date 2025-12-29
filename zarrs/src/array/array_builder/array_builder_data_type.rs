@@ -2,15 +2,33 @@ use crate::array::{ArrayCreateError, DataType, NamedDataType};
 use crate::metadata::v3::MetadataV3;
 
 /// An input that can be mapped to a data type.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct ArrayBuilderDataType(ArrayBuilderDataTypeImpl);
 
-#[derive(Debug, PartialEq, Clone)]
+impl PartialEq for ArrayBuilderDataType {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[derive(Debug, Clone)]
 enum ArrayBuilderDataTypeImpl {
     NamedDataType(NamedDataType),
     DataType(DataType),
     Metadata(MetadataV3),
     MetadataString(String),
+}
+
+impl PartialEq for ArrayBuilderDataTypeImpl {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::NamedDataType(a), Self::NamedDataType(b)) => a == b,
+            (Self::DataType(a), Self::DataType(b)) => a.data_type_eq(b.as_ref()),
+            (Self::Metadata(a), Self::Metadata(b)) => a == b,
+            (Self::MetadataString(a), Self::MetadataString(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl ArrayBuilderDataType {

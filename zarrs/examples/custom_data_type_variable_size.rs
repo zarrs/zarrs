@@ -29,7 +29,7 @@ impl From<Option<f32>> for CustomDataTypeVariableSizeElement {
 
 impl Element for CustomDataTypeVariableSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeVariableSize)))
+        (data_type.identifier() == CUSTOM_NAME)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -165,6 +165,10 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Variable
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 fn main() {
@@ -173,7 +177,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![3, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
+        Arc::new(CustomDataTypeVariableSize) as DataType,
         [],
     )
     .array_to_array_codecs(vec![

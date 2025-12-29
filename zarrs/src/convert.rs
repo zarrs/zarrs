@@ -64,10 +64,10 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
     // Special handling for RawBits V2 format (|V8 -> r64)
     // Must be checked before plugin iteration since the plugin won't know the size
     if RawBitsDataType::matches_name(v2_name, ZarrVersions::V2) {
-        if let Some(size_str) = v2_name.strip_prefix("|V") {
-            if let Ok(size_bytes) = size_str.parse::<usize>() {
-                return Some(Cow::Owned(format!("r{}", size_bytes * 8)));
-            }
+        if let Some(size_str) = v2_name.strip_prefix("|V")
+            && let Ok(size_bytes) = size_str.parse::<usize>()
+        {
+            return Some(Cow::Owned(format!("r{}", size_bytes * 8)));
         }
         // If it's already in r* format, return as-is
         return Some(Cow::Owned(v2_name.to_string()));
@@ -368,16 +368,16 @@ fn get_data_type_size_for_blosc(
     }
 
     // Raw bits data types (r8, r16, r24, etc.)
-    if RawBitsDataType::matches_name(name, ZarrVersions::V3) {
-        if let Ok(size_bits) = name[1..].parse::<usize>() {
-            if size_bits % 8 == 0 {
-                let size_bytes = size_bits / 8;
-                return Ok(Some(DataTypeSize::Fixed(size_bytes)));
-            }
-            return Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
-                DataTypeMetadataV2::Simple(name.to_string()),
-            ));
+    if RawBitsDataType::matches_name(name, ZarrVersions::V3)
+        && let Ok(size_bits) = name[1..].parse::<usize>()
+    {
+        if size_bits % 8 == 0 {
+            let size_bytes = size_bits / 8;
+            return Ok(Some(DataTypeSize::Fixed(size_bytes)));
         }
+        return Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
+            DataTypeMetadataV2::Simple(name.to_string()),
+        ));
     }
 
     // Unknown data type size
@@ -497,26 +497,23 @@ pub fn fill_value_metadata_v2_to_v3(
         }
         Some(value) => {
             // Add a special case for `zarr-python` string data with a 0 fill value -> empty string
-            if is_string {
-                if let FillValueMetadataV3::Number(n) = value {
-                    if n.as_u64() == Some(0) {
-                        log::warn!(
-                            "Permitting non-conformant `0` fill value for `string` data type (zarr-python compatibility)."
-                        );
-                        return Ok(FillValueMetadataV3::from(""));
-                    }
-                }
+            if is_string
+                && let FillValueMetadataV3::Number(n) = value
+                && n.as_u64() == Some(0)
+            {
+                log::warn!(
+                    "Permitting non-conformant `0` fill value for `string` data type (zarr-python compatibility)."
+                );
+                return Ok(FillValueMetadataV3::from(""));
             }
 
             // Map a 0/1 scalar fill value to a bool
-            if is_bool {
-                if let FillValueMetadataV3::Number(n) = value {
-                    if n.as_u64() == Some(0) {
-                        return Ok(FillValueMetadataV3::from(false));
-                    }
-                    if n.as_u64() == Some(1) {
-                        return Ok(FillValueMetadataV3::from(true));
-                    }
+            if is_bool && let FillValueMetadataV3::Number(n) = value {
+                if n.as_u64() == Some(0) {
+                    return Ok(FillValueMetadataV3::from(false));
+                }
+                if n.as_u64() == Some(1) {
+                    return Ok(FillValueMetadataV3::from(true));
                 }
             }
 
@@ -570,7 +567,7 @@ mod tests {
                 "zarr_format": 2
             }"#;
         let array_metadata_v2: zarrs_metadata::v2::ArrayMetadataV2 =
-            serde_json::from_str(&json).unwrap();
+            serde_json::from_str(json).unwrap();
         assert_eq!(
             array_metadata_v2.chunks,
             ChunkShape::try_from(vec![NonZeroU64::new(1000).unwrap(); 2]).unwrap()

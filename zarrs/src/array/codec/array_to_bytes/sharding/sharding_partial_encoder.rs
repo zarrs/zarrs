@@ -434,7 +434,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 .encode(
                     shard_index_bytes.into(),
                     &self.index_shape,
-                    &DataType::UInt64,
+                    &crate::array::data_types::uint64(),
                     &FillValue::from(u64::MAX),
                     options,
                 )?

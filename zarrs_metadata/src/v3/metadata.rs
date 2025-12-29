@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn metadata_must_understand_implicit_string() {
         let metadata = r#""test""#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -371,7 +371,7 @@ mod tests {
         let metadata = r#"{
     "name": "test"
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -382,7 +382,7 @@ mod tests {
     "name": "test",
     "must_understand": true
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -393,7 +393,7 @@ mod tests {
     "name": "test",
     "must_understand": false
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(!metadata.must_understand());
         assert_ne!(metadata, MetadataV3::new("test".to_string()));

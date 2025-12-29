@@ -15,7 +15,7 @@ use crate::array::{
 use crate::convert::data_type_metadata_v2_to_v3;
 use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use std::num::NonZeroU64;
-use zarrs_data_type::{DataTypeExtension, FixedScaleOffsetElementType, FixedScaleOffsetFloatType};
+use zarrs_data_type::{FixedScaleOffsetElementType, FixedScaleOffsetFloatType};
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `fixedscaleoffset` codec implementation.
@@ -413,9 +413,9 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if self.dtype.data_type() != data_type {
+        if !self.dtype.data_type().data_type_eq(data_type.as_ref()) {
             return Err(CodecError::Other(format!(
-                "fixedscaleoffset got {} as input, but metadata expects {}",
+                "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
                 data_type,
                 self.dtype.data_type()
             )));
@@ -438,9 +438,9 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if self.dtype.data_type() != data_type {
+        if !self.dtype.data_type().data_type_eq(data_type.as_ref()) {
             return Err(CodecError::Other(format!(
-                "fixedscaleoffset got {} as input, but metadata expects {}",
+                "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
                 data_type,
                 self.dtype.data_type()
             )));

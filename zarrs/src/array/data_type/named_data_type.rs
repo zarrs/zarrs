@@ -1,8 +1,7 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
-use base64::{Engine, prelude::BASE64_STANDARD};
-use zarrs_data_type::DataTypePlugin;
-use zarrs_data_type::{DataTypeFillValueMetadataError, FillValue};
+use zarrs_data_type::{DataTypeFillValueMetadataError, DataTypePlugin, FillValue};
 use zarrs_metadata::{
     ConfigurationSerialize,
     v3::{FillValueMetadataV3, MetadataV3},
@@ -13,7 +12,7 @@ use zarrs_plugin::{
 };
 
 use crate::array::{
-    DataType,
+    DataType, DataTypeExt,
     data_type::{
         BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
         ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
@@ -26,17 +25,24 @@ use crate::array::{
         Float16DataType, Float32DataType, Float64DataType, Int2DataType, Int4DataType,
         Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
         NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
-        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-        subfloat_hex_string_to_fill_value,
+        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType, data_types,
     },
 };
 
 /// A named data type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct NamedDataType {
     name: String,
     data_type: DataType,
 }
+
+impl PartialEq for NamedDataType {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.data_type.data_type_eq(other.data_type.as_ref())
+    }
+}
+
+impl Eq for NamedDataType {}
 
 impl NamedDataType {
     /// Create a new [`NamedDataType`].
@@ -64,23 +70,23 @@ impl NamedDataType {
         &self.data_type
     }
 
-    /// Wrap this data type in an [`Optional`](DataType::Optional).
+    /// Wrap this data type in an optional type.
     ///
     /// Can be chained to create nested optional types.
     ///
     /// # Examples
     /// ```
-    /// # use zarrs::array::{DataType, data_type::OptionalDataType};
+    /// # use zarrs::array::{data_types, DataTypeExt};
     /// // Single level optional
-    /// let opt_u8 = DataType::UInt8.into_optional();
-    /// # assert_eq!(opt_u8, DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named())));
+    /// let opt_u8 = data_types::uint8().to_named().into_optional();
+    /// assert_eq!(opt_u8.identifier(), "zarrs.optional");
     ///
     /// // Nested optional
-    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
+    /// let opt_opt_u8 = opt_u8.into_optional();
     /// ```
     #[must_use]
     pub fn into_optional(self) -> Self {
-        let data_type = DataType::Optional(OptionalDataType::new(self));
+        let data_type = data_types::optional(self);
         let name = data_type.default_name().into_owned();
         Self::new(name, data_type)
     }
@@ -104,167 +110,8 @@ impl NamedDataType {
         &self,
         fill_value: &FillValueMetadataV3,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        use zarrs_data_type::DataTypeExtension;
-        let name = self.name();
-        let err0 = || DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone());
-        match self.data_type() {
-            // Delegate to marker types for standard numeric types
-            DataType::Bool => BoolDataType.fill_value(fill_value),
-            DataType::Int2 => Int2DataType.fill_value(fill_value),
-            DataType::Int4 => Int4DataType.fill_value(fill_value),
-            DataType::Int8 => Int8DataType.fill_value(fill_value),
-            DataType::Int16 => Int16DataType.fill_value(fill_value),
-            DataType::Int32 => Int32DataType.fill_value(fill_value),
-            DataType::Int64 => Int64DataType.fill_value(fill_value),
-            DataType::UInt2 => UInt2DataType.fill_value(fill_value),
-            DataType::UInt4 => UInt4DataType.fill_value(fill_value),
-            DataType::UInt8 => UInt8DataType.fill_value(fill_value),
-            DataType::UInt16 => UInt16DataType.fill_value(fill_value),
-            DataType::UInt32 => UInt32DataType.fill_value(fill_value),
-            DataType::UInt64 => UInt64DataType.fill_value(fill_value),
-            DataType::BFloat16 => BFloat16DataType.fill_value(fill_value),
-            DataType::Float16 => Float16DataType.fill_value(fill_value),
-            DataType::Float32 => Float32DataType.fill_value(fill_value),
-            DataType::Float64 => Float64DataType.fill_value(fill_value),
-            DataType::ComplexBFloat16 => ComplexBFloat16DataType.fill_value(fill_value),
-            DataType::ComplexFloat16 => ComplexFloat16DataType.fill_value(fill_value),
-            DataType::ComplexFloat32 => ComplexFloat32DataType.fill_value(fill_value),
-            DataType::ComplexFloat64 => ComplexFloat64DataType.fill_value(fill_value),
-            DataType::Complex64 => Complex64DataType.fill_value(fill_value),
-            DataType::Complex128 => Complex128DataType.fill_value(fill_value),
-            DataType::String => StringDataType.fill_value(fill_value),
-            DataType::NumpyDateTime64 { .. } => NumpyDateTime64DataType::STATIC.fill_value(fill_value),
-            DataType::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::STATIC.fill_value(fill_value),
-            // Float8E4M3 and Float8E5M2 support float values when float8 feature is enabled
-            DataType::Float8E4M3 => {
-                #[cfg(feature = "float8")]
-                {
-                    subfloat_hex_string_to_fill_value(fill_value)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(fill_value.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)
-                }
-                #[cfg(not(feature = "float8"))]
-                Float8E4M3DataType.fill_value(fill_value)
-            }
-            DataType::Float8E5M2 => {
-                #[cfg(feature = "float8")]
-                {
-                    subfloat_hex_string_to_fill_value(fill_value)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(fill_value.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)
-                }
-                #[cfg(not(feature = "float8"))]
-                Float8E5M2DataType.fill_value(fill_value)
-            }
-            // Other subfloats use marker types directly
-            DataType::Float4E2M1FN => Float4E2M1FNDataType.fill_value(fill_value),
-            DataType::Float6E2M3FN => Float6E2M3FNDataType.fill_value(fill_value),
-            DataType::Float6E3M2FN => Float6E3M2FNDataType.fill_value(fill_value),
-            DataType::Float8E3M4 => Float8E3M4DataType.fill_value(fill_value),
-            DataType::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType.fill_value(fill_value),
-            DataType::Float8E4M3FNUZ => Float8E4M3FNUZDataType.fill_value(fill_value),
-            DataType::Float8E5M2FNUZ => Float8E5M2FNUZDataType.fill_value(fill_value),
-            DataType::Float8E8M0FNU => Float8E8M0FNUDataType.fill_value(fill_value),
-            // ComplexFloat8E4M3 and ComplexFloat8E5M2 support float values when float8 feature is enabled
-            DataType::ComplexFloat8E4M3 => {
-                #[cfg(feature = "float8")]
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = subfloat_hex_string_to_fill_value(re)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(re.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    let im = subfloat_hex_string_to_fill_value(im)
-                        .or_else(|| {
-                            let number = float8::F8E4M3::from_f64(im.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    Ok(FillValue::from(num::complex::Complex::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-                #[cfg(not(feature = "float8"))]
-                ComplexFloat8E4M3DataType.fill_value(fill_value)
-            }
-            DataType::ComplexFloat8E5M2 => {
-                #[cfg(feature = "float8")]
-                if let [re, im] = fill_value.as_array().ok_or_else(err0)? {
-                    let re = subfloat_hex_string_to_fill_value(re)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(re.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    let im = subfloat_hex_string_to_fill_value(im)
-                        .or_else(|| {
-                            let number = float8::F8E5M2::from_f64(im.as_f64()?);
-                            Some(FillValue::from(number.to_bits()))
-                        })
-                        .ok_or_else(err0)?;
-                    Ok(FillValue::from(num::complex::Complex::new(re, im)))
-                } else {
-                    Err(err0())?
-                }
-                #[cfg(not(feature = "float8"))]
-                ComplexFloat8E5M2DataType.fill_value(fill_value)
-            }
-            // Other complex subfloats use marker types directly
-            DataType::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType.fill_value(fill_value),
-            DataType::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType.fill_value(fill_value),
-            DataType::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType.fill_value(fill_value),
-            DataType::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType.fill_value(fill_value),
-            DataType::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType.fill_value(fill_value),
-            DataType::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType.fill_value(fill_value),
-            DataType::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType.fill_value(fill_value),
-            DataType::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType.fill_value(fill_value),
-            // RawBits uses array representation (legacy behavior)
-            DataType::RawBits(size) => {
-                let bytes = fill_value.as_bytes().ok_or_else(err0)?;
-                if bytes.len() == *size {
-                    Ok(FillValue::from(bytes))
-                } else {
-                    Err(err0())?
-                }
-            }
-            // Bytes supports both array and base64 (legacy behavior)
-            DataType::Bytes => {
-                if let Some(bytes) = fill_value.as_bytes() {
-                    // Permit bytes for any data type alias of `bytes`
-                    Ok(FillValue::from(bytes))
-                } else if let Some(string) = fill_value.as_str() {
-                    Ok(FillValue::from(
-                        BASE64_STANDARD.decode(string).map_err(|_| err0())?,
-                    ))
-                } else {
-                    Err(err0())?
-                }
-            }
-            // Optional has special recursive handling
-            DataType::Optional(opt) => {
-                if fill_value.is_null() {
-                    // Null fill value for optional type: single 0x00 byte
-                    Ok(FillValue::new_optional_null())
-                } else if let Some([inner]) = fill_value.as_array() {
-                    // Wrapped value [inner_metadata] -> Some(inner)
-                    let inner_fv = opt.fill_value_from_metadata(inner)?;
-                    Ok(inner_fv.into_optional())
-                } else {
-                    // Invalid format for optional
-                    Err(err0())
-                }
-            }
-            DataType::Extension(ext) => ext.fill_value(fill_value).map_err(|_| {
-                DataTypeFillValueMetadataError::new(name.to_string(), fill_value.clone())
-            }),
-        }
+        // Delegate to the trait method - each data type implementation handles its own fill value parsing
+        self.data_type.fill_value(fill_value)
     }
 }
 
@@ -317,7 +164,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
                     })?;
                 return Ok(Self::new(
                     name.to_string(),
-                    DataType::NumpyDateTime64 { unit, scale_factor },
+                    Arc::new(NumpyDateTime64DataType::new(unit, scale_factor)),
                 ));
             }
 
@@ -336,7 +183,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
                     })?;
                 return Ok(Self::new(
                     name.to_string(),
-                    DataType::NumpyTimeDelta64 { unit, scale_factor },
+                    Arc::new(NumpyTimeDelta64DataType::new(unit, scale_factor)),
                 ));
             }
 
@@ -363,7 +210,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
 
                 // Recursively parse the inner data type
                 let inner_data_type = Self::try_from(&inner_metadata)?;
-                let data_type = DataType::Optional(OptionalDataType::new(inner_data_type));
+                let data_type = data_types::optional(inner_data_type);
                 return Ok(Self::new(name.to_string(), data_type));
             }
         }
@@ -372,180 +219,229 @@ impl TryFrom<&MetadataV3> for NamedDataType {
         if metadata.configuration_is_none_or_empty() {
             // Boolean
             if BoolDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Bool));
+                return Ok(Self::new(name.to_string(), Arc::new(BoolDataType)));
             }
 
             // Signed integers
             if Int2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int2));
+                return Ok(Self::new(name.to_string(), Arc::new(Int2DataType)));
             }
             if Int4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int4));
+                return Ok(Self::new(name.to_string(), Arc::new(Int4DataType)));
             }
             if Int8DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int8));
+                return Ok(Self::new(name.to_string(), Arc::new(Int8DataType)));
             }
             if Int16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int16));
+                return Ok(Self::new(name.to_string(), Arc::new(Int16DataType)));
             }
             if Int32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int32));
+                return Ok(Self::new(name.to_string(), Arc::new(Int32DataType)));
             }
             if Int64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Int64));
+                return Ok(Self::new(name.to_string(), Arc::new(Int64DataType)));
             }
 
             // Unsigned integers
             if UInt2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt2));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt2DataType)));
             }
             if UInt4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt4));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt4DataType)));
             }
             if UInt8DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt8));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt8DataType)));
             }
             if UInt16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt16));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt16DataType)));
             }
             if UInt32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt32));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt32DataType)));
             }
             if UInt64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::UInt64));
+                return Ok(Self::new(name.to_string(), Arc::new(UInt64DataType)));
             }
 
             // Subfloats
             if Float4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float4E2M1FN));
+                return Ok(Self::new(name.to_string(), Arc::new(Float4E2M1FNDataType)));
             }
             if Float6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float6E2M3FN));
+                return Ok(Self::new(name.to_string(), Arc::new(Float6E2M3FNDataType)));
             }
             if Float6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float6E3M2FN));
+                return Ok(Self::new(name.to_string(), Arc::new(Float6E3M2FNDataType)));
             }
             if Float8E3M4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E3M4));
+                return Ok(Self::new(name.to_string(), Arc::new(Float8E3M4DataType)));
             }
             if Float8E4M3DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E4M3));
+                return Ok(Self::new(name.to_string(), Arc::new(Float8E4M3DataType)));
             }
             if Float8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E4M3B11FNUZ));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(Float8E4M3B11FNUZDataType),
+                ));
             }
             if Float8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E4M3FNUZ));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(Float8E4M3FNUZDataType),
+                ));
             }
             if Float8E5M2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E5M2));
+                return Ok(Self::new(name.to_string(), Arc::new(Float8E5M2DataType)));
             }
             if Float8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E5M2FNUZ));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(Float8E5M2FNUZDataType),
+                ));
             }
             if Float8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float8E8M0FNU));
+                return Ok(Self::new(name.to_string(), Arc::new(Float8E8M0FNUDataType)));
             }
 
             // Standard floats
             if BFloat16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::BFloat16));
+                return Ok(Self::new(name.to_string(), Arc::new(BFloat16DataType)));
             }
             if Float16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float16));
+                return Ok(Self::new(name.to_string(), Arc::new(Float16DataType)));
             }
             if Float32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float32));
+                return Ok(Self::new(name.to_string(), Arc::new(Float32DataType)));
             }
             if Float64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Float64));
+                return Ok(Self::new(name.to_string(), Arc::new(Float64DataType)));
             }
 
             // Complex subfloats
             if ComplexFloat4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat4E2M1FN));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat4E2M1FNDataType),
+                ));
             }
             if ComplexFloat6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat6E2M3FN));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat6E2M3FNDataType),
+                ));
             }
             if ComplexFloat6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat6E3M2FN));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat6E3M2FNDataType),
+                ));
             }
             if ComplexFloat8E3M4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E3M4));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E3M4DataType),
+                ));
             }
             if ComplexFloat8E4M3DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E4M3));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E4M3DataType),
+                ));
             }
             if ComplexFloat8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    DataType::ComplexFloat8E4M3B11FNUZ,
+                    Arc::new(ComplexFloat8E4M3B11FNUZDataType),
                 ));
             }
             if ComplexFloat8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E4M3FNUZ));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E4M3FNUZDataType),
+                ));
             }
             if ComplexFloat8E5M2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E5M2));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E5M2DataType),
+                ));
             }
             if ComplexFloat8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E5M2FNUZ));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E5M2FNUZDataType),
+                ));
             }
             if ComplexFloat8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat8E8M0FNU));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat8E8M0FNUDataType),
+                ));
             }
 
             // Complex floats
             if ComplexBFloat16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexBFloat16));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexBFloat16DataType),
+                ));
             }
             if ComplexFloat16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat16));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat16DataType),
+                ));
             }
             if ComplexFloat32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat32));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat32DataType),
+                ));
             }
             if ComplexFloat64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::ComplexFloat64));
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(ComplexFloat64DataType),
+                ));
             }
             if Complex64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Complex64));
+                return Ok(Self::new(name.to_string(), Arc::new(Complex64DataType)));
             }
             if Complex128DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Complex128));
+                return Ok(Self::new(name.to_string(), Arc::new(Complex128DataType)));
             }
 
             // Variable-length types
             if StringDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::String));
+                return Ok(Self::new(name.to_string(), Arc::new(StringDataType)));
             }
             if BytesDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), DataType::Bytes));
+                return Ok(Self::new(name.to_string(), Arc::new(BytesDataType)));
             }
 
             // RawBits (r8, r16, r24, etc.)
-            if RawBitsDataType::matches_name(name, ZarrVersions::V3) {
-                if let Ok(size_bits) = name[1..].parse::<usize>() {
-                    if size_bits % 8 == 0 {
-                        let size_bytes = size_bits / 8;
-                        return Ok(Self::new(name.to_string(), DataType::RawBits(size_bytes)));
-                    }
-                    return Err(PluginUnsupportedError::new(
+            if RawBitsDataType::matches_name(name, ZarrVersions::V3)
+                && let Ok(size_bits) = name[1..].parse::<usize>()
+            {
+                if size_bits % 8 == 0 {
+                    let size_bytes = size_bits / 8;
+                    return Ok(Self::new(
                         name.to_string(),
-                        "data type".to_string(),
-                    )
-                    .into());
+                        Arc::new(RawBitsDataType::new(size_bytes)),
+                    ));
                 }
+                return Err(
+                    PluginUnsupportedError::new(name.to_string(), "data type".to_string()).into(),
+                );
             }
         }
 
         // Try an extension plugin
         for plugin in inventory::iter::<DataTypePlugin> {
             if plugin.match_name(name, ZarrVersions::V3) {
-                return plugin.create(metadata).map(|dt| {
-                    NamedDataType::new(metadata.name().to_string(), DataType::Extension(dt))
-                });
+                return plugin
+                    .create(metadata)
+                    .map(|dt| NamedDataType::new(metadata.name().to_string(), dt));
             }
         }
 

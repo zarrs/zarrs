@@ -12,6 +12,7 @@ use zarrs::{
 };
 use zarrs_filesystem::FilesystemStore;
 
+#[must_use]
 pub fn to_json(data: &[u8]) -> serde_json::Value {
     let data = std::str::from_utf8(data).unwrap();
     serde_json::from_str(data).unwrap()

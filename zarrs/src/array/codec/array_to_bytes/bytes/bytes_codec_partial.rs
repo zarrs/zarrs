@@ -14,6 +14,7 @@ use crate::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
+        data_type::DataTypeExt,
         update_array_bytes,
     },
     indexer::IncompatibleIndexerError,
@@ -97,10 +98,10 @@ where
 
         let decoded = if let Some(decoded) = decoded {
             let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut decoded, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut decoded, &self.data_type);
             }
             ArrayBytes::from(decoded)
         } else {
@@ -169,10 +170,10 @@ where
 
         let decoded = if let Some(decoded) = decoded {
             let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut decoded, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut decoded, &self.data_type);
             }
             ArrayBytes::from(decoded)
         } else {
@@ -226,10 +227,10 @@ where
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut bytes_to_encode, &self.data_type);
             }
 
             let offset_bytes: Vec<_> = byte_ranges
@@ -264,10 +265,10 @@ where
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut chunk_bytes, &self.data_type);
             }
 
             self.input_output_handle
@@ -322,10 +323,10 @@ where
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut bytes_to_encode, &self.data_type);
             }
 
             let offset_bytes: Vec<_> = byte_ranges
@@ -361,10 +362,10 @@ where
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut chunk_bytes, &self.data_type);
             }
 
             self.input_output_handle

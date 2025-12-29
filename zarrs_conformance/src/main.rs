@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use zarrs::array::{Array, ArrayBytes, DataType, FillValue};
+use zarrs::array::{Array, ArrayBytes, DataType, DataTypeExt, FillValue};
 use zarrs::filesystem::FilesystemStore;
 
 /// Command-line arguments for the conformance test binary.

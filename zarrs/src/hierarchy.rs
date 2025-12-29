@@ -285,13 +285,13 @@ mod tests {
         let group_builder = GroupBuilder::default();
 
         let root = group_builder
-            .build(store.clone(), &NodePath::root().as_str())
+            .build(store.clone(), NodePath::root().as_str())
             .unwrap();
         let group = group_builder.build(store.clone(), "/group").unwrap();
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_types::float32(),
             0.0f32,
         );
 
@@ -317,8 +317,12 @@ mod tests {
     #[test]
     fn hierarchy_try_from_array() {
         let store = Arc::new(MemoryStore::new());
-        let array_builder =
-            ArrayBuilder::new(vec![1], vec![1], crate::array::DataType::Float32, 0.0f32);
+        let array_builder = ArrayBuilder::new(
+            vec![1],
+            vec![1],
+            crate::array::data_types::float32(),
+            0.0f32,
+        );
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -336,8 +340,12 @@ mod tests {
         let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(
             object_store::memory::InMemory::new(),
         ));
-        let array_builder =
-            ArrayBuilder::new(vec![1], vec![1], crate::array::DataType::Float32, 0.0f32);
+        let array_builder = ArrayBuilder::new(
+            vec![1],
+            vec![1],
+            crate::array::data_types::float32(),
+            0.0f32,
+        );
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -375,7 +383,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_types::float32(),
             0.0f32,
         )
         .build(store.clone(), "/group/subgroup/array")
@@ -388,7 +396,9 @@ mod tests {
         let hierarchy = Hierarchy::try_from_async_group(&group).await;
         assert!(hierarchy.is_ok());
         let hierarchy = hierarchy.unwrap();
-        assert!("/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string())
+        assert!(
+            "/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string()
+        );
     }
 
     #[cfg(feature = "async")]
@@ -483,7 +493,7 @@ mod tests {
             store.clone(),
             "/groupv2/arrayv2",
             ArrayMetadata::V2(ArrayMetadataV2::new(
-                vec![1].into(),
+                vec![1],
                 crate::array::ChunkShape::from(vec![NonZeroU64::new(1).unwrap()]),
                 zarrs_metadata::v2::DataTypeMetadataV2::Simple("<f8".into()),
                 zarrs_metadata::v2::FillValueMetadataV2::from(f64::NAN),
@@ -532,13 +542,13 @@ mod tests {
         let group_builder = GroupBuilder::default();
 
         let root = group_builder
-            .build(store.clone(), &NodePath::root().as_str())
+            .build(store.clone(), NodePath::root().as_str())
             .unwrap();
         let group = group_builder.build(store.clone(), "/group").unwrap();
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_types::float32(),
             0.0f32,
         );
 

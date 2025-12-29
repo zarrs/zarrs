@@ -2,7 +2,9 @@
 
 use crate::array::{
     ArrayBytes, ArrayError, DataType, Element, ElementOwned, convert_from_bytes_slice,
+    data_type::NumpyTimeDelta64DataType,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "chrono")]
 impl Element for chrono::TimeDelta {
@@ -13,16 +15,20 @@ impl Element for chrono::TimeDelta {
         use chrono::DateTime;
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
+        let Some(dt) = data_type
+            .as_any()
+            .downcast_ref::<NumpyTimeDelta64DataType>()
+        else {
             return Err(ArrayError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
         let scale_factor = i64::from(scale_factor.get());
         for element in elements {
             if element == &Self::MIN {
                 bytes.extend_from_slice(&i64::MIN.to_ne_bytes());
             } else {
-                let value = super::chrono_timedelta_to_int(*element, *unit, scale_factor)
+                let value = super::chrono_timedelta_to_int(*element, unit, scale_factor)
                     .ok_or_else(|| {
                         ArrayError::Other("unsupported chrono::DateTime unit or offset".to_string())
                     })?;
@@ -40,13 +46,7 @@ impl Element for chrono::TimeDelta {
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if matches!(
-            data_type,
-            DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _
-            }
-        ) {
+        if data_type.identifier() == NumpyTimeDelta64DataType::IDENTIFIER {
             Ok(())
         } else {
             Err(ArrayError::IncompatibleElementType)
@@ -62,9 +62,13 @@ impl ElementOwned for chrono::TimeDelta {
     ) -> Result<Vec<Self>, ArrayError> {
         use chrono::{DateTime, NaiveDateTime};
 
-        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
+        let Some(dt) = data_type
+            .as_any()
+            .downcast_ref::<NumpyTimeDelta64DataType>()
+        else {
             return Err(ArrayError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
 
         let bytes = bytes.into_fixed()?;
         let elements = convert_from_bytes_slice::<i64>(&bytes);
@@ -76,7 +80,7 @@ impl ElementOwned for chrono::TimeDelta {
                 if i == i64::MIN {
                     Ok(Self::MIN)
                 } else {
-                    super::int_to_chrono_timedelta(i, *unit, scale_factor).ok_or_else(|| {
+                    super::int_to_chrono_timedelta(i, unit, scale_factor).ok_or_else(|| {
                         ArrayError::Other("unsupported chrono::DateTime unit or offset".to_string())
                     })
                 }
@@ -96,9 +100,13 @@ impl Element for jiff::SignedDuration {
         use jiff::{SignedDuration, Span, Unit};
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
+        let Some(dt) = data_type
+            .as_any()
+            .downcast_ref::<NumpyTimeDelta64DataType>()
+        else {
             return Err(ArrayError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
         let error = |e: jiff::Error| ArrayError::Other(e.to_string());
         let scale_factor = i64::from(scale_factor.get());
@@ -107,7 +115,7 @@ impl Element for jiff::SignedDuration {
                 bytes.extend_from_slice(&i64::MIN.to_ne_bytes());
             } else {
                 let value =
-                    super::jiff_duration_to_int(*duration, *unit, scale_factor).map_err(error)?;
+                    super::jiff_duration_to_int(*duration, unit, scale_factor).map_err(error)?;
                 bytes.extend_from_slice(&value.to_ne_bytes());
             }
         }
@@ -122,13 +130,7 @@ impl Element for jiff::SignedDuration {
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if matches!(
-            data_type,
-            DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _
-            }
-        ) {
+        if data_type.identifier() == NumpyTimeDelta64DataType::IDENTIFIER {
             Ok(())
         } else {
             Err(ArrayError::IncompatibleElementType)
@@ -145,9 +147,13 @@ impl ElementOwned for jiff::SignedDuration {
         use jiff::{SignedDuration, Span};
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyTimeDelta64 { unit, scale_factor } = data_type else {
+        let Some(dt) = data_type
+            .as_any()
+            .downcast_ref::<NumpyTimeDelta64DataType>()
+        else {
             return Err(ArrayError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
 
         let bytes = bytes.into_fixed()?;
         let elements = convert_from_bytes_slice::<i64>(&bytes);
@@ -158,7 +164,7 @@ impl ElementOwned for jiff::SignedDuration {
                 if i == i64::MIN {
                     Ok(SignedDuration::MIN)
                 } else {
-                    super::int_to_jiff_duration(i, *unit, scale_factor)
+                    super::int_to_jiff_duration(i, unit, scale_factor)
                 }
             })
             .collect::<Result<Vec<_>, _>>()

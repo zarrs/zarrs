@@ -78,17 +78,17 @@ mod tests {
         storage::byte_range::ByteRange,
     };
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
 
     #[test]
     fn codec_fletcher32_configuration_none() {
         let codec_configuration: Fletcher32CodecConfiguration =
-            serde_json::from_str(r#"{}"#).unwrap();
+            serde_json::from_str(r"{}").unwrap();
         let codec = Fletcher32Codec::new_with_configuration(&codec_configuration);
         let configuration = codec
             .configuration("numcodecs.fletcher32", &CodecMetadataOptions::default())
             .unwrap();
-        assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
+        assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }
 
     #[test]

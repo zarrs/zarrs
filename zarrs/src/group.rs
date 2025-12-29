@@ -158,12 +158,11 @@ impl<TStorage: ?Sized> Group<TStorage> {
             if let Some(consolidated_metadata) = group_metadata
                 .additional_fields
                 .get("consolidated_metadata")
-            {
-                if let Ok(consolidated_metadata) = serde_json::from_value::<ConsolidatedMetadata>(
+                && let Ok(consolidated_metadata) = serde_json::from_value::<ConsolidatedMetadata>(
                     consolidated_metadata.as_value().clone(),
-                ) {
-                    return Some(consolidated_metadata);
-                }
+                )
+            {
+                return Some(consolidated_metadata);
             }
             None
         } else {
@@ -927,7 +926,7 @@ mod tests {
         let group_copy = Group::open(store, group_path).unwrap();
         assert_eq!(group_copy.metadata(), group.metadata());
         let group_metadata_str = group.metadata().to_string();
-        println!("{}", group_metadata_str);
+        println!("{group_metadata_str}");
         assert!(
             group_metadata_str == r#"{"node_type":"group","zarr_format":3}"#
                 || group_metadata_str == r#"{"zarr_format":3,"node_type":"group"}"#
@@ -1039,8 +1038,8 @@ mod tests {
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
                 .collect::<Vec<&str>>()
-                .sort(),
-            vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
+                .sort_unstable(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort_unstable()
         );
     }
 
@@ -1096,8 +1095,8 @@ mod tests {
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
                 .collect::<Vec<&str>>()
-                .sort(),
-            vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
+                .sort_unstable(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort_unstable()
         );
     }
 }

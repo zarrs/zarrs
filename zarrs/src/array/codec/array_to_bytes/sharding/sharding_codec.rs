@@ -34,6 +34,7 @@ use crate::{
             RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
+        data_type::DataTypeExt,
         transmute_to_bytes_vec, unravel_index,
     },
     array_subset::ArraySubset,
@@ -434,7 +435,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         let encoded_index = self.index_codecs.encode(
             ArrayBytes::from(index_bytes),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_types::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;
@@ -798,7 +799,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             shard_index_bytes.into(),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_types::uint64(),
             &FillValue::from(u64::MAX),
             &options,
         )?;
@@ -948,7 +949,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_types::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;

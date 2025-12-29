@@ -164,7 +164,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedRate { rate } = mode {
             assert_eq!(rate, 0.123);
-        };
+        }
     }
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedPrecision { precision } = mode {
             assert_eq!(precision, 10);
-        };
+        }
     }
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedAccuracy { tolerance } = mode {
             assert_eq!(tolerance, 0.123);
-        };
+        }
     }
 
     #[test]

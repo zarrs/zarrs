@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn codec_bytes_empty() {
-        serde_json::from_str::<BytesCodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<BytesCodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

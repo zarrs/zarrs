@@ -10,7 +10,6 @@ use crate::array::{
     },
 };
 use crate::storage::StorageError;
-use zarrs_data_type::DataTypeExtension;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// Generic partial codec for the bitround codec.

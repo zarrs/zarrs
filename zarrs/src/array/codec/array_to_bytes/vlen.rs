@@ -108,9 +108,9 @@ use zarrs_plugin::ExtensionIdentifier;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, DataType, Endianness,
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness,
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice,
+    convert_from_bytes_slice, data_types,
 };
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
@@ -149,8 +149,8 @@ fn get_vlen_bytes_and_offsets(
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
     let (data_type, fill_value) = match index_data_type {
-        VlenIndexDataType::UInt32 => (DataType::UInt32, FillValue::from(0u32)),
-        VlenIndexDataType::UInt64 => (DataType::UInt64, FillValue::from(0u64)),
+        VlenIndexDataType::UInt32 => (data_types::uint32(), FillValue::from(0u32)),
+        VlenIndexDataType::UInt64 => (data_types::uint64(), FillValue::from(0u64)),
     };
 
     // Get the index length
@@ -188,27 +188,17 @@ fn get_vlen_bytes_and_offsets(
         )?
         .into_fixed()?;
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &DataType::UInt64);
+        reverse_endianness(index.to_mut(), &data_types::uint64());
     }
-    #[allow(clippy::wildcard_enum_match_arm)]
-    let index = match data_type {
-        // DataType::UInt8 => {
-        //     let index = convert_from_bytes_slice::<u8>(&index);
-        //     offsets_u8_to_usize(index)
-        // }
-        // DataType::UInt16 => {
-        //     let index = convert_from_bytes_slice::<u16>(&index);
-        //     offsets_u16_to_usize(index)
-        // }
-        DataType::UInt32 => {
+    let index = match index_data_type {
+        VlenIndexDataType::UInt32 => {
             let index = convert_from_bytes_slice::<u32>(&index);
             offsets_u32_to_usize(index)
         }
-        DataType::UInt64 => {
+        VlenIndexDataType::UInt64 => {
             let index = convert_from_bytes_slice::<u64>(&index);
             offsets_u64_to_usize(index)
         }
-        _ => unreachable!("other data types are not part of VlenIndexDataType"),
     };
 
     // Get the data length
@@ -224,7 +214,7 @@ fn get_vlen_bytes_and_offsets(
             .decode(
                 data_enc.into(),
                 &[data_len_expected],
-                &DataType::UInt8,
+                &data_types::uint8(),
                 &0u8.into(),
                 options,
             )?

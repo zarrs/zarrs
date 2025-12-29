@@ -3,9 +3,9 @@
 use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin};
 use zarrs_data_type::{
     DataTypeExtensionBitroundCodec, DataTypeExtensionFixedScaleOffsetCodec,
-    DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, FixedScaleOffsetElementType,
-    PcodecElementType, ZfpPromotion, ZfpType, round_bytes_float16, round_bytes_float32,
-    round_bytes_float64,
+    DataTypeExtensionPackBitsCodec, DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec,
+    FixedScaleOffsetElementType, PcodecElementType, ZfpPromotion, ZfpType, round_bytes_float16,
+    round_bytes_float32, round_bytes_float64,
 };
 
 // Standard floats - V2: <f2, <f4, <f8 (and > variants), no bfloat16
@@ -40,10 +40,11 @@ zarrs_plugin::impl_extension_aliases!(Float64DataType, "float64",
 );
 
 // DataTypeExtension implementations
-impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16);
-impl_data_type_extension_numeric!(Float16DataType, 2, f16);
-impl_data_type_extension_numeric!(Float32DataType, 4, f32);
-impl_data_type_extension_numeric!(Float64DataType, 8, f64);
+// All float types support: pcodec, bitround, fixedscaleoffset, zfp, packbits
+impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(Float16DataType, 2, f16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(Float32DataType, 4, f32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(Float64DataType, 8, f64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 // Plugin registrations
 register_data_type_plugin!(BFloat16DataType);
@@ -200,5 +201,56 @@ impl DataTypeExtensionZfpCodec for Float64DataType {
 
     fn zfp_promotion(&self) -> ZfpPromotion {
         ZfpPromotion::None
+    }
+}
+
+// --- PackBits codec ---
+// All float types support packbits (byte-aligned encoding)
+
+impl DataTypeExtensionPackBitsCodec for BFloat16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false // floats don't use sign extension
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Float16DataType {
+    fn component_size_bits(&self) -> u64 {
+        16
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Float32DataType {
+    fn component_size_bits(&self) -> u64 {
+        32
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
+    }
+}
+
+impl DataTypeExtensionPackBitsCodec for Float64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+    fn num_components(&self) -> u64 {
+        1
+    }
+    fn sign_extension(&self) -> bool {
+        false
     }
 }

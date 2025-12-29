@@ -13,6 +13,7 @@ use crate::array::{
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 

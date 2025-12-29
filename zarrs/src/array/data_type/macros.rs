@@ -1,8 +1,20 @@
 //! Macros for implementing [`DataTypeExtension`](zarrs_data_type::DataTypeExtension) for data type markers.
 
 /// Helper macro to implement `DataTypeExtension` for simple fixed-size numeric types.
+///
+/// Usage:
+/// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type)` - basic implementation
+/// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type; codec_method1, codec_method2, ...)` - with codec overrides
+///
+/// Available codec methods: `pcodec`, `zfp`, `bitround`, `fixedscaleoffset`, `packbits`
 macro_rules! impl_data_type_extension_numeric {
+    // Base case: no additional codec methods
     ($marker:ty, $size:tt, $rust_type:tt) => {
+        impl_data_type_extension_numeric!($marker, $size, $rust_type;);
+    };
+
+    // With optional codec method overrides
+    ($marker:ty, $size:tt, $rust_type:tt; $($codec:ident),* $(,)?) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <$marker as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -33,6 +45,14 @@ macro_rules! impl_data_type_extension_numeric {
             fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
                 Some(self)
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
+            $(
+                impl_data_type_extension_numeric!(@codec_method $codec);
+            )*
         }
 
         #[allow(unused_variables)]
@@ -52,6 +72,33 @@ macro_rules! impl_data_type_extension_numeric {
             ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
                 impl_data_type_extension_numeric!(@decode bytes, endianness, $rust_type, $size)
             }
+        }
+    };
+
+    // Codec method overrides
+    (@codec_method pcodec) => {
+        fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method zfp) => {
+        fn codec_zfp(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionZfpCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method bitround) => {
+        fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method fixedscaleoffset) => {
+        fn codec_fixedscaleoffset(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method packbits) => {
+        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+            Some(self)
         }
     };
 
@@ -271,8 +318,18 @@ macro_rules! impl_data_type_extension_numeric {
 }
 
 /// Macro to implement `DataTypeExtension` for complex types.
+///
+/// Usage:
+/// - `impl_complex_data_type!(MarkerType, size, component_type)` - basic implementation
+/// - `impl_complex_data_type!(MarkerType, size, component_type; codec_method1, codec_method2, ...)` - with codec overrides
 macro_rules! impl_complex_data_type {
+    // Base case: no additional codec methods
     ($marker:ty, $size:tt, $component_type:tt) => {
+        impl_complex_data_type!($marker, $size, $component_type;);
+    };
+
+    // With optional codec method overrides
+    ($marker:ty, $size:tt, $component_type:tt; $($codec:ident),* $(,)?) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -316,6 +373,14 @@ macro_rules! impl_complex_data_type {
             fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
                 Some(self)
             }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
+            $(
+                impl_complex_data_type!(@codec_method $codec);
+            )*
         }
 
         impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
@@ -408,11 +473,28 @@ macro_rules! impl_complex_data_type {
             zarrs_metadata::v3::FillValueMetadataV3::from(im),
         ]))
     }};
+
+    // Codec method overrides for complex types
+    (@codec_method pcodec) => {
+        fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method bitround) => {
+        fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
+            Some(self)
+        }
+    };
+    (@codec_method packbits) => {
+        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+            Some(self)
+        }
+    };
 }
 
 /// Macro to implement `DataTypeExtension` for subfloat types (single-byte floating point formats).
 macro_rules! impl_subfloat_data_type {
-    ($marker:ty) => {
+    ($marker:ty, $bits:tt) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -468,6 +550,14 @@ macro_rules! impl_subfloat_data_type {
             fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
                 Some(self)
             }
+
+            fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+                Some(self)
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
 
         impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
@@ -489,12 +579,25 @@ macro_rules! impl_subfloat_data_type {
                 Ok(bytes)
             }
         }
+
+        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                1
+            }
+            fn sign_extension(&self) -> bool {
+                false // subfloats don't use sign extension
+            }
+        }
     };
 }
 
 /// Macro to implement `DataTypeExtension` for complex subfloat types (two subfloats packed together).
+/// The second parameter is the bit size of each component for packbits codec.
 macro_rules! impl_complex_subfloat_data_type {
-    ($marker:ty) => {
+    ($marker:ty, $bits:tt) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -556,6 +659,14 @@ macro_rules! impl_complex_subfloat_data_type {
             fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
                 Some(self)
             }
+
+            fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+                Some(self)
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
         }
 
         impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
@@ -575,6 +686,18 @@ macro_rules! impl_complex_subfloat_data_type {
             ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
                 // Two single-byte components, no endianness conversion needed
                 Ok(bytes)
+            }
+        }
+
+        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                2 // complex = 2 components
+            }
+            fn sign_extension(&self) -> bool {
+                false // subfloats don't use sign extension
             }
         }
     };

@@ -2,7 +2,7 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::{borrow::Cow, sync::Arc};
+use std::{any::Any, borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
 use zarrs::metadata::{Configuration, v3::MetadataV3};
@@ -105,6 +105,10 @@ impl DataTypeExtension for CustomDataTypeUInt4 {
     fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
         Some(self)
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
@@ -170,7 +174,8 @@ impl CustomDataTypeUInt4Element {
 /// This defines how an in-memory CustomDataTypeUInt4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeUInt4)))
+        // Check if the data type identifier matches our custom data type
+        (data_type.identifier() == UINT4)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -220,7 +225,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeUInt4)),
+        Arc::new(CustomDataTypeUInt4) as DataType,
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

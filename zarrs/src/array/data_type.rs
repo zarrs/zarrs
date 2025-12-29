@@ -19,10 +19,12 @@ mod optional;
 mod special;
 mod subfloat;
 
-use std::{borrow::Cow, fmt::Debug, mem::discriminant, num::NonZeroU32, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU32, sync::Arc};
 
+use zarrs_metadata::DataTypeSize;
 use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
+use crate::metadata_ext::data_type::NumpyTimeUnit;
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
     DataTypeExtension, DataTypeExtensionBitroundCodec, DataTypeExtensionBytesCodec,
@@ -30,13 +32,6 @@ pub use zarrs_data_type::{
     DataTypeExtensionFixedScaleOffsetCodec, DataTypeExtensionPackBitsCodec,
     DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
-};
-use zarrs_metadata::Configuration;
-
-use crate::metadata::{DataTypeSize, v3::FillValueMetadataV3};
-use crate::metadata_ext::data_type::{
-    NumpyTimeUnit, numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1,
-    numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
 };
 
 pub use complex::{
@@ -64,9 +59,8 @@ pub use subfloat::{
 
 /// Factory functions for creating built-in data types.
 ///
-/// These functions create [`DataType`] enum variants for built-in types.
-/// This module provides a more ergonomic API and will remain stable
-/// when the internal representation changes.
+/// These functions create [`DataType`] instances for built-in types.
+/// This module provides a more ergonomic API.
 ///
 /// # Example
 /// ```
@@ -82,998 +76,216 @@ pub mod data_types {
 
     // Integers
     /// Create a `bool` data type.
-    #[must_use] pub fn bool() -> DataType { DataType::Bool }
+    #[must_use] pub fn bool() -> DataType { Arc::new(BoolDataType) }
     /// Create an `int2` data type.
-    #[must_use] pub fn int2() -> DataType { DataType::Int2 }
+    #[must_use] pub fn int2() -> DataType { Arc::new(Int2DataType) }
     /// Create an `int4` data type.
-    #[must_use] pub fn int4() -> DataType { DataType::Int4 }
+    #[must_use] pub fn int4() -> DataType { Arc::new(Int4DataType) }
     /// Create an `int8` data type.
-    #[must_use] pub fn int8() -> DataType { DataType::Int8 }
+    #[must_use] pub fn int8() -> DataType { Arc::new(Int8DataType) }
     /// Create an `int16` data type.
-    #[must_use] pub fn int16() -> DataType { DataType::Int16 }
+    #[must_use] pub fn int16() -> DataType { Arc::new(Int16DataType) }
     /// Create an `int32` data type.
-    #[must_use] pub fn int32() -> DataType { DataType::Int32 }
+    #[must_use] pub fn int32() -> DataType { Arc::new(Int32DataType) }
     /// Create an `int64` data type.
-    #[must_use] pub fn int64() -> DataType { DataType::Int64 }
+    #[must_use] pub fn int64() -> DataType { Arc::new(Int64DataType) }
     /// Create a `uint2` data type.
-    #[must_use] pub fn uint2() -> DataType { DataType::UInt2 }
+    #[must_use] pub fn uint2() -> DataType { Arc::new(UInt2DataType) }
     /// Create a `uint4` data type.
-    #[must_use] pub fn uint4() -> DataType { DataType::UInt4 }
+    #[must_use] pub fn uint4() -> DataType { Arc::new(UInt4DataType) }
     /// Create a `uint8` data type.
-    #[must_use] pub fn uint8() -> DataType { DataType::UInt8 }
+    #[must_use] pub fn uint8() -> DataType { Arc::new(UInt8DataType) }
     /// Create a `uint16` data type.
-    #[must_use] pub fn uint16() -> DataType { DataType::UInt16 }
+    #[must_use] pub fn uint16() -> DataType { Arc::new(UInt16DataType) }
     /// Create a `uint32` data type.
-    #[must_use] pub fn uint32() -> DataType { DataType::UInt32 }
+    #[must_use] pub fn uint32() -> DataType { Arc::new(UInt32DataType) }
     /// Create a `uint64` data type.
-    #[must_use] pub fn uint64() -> DataType { DataType::UInt64 }
+    #[must_use] pub fn uint64() -> DataType { Arc::new(UInt64DataType) }
 
     // Standard floats
     /// Create a `bfloat16` data type.
-    #[must_use] pub fn bfloat16() -> DataType { DataType::BFloat16 }
+    #[must_use] pub fn bfloat16() -> DataType { Arc::new(BFloat16DataType) }
     /// Create a `float16` data type.
-    #[must_use] pub fn float16() -> DataType { DataType::Float16 }
+    #[must_use] pub fn float16() -> DataType { Arc::new(Float16DataType) }
     /// Create a `float32` data type.
-    #[must_use] pub fn float32() -> DataType { DataType::Float32 }
+    #[must_use] pub fn float32() -> DataType { Arc::new(Float32DataType) }
     /// Create a `float64` data type.
-    #[must_use] pub fn float64() -> DataType { DataType::Float64 }
+    #[must_use] pub fn float64() -> DataType { Arc::new(Float64DataType) }
 
     // Subfloats
     /// Create a `float4_e2m1fn` data type.
-    #[must_use] pub fn float4_e2m1fn() -> DataType { DataType::Float4E2M1FN }
+    #[must_use] pub fn float4_e2m1fn() -> DataType { Arc::new(Float4E2M1FNDataType) }
     /// Create a `float6_e2m3fn` data type.
-    #[must_use] pub fn float6_e2m3fn() -> DataType { DataType::Float6E2M3FN }
+    #[must_use] pub fn float6_e2m3fn() -> DataType { Arc::new(Float6E2M3FNDataType) }
     /// Create a `float6_e3m2fn` data type.
-    #[must_use] pub fn float6_e3m2fn() -> DataType { DataType::Float6E3M2FN }
+    #[must_use] pub fn float6_e3m2fn() -> DataType { Arc::new(Float6E3M2FNDataType) }
     /// Create a `float8_e3m4` data type.
-    #[must_use] pub fn float8_e3m4() -> DataType { DataType::Float8E3M4 }
+    #[must_use] pub fn float8_e3m4() -> DataType { Arc::new(Float8E3M4DataType) }
     /// Create a `float8_e4m3` data type.
-    #[must_use] pub fn float8_e4m3() -> DataType { DataType::Float8E4M3 }
+    #[must_use] pub fn float8_e4m3() -> DataType { Arc::new(Float8E4M3DataType) }
     /// Create a `float8_e4m3b11fnuz` data type.
-    #[must_use] pub fn float8_e4m3b11fnuz() -> DataType { DataType::Float8E4M3B11FNUZ }
+    #[must_use] pub fn float8_e4m3b11fnuz() -> DataType { Arc::new(Float8E4M3B11FNUZDataType) }
     /// Create a `float8_e4m3fnuz` data type.
-    #[must_use] pub fn float8_e4m3fnuz() -> DataType { DataType::Float8E4M3FNUZ }
+    #[must_use] pub fn float8_e4m3fnuz() -> DataType { Arc::new(Float8E4M3FNUZDataType) }
     /// Create a `float8_e5m2` data type.
-    #[must_use] pub fn float8_e5m2() -> DataType { DataType::Float8E5M2 }
+    #[must_use] pub fn float8_e5m2() -> DataType { Arc::new(Float8E5M2DataType) }
     /// Create a `float8_e5m2fnuz` data type.
-    #[must_use] pub fn float8_e5m2fnuz() -> DataType { DataType::Float8E5M2FNUZ }
+    #[must_use] pub fn float8_e5m2fnuz() -> DataType { Arc::new(Float8E5M2FNUZDataType) }
     /// Create a `float8_e8m0fnu` data type.
-    #[must_use] pub fn float8_e8m0fnu() -> DataType { DataType::Float8E8M0FNU }
+    #[must_use] pub fn float8_e8m0fnu() -> DataType { Arc::new(Float8E8M0FNUDataType) }
 
     // Standard complex
     /// Create a `complex64` data type.
-    #[must_use] pub fn complex64() -> DataType { DataType::Complex64 }
+    #[must_use] pub fn complex64() -> DataType { Arc::new(Complex64DataType) }
     /// Create a `complex128` data type.
-    #[must_use] pub fn complex128() -> DataType { DataType::Complex128 }
+    #[must_use] pub fn complex128() -> DataType { Arc::new(Complex128DataType) }
     /// Create a `complex_bfloat16` data type.
-    #[must_use] pub fn complex_bfloat16() -> DataType { DataType::ComplexBFloat16 }
+    #[must_use] pub fn complex_bfloat16() -> DataType { Arc::new(ComplexBFloat16DataType) }
     /// Create a `complex_float16` data type.
-    #[must_use] pub fn complex_float16() -> DataType { DataType::ComplexFloat16 }
+    #[must_use] pub fn complex_float16() -> DataType { Arc::new(ComplexFloat16DataType) }
     /// Create a `complex_float32` data type.
-    #[must_use] pub fn complex_float32() -> DataType { DataType::ComplexFloat32 }
+    #[must_use] pub fn complex_float32() -> DataType { Arc::new(ComplexFloat32DataType) }
     /// Create a `complex_float64` data type.
-    #[must_use] pub fn complex_float64() -> DataType { DataType::ComplexFloat64 }
+    #[must_use] pub fn complex_float64() -> DataType { Arc::new(ComplexFloat64DataType) }
 
     // Complex subfloats
     /// Create a `complex_float4_e2m1fn` data type.
-    #[must_use] pub fn complex_float4_e2m1fn() -> DataType { DataType::ComplexFloat4E2M1FN }
+    #[must_use] pub fn complex_float4_e2m1fn() -> DataType { Arc::new(ComplexFloat4E2M1FNDataType) }
     /// Create a `complex_float6_e2m3fn` data type.
-    #[must_use] pub fn complex_float6_e2m3fn() -> DataType { DataType::ComplexFloat6E2M3FN }
+    #[must_use] pub fn complex_float6_e2m3fn() -> DataType { Arc::new(ComplexFloat6E2M3FNDataType) }
     /// Create a `complex_float6_e3m2fn` data type.
-    #[must_use] pub fn complex_float6_e3m2fn() -> DataType { DataType::ComplexFloat6E3M2FN }
+    #[must_use] pub fn complex_float6_e3m2fn() -> DataType { Arc::new(ComplexFloat6E3M2FNDataType) }
     /// Create a `complex_float8_e3m4` data type.
-    #[must_use] pub fn complex_float8_e3m4() -> DataType { DataType::ComplexFloat8E3M4 }
+    #[must_use] pub fn complex_float8_e3m4() -> DataType { Arc::new(ComplexFloat8E3M4DataType) }
     /// Create a `complex_float8_e4m3` data type.
-    #[must_use] pub fn complex_float8_e4m3() -> DataType { DataType::ComplexFloat8E4M3 }
+    #[must_use] pub fn complex_float8_e4m3() -> DataType { Arc::new(ComplexFloat8E4M3DataType) }
     /// Create a `complex_float8_e4m3b11fnuz` data type.
-    #[must_use] pub fn complex_float8_e4m3b11fnuz() -> DataType { DataType::ComplexFloat8E4M3B11FNUZ }
+    #[must_use] pub fn complex_float8_e4m3b11fnuz() -> DataType { Arc::new(ComplexFloat8E4M3B11FNUZDataType) }
     /// Create a `complex_float8_e4m3fnuz` data type.
-    #[must_use] pub fn complex_float8_e4m3fnuz() -> DataType { DataType::ComplexFloat8E4M3FNUZ }
+    #[must_use] pub fn complex_float8_e4m3fnuz() -> DataType { Arc::new(ComplexFloat8E4M3FNUZDataType) }
     /// Create a `complex_float8_e5m2` data type.
-    #[must_use] pub fn complex_float8_e5m2() -> DataType { DataType::ComplexFloat8E5M2 }
+    #[must_use] pub fn complex_float8_e5m2() -> DataType { Arc::new(ComplexFloat8E5M2DataType) }
     /// Create a `complex_float8_e5m2fnuz` data type.
-    #[must_use] pub fn complex_float8_e5m2fnuz() -> DataType { DataType::ComplexFloat8E5M2FNUZ }
+    #[must_use] pub fn complex_float8_e5m2fnuz() -> DataType { Arc::new(ComplexFloat8E5M2FNUZDataType) }
     /// Create a `complex_float8_e8m0fnu` data type.
-    #[must_use] pub fn complex_float8_e8m0fnu() -> DataType { DataType::ComplexFloat8E8M0FNU }
+    #[must_use] pub fn complex_float8_e8m0fnu() -> DataType { Arc::new(ComplexFloat8E8M0FNUDataType) }
 
     // Special types
     /// Create a `string` data type.
-    #[must_use] pub fn string() -> DataType { DataType::String }
+    #[must_use] pub fn string() -> DataType { Arc::new(StringDataType) }
     /// Create a `bytes` data type.
-    #[must_use] pub fn bytes() -> DataType { DataType::Bytes }
+    #[must_use] pub fn bytes() -> DataType { Arc::new(BytesDataType) }
     /// Create an `r*` (raw bits) data type with the given size in bytes.
-    #[must_use] pub fn raw_bits(size_bytes: usize) -> DataType { DataType::RawBits(size_bytes) }
+    #[must_use] pub fn raw_bits(size_bytes: usize) -> DataType { Arc::new(RawBitsDataType::new(size_bytes)) }
 
     // NumPy time types
     /// Create a `numpy.datetime64` data type.
     #[must_use]
     pub fn numpy_datetime64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
-        DataType::NumpyDateTime64 { unit, scale_factor }
+        Arc::new(NumpyDateTime64DataType::new(unit, scale_factor))
     }
     /// Create a `numpy.timedelta64` data type.
     #[must_use]
     pub fn numpy_timedelta64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
-        DataType::NumpyTimeDelta64 { unit, scale_factor }
+        Arc::new(NumpyTimeDelta64DataType::new(unit, scale_factor))
     }
 
     // Optional
     /// Create an optional data type wrapping the given inner type.
     #[must_use]
     pub fn optional(inner: NamedDataType) -> DataType {
-        DataType::Optional(OptionalDataType::new(inner))
-    }
-
-    // Extension
-    /// Create an extension data type from an [`Arc<dyn DataTypeExtension>`].
-    #[must_use]
-    pub fn extension(ext: Arc<dyn DataTypeExtension>) -> DataType {
-        DataType::Extension(ext)
+        Arc::new(OptionalDataType::new(inner))
     }
 }
 
 /// A data type.
-#[derive(Clone, Debug)]
-#[non_exhaustive]
-#[rustfmt::skip]
-pub enum DataType {
-    /// `bool` Boolean.
-    Bool,
-    /// `int2` Integer in `[-2, 1]`.
-    Int2,
-    /// `int4` Integer in `[-8, 7]`.
-    Int4,
-    /// `int8` Integer in `[-2^7, 2^7-1]`.
-    Int8,
-    /// `int16` Integer in `[-2^15, 2^15-1]`.
-    Int16,
-    /// `int32` Integer in `[-2^31, 2^31-1]`.
-    Int32,
-    /// `int64` Integer in `[-2^63, 2^63-1]`.
-    Int64,
-    /// `uint2` Integer in `[0, 3]`.
-    UInt2,
-    /// `uint4` Integer in `[0, 15]`.
-    UInt4,
-    /// `uint8` Integer in `[0, 2^8-1]`.
-    UInt8,
-    /// `uint16` Integer in `[0, 2^16-1]`.
-    UInt16,
-    /// `uint32` Integer in `[0, 2^32-1]`.
-    UInt32,
-    /// `uint64` Integer in `[0, 2^64-1]`.
-    UInt64,
-    /// `float4_e2m1fn` a 4-bit floating point representation: sign bit, 2 bit exponent (bias 1), 1 bit mantissa.
-    /// - Extended range: no infinity, no NaN.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float4E2M1FN,
-    /// `float6_e2m3fn` a 6-bit floating point representation: sign bit, 2 bit exponent (bias 1), 3 bit mantissa.
-    /// - Extended range: no infinity, no NaN.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float6E2M3FN,
-    /// `float6_e3m2fn` a 6-bit floating point representation: sign bit, 3 bit exponent (bias 3), 2 bit mantissa.
-    /// - Extended range: no infinity, no NaN.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float6E3M2FN,
-    /// `float8_e3m4` an 8-bit floating point representation: sign bit, 3 bit exponent (bias 3), 4 bit mantissa.
-    /// - IEEE 754-compliant, with NaN and +/-inf.
-    //  - Subnormal numbers when biased exponent is 0.
-    Float8E3M4,
-    /// `float8_e4m3` an 8-bit floating point representation: sign bit, 4 bit exponent (bias 7), 3 bit mantissa.
-    /// - IEEE 754-compliant, with NaN and +/-inf.
-    //  - Subnormal numbers when biased exponent is 0.
-    Float8E4M3,
-    /// `float8_e4m3b11fnuz` an 8-bit floating point representation: sign bit, 4 bit exponent (bias 11), 3 bit mantissa.
-    /// - Extended range: no infinity, NaN represented by `0b1000'0000`.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float8E4M3B11FNUZ,
-    /// `float8_e4m3fnuz` an 8-bit floating point representation: sign bit, 4 bit exponent (bias 8), 3 bit mantissa.
-    /// - Extended range: no infinity, NaN represented by `0b1000'0000`.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float8E4M3FNUZ,
-    /// `float8_e5m2` an 8-bit floating point representation: sign bit, 5 bit exponent (bias 15), 2 bit mantissa.
-    /// - IEEE 754-compliant, with NaN and +/-inf.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float8E5M2,
-    /// `float8_e5m2fnuz` an 8-bit floating point representation: sign bit, 5 bit exponent (bias 16), 2 bit mantissa.
-    /// - Extended range: no infinity, NaN represented by `0b1000'0000`.
-    /// - Subnormal numbers when biased exponent is 0.
-    Float8E5M2FNUZ,
-    /// `float8_e8m0fnu` an 8-bit floating point representation: no sign bit, 8 bit exponent (bias 127), 0 bit mantissa.
-    /// - No zero, no infinity, NaN represented by `0b1111'1111`.
-    /// - No subnormal numbers.
-    Float8E8M0FNU,
-    /// `bfloat16` brain floating point data type: sign bit, 5 bits exponent, 10 bits mantissa.
-    BFloat16,
-    /// `float16` IEEE 754 half-precision floating point: sign bit, 5 bits exponent, 10 bits mantissa.
-    Float16,
-    /// `float32` IEEE 754 single-precision floating point: sign bit, 8 bits exponent, 23 bits mantissa.
-    Float32,
-    /// `float64` IEEE 754 double-precision floating point: sign bit, 11 bits exponent, 52 bits mantissa.
-    Float64,
-    /// `complex_float32` real and complex components are each brain floating point data type.
-    ComplexBFloat16,
-    /// `complex_float32` real and complex components are each IEEE 754 half-precision floating point.
-    ComplexFloat16,
-    /// `complex_float32` real and complex components are each IEEE 754 single-precision floating point.
-    ComplexFloat32,
-    /// `complex_float64` real and complex components are each IEEE 754 double-precision floating point.
-    ComplexFloat64,
-    /// `complex_float4_e2m1fn` real and complex components are each the `float4_e2m1fn` type.
-    ComplexFloat4E2M1FN,
-    /// `complex_float6_e2m3fn` real and complex components are each the `float6_e2m3fn` type.
-    ComplexFloat6E2M3FN,
-    /// `complex_float6_e3m2fn` real and complex components are each the `float6_e3m2fn` type.
-    ComplexFloat6E3M2FN,
-    /// `complex_float8_e3m4` real and complex components are each the `float8_e3m4` type.
-    ComplexFloat8E3M4,
-    /// `complex_float8_e4m3` real and complex components are each the `float8_e4m3` type.
-    ComplexFloat8E4M3,
-    /// `complex_float8_e4m3b11fnuz` real and complex components are each the `float8_e4m3b11fnuz` type.
-    ComplexFloat8E4M3B11FNUZ,
-    /// `complex_float8_e4m3fnuz` real and complex components are each the `float8_e4m3fnuz` type.
-    ComplexFloat8E4M3FNUZ,
-    /// `complex_float8_e5m2` real and complex components are each the `float8_e5m2` type.
-    ComplexFloat8E5M2,
-    /// `complex_float8_e5m2fnuz` real and complex components are each the `float8_e5m2fnuz` type.
-    ComplexFloat8E5M2FNUZ,
-    /// `complex_float8_e8m0fnu` real and complex components are each the `float8_e8m0fnu` type.
-    ComplexFloat8E8M0FNU,
-    /// `complex64` real and complex components are each IEEE 754 single-precision floating point.
-    Complex64,
-    /// `complex128` real and complex components are each IEEE 754 double-precision floating point.
-    Complex128,
-    /// `r*` raw bits, variable size given by *, limited to be a multiple of 8.
-    RawBits(usize), // the stored usize is the size in bytes
-    /// A UTF-8 encoded string.
-    String,
-    /// Variable-sized binary data.
-    Bytes,
-    /// `numpy.datetime64` a 64-bit signed integer represents moments in time relative to the Unix epoch.
-    ///
-    /// This data type closely models the `datetime64` data type from `NumPy`.
-    NumpyDateTime64{
-        /// The `NumPy` temporal unit.
-        unit: NumpyTimeUnit,
-        /// The `NumPy` temporal scale factor.
-        scale_factor: NonZeroU32,
-    },
-    /// `numpy.timedelta64` a 64-bit signed integer represents signed temporal durations.
-    ///
-    /// This data type closely models the `timedelta64` data type from `NumPy`.
-    NumpyTimeDelta64{
-        /// The `NumPy` temporal unit.
-        unit: NumpyTimeUnit,
-        /// The `NumPy` temporal scale factor.
-        scale_factor: NonZeroU32,
-    },
-    /// An optional data type.
-    Optional(OptionalDataType),
-    /// An extension data type.
-    Extension(Arc<dyn DataTypeExtension>),
-}
+///
+/// This is a type alias for `Arc<dyn DataTypeExtension>`, providing a unified
+/// interface for all data types (both built-in and custom extensions).
+///
+/// Use the factory functions in [`data_types`] to create built-in data types.
+pub type DataType = Arc<dyn DataTypeExtension>;
 
-impl PartialEq for DataType {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self, other) {
-            (DataType::RawBits(a), DataType::RawBits(b)) => a == b,
-            (DataType::Optional(a), DataType::Optional(b)) => a == b,
-            (DataType::Extension(a), DataType::Extension(b)) => {
-                a.identifier() == b.identifier() && a.configuration() == b.configuration()
-            }
-            _ => discriminant(self) == discriminant(other),
-        }
-    }
-}
-
-impl Eq for DataType {}
-
-impl DataType {
-    /// Returns the identifier.
-    #[must_use]
-    pub fn identifier(&self) -> &'static str {
-        match self {
-            Self::Bool => BoolDataType::IDENTIFIER,
-            Self::Int2 => Int2DataType::IDENTIFIER,
-            Self::Int4 => Int4DataType::IDENTIFIER,
-            Self::Int8 => Int8DataType::IDENTIFIER,
-            Self::Int16 => Int16DataType::IDENTIFIER,
-            Self::Int32 => Int32DataType::IDENTIFIER,
-            Self::Int64 => Int64DataType::IDENTIFIER,
-            Self::UInt2 => UInt2DataType::IDENTIFIER,
-            Self::UInt4 => UInt4DataType::IDENTIFIER,
-            Self::UInt8 => UInt8DataType::IDENTIFIER,
-            Self::UInt16 => UInt16DataType::IDENTIFIER,
-            Self::UInt32 => UInt32DataType::IDENTIFIER,
-            Self::UInt64 => UInt64DataType::IDENTIFIER,
-            Self::Float4E2M1FN => Float4E2M1FNDataType::IDENTIFIER,
-            Self::Float6E2M3FN => Float6E2M3FNDataType::IDENTIFIER,
-            Self::Float6E3M2FN => Float6E3M2FNDataType::IDENTIFIER,
-            Self::Float8E3M4 => Float8E3M4DataType::IDENTIFIER,
-            Self::Float8E4M3 => Float8E4M3DataType::IDENTIFIER,
-            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType::IDENTIFIER,
-            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType::IDENTIFIER,
-            Self::Float8E5M2 => Float8E5M2DataType::IDENTIFIER,
-            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType::IDENTIFIER,
-            Self::Float8E8M0FNU => Float8E8M0FNUDataType::IDENTIFIER,
-            Self::BFloat16 => BFloat16DataType::IDENTIFIER,
-            Self::Float16 => Float16DataType::IDENTIFIER,
-            Self::Float32 => Float32DataType::IDENTIFIER,
-            Self::Float64 => Float64DataType::IDENTIFIER,
-            Self::Complex64 => Complex64DataType::IDENTIFIER,
-            Self::Complex128 => Complex128DataType::IDENTIFIER,
-            Self::ComplexBFloat16 => ComplexBFloat16DataType::IDENTIFIER,
-            Self::ComplexFloat16 => ComplexFloat16DataType::IDENTIFIER,
-            Self::ComplexFloat32 => ComplexFloat32DataType::IDENTIFIER,
-            Self::ComplexFloat64 => ComplexFloat64DataType::IDENTIFIER,
-            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType::IDENTIFIER,
-            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType::IDENTIFIER,
-            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType::IDENTIFIER,
-            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType::IDENTIFIER,
-            Self::ComplexFloat8E4M3 => ComplexFloat8E4M3DataType::IDENTIFIER,
-            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
-            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
-            Self::ComplexFloat8E5M2 => ComplexFloat8E5M2DataType::IDENTIFIER,
-            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
-            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType::IDENTIFIER,
-            Self::RawBits(_size) => RawBitsDataType::IDENTIFIER,
-            Self::String => StringDataType::IDENTIFIER,
-            Self::Bytes => BytesDataType::IDENTIFIER,
-            Self::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            } => NumpyDateTime64DataType::IDENTIFIER,
-            Self::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => NumpyTimeDelta64DataType::IDENTIFIER,
-            Self::Optional(_data_type) => OptionalDataType::IDENTIFIER,
-            Self::Extension(extension) => extension.identifier(),
-        }
-    }
-
-    /// Returns the metadata.
-    // TODO: Remove for configuration
-    #[allow(clippy::too_many_lines)]
-    #[must_use]
-    pub fn configuration(&self) -> Configuration {
-        match self {
-            Self::Bool
-            | Self::Int2
-            | Self::Int4
-            | Self::Int8
-            | Self::Int16
-            | Self::Int32
-            | Self::Int64
-            | Self::UInt2
-            | Self::UInt4
-            | Self::UInt8
-            | Self::UInt16
-            | Self::UInt32
-            | Self::UInt64
-            | Self::Float4E2M1FN
-            | Self::Float6E2M3FN
-            | Self::Float6E3M2FN
-            | Self::Float8E3M4
-            | Self::Float8E4M3
-            | Self::Float8E4M3B11FNUZ
-            | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2
-            | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU
-            | Self::BFloat16
-            | Self::Float16
-            | Self::Float32
-            | Self::Float64
-            | Self::Complex64
-            | Self::Complex128
-            | Self::ComplexBFloat16
-            | Self::ComplexFloat16
-            | Self::ComplexFloat32
-            | Self::ComplexFloat64
-            | Self::ComplexFloat4E2M1FN
-            | Self::ComplexFloat6E2M3FN
-            | Self::ComplexFloat6E3M2FN
-            | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3
-            | Self::ComplexFloat8E4M3B11FNUZ
-            | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2
-            | Self::ComplexFloat8E5M2FNUZ
-            | Self::ComplexFloat8E8M0FNU
-            | Self::String
-            | Self::Bytes
-            | Self::RawBits(..) => Configuration::default(),
-            Self::NumpyDateTime64 { unit, scale_factor } => {
-                Configuration::from(NumpyDateTime64DataTypeConfigurationV1 {
-                    unit: *unit,
-                    scale_factor: *scale_factor,
-                })
-            }
-            Self::NumpyTimeDelta64 { unit, scale_factor } => {
-                Configuration::from(NumpyTimeDelta64DataTypeConfigurationV1 {
-                    unit: *unit,
-                    scale_factor: *scale_factor,
-                })
-            }
-            Self::Optional(data_type) => data_type.configuration(),
-            Self::Extension(ext) => ext.configuration(),
-        }
-    }
-
-    /// Returns the [`DataTypeSize`].
-    #[must_use]
-    pub fn size(&self) -> DataTypeSize {
-        match self {
-            Self::Bool
-            | Self::Int2
-            | Self::Int4
-            | Self::Int8
-            | Self::UInt2
-            | Self::UInt4
-            | Self::UInt8
-            | Self::Float4E2M1FN
-            | Self::Float6E2M3FN
-            | Self::Float6E3M2FN
-            | Self::Float8E3M4
-            | Self::Float8E4M3
-            | Self::Float8E4M3B11FNUZ
-            | Self::Float8E4M3FNUZ
-            | Self::Float8E5M2
-            | Self::Float8E5M2FNUZ
-            | Self::Float8E8M0FNU => DataTypeSize::Fixed(1),
-            Self::Int16
-            | Self::UInt16
-            | Self::Float16
-            | Self::BFloat16
-            | Self::ComplexFloat4E2M1FN
-            | Self::ComplexFloat6E2M3FN
-            | Self::ComplexFloat6E3M2FN
-            | Self::ComplexFloat8E3M4
-            | Self::ComplexFloat8E4M3
-            | Self::ComplexFloat8E4M3B11FNUZ
-            | Self::ComplexFloat8E4M3FNUZ
-            | Self::ComplexFloat8E5M2
-            | Self::ComplexFloat8E5M2FNUZ
-            | Self::ComplexFloat8E8M0FNU => DataTypeSize::Fixed(2),
-            Self::Int32
-            | Self::UInt32
-            | Self::Float32
-            | Self::ComplexFloat16
-            | Self::ComplexBFloat16 => DataTypeSize::Fixed(4),
-            Self::Int64
-            | Self::UInt64
-            | Self::Float64
-            | Self::Complex64
-            | Self::ComplexFloat32
-            | Self::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | Self::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => DataTypeSize::Fixed(8),
-            Self::Complex128 | Self::ComplexFloat64 => DataTypeSize::Fixed(16),
-            Self::RawBits(size) => DataTypeSize::Fixed(*size),
-            Self::String | Self::Bytes => DataTypeSize::Variable,
-            Self::Optional(inner) => inner.size(),
-            Self::Extension(extension) => extension.size(),
-        }
-    }
-
+/// Extension trait providing convenience methods for [`DataType`].
+///
+/// This trait adds methods that are not part of [`DataTypeExtension`] but are
+/// useful when working with data types in the context of zarrs.
+pub trait DataTypeExt {
     /// Returns true if this is an optional data type.
-    #[must_use]
-    pub fn is_optional(&self) -> bool {
-        matches!(self, Self::Optional(_))
-    }
-
-    /// Returns the default serialization name for this data type.
-    ///
-    /// This uses the per-data-type [`ExtensionIdentifier`] implementations to get the
-    /// runtime-configurable default name.
-    #[must_use]
-    #[rustfmt::skip]
-    pub fn default_name(&self) -> Cow<'static, str> {
-        match self {
-            Self::Bool => BoolDataType::default_name(ZarrVersions::V3),
-            Self::Int2 => Int2DataType::default_name(ZarrVersions::V3),
-            Self::Int4 => Int4DataType::default_name(ZarrVersions::V3),
-            Self::Int8 => Int8DataType::default_name(ZarrVersions::V3),
-            Self::Int16 => Int16DataType::default_name(ZarrVersions::V3),
-            Self::Int32 => Int32DataType::default_name(ZarrVersions::V3),
-            Self::Int64 => Int64DataType::default_name(ZarrVersions::V3),
-            Self::UInt2 => UInt2DataType::default_name(ZarrVersions::V3),
-            Self::UInt4 => UInt4DataType::default_name(ZarrVersions::V3),
-            Self::UInt8 => UInt8DataType::default_name(ZarrVersions::V3),
-            Self::UInt16 => UInt16DataType::default_name(ZarrVersions::V3),
-            Self::UInt32 => UInt32DataType::default_name(ZarrVersions::V3),
-            Self::UInt64 => UInt64DataType::default_name(ZarrVersions::V3),
-            Self::Float4E2M1FN => Float4E2M1FNDataType::default_name(ZarrVersions::V3),
-            Self::Float6E2M3FN => Float6E2M3FNDataType::default_name(ZarrVersions::V3),
-            Self::Float6E3M2FN => Float6E3M2FNDataType::default_name(ZarrVersions::V3),
-            Self::Float8E3M4 => Float8E3M4DataType::default_name(ZarrVersions::V3),
-            Self::Float8E4M3 => Float8E4M3DataType::default_name(ZarrVersions::V3),
-            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType::default_name(ZarrVersions::V3),
-            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType::default_name(ZarrVersions::V3),
-            Self::Float8E5M2 => Float8E5M2DataType::default_name(ZarrVersions::V3),
-            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType::default_name(ZarrVersions::V3),
-            Self::Float8E8M0FNU => Float8E8M0FNUDataType::default_name(ZarrVersions::V3),
-            Self::BFloat16 => BFloat16DataType::default_name(ZarrVersions::V3),
-            Self::Float16 => Float16DataType::default_name(ZarrVersions::V3),
-            Self::Float32 => Float32DataType::default_name(ZarrVersions::V3),
-            Self::Float64 => Float64DataType::default_name(ZarrVersions::V3),
-            Self::ComplexBFloat16 => ComplexBFloat16DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat16 => ComplexFloat16DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat32 => ComplexFloat32DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat64 => ComplexFloat64DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E4M3 => ComplexFloat8E4M3DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E5M2 => ComplexFloat8E5M2DataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType::default_name(ZarrVersions::V3),
-            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType::default_name(ZarrVersions::V3),
-            Self::Complex64 => Complex64DataType::default_name(ZarrVersions::V3),
-            Self::Complex128 => Complex128DataType::default_name(ZarrVersions::V3),
-            Self::String => StringDataType::default_name(ZarrVersions::V3),
-            Self::Bytes => BytesDataType::default_name(ZarrVersions::V3),
-            Self::RawBits(size_bytes) => RawBitsDataType::new(*size_bytes).metadata_name(ZarrVersions::V3),
-            Self::NumpyDateTime64 { .. } => NumpyDateTime64DataType::default_name(ZarrVersions::V3),
-            Self::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::default_name(ZarrVersions::V3),
-            Self::Optional(_) => OptionalDataType::default_name(ZarrVersions::V3),
-            Self::Extension(ext) => ext.metadata_name(ZarrVersions::V3),
-        }
-    }
-
-    /// Converts this data type into a named data type using the default name.
-    #[must_use]
-    pub fn into_named(self) -> NamedDataType {
-        let name = self.default_name().into_owned();
-        NamedDataType::new(name, self)
-    }
-
-    /// Wrap this data type in an [`Optional`](DataType::Optional).
-    ///
-    /// Can be chained to create nested optional types.
-    ///
-    /// # Examples
-    /// ```
-    /// # use zarrs::array::{DataType, data_type::OptionalDataType};
-    /// // Single level optional
-    /// let opt_u8 = DataType::UInt8.into_optional();
-    /// # assert_eq!(opt_u8, DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named())));
-    ///
-    /// // Nested optional
-    /// let opt_opt_u8 = DataType::UInt8.into_optional().into_optional();
-    /// ```
-    #[must_use]
-    pub fn into_optional(self) -> DataType {
-        DataType::Optional(OptionalDataType::new(self.into_named()))
-    }
+    fn is_optional(&self) -> bool;
 
     /// Returns the optional type wrapper if this is an optional data type.
+    fn as_optional(&self) -> Option<&OptionalDataType>;
+
+    /// For optional types: returns the inner data type.
     ///
-    /// # Examples
-    /// ```
-    /// # use zarrs::array::DataType;
-    /// let opt_u8 = DataType::UInt8.into_optional();
-    /// assert!(opt_u8.optional().is_some());
-    /// assert!(DataType::UInt8.optional().is_none());
-    /// ```
-    #[must_use]
-    pub fn optional(&self) -> Option<&OptionalDataType> {
-        if let Self::Optional(opt) = self {
-            Some(opt)
+    /// Returns `None` if this is not an optional type.
+    fn optional_inner(&self) -> Option<&dyn DataTypeExtension>;
+
+    /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
+    fn fixed_size(&self) -> Option<usize>;
+
+    /// Returns `true` if the data type has a fixed size.
+    fn is_fixed(&self) -> bool;
+
+    /// Returns `true` if the data type has a variable size.
+    fn is_variable(&self) -> bool;
+
+    /// Returns the default serialization name for this data type.
+    fn default_name(&self) -> Cow<'static, str>;
+
+    /// Converts this data type into a named data type using the default name.
+    fn to_named(&self) -> NamedDataType;
+
+    /// Wrap this data type in an optional type.
+    fn to_optional(&self) -> DataType;
+}
+
+impl DataTypeExt for DataType {
+    fn is_optional(&self) -> bool {
+        self.identifier() == OptionalDataType::IDENTIFIER
+    }
+
+    fn as_optional(&self) -> Option<&OptionalDataType> {
+        // Check identifier first, then use downcasting
+        if self.identifier() == OptionalDataType::IDENTIFIER {
+            self.as_any().downcast_ref::<OptionalDataType>()
         } else {
             None
         }
     }
 
-    /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
-    #[must_use]
-    pub fn fixed_size(&self) -> Option<usize> {
+    fn optional_inner(&self) -> Option<&dyn DataTypeExtension> {
+        self.optional_inner_data_type()
+    }
+
+    fn fixed_size(&self) -> Option<usize> {
         match self.size() {
             DataTypeSize::Fixed(size) => Some(size),
             DataTypeSize::Variable => None,
         }
     }
 
-    /// Returns `true` if the data type has a fixed size.
-    #[must_use]
-    pub fn is_fixed(&self) -> bool {
+    fn is_fixed(&self) -> bool {
         matches!(self.size(), DataTypeSize::Fixed(_))
     }
 
-    /// Returns `true` if the data type has a variable size.
-    #[must_use]
-    pub fn is_variable(&self) -> bool {
+    fn is_variable(&self) -> bool {
         matches!(self.size(), DataTypeSize::Variable)
     }
 
-    /// Create a fill value from metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DataTypeFillValueMetadataError`] if the fill value is incompatible with the data type.
-    #[allow(clippy::too_many_lines)]
-    pub fn fill_value_from_metadata(
-        &self,
-        fill_value: &FillValueMetadataV3,
-    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        NamedDataType::new(self.identifier().to_string(), self.clone())
-            .fill_value_from_metadata(fill_value)
+    fn default_name(&self) -> Cow<'static, str> {
+        self.metadata_name(ZarrVersions::V3)
     }
 
-    /// Create fill value metadata.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`DataTypeFillValueError`] if the metadata cannot be created from the fill value.
-    pub fn metadata_fill_value(
-        &self,
-        fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-        let error =
-            || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
-        match self {
-            // Delegate to marker types for standard numeric types
-            Self::Bool => BoolDataType.metadata_fill_value(fill_value),
-            Self::Int2 => Int2DataType.metadata_fill_value(fill_value),
-            Self::Int4 => Int4DataType.metadata_fill_value(fill_value),
-            Self::Int8 => Int8DataType.metadata_fill_value(fill_value),
-            Self::Int16 => Int16DataType.metadata_fill_value(fill_value),
-            Self::Int32 => Int32DataType.metadata_fill_value(fill_value),
-            Self::Int64 => Int64DataType.metadata_fill_value(fill_value),
-            Self::UInt2 => UInt2DataType.metadata_fill_value(fill_value),
-            Self::UInt4 => UInt4DataType.metadata_fill_value(fill_value),
-            Self::UInt8 => UInt8DataType.metadata_fill_value(fill_value),
-            Self::UInt16 => UInt16DataType.metadata_fill_value(fill_value),
-            Self::UInt32 => UInt32DataType.metadata_fill_value(fill_value),
-            Self::UInt64 => UInt64DataType.metadata_fill_value(fill_value),
-            Self::Float4E2M1FN => Float4E2M1FNDataType.metadata_fill_value(fill_value),
-            Self::Float6E2M3FN => Float6E2M3FNDataType.metadata_fill_value(fill_value),
-            Self::Float6E3M2FN => Float6E3M2FNDataType.metadata_fill_value(fill_value),
-            Self::Float8E3M4 => Float8E3M4DataType.metadata_fill_value(fill_value),
-            // Float8E4M3 and Float8E5M2 have special handling when float8 feature is enabled
-            Self::Float8E4M3 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                #[cfg(feature = "float8")]
-                {
-                    let number = float8::F8E4M3::from_bits(bytes[0]);
-                    Ok(FillValueMetadataV3::from(number.to_f64()))
-                }
-                #[cfg(not(feature = "float8"))]
-                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
-            }
-            Self::Float8E4M3B11FNUZ => Float8E4M3B11FNUZDataType.metadata_fill_value(fill_value),
-            Self::Float8E4M3FNUZ => Float8E4M3FNUZDataType.metadata_fill_value(fill_value),
-            Self::Float8E5M2 => {
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                #[cfg(feature = "float8")]
-                {
-                    let number = float8::F8E5M2::from_bits(bytes[0]);
-                    Ok(FillValueMetadataV3::from(number.to_f64()))
-                }
-                #[cfg(not(feature = "float8"))]
-                Ok(FillValueMetadataV3::from(byte_to_hex_string(bytes[0])))
-            }
-            Self::Float8E5M2FNUZ => Float8E5M2FNUZDataType.metadata_fill_value(fill_value),
-            Self::Float8E8M0FNU => Float8E8M0FNUDataType.metadata_fill_value(fill_value),
-            Self::BFloat16 => BFloat16DataType.metadata_fill_value(fill_value),
-            Self::Float16 => Float16DataType.metadata_fill_value(fill_value),
-            Self::Float32 => Float32DataType.metadata_fill_value(fill_value),
-            Self::Float64 => Float64DataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat4E2M1FN => ComplexFloat4E2M1FNDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat6E2M3FN => ComplexFloat6E2M3FNDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat6E3M2FN => ComplexFloat6E3M2FNDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat8E3M4 => ComplexFloat8E3M4DataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat8E4M3 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                #[cfg(feature = "float8")]
-                {
-                    let re = float8::F8E4M3::from_bits(bytes[0]);
-                    let im = float8::F8E4M3::from_bits(bytes[1]);
-                    let re = FillValueMetadataV3::from(re.to_f64());
-                    let im = FillValueMetadataV3::from(im.to_f64());
-                    Ok(FillValueMetadataV3::from([re, im]))
-                }
-                #[cfg(not(feature = "float8"))]
-                {
-                    let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
-                    let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
-                    Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
-                }
-            }
-            Self::ComplexFloat8E4M3B11FNUZ => ComplexFloat8E4M3B11FNUZDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat8E4M3FNUZ => ComplexFloat8E4M3FNUZDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat8E5M2 => {
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                #[cfg(feature = "float8")]
-                {
-                    let re = float8::F8E5M2::from_bits(bytes[0]);
-                    let im = float8::F8E5M2::from_bits(bytes[1]);
-                    let re = FillValueMetadataV3::from(re.to_f64());
-                    let im = FillValueMetadataV3::from(im.to_f64());
-                    Ok(FillValueMetadataV3::from([re, im]))
-                }
-                #[cfg(not(feature = "float8"))]
-                {
-                    let hex_string_re = FillValueMetadataV3::from(byte_to_hex_string(bytes[0]));
-                    let hex_string_im = FillValueMetadataV3::from(byte_to_hex_string(bytes[1]));
-                    Ok(FillValueMetadataV3::from([hex_string_re, hex_string_im]))
-                }
-            }
-            Self::ComplexFloat8E5M2FNUZ => ComplexFloat8E5M2FNUZDataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat8E8M0FNU => ComplexFloat8E8M0FNUDataType.metadata_fill_value(fill_value),
-            Self::ComplexBFloat16 => ComplexBFloat16DataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat16 => ComplexFloat16DataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat32 => ComplexFloat32DataType.metadata_fill_value(fill_value),
-            Self::ComplexFloat64 => ComplexFloat64DataType.metadata_fill_value(fill_value),
-            Self::Complex64 => Complex64DataType.metadata_fill_value(fill_value),
-            Self::Complex128 => Complex128DataType.metadata_fill_value(fill_value),
-            Self::String => StringDataType.metadata_fill_value(fill_value),
-            Self::NumpyDateTime64 { .. } => NumpyDateTime64DataType::STATIC.metadata_fill_value(fill_value),
-            Self::NumpyTimeDelta64 { .. } => NumpyTimeDelta64DataType::STATIC.metadata_fill_value(fill_value),
-            // RawBits uses array representation (legacy behavior)
-            // TODO: Switch to base64 when zarr-extensions PR 38 and zarr-python PR 3559 land
-            Self::RawBits(size) => {
-                let bytes = fill_value.as_ne_bytes();
-                if bytes.len() == *size {
-                    Ok(FillValueMetadataV3::from(bytes))
-                } else {
-                    Err(error())
-                }
-            }
-            // Bytes uses array representation (legacy behavior)
-            // TODO: Switch to base64 when zarr-extensions PR 38 and zarr-python PR 3559 land
-            Self::Bytes => Ok(FillValueMetadataV3::from(fill_value.as_ne_bytes().to_vec())),
-            // Optional has special recursive handling
-            Self::Optional(opt) => {
-                let bytes = fill_value.as_ne_bytes();
-                if bytes.is_empty() {
-                    // Invalid: optional fill value must have at least the suffix byte
-                    Err(error())
-                } else if bytes.last() == Some(&0) {
-                    // Null fill value (suffix byte is 0x00)
-                    Ok(FillValueMetadataV3::Null)
-                } else {
-                    // Non-null fill value: strip the suffix byte and recurse
-                    // Use the inner NamedDataType's data_type() to avoid calling OptionalDataType's method
-                    let inner_fill_value = FillValue::new(bytes[..bytes.len() - 1].to_vec());
-                    let inner_metadata = opt.data_type().metadata_fill_value(&inner_fill_value)?;
-                    // Wrap in single-element array for Some(x)
-                    Ok(FillValueMetadataV3::Array(vec![inner_metadata]))
-                }
-            }
-            Self::Extension(extension) => extension.metadata_fill_value(fill_value),
-        }
-    }
-}
-
-impl core::fmt::Display for DataType {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{}", self.identifier())
-    }
-}
-
-/// Implementation of [`DataTypeExtension`] for [`DataType`] enum.
-///
-/// This bridges the enum-based and trait-based approaches, allowing `DataType`
-/// to be used anywhere a `dyn DataTypeExtension` is expected.
-impl DataTypeExtension for DataType {
-    fn identifier(&self) -> &'static str {
-        // Delegate to the existing method
-        DataType::identifier(self)
+    fn to_named(&self) -> NamedDataType {
+        let name = self.default_name().into_owned();
+        NamedDataType::new(name, Arc::clone(self))
     }
 
-    fn configuration(&self) -> Configuration {
-        // Delegate to the existing method
-        DataType::configuration(self)
+    fn to_optional(&self) -> DataType {
+        Arc::new(OptionalDataType::new(self.to_named()))
     }
-
-    fn size(&self) -> DataTypeSize {
-        // Delegate to the existing method
-        DataType::size(self)
-    }
-
-    fn fill_value(
-        &self,
-        fill_value_metadata: &FillValueMetadataV3,
-    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        // Delegate to the existing method
-        DataType::fill_value_from_metadata(self, fill_value_metadata)
-    }
-
-    fn metadata_fill_value(
-        &self,
-        fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-        // Delegate to the existing method
-        DataType::metadata_fill_value(self, fill_value)
-    }
-
-    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
-        match self {
-            Self::Bool => Some(&BoolDataType),
-            Self::Int2 => Some(&Int2DataType),
-            Self::Int4 => Some(&Int4DataType),
-            Self::Int8 => Some(&Int8DataType),
-            Self::Int16 => Some(&Int16DataType),
-            Self::Int32 => Some(&Int32DataType),
-            Self::Int64 => Some(&Int64DataType),
-            Self::UInt2 => Some(&UInt2DataType),
-            Self::UInt4 => Some(&UInt4DataType),
-            Self::UInt8 => Some(&UInt8DataType),
-            Self::UInt16 => Some(&UInt16DataType),
-            Self::UInt32 => Some(&UInt32DataType),
-            Self::UInt64 => Some(&UInt64DataType),
-            Self::Float4E2M1FN => Some(&Float4E2M1FNDataType),
-            Self::Float6E2M3FN => Some(&Float6E2M3FNDataType),
-            Self::Float6E3M2FN => Some(&Float6E3M2FNDataType),
-            Self::Float8E3M4 => Some(&Float8E3M4DataType),
-            Self::Float8E4M3 => Some(&Float8E4M3DataType),
-            Self::Float8E4M3B11FNUZ => Some(&Float8E4M3B11FNUZDataType),
-            Self::Float8E4M3FNUZ => Some(&Float8E4M3FNUZDataType),
-            Self::Float8E5M2 => Some(&Float8E5M2DataType),
-            Self::Float8E5M2FNUZ => Some(&Float8E5M2FNUZDataType),
-            Self::Float8E8M0FNU => Some(&Float8E8M0FNUDataType),
-            Self::BFloat16 => Some(&BFloat16DataType),
-            Self::Float16 => Some(&Float16DataType),
-            Self::Float32 => Some(&Float32DataType),
-            Self::Float64 => Some(&Float64DataType),
-            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
-            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
-            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
-            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
-            Self::ComplexFloat4E2M1FN => Some(&ComplexFloat4E2M1FNDataType),
-            Self::ComplexFloat6E2M3FN => Some(&ComplexFloat6E2M3FNDataType),
-            Self::ComplexFloat6E3M2FN => Some(&ComplexFloat6E3M2FNDataType),
-            Self::ComplexFloat8E3M4 => Some(&ComplexFloat8E3M4DataType),
-            Self::ComplexFloat8E4M3 => Some(&ComplexFloat8E4M3DataType),
-            Self::ComplexFloat8E4M3B11FNUZ => Some(&ComplexFloat8E4M3B11FNUZDataType),
-            Self::ComplexFloat8E4M3FNUZ => Some(&ComplexFloat8E4M3FNUZDataType),
-            Self::ComplexFloat8E5M2 => Some(&ComplexFloat8E5M2DataType),
-            Self::ComplexFloat8E5M2FNUZ => Some(&ComplexFloat8E5M2FNUZDataType),
-            Self::ComplexFloat8E8M0FNU => Some(&ComplexFloat8E8M0FNUDataType),
-            Self::Complex64 => Some(&Complex64DataType),
-            Self::Complex128 => Some(&Complex128DataType),
-            Self::RawBits(_) => Some(&RawBitsDataType::STATIC),
-            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
-            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
-            // Variable size or special handling types
-            Self::String | Self::Bytes | Self::Optional(_) => None,
-            Self::Extension(ext) => ext.codec_bytes(),
-        }
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
-        match self {
-            Self::Extension(ext) => ext.codec_packbits(),
-            _ => None,
-        }
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn codec_bitround(&self) -> Option<&dyn DataTypeExtensionBitroundCodec> {
-        match self {
-            Self::Int8 => Some(&Int8DataType),
-            Self::Int16 => Some(&Int16DataType),
-            Self::Int32 => Some(&Int32DataType),
-            Self::Int64 => Some(&Int64DataType),
-            Self::UInt8 => Some(&UInt8DataType),
-            Self::UInt16 => Some(&UInt16DataType),
-            Self::UInt32 => Some(&UInt32DataType),
-            Self::UInt64 => Some(&UInt64DataType),
-            Self::BFloat16 => Some(&BFloat16DataType),
-            Self::Float16 => Some(&Float16DataType),
-            Self::Float32 => Some(&Float32DataType),
-            Self::Float64 => Some(&Float64DataType),
-            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
-            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
-            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
-            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
-            Self::Complex64 => Some(&Complex64DataType),
-            Self::Complex128 => Some(&Complex128DataType),
-            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
-            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
-            Self::Extension(ext) => ext.codec_bitround(),
-            _ => None,
-        }
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn codec_pcodec(&self) -> Option<&dyn DataTypeExtensionPcodecCodec> {
-        match self {
-            Self::Int16 => Some(&Int16DataType),
-            Self::Int32 => Some(&Int32DataType),
-            Self::Int64 => Some(&Int64DataType),
-            Self::UInt16 => Some(&UInt16DataType),
-            Self::UInt32 => Some(&UInt32DataType),
-            Self::UInt64 => Some(&UInt64DataType),
-            Self::BFloat16 => Some(&BFloat16DataType),
-            Self::Float16 => Some(&Float16DataType),
-            Self::Float32 => Some(&Float32DataType),
-            Self::Float64 => Some(&Float64DataType),
-            Self::ComplexBFloat16 => Some(&ComplexBFloat16DataType),
-            Self::ComplexFloat16 => Some(&ComplexFloat16DataType),
-            Self::ComplexFloat32 => Some(&ComplexFloat32DataType),
-            Self::ComplexFloat64 => Some(&ComplexFloat64DataType),
-            Self::Complex64 => Some(&Complex64DataType),
-            Self::Complex128 => Some(&Complex128DataType),
-            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
-            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
-            Self::Extension(ext) => ext.codec_pcodec(),
-            _ => None,
-        }
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn codec_fixedscaleoffset(&self) -> Option<&dyn DataTypeExtensionFixedScaleOffsetCodec> {
-        match self {
-            // Integers
-            Self::Int8 => Some(&Int8DataType),
-            Self::Int16 => Some(&Int16DataType),
-            Self::Int32 => Some(&Int32DataType),
-            Self::Int64 => Some(&Int64DataType),
-            Self::UInt8 => Some(&UInt8DataType),
-            Self::UInt16 => Some(&UInt16DataType),
-            Self::UInt32 => Some(&UInt32DataType),
-            Self::UInt64 => Some(&UInt64DataType),
-            // Floats (not complex types)
-            Self::BFloat16 => Some(&BFloat16DataType),
-            Self::Float16 => Some(&Float16DataType),
-            Self::Float32 => Some(&Float32DataType),
-            Self::Float64 => Some(&Float64DataType),
-            Self::Extension(ext) => ext.codec_fixedscaleoffset(),
-            _ => None,
-        }
-    }
-
-    #[allow(clippy::wildcard_enum_match_arm)]
-    fn codec_zfp(&self) -> Option<&dyn DataTypeExtensionZfpCodec> {
-        match self {
-            // Integers that promote to Int32
-            Self::Int8 => Some(&Int8DataType),
-            Self::Int16 => Some(&Int16DataType),
-            Self::Int32 => Some(&Int32DataType),
-            Self::UInt8 => Some(&UInt8DataType),
-            Self::UInt16 => Some(&UInt16DataType),
-            Self::UInt32 => Some(&UInt32DataType),
-            // Integers that promote to Int64
-            Self::Int64 => Some(&Int64DataType),
-            Self::UInt64 => Some(&UInt64DataType),
-            Self::NumpyDateTime64 { .. } => Some(&NumpyDateTime64DataType::STATIC),
-            Self::NumpyTimeDelta64 { .. } => Some(&NumpyTimeDelta64DataType::STATIC),
-            // Native float types
-            Self::Float32 => Some(&Float32DataType),
-            Self::Float64 => Some(&Float64DataType),
-            Self::Extension(ext) => ext.codec_zfp(),
-            _ => None,
-        }
-    }
-}
-
-#[cfg(not(feature = "float8"))]
-fn byte_to_hex_string(byte: u8) -> String {
-    let mut string = String::with_capacity(4);
-    string.push('0');
-    string.push('x');
-    string.push(char::from_digit((byte / 16).into(), 16).unwrap());
-    string.push(char::from_digit((byte % 16).into(), 16).unwrap());
-    string
-}
-
-fn subfloat_hex_string_to_fill_value(fill_value: &FillValueMetadataV3) -> Option<FillValue> {
-    if let Some(s) = fill_value.as_str() {
-        if s.starts_with("0x") && s.len() == 4 {
-            return u8::from_str_radix(&s[2..4], 16).ok().map(FillValue::from);
-        }
-    }
-    None
 }
 
 /// Get the default V3 name for a V3 data type name.
@@ -1108,9 +320,10 @@ pub(crate) fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
 mod tests {
     use half::bf16;
 
+    use super::data_types;
     use super::*;
     use crate::metadata::v3::{
-        MetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
+        FillValueMetadataV3, MetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
     };
 
     #[test]
@@ -1139,14 +352,14 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(
-            format!("{}", named_data_type.data_type()),
+            named_data_type.data_type().identifier(),
             BoolDataType::IDENTIFIER
         );
         assert_eq!(
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Bool);
+        assert_eq!(named_data_type.data_type().identifier(), "bool");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("true").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1174,7 +387,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int2);
+        assert_eq!(named_data_type.data_type().identifier(), "int2");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-1").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1208,7 +421,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int4);
+        assert_eq!(named_data_type.data_type().identifier(), "int4");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1242,7 +455,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int8);
+        assert_eq!(named_data_type.data_type().identifier(), "int8");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1272,7 +485,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int16);
+        assert_eq!(named_data_type.data_type().identifier(), "int16");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1302,7 +515,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int32);
+        assert_eq!(named_data_type.data_type().identifier(), "int32");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1332,7 +545,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Int64);
+        assert_eq!(named_data_type.data_type().identifier(), "int64");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1362,7 +575,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt2);
+        assert_eq!(named_data_type.data_type().identifier(), "uint2");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("3").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1387,7 +600,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt4);
+        assert_eq!(named_data_type.data_type().identifier(), "uint4");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("15").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1411,7 +624,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt8);
+        assert_eq!(named_data_type.data_type().identifier(), "uint8");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1431,7 +644,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt16);
+        assert_eq!(named_data_type.data_type().identifier(), "uint16");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1451,7 +664,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt32);
+        assert_eq!(named_data_type.data_type().identifier(), "uint32");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1471,7 +684,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::UInt64);
+        assert_eq!(named_data_type.data_type().identifier(), "uint64");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("7").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1491,7 +704,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Float32);
+        assert_eq!(named_data_type.data_type().identifier(), "float32");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7.0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1551,7 +764,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Float64);
+        assert_eq!(named_data_type.data_type().identifier(), "float64");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("-7.0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
@@ -1718,11 +931,14 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""0xaa""#).unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
-        let metadata2 = serde_json::from_str::<FillValueMetadataV3>(r#"-0.3125"#).unwrap();
         assert_eq!(fill_value.as_ne_bytes(), [170]);
+        // Verify that the fill value represents -0.3125 in float8_e4m3 format
+        assert_eq!(float8::F8E4M3::from_bits(170).to_f32(), -0.3125);
+        // metadata_fill_value returns numeric value (with float8 feature enabled)
+        let metadata_out = named_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
-            metadata2,
-            named_data_type.metadata_fill_value(&fill_value).unwrap()
+            serde_json::from_str::<FillValueMetadataV3>(r"-0.3125").unwrap(),
+            metadata_out
         );
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""NaN""#).unwrap();
@@ -1743,28 +959,28 @@ mod tests {
             float8::F8E4M3::NEG_INFINITY
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"0"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E4M3::ZERO
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-0"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E4M3::NEG_ZERO
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-1"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-1").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E4M3::NEG_ONE
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"1"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"1").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
@@ -1847,11 +1063,14 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""0xaa""#).unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
-        let metadata2 = serde_json::from_str::<FillValueMetadataV3>(r#"-0.046875"#).unwrap();
         assert_eq!(fill_value.as_ne_bytes(), [170]);
+        // Verify that the fill value represents -0.046875 in float8_e5m2 format
+        assert_eq!(float8::F8E5M2::from_bits(170).to_f32(), -0.046875);
+        // metadata_fill_value returns numeric value (with float8 feature enabled)
+        let metadata_out = named_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
-            metadata2,
-            named_data_type.metadata_fill_value(&fill_value).unwrap()
+            serde_json::from_str::<FillValueMetadataV3>(r"-0.046875").unwrap(),
+            metadata_out
         );
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>(r#""NaN""#).unwrap();
@@ -1872,28 +1091,28 @@ mod tests {
             float8::F8E5M2::NEG_INFINITY
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"0"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E5M2::ZERO
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-0"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-0").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E5M2::NEG_ZERO
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-1"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-1").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E5M2::NEG_ONE
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"1"#).unwrap();
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"1").unwrap();
         let fill_value = named_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(
             float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
@@ -2071,7 +1290,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::ComplexBFloat16);
+        assert_eq!(named_data_type.data_type().identifier(), "complex_bfloat16");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2090,8 +1309,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2103,7 +1322,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::ComplexFloat16);
+        assert_eq!(named_data_type.data_type().identifier(), "complex_float16");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2122,8 +1341,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2135,7 +1354,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::ComplexFloat32);
+        assert_eq!(named_data_type.data_type().identifier(), "complex_float32");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2154,8 +1373,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2167,7 +1386,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::ComplexFloat64);
+        assert_eq!(named_data_type.data_type().identifier(), "complex_float64");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2186,8 +1405,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2199,7 +1418,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Complex64);
+        assert_eq!(named_data_type.data_type().identifier(), "complex64");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2218,8 +1437,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2231,7 +1450,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Complex128);
+        assert_eq!(named_data_type.data_type().identifier(), "complex128");
 
         let metadata =
             serde_json::from_str::<FillValueMetadataV3>(r#"[-7.0, "Infinity"]"#).unwrap();
@@ -2250,8 +1469,8 @@ mod tests {
             named_data_type.metadata_fill_value(&fill_value).unwrap()
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadataV3>(r#"-7.0"#).unwrap();
-        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err())
+        let metadata = serde_json::from_str::<FillValueMetadataV3>(r"-7.0").unwrap();
+        assert!(named_data_type.fill_value_from_metadata(&metadata).is_err());
     }
 
     #[test]
@@ -2385,7 +1604,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::Bool);
+        assert_eq!(named_data_type.data_type().identifier(), "bool");
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("1").unwrap();
         assert_eq!(
@@ -2406,7 +1625,11 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert_eq!(named_data_type.data_type(), &DataType::RawBits(2));
+        assert!(
+            named_data_type
+                .data_type()
+                .data_type_eq(data_types::raw_bits(2).as_ref())
+        );
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("[123]").unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), "[123]");
@@ -2510,60 +1733,100 @@ mod tests {
     #[test]
     fn fill_value_from_metadata_failure() {
         let metadata = serde_json::from_str::<FillValueMetadataV3>("1").unwrap();
-        assert!(DataType::Bool.fill_value_from_metadata(&metadata).is_err());
+        assert!(
+            data_types::bool()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
         let metadata = serde_json::from_str::<FillValueMetadataV3>("false").unwrap();
-        assert!(DataType::Int8.fill_value_from_metadata(&metadata).is_err());
-        assert!(DataType::Int16.fill_value_from_metadata(&metadata).is_err());
-        assert!(DataType::Int32.fill_value_from_metadata(&metadata).is_err());
-        assert!(DataType::Int64.fill_value_from_metadata(&metadata).is_err());
-        assert!(DataType::UInt8.fill_value_from_metadata(&metadata).is_err());
         assert!(
-            DataType::UInt16
+            data_types::int8()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::UInt32
+            data_types::int16()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::UInt64
+            data_types::int32()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::Float16
+            data_types::int64()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::Float32
+            data_types::uint8()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::Float64
+            data_types::uint16()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::BFloat16
+            data_types::uint32()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::Complex64
+            data_types::uint64()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::Complex128
+            data_types::float16()
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
         assert!(
-            DataType::RawBits(1)
+            data_types::float32()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            data_types::float64()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            data_types::bfloat16()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            data_types::complex64()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            data_types::complex128()
+                .to_named()
+                .fill_value_from_metadata(&metadata)
+                .is_err()
+        );
+        assert!(
+            data_types::raw_bits(1)
+                .to_named()
                 .fill_value_from_metadata(&metadata)
                 .is_err()
         );
@@ -2619,8 +1882,7 @@ mod tests {
         assert_eq!(named_data_type.size(), DataTypeSize::Variable);
 
         let expected_bytes = [0u8, 1, 2, 3];
-        let metadata_from_arr: FillValueMetadataV3 =
-            serde_json::from_str(r#"[0, 1, 2, 3]"#).unwrap();
+        let metadata_from_arr: FillValueMetadataV3 = serde_json::from_str(r"[0, 1, 2, 3]").unwrap();
         let fill_value_from_arr = named_data_type
             .fill_value_from_metadata(&metadata_from_arr)
             .unwrap();
@@ -2658,7 +1920,7 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.name(), "zarrs.optional");
-        if let Some(opt) = named_data_type.optional() {
+        if let Some(opt) = named_data_type.as_optional() {
             // Use data_type().identifier() to get the inner type's identifier
             assert_eq!(opt.data_type().identifier(), "int32");
             assert_eq!(opt.data_type().size(), DataTypeSize::Fixed(4));
@@ -2672,11 +1934,15 @@ mod tests {
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
         assert_eq!(named_data_type.name(), "zarrs.optional");
-        if let Some(opt) = named_data_type.optional() {
+        if let Some(opt) = named_data_type.as_optional() {
             assert_eq!(opt.data_type().identifier(), "numpy.datetime64");
-            if let DataType::NumpyDateTime64 { unit, scale_factor } = opt.data_type() {
-                assert_eq!(*unit, NumpyTimeUnit::Second);
-                assert_eq!(scale_factor.get(), 1);
+            if let Some(dt) = opt
+                .data_type()
+                .as_any()
+                .downcast_ref::<NumpyDateTime64DataType>()
+            {
+                assert_eq!(dt.unit, NumpyTimeUnit::Second);
+                assert_eq!(dt.scale_factor.get(), 1);
             } else {
                 panic!("Expected NumpyDateTime64 inner type");
             }
@@ -2689,7 +1955,7 @@ mod tests {
             r#"{"name":"zarrs.optional","configuration":{"name":"string","configuration":{}}}"#;
         let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
         let named_data_type = NamedDataType::try_from(&metadata).unwrap();
-        if let Some(opt) = named_data_type.optional() {
+        if let Some(opt) = named_data_type.as_optional() {
             assert_eq!(opt.data_type().identifier(), "string");
             assert_eq!(opt.data_type().size(), DataTypeSize::Variable);
         } else {
@@ -2727,115 +1993,105 @@ mod tests {
     #[test]
     fn data_type_optional_method() {
         // Single level optional
-        let opt_u8 = DataType::UInt8.into_optional();
-        assert_eq!(
-            opt_u8,
-            DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named()))
-        );
+        let opt_u8 = data_types::uint8().to_optional();
+        let expected = data_types::optional(data_types::uint8().to_named());
+        assert!(opt_u8.data_type_eq(expected.as_ref()));
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
-        assert_eq!(
-            DataType::UInt8.into_optional().into_optional(),
-            DataType::Optional(OptionalDataType::new(
-                DataType::Optional(OptionalDataType::new(DataType::UInt8.into_named()))
-                    .into_named()
-            ))
-        );
+        let nested_2 = data_types::uint8().to_optional().to_optional();
+        let expected_2 =
+            data_types::optional(data_types::optional(data_types::uint8().to_named()).to_named());
+        assert!(nested_2.data_type_eq(expected_2.as_ref()));
 
         // Nested optional (3 levels)
-        assert_eq!(
-            DataType::UInt16
-                .into_optional()
-                .into_optional()
-                .into_optional(),
-            DataType::Optional(OptionalDataType::new(
-                DataType::Optional(OptionalDataType::new(
-                    DataType::Optional(OptionalDataType::new(DataType::UInt16.into_named()))
-                        .into_named()
-                ))
-                .into_named()
-            ))
+        let nested_3 = data_types::uint16()
+            .to_optional()
+            .to_optional()
+            .to_optional();
+        let expected_3 = data_types::optional(
+            data_types::optional(data_types::optional(data_types::uint16().to_named()).to_named())
+                .to_named(),
         );
+        assert!(nested_3.data_type_eq(expected_3.as_ref()));
 
         // Works with various inner types
-        assert_eq!(
-            DataType::String.into_optional(),
-            DataType::Optional(OptionalDataType::new(DataType::String.into_named()))
-        );
-        assert_eq!(
-            DataType::Float64.into_optional(),
-            DataType::Optional(OptionalDataType::new(DataType::Float64.into_named()))
-        );
+        let opt_string = data_types::string().to_optional();
+        let expected_string = data_types::optional(data_types::string().to_named());
+        assert!(opt_string.data_type_eq(expected_string.as_ref()));
+
+        let opt_f64 = data_types::float64().to_optional();
+        let expected_f64 = data_types::optional(data_types::float64().to_named());
+        assert!(opt_f64.data_type_eq(expected_f64.as_ref()));
     }
 
     #[test]
     fn data_type_optional_fill_value() {
         // Simple optional: None -> null
-        let named_data_type = DataType::UInt8.into_optional();
+        let opt_data_type = data_types::uint8().to_optional().to_named();
         let fill_value = FillValue::new_optional_null();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = opt_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = opt_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Simple optional: Some(42) -> [42]
         let fill_value = FillValue::from(42u8).into_optional();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = opt_data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
             FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
         );
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = opt_data_type.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: None -> null
-        let named_data_type = DataType::UInt8.into_optional().into_optional();
+        let nested_opt = data_types::uint8().to_optional().to_optional().to_named();
         let fill_value = FillValue::new_optional_null();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = nested_opt.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(metadata, FillValueMetadataV3::Null);
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = nested_opt.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: Some(None) -> [null]
         let fill_value = FillValue::new_optional_null().into_optional();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = nested_opt.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
             FillValueMetadataV3::Array(vec![FillValueMetadataV3::Null])
         );
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = nested_opt.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Nested optional: Some(Some(42)) -> [[42]]
         let fill_value = FillValue::from(42u8).into_optional().into_optional();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = nested_opt.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
             FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
                 FillValueMetadataV3::from(42u8)
             ])])
         );
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = nested_opt.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Triple nested: Some(Some(None)) -> [[null]]
-        let named_data_type = DataType::UInt8
-            .into_named()
+        let triple_nested = data_types::uint8()
+            .to_named()
             .into_optional()
             .into_optional()
             .into_optional();
         let fill_value = FillValue::new_optional_null()
             .into_optional()
             .into_optional();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = triple_nested.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
             FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
                 FillValueMetadataV3::Null
             ])])
         );
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = triple_nested.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
 
         // Triple nested: Some(Some(Some(42))) -> [[[42]]]
@@ -2843,14 +2099,14 @@ mod tests {
             .into_optional()
             .into_optional()
             .into_optional();
-        let metadata = named_data_type.metadata_fill_value(&fill_value).unwrap();
+        let metadata = triple_nested.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             metadata,
             FillValueMetadataV3::Array(vec![FillValueMetadataV3::Array(vec![
                 FillValueMetadataV3::Array(vec![FillValueMetadataV3::from(42u8)])
             ])])
         );
-        let roundtrip = named_data_type.fill_value_from_metadata(&metadata).unwrap();
+        let roundtrip = triple_nested.fill_value_from_metadata(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
     }
 }

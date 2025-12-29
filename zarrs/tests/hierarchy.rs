@@ -30,7 +30,7 @@ fn hierarchy_tree() {
     let store = sync_store();
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("{:?}", tree);
+    println!("{tree:?}");
     assert_eq!(
         tree,
         "/
@@ -47,11 +47,11 @@ fn consolidated_metadata() {
     let store = sync_store();
     let node = Node::open(&store, "/").unwrap();
     let consolidated_metadata = node.consolidate_metadata().unwrap();
-    println!("{:#?}", consolidated_metadata);
+    println!("{consolidated_metadata:#?}");
 
     for relative_path in ["a", "a/baz", "a/foo", "b"] {
         let consolidated = consolidated_metadata.get(relative_path).unwrap();
-        let node_path = format!("/{}", relative_path);
+        let node_path = format!("/{relative_path}");
         let actual = Node::open(&store, &node_path).unwrap();
         assert_eq!(consolidated, actual.metadata());
     }
@@ -66,10 +66,10 @@ fn consolidated_metadata() {
 
     let node = Node::open(&store, "/a").unwrap();
     let consolidated_metadata = node.consolidate_metadata().unwrap();
-    println!("{:#?}", consolidated_metadata);
+    println!("{consolidated_metadata:#?}");
     for relative_path in ["baz", "foo"] {
         let consolidated = consolidated_metadata.get(relative_path).unwrap();
-        let node_path = format!("/a/{}", relative_path);
+        let node_path = format!("/a/{relative_path}");
         let actual = Node::open(&store, &node_path).unwrap();
         assert_eq!(consolidated, actual.metadata());
     }
@@ -114,13 +114,19 @@ fn child_paths() {
     // At root, there are two child paths: a and b (both groups)
     let group = Group::open(store.clone(), "/").unwrap();
     let paths = group.child_paths().unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are two child paths: baz and foo (both arrays)
     let group = Group::open(store.clone(), "/a").unwrap();
     let paths = group.child_paths().unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
 }
 
@@ -131,7 +137,10 @@ fn child_group_paths() {
     // At root, there are two group paths: a and b
     let group = Group::open(store.clone(), "/").unwrap();
     let paths = group.child_group_paths().unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are no child group paths (only arrays)
@@ -152,7 +161,10 @@ fn child_array_paths() {
     // In /a, there are two array paths: baz and foo
     let group = Group::open(store.clone(), "/a").unwrap();
     let paths = group.child_array_paths().unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
 }
 
@@ -198,13 +210,19 @@ async fn async_child_paths() {
     // At root, there are two child paths: a and b (both groups)
     let group = Group::async_open(store.clone(), "/").await.unwrap();
     let paths = group.async_child_paths().await.unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are two child paths: baz and foo (both arrays)
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
     let paths = group.async_child_paths().await.unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
 }
 
@@ -216,7 +234,10 @@ async fn async_child_group_paths() {
     // At root, there are two group paths: a and b
     let group = Group::async_open(store.clone(), "/").await.unwrap();
     let paths = group.async_child_group_paths().await.unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a", "/b"]);
 
     // In /a, there are no child group paths (only arrays)
@@ -238,6 +259,9 @@ async fn async_child_array_paths() {
     // In /a, there are two array paths: baz and foo
     let group = Group::async_open(store.clone(), "/a").await.unwrap();
     let paths = group.async_child_array_paths().await.unwrap();
-    let path_strings: Vec<_> = paths.iter().map(|p| p.as_str()).collect();
+    let path_strings: Vec<_> = paths
+        .iter()
+        .map(zarrs::hierarchy::NodePath::as_str)
+        .collect();
     assert_eq!(path_strings, ["/a/baz", "/a/foo"]);
 }

@@ -63,155 +63,17 @@ struct DataTypeExtensionPackBitsCodecComponents {
     pub sign_extension: bool,
 }
 
-#[allow(clippy::too_many_lines)]
 fn pack_bits_components(
     data_type: &DataType,
 ) -> Result<DataTypeExtensionPackBitsCodecComponents, CodecError> {
-    type DT = DataType;
-    match data_type {
-        DT::Bool => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 1,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::UInt2 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 2,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int2 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 2,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt4 | DT::Float4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int4 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::Float6E2M3FN | DT::Float6E3M2FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 6,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::UInt8
-        | DT::Float8E3M4
-        | DT::Float8E4M3
-        | DT::Float8E4M3B11FNUZ
-        | DT::Float8E4M3FNUZ
-        | DT::Float8E5M2
-        | DT::Float8E5M2FNUZ
-        | DT::Float8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DataType::ComplexFloat4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DataType::ComplexFloat6E2M3FN | DataType::ComplexFloat6E3M2FN => {
-            Ok(DataTypeExtensionPackBitsCodecComponents {
-                component_size_bits: 6,
-                num_components: 2,
-                sign_extension: false,
-            })
-        }
-        DataType::ComplexFloat8E3M4
-        | DataType::ComplexFloat8E4M3
-        | DataType::ComplexFloat8E4M3B11FNUZ
-        | DataType::ComplexFloat8E4M3FNUZ
-        | DataType::ComplexFloat8E5M2
-        | DataType::ComplexFloat8E5M2FNUZ
-        | DataType::ComplexFloat8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Int8 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt16 | DT::Float16 | DT::BFloat16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::ComplexBFloat16 | DT::ComplexFloat16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::UInt32 | DT::Float32 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int32
-        | DT::NumpyDateTime64 {
-            unit: _,
-            scale_factor: _,
-        }
-        | DT::NumpyTimeDelta64 {
-            unit: _,
-            scale_factor: _,
-        } => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt64 | DT::Float64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::Complex64 | DT::ComplexFloat32 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Complex128 | DT::ComplexFloat64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Extension(ext) => {
-            let packbits = ext.codec_packbits().ok_or_else(|| {
-                CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    PackBitsCodec::IDENTIFIER.to_string(),
-                )
-            })?;
-            Ok(DataTypeExtensionPackBitsCodecComponents {
-                component_size_bits: packbits.component_size_bits(),
-                num_components: packbits.num_components(),
-                sign_extension: packbits.sign_extension(),
-            })
-        }
-        DT::String | DT::Bytes | DT::RawBits(_) | DT::Optional(_) => {
-            Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                PackBitsCodec::IDENTIFIER.to_string(),
-            ))
-        }
-    }
+    let packbits = data_type.codec_packbits().ok_or_else(|| {
+        CodecError::UnsupportedDataType(data_type.clone(), PackBitsCodec::IDENTIFIER.to_string())
+    })?;
+    Ok(DataTypeExtensionPackBitsCodecComponents {
+        component_size_bits: packbits.component_size_bits(),
+        num_components: packbits.num_components(),
+        sign_extension: packbits.sign_extension(),
+    })
 }
 
 fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
@@ -232,8 +94,9 @@ mod tests {
     use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
     use crate::{
         array::{
-            ArrayBytes, DataType,
+            ArrayBytes,
             codec::{ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions},
+            data_types,
             element::{Element, ElementOwned},
         },
         array_subset::ArraySubset,
@@ -273,7 +136,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-            let data_type = DataType::Bool;
+            let data_type = data_types::bool();
             let fill_value = FillValue::from(false);
 
             let elements: Vec<bool> = (0..40).map(|i| i % 3 == 0).collect();
@@ -292,7 +155,7 @@ mod tests {
                 &fill_value,
                 &CodecOptions::default(),
             )?;
-            assert!((encoded.len() as u64) <= (40 * 1).div_ceil(&8) + 1);
+            assert!((encoded.len() as u64) <= 40.div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
@@ -340,7 +203,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-            let data_type = DataType::Float32;
+            let data_type = data_types::float32();
             let fill_value = FillValue::from(0.0f32);
 
             let elements: Vec<f32> = (0..40).map(|i| i as f32).collect();
@@ -398,7 +261,7 @@ mod tests {
                     );
                     let chunk_shape =
                         vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-                    let data_type = DataType::Int16;
+                    let data_type = data_types::int16();
                     let fill_value = FillValue::from(0i16);
                     let elements: Vec<i16> = (-20..20).map(|i| (i as i16) << first_bit).collect();
                     let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
@@ -441,7 +304,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::UInt2;
+            let data_type = data_types::uint2();
             let fill_value = FillValue::from(0u8);
 
             let elements: Vec<u8> = (0..4).map(|i| i as u8).collect();
@@ -481,7 +344,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::UInt4;
+            let data_type = data_types::uint4();
             let fill_value = FillValue::from(0u8);
 
             let elements: Vec<u8> = (0..16).map(|i| i as u8).collect();
@@ -521,7 +384,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::Int2;
+            let data_type = data_types::int2();
             let fill_value = FillValue::from(0i8);
 
             let elements: Vec<i8> = (-2..2).map(|i| i as i8).collect();
@@ -561,7 +424,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::Int4;
+            let data_type = data_types::int4();
             let fill_value = FillValue::from(0i8);
 
             let elements: Vec<i8> = (-8..8).map(|i| i as i8).collect();
@@ -601,7 +464,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::Float4E2M1FN;
+            let data_type = data_types::float4_e2m1fn();
             let fill_value = FillValue::from(0u8);
 
             let bytes = ArrayBytes::new_flen((0..16).map(|i| i as u8).collect::<Vec<u8>>());
@@ -640,7 +503,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::Float6E2M3FN;
+            let data_type = data_types::float6_e2m3fn();
             let fill_value = FillValue::from(0u8);
 
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
@@ -679,7 +542,7 @@ mod tests {
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
-            let data_type = DataType::Float6E3M2FN;
+            let data_type = data_types::float6_e3m2fn();
             let fill_value = FillValue::from(0u8);
 
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());

@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use ndarray::ArrayD;
-use zarrs::array::{ArrayBuilder, DataType, FillValue};
+use zarrs::array::{ArrayBuilder, DataTypeExt, FillValue, data_types};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let array = ArrayBuilder::new(
         vec![4, 4],                                      // 4x4 array
         vec![2, 2],                                      // 2x2 chunks
-        DataType::UInt8.into_optional().into_optional(), // Optional optional uint8 => Option<Option<u8>>
+        data_types::uint8().to_optional().to_optional(), // Optional optional uint8 => Option<Option<u8>>
         FillValue::new_optional_null().into_optional(),  // Fill value => Some(None)
     )
     .dimension_names(["y", "x"].into())

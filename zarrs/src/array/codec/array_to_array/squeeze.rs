@@ -124,6 +124,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
+            data_type::DataTypeExt,
+            data_types,
         },
         array_subset::ArraySubset,
     };
@@ -179,8 +181,8 @@ mod tests {
 
     #[test]
     fn codec_squeeze_round_trip_array1() {
-        const JSON: &str = r#"{}"#;
-        codec_squeeze_round_trip_impl(JSON, DataType::UInt8, 0u8);
+        const JSON: &str = r"{}";
+        codec_squeeze_round_trip_impl(JSON, data_types::uint8(), 0u8);
     }
 
     #[test]
@@ -195,7 +197,7 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(1).unwrap(),
         ];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();

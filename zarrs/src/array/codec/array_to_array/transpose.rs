@@ -246,6 +246,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
+            data_type::DataTypeExt,
+            data_types,
         },
         array_subset::ArraySubset,
     };
@@ -294,7 +296,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [0, 2, 1]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt8, 0u8);
+        codec_transpose_round_trip_impl(JSON, data_types::uint8(), 0u8);
     }
 
     #[test]
@@ -302,7 +304,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [2, 1, 0]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt16, 0u16);
+        codec_transpose_round_trip_impl(JSON, data_types::uint16(), 0u16);
     }
 
     #[test]
@@ -311,12 +313,12 @@ mod tests {
 
         // Create a 2x3 array of strings
         let shape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()];
-        let data_type = DataType::String;
+        let data_type = data_types::string();
         let fill_value = FillValue::from("");
 
         // Create test data: 6 strings in row-major order
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let bytes = Element::into_array_bytes(&DataType::String, strings).unwrap();
+        let bytes = Element::into_array_bytes(&data_types::string(), strings).unwrap();
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
@@ -355,24 +357,25 @@ mod tests {
         // Create test data: 6 strings in row-major order for shape [2, 3]
         // [[s00, s01, s02], [s10, s11, s12]]
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let original = Element::into_array_bytes(&DataType::String, strings).unwrap();
+        let original = Element::into_array_bytes(&data_types::string(), strings).unwrap();
 
         // Encode: apply transpose order [1, 0] to get shape [3, 2]
         // Transposed should be: [[s00, s10], [s01, s11], [s02, s12]]
         let transposed_strings: Vec<&str> =
             vec!["s00", "s10abc", "s01a", "s11abcd", "s02ab", "s12abcde"];
         let expected_transposed =
-            Element::into_array_bytes(&DataType::String, transposed_strings).unwrap();
+            Element::into_array_bytes(&data_types::string(), transposed_strings).unwrap();
 
         // Test encoding (forward permutation)
-        let encoded = apply_permutation(&original, &[2, 3], &order.0, &DataType::String).unwrap();
+        let encoded =
+            apply_permutation(&original, &[2, 3], &order.0, &data_types::string()).unwrap();
         assert_eq!(encoded, expected_transposed);
 
         // Test decoding (inverse permutation)
         // Inverse of [1, 0] is [1, 0]
         let order_decode = [1, 0];
         let decoded =
-            apply_permutation(&encoded, &[3, 2], &order_decode, &DataType::String).unwrap();
+            apply_permutation(&encoded, &[3, 2], &order_decode, &data_types::string()).unwrap();
         assert_eq!(decoded, original);
     }
 
@@ -382,7 +385,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -448,7 +451,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();

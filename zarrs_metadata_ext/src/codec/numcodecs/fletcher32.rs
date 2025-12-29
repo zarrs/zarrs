@@ -35,7 +35,7 @@ mod tests {
 
     #[test]
     fn codec_fletcher32_config1() {
-        serde_json::from_str::<Fletcher32CodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<Fletcher32CodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use ndarray::ArrayD;
 use zarrs::{
-    array::{ArrayBuilder, DataType, FillValue},
+    array::{ArrayBuilder, DataTypeExt, FillValue, data_types},
     storage::ReadableStorageTraits,
 };
 
@@ -26,10 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the codec chains for the optional codec
     let array = ArrayBuilder::new(
-        vec![4, 4],                      // 4x4 array
-        vec![2, 2],                      // 2x2 chunks
-        DataType::UInt8.into_optional(), // Optional uint8
-        FillValue::new_optional_null(),  // Null fill value: [0]
+        vec![4, 4],                        // 4x4 array
+        vec![2, 2],                        // 2x2 chunks
+        data_types::uint8().to_optional(), // Optional uint8
+        FillValue::new_optional_null(),    // Null fill value: [0]
     )
     .dimension_names(["y", "x"].into())
     .attributes(

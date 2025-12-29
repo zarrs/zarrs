@@ -23,6 +23,7 @@ use crate::{
             AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
             CodecError, CodecOptions,
         },
+        data_type::DataTypeExt,
         ravel_indices,
     },
     array_subset::IncompatibleDimensionalityError,

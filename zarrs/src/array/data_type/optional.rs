@@ -14,9 +14,7 @@ use crate::array::NamedDataType;
 /// to access the wrapped data type's properties.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OptionalDataType(Box<NamedDataType>);
-zarrs_plugin::impl_extension_aliases!(OptionalDataType, "optional",
-    v3: "zarrs.optional", []
-);
+zarrs_plugin::impl_extension_aliases!(OptionalDataType, "zarrs.optional");
 
 impl OptionalDataType {
     /// Create a new optional data type wrapper.
@@ -93,13 +91,15 @@ impl OptionalDataType {
     /// Returns true if the inner data type is fixed size.
     #[must_use]
     pub fn is_fixed(&self) -> bool {
-        self.0.is_fixed()
+        use crate::array::data_type::DataTypeExt;
+        self.0.data_type().is_fixed()
     }
 
     /// Returns the fixed size of the inner data type if it's fixed size.
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
-        self.0.fixed_size()
+        use crate::array::data_type::DataTypeExt;
+        self.0.data_type().fixed_size()
     }
 
     /// Create a fill value from metadata for the inner data type.
@@ -177,6 +177,22 @@ impl zarrs_data_type::DataTypeExtension for OptionalDataType {
         // For now, return None to indicate no direct bytes codec support
         // (the bytes codec needs to handle the optional suffix byte)
         None
+    }
+
+    fn optional_inner_data_type(&self) -> Option<&dyn zarrs_data_type::DataTypeExtension> {
+        Some(self.0.data_type().as_ref())
+    }
+
+    fn optional_is_fill_value_null(&self, fill_value: &FillValue) -> bool {
+        self.is_fill_value_null(fill_value)
+    }
+
+    fn optional_fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        self.fill_value_inner_bytes(fill_value)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

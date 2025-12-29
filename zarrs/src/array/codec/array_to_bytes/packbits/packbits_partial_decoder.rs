@@ -16,6 +16,7 @@ use crate::array::{
         ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
         array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use crate::storage::{StorageError, byte_range::ByteRange};

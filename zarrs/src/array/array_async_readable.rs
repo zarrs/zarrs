@@ -6,7 +6,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError,
     ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataV2, ArrayMetadataV3, ChunkShapeTraits,
-    DataType, FromArrayBytes,
+    DataType, DataTypeExt, FromArrayBytes,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
         merge_chunks_vlen_optional, optional_nesting_depth,

@@ -683,8 +683,9 @@ mod tests {
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
-            ArrayBuilder, DataType,
+            ArrayBuilder,
             codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
+            data_types,
         },
         array_subset::ArraySubset,
         storage::{
@@ -699,7 +700,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // regular chunk shape
-            DataType::UInt16,
+            data_types::uint16(),
             0u16,
         );
         builder.bytes_to_bytes_codecs(vec![
@@ -711,7 +712,7 @@ mod tests {
         }
         let array = builder.build(store, array_path)?;
 
-        let data: Vec<u16> = (0..array.shape().into_iter().product())
+        let data: Vec<u16> = (0..array.shape().iter().product())
             .map(|i| i as u16)
             .collect();
 
@@ -864,7 +865,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![16, 16, 9], // array shape
             vec![8, 4, 3],   // regular chunk shape
-            DataType::UInt32,
+            data_types::uint32(),
             0u32,
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
@@ -882,7 +883,7 @@ mod tests {
                     NonZeroU64::new(3).unwrap(),
                 ]
                 .try_into()?,
-                &DataType::UInt32,
+                &data_types::uint32(),
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]
@@ -929,7 +930,7 @@ mod tests {
             // CodecError(Other("invalid inner chunk shape [1, 3, 3], it must evenly divide [4, 8, 3]"))
         }
 
-        let data: Vec<u32> = (0..array.shape().into_iter().product())
+        let data: Vec<u32> = (0..array.shape().iter().product())
             .map(|i| i as u32)
             .collect();
         array.store_array_subset(&array.subset_all(), &data)?;
@@ -945,7 +946,7 @@ mod tests {
 
     #[test]
     fn array_sharded_ext_impl_transpose_valid_inner_chunk_shape() {
-        assert!(array_sharded_ext_impl_transpose(true).is_ok())
+        assert!(array_sharded_ext_impl_transpose(true).is_ok());
     }
 
     #[test]
@@ -955,6 +956,6 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "invalid subchunk shape [1, 3, 3], it must evenly divide shard shape [4, 8, 3]"
-        )
+        );
     }
 }

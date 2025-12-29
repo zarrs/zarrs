@@ -119,6 +119,8 @@ mod tests {
     use crate::array::{
         ArrayBytes, ChunkShapeTraits, DataType, FillValue,
         codec::{ArrayToArrayCodecTraits, CodecOptions},
+        data_type::DataTypeExt,
+        data_types,
     };
 
     fn codec_reshape_round_trip_impl(
@@ -172,7 +174,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -193,7 +195,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -210,7 +212,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -231,7 +233,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -252,7 +254,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -274,7 +276,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -296,7 +298,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )
@@ -318,7 +320,7 @@ mod tests {
         assert!(
             codec_reshape_round_trip_impl(
                 JSON,
-                DataType::UInt32,
+                data_types::uint32(),
                 FillValue::from(0u32),
                 output_shape
             )

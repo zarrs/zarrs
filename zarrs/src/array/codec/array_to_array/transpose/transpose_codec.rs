@@ -8,6 +8,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
 use crate::array::{
     DataType, FillValue,
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
+    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;

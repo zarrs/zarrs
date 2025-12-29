@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug};
+use std::{any::Any, borrow::Cow, fmt::Debug};
 
 use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
 use zarrs_plugin::{MaybeSend, MaybeSync, ZarrVersions};
@@ -126,6 +126,42 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     fn codec_zfp(&self) -> Option<&dyn DataTypeExtensionZfpCodec> {
         None
     }
+
+    /// Compare this data type with another for equality.
+    ///
+    /// The default implementation compares identifier and configuration.
+    /// Custom data types may override this for more efficient comparison.
+    fn data_type_eq(&self, other: &dyn DataTypeExtension) -> bool {
+        self.identifier() == other.identifier() && self.configuration() == other.configuration()
+    }
+
+    /// For optional types: returns the inner data type.
+    ///
+    /// The default implementation returns `None`. Override this for optional/nullable types
+    /// to return a reference to the wrapped inner data type.
+    fn optional_inner_data_type(&self) -> Option<&dyn DataTypeExtension> {
+        None
+    }
+
+    /// For optional types: check if the fill value represents null.
+    ///
+    /// The default implementation returns `false`. Override this for optional/nullable types.
+    fn optional_is_fill_value_null(&self, _fill_value: &FillValue) -> bool {
+        false
+    }
+
+    /// For optional types: get the inner fill value bytes (without optional suffix).
+    ///
+    /// The default implementation returns an empty slice. Override this for optional/nullable types.
+    fn optional_fill_value_inner_bytes<'a>(&self, fill_value: &'a FillValue) -> &'a [u8] {
+        fill_value.as_ne_bytes()
+    }
+
+    /// Returns self as `Any` for downcasting.
+    ///
+    /// This enables accessing concrete type-specific methods (like `OptionalDataType::data_type()`).
+    /// The default implementation panics - types that need downcasting must override this.
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// A data type extension error.

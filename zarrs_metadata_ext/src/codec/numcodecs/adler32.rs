@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn codec_adler32_config1() {
-        serde_json::from_str::<Adler32CodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<Adler32CodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

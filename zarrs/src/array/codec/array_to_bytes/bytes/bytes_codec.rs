@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs_data_type::{DataTypeExtension, DataTypeExtensionError};
+use zarrs_data_type::DataTypeExtensionError;
 use zarrs_plugin::PluginCreateError;
 
 use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
@@ -22,6 +22,7 @@ use crate::array::{
 use crate::array::{
     DataType,
     codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
+    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;

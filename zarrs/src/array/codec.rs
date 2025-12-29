@@ -92,8 +92,10 @@ use zarrs_plugin::{ExtensionIdentifier, PluginUnsupportedError, ZarrVersions};
 use super::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayShape, BytesRepresentation,
     ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError, array_bytes::RawBytesOffsetsCreateError,
-    concurrency::RecommendedConcurrency,
+    concurrency::RecommendedConcurrency, data_type::DataTypeExt,
 };
+use crate::array::data_type::BytesDataType;
+use crate::array::data_type::StringDataType;
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 use crate::storage::OffsetBytesIterator;
@@ -1833,10 +1835,14 @@ pub enum CodecError {
 fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {
     if data_type.is_optional() {
         format!(
-            "Unsupported data type {data_type} for codec {codec}. Use the optional codec to handle optional data types.",
+            "Unsupported data type {:?} for codec {codec}. Use the optional codec to handle optional data types.",
+            data_type.identifier()
         )
     } else {
-        format!("Unsupported data type {data_type} for codec {codec}")
+        format!(
+            "Unsupported data type {:?} for codec {codec}",
+            data_type.identifier()
+        )
     }
 }
 
@@ -1862,14 +1868,14 @@ impl From<String> for CodecError {
 ///
 /// The default codec is dependent on the data type:
 ///  - [`bytes`](array_to_bytes::bytes) for fixed-length data types,
-///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`String`](DataType::String) variable-length data type,
-///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`Bytes`](DataType::Bytes) variable-length data type,
+///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`StringDataType`] variable-length data type,
+///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`BytesDataType`] variable-length data type,
 ///  - [`vlen`](array_to_bytes::vlen) for any other variable-length data type, and
 ///  - [`optional`](array_to_bytes::optional) wrapping the appropriate inner codec for optional data types.
 #[must_use]
 pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
     // Special handling for optional types
-    if let Some(opt) = data_type.optional() {
+    if let Some(opt) = data_type.as_optional() {
         // Create mask codec chain using PackBitsCodec
         let mask_codec_chain = Arc::new(CodecChain::new_named(
             vec![],
@@ -1890,78 +1896,21 @@ pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCo
     }
 
     // Handle non-optional types based on size
-    if data_type.fixed_size().is_some() {
+    if data_type.is_fixed() {
         NamedArrayToBytesCodec::new_default_name(Arc::<BytesCodec>::default())
     } else {
         // FIXME: Default to VlenCodec if ever stabilised
-        match data_type {
-            DataType::String => NamedArrayToBytesCodec::new(
+        // Variable-sized types
+        match data_type.identifier() {
+            StringDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
                 VlenUtf8Codec::IDENTIFIER.to_string(),
                 Arc::new(VlenV2Codec::new()),
             ),
-            DataType::Bytes => NamedArrayToBytesCodec::new(
+            BytesDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
                 VlenBytesCodec::IDENTIFIER.to_string(),
                 Arc::new(VlenV2Codec::new()),
             ),
-            DataType::Extension(_) => {
-                NamedArrayToBytesCodec::new_default_name(Arc::new(VlenCodec::default()))
-            }
-            // Fixed size data types
-            DataType::Bool
-            | DataType::Int2
-            | DataType::Int4
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::BFloat16
-            | DataType::Float16
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::RawBits(_) => unreachable!("fixed size data types handled above"),
-            DataType::Optional(_) => {
-                unreachable!("optional data types handled above")
-            }
+            _ => NamedArrayToBytesCodec::new_default_name(Arc::new(VlenCodec::default())),
         }
     }
 }

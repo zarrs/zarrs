@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(
             configuration.to_string(),
             r#"regular chunk grid {"chunk_shape":[1,2,3]}"#
-        )
+        );
     }
 
     #[test]

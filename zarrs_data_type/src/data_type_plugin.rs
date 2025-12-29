@@ -75,6 +75,10 @@ mod tests {
         ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
             Ok(FillValueMetadataV3::Null)
         }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
 
     fn matches_name_test_void(name: &str, _version: ZarrVersions) -> bool {

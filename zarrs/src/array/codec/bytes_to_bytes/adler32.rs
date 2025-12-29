@@ -76,18 +76,18 @@ mod tests {
         storage::byte_range::ByteRange,
     };
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
     const JSON2: &str = r#"{"location":"start"}"#;
     const JSON3: &str = r#"{"location":"end"}"#;
 
     #[test]
     fn codec_adler32_configuration_none() {
-        let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
+        let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
             .configuration("numcodecs.adler32", &CodecMetadataOptions::default())
             .unwrap();
-        assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
+        assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }
 
     #[test]

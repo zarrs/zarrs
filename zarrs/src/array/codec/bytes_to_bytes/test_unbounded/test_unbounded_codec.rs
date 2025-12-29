@@ -22,6 +22,7 @@ impl TestUnboundedCodec {
     ///
     /// # Errors
     /// Returns [`TestUnboundedCompressionLevelError`] if `compression_level` is not valid.
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }

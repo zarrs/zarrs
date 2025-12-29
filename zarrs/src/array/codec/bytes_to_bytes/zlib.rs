@@ -66,8 +66,10 @@ mod tests {
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            BytesRepresentation, ChunkShapeTraits, DataType,
+            BytesRepresentation, ChunkShapeTraits,
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
+            data_type::DataTypeExt,
+            data_types,
         },
         array_subset::ArraySubset,
         indexer::Indexer,
@@ -102,7 +104,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_zlib_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_types::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -137,7 +139,7 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
+            .clone()
             .chunks_exact(size_of::<u16>())
             .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
             .collect();
@@ -151,7 +153,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     async fn codec_zlib_async_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_types::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -187,7 +189,7 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
+            .clone()
             .chunks_exact(size_of::<u16>())
             .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
             .collect();

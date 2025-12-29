@@ -174,6 +174,14 @@ impl zarrs_data_type::DataTypeExtension for BoolDataType {
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for BoolDataType {
@@ -191,6 +199,20 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for BoolDataType {
         _endianness: Option<zarrs_metadata::Endianness>,
     ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
         Ok(bytes)
+    }
+}
+
+impl zarrs_data_type::DataTypeExtensionPackBitsCodec for BoolDataType {
+    fn component_size_bits(&self) -> u64 {
+        1 // bool is 1 bit for packbits
+    }
+
+    fn num_components(&self) -> u64 {
+        1
+    }
+
+    fn sign_extension(&self) -> bool {
+        false
     }
 }
 
@@ -240,6 +262,10 @@ impl zarrs_data_type::DataTypeExtension for StringDataType {
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for StringDataType {
@@ -285,10 +311,23 @@ impl zarrs_data_type::DataTypeExtension for BytesDataType {
                 fill_value_metadata.clone(),
             )
         };
-        // Bytes fill value is base64-encoded
-        let s = fill_value_metadata.as_str().ok_or_else(err)?;
-        let bytes = BASE64_STANDARD.decode(s).map_err(|_| err())?;
-        Ok(zarrs_data_type::FillValue::from(bytes))
+        // Bytes fill value can be base64-encoded string or array of bytes
+        if let Some(s) = fill_value_metadata.as_str() {
+            let bytes = BASE64_STANDARD.decode(s).map_err(|_| err())?;
+            Ok(zarrs_data_type::FillValue::from(bytes))
+        } else if let Some(arr) = fill_value_metadata.as_array() {
+            let bytes: Result<Vec<u8>, _> = arr
+                .iter()
+                .map(|v| {
+                    v.as_u64()
+                        .and_then(|u| u8::try_from(u).ok())
+                        .ok_or_else(err)
+                })
+                .collect();
+            Ok(zarrs_data_type::FillValue::from(bytes?))
+        } else {
+            Err(err())
+        }
     }
 
     fn metadata_fill_value(
@@ -296,13 +335,22 @@ impl zarrs_data_type::DataTypeExtension for BytesDataType {
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError>
     {
-        use base64::{Engine, prelude::BASE64_STANDARD};
-        let encoded = BASE64_STANDARD.encode(fill_value.as_ne_bytes());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(encoded))
+        // Return as array of bytes for consistency
+        // Note: base64 encoding may be preferred per zarr spec - see comments in test
+        let bytes = fill_value.as_ne_bytes();
+        let arr: Vec<zarrs_metadata::v3::FillValueMetadataV3> = bytes
+            .iter()
+            .map(|&b| zarrs_metadata::v3::FillValueMetadataV3::from(b))
+            .collect();
+        Ok(zarrs_metadata::v3::FillValueMetadataV3::Array(arr))
     }
 
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -332,7 +380,10 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }
 
-    fn metadata_name(&self, _zarr_version: zarrs_plugin::ZarrVersions) -> std::borrow::Cow<'static, str> {
+    fn metadata_name(
+        &self,
+        _zarr_version: zarrs_plugin::ZarrVersions,
+    ) -> std::borrow::Cow<'static, str> {
         // Return "r{bits}" where bits = size_bytes * 8
         std::borrow::Cow::Owned(format!("r{}", self.size_bytes * 8))
     }
@@ -350,16 +401,37 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
         fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         use base64::{Engine, prelude::BASE64_STANDARD};
+        // Use metadata_name for better error messages (e.g., "r16" instead of "r*")
+        let name = self.metadata_name(zarrs_plugin::ZarrVersions::V3);
         let err = || {
             zarrs_data_type::DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
+                name.to_string(),
                 fill_value_metadata.clone(),
             )
         };
-        // RawBits fill value is base64-encoded
-        let s = fill_value_metadata.as_str().ok_or_else(err)?;
-        let bytes = BASE64_STANDARD.decode(s).map_err(|_| err())?;
-        Ok(zarrs_data_type::FillValue::from(bytes))
+        // RawBits fill value can be base64-encoded string or array of bytes
+        if let Some(s) = fill_value_metadata.as_str() {
+            let bytes = BASE64_STANDARD.decode(s).map_err(|_| err())?;
+            if bytes.len() != self.size_bytes {
+                return Err(err());
+            }
+            Ok(zarrs_data_type::FillValue::from(bytes))
+        } else if let Some(arr) = fill_value_metadata.as_array() {
+            if arr.len() != self.size_bytes {
+                return Err(err());
+            }
+            let bytes: Result<Vec<u8>, _> = arr
+                .iter()
+                .map(|v| {
+                    v.as_u64()
+                        .and_then(|u| u8::try_from(u).ok())
+                        .ok_or_else(err)
+                })
+                .collect();
+            Ok(zarrs_data_type::FillValue::from(bytes?))
+        } else {
+            Err(err())
+        }
     }
 
     fn metadata_fill_value(
@@ -367,13 +439,21 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError>
     {
-        use base64::{Engine, prelude::BASE64_STANDARD};
-        let encoded = BASE64_STANDARD.encode(fill_value.as_ne_bytes());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(encoded))
+        // Return as array of bytes (not base64 encoded) for consistency
+        let bytes = fill_value.as_ne_bytes();
+        let arr: Vec<zarrs_metadata::v3::FillValueMetadataV3> = bytes
+            .iter()
+            .map(|&b| zarrs_metadata::v3::FillValueMetadataV3::from(b))
+            .collect();
+        Ok(zarrs_metadata::v3::FillValueMetadataV3::Array(arr))
     }
 
     fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
         Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -465,6 +545,14 @@ impl zarrs_data_type::DataTypeExtension for NumpyDateTime64DataType {
 
     fn codec_zfp(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionZfpCodec> {
         Some(self)
+    }
+
+    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -567,6 +655,14 @@ impl zarrs_data_type::DataTypeExtension for NumpyTimeDelta64DataType {
     fn codec_zfp(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionZfpCodec> {
         Some(self)
     }
+
+    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
+        Some(self)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyTimeDelta64DataType {
@@ -660,6 +756,36 @@ impl zarrs_data_type::DataTypeExtensionZfpCodec for NumpyTimeDelta64DataType {
 
     fn zfp_promotion(&self) -> zarrs_data_type::ZfpPromotion {
         zarrs_data_type::ZfpPromotion::None
+    }
+}
+
+// PackBits implementations for NumpyDateTime64 and NumpyTimeDelta64
+// They behave like 64-bit signed integers
+impl zarrs_data_type::DataTypeExtensionPackBitsCodec for NumpyDateTime64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+
+    fn num_components(&self) -> u64 {
+        1
+    }
+
+    fn sign_extension(&self) -> bool {
+        true // i64 is signed
+    }
+}
+
+impl zarrs_data_type::DataTypeExtensionPackBitsCodec for NumpyTimeDelta64DataType {
+    fn component_size_bits(&self) -> u64 {
+        64
+    }
+
+    fn num_components(&self) -> u64 {
+        1
+    }
+
+    fn sign_extension(&self) -> bool {
+        true // i64 is signed
     }
 }
 

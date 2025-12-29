@@ -105,6 +105,10 @@ impl DataTypeExtension for CustomDataTypeUInt12 {
     fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
         Some(self)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
@@ -170,7 +174,8 @@ impl CustomDataTypeUInt12Element {
 /// This defines how an in-memory CustomDataTypeUInt12Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt12Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeUInt12)))
+        // Check if the data type identifier matches our custom data type
+        (data_type.identifier() == UINT12)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -222,7 +227,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4096, 1], // array shape
         vec![5, 1],    // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeUInt12)),
+        Arc::new(CustomDataTypeUInt12) as DataType,
         FillValue::new(fill_value.to_le_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

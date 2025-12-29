@@ -72,10 +72,10 @@ mod tests {
     #[test]
     fn packbits_default() {
         let configuration = serde_json::from_str::<PackBitsCodecConfigurationV1>(
-            r#"
+            r"
         {
         }
-        "#,
+        ",
         )
         .unwrap();
         assert_eq!(configuration.padding_encoding, None);

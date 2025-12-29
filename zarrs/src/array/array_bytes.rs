@@ -5,13 +5,15 @@ use itertools::Itertools;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::DataTypeFillValueError;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{
-    ArrayBytesFixedDisjointView, DataType, FillValue,
+    ArrayBytesFixedDisjointView, DataType, DataTypeExt, FillValue,
     codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
     ravel_indices,
 };
 use crate::{
+    array::data_type::OptionalDataType,
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
     metadata::DataTypeSize,
@@ -21,8 +23,25 @@ use crate::{
 /// Count the nesting depth of optional types.
 /// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.
 pub(super) fn optional_nesting_depth(data_type: &DataType) -> usize {
-    if let DataType::Optional(opt) = data_type {
-        1 + optional_nesting_depth(opt.data_type())
+    if let Some(inner) = data_type.optional_inner() {
+        // Get inner as DataType Arc by creating a new Arc
+        // For now, we use identifier matching - if inner is also optional, recurse
+        if inner.identifier() == OptionalDataType::IDENTIFIER {
+            // We need to get the inner's inner, but we only have &dyn DataTypeExtension
+            // Use the trait method to check nesting
+            1 + count_optional_depth(inner)
+        } else {
+            1
+        }
+    } else {
+        0
+    }
+}
+
+/// Helper to count optional depth from a `DataTypeExtension` reference
+fn count_optional_depth(dt: &dyn zarrs_data_type::DataTypeExtension) -> usize {
+    if let Some(inner) = dt.optional_inner_data_type() {
+        1 + count_optional_depth(inner)
     } else {
         0
     }
@@ -148,7 +167,7 @@ impl<'a> ArrayBytes<'a> {
         num_elements: u64,
         fill_value: &FillValue,
     ) -> Result<Self, DataTypeFillValueError> {
-        if let Some(opt) = data_type.optional() {
+        if let Some(opt) = data_type.as_optional() {
             let num_elements_usize = usize::try_from(num_elements).unwrap();
             if opt.is_fill_value_null(fill_value) {
                 // Null fill value for optional type: create mask of all zeros
@@ -387,7 +406,7 @@ impl<'a> ArrayBytes<'a> {
             }
             ArrayBytes::Optional(optional_bytes) => {
                 // Extract the inner data type from the optional data type
-                let DataType::Optional(opt) = data_type else {
+                let Some(opt) = data_type.as_optional() else {
                     return Err(CodecError::Other(
                         "Optional array bytes requires an optional data type".to_string(),
                     ));
@@ -483,7 +502,7 @@ fn validate_bytes(
             }
         }
         ArrayBytes::Optional(optional_bytes) => {
-            let DataType::Optional(opt) = data_type else {
+            let Some(opt) = data_type.as_optional() else {
                 return Err(CodecError::Other(
                     "Used optional array bytes with a non-optional data type.".to_string(),
                 ));
@@ -1127,13 +1146,13 @@ mod tests {
     use std::error::Error;
 
     use super::*;
-    use crate::array::Element;
+    use crate::array::{Element, data_types};
 
     #[test]
     fn array_bytes_flen() -> Result<(), Box<dyn Error>> {
         let data = vec![0u32, 1, 2, 3, 4];
         let n_elements = data.len();
-        let bytes = Element::into_array_bytes(&DataType::UInt32, data)?;
+        let bytes = Element::into_array_bytes(&data_types::uint32(), data)?;
         let ArrayBytes::Fixed(bytes) = bytes else {
             panic!()
         };
@@ -1156,7 +1175,7 @@ mod tests {
     #[test]
     fn array_bytes_str() -> Result<(), Box<dyn Error>> {
         let data = vec!["a", "bb", "ccc"];
-        let bytes = Element::into_array_bytes(&DataType::String, data)?;
+        let bytes = Element::into_array_bytes(&data_types::string(), data)?;
         let (bytes, offsets) = bytes.into_variable().unwrap().into_parts();
         assert_eq!(bytes, "abbccc".as_bytes());
         assert_eq!(*offsets, [0, 1, 3, 6]);

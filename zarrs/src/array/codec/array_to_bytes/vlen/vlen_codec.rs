@@ -17,6 +17,7 @@ use crate::{
             BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
+        data_type::DataTypeExt,
         transmute_to_bytes_vec,
     },
     plugin::PluginCreateError,
@@ -200,7 +201,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &DataType::UInt32,
+                    &crate::array::data_types::uint32(),
                     &FillValue::from(0u32),
                     options,
                 )?
@@ -215,7 +216,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &DataType::UInt64,
+                    &crate::array::data_types::uint64(),
                     &FillValue::from(0u64),
                     options,
                 )?
@@ -228,7 +229,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.data_codecs.encode(
                 data.into(),
                 &data_shape,
-                &DataType::UInt8,
+                &crate::array::data_types::uint8(),
                 &FillValue::from(0u8),
                 options,
             )?

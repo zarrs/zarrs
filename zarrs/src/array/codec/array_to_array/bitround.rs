@@ -52,7 +52,6 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
-use zarrs_data_type::DataTypeExtension;
 
 // Register the codec.
 inventory::submit! {
@@ -83,6 +82,7 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
+    use crate::array::data_types;
     use crate::{
         array::{
             ArrayBytes,
@@ -94,22 +94,22 @@ mod tests {
     #[test]
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = vec![
             //                         |
             0.0,
             // 1.23456789 -> 001111111001|11100000011001010010
             // 1.25       -> 001111111010
-            1.23456789,
+            1.234_567_9,
             // -8.3587192 -> 110000010000|01011011110101010000
             // -8.0       -> 110000010000
-            -8.3587192834,
+            -8.358_719,
             // 98765.43210-> 010001111100|00001110011010110111
             // 98304.0    -> 010001111100
-            98765.43210,
+            98_765.43,
         ];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -143,9 +143,9 @@ mod tests {
 
     #[test]
     fn codec_bitround_uint() {
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(7).unwrap()];
-        let data_type = DataType::UInt32;
+        let data_type = data_types::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -186,9 +186,9 @@ mod tests {
 
     #[test]
     fn codec_bitround_uint8() {
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(9).unwrap()];
-        let data_type = DataType::UInt8;
+        let data_type = data_types::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -226,13 +226,13 @@ mod tests {
 
     #[test]
     fn codec_bitround_partial_decode() {
-        const JSON: &'static str = r#"{ "keepbits": 2 }"#;
+        const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
 
@@ -288,13 +288,13 @@ mod tests {
     async fn codec_bitround_async_partial_decode() {
         use zarrs_data_type::FillValue;
 
-        const JSON: &'static str = r#"{ "keepbits": 2 }"#;
+        const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_types::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);

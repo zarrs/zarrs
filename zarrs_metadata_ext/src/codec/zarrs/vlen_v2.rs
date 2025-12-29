@@ -33,6 +33,6 @@ mod tests {
 
     #[test]
     fn codec_vlen_v2() {
-        serde_json::from_str::<VlenV2CodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<VlenV2CodecConfiguration>(r"{}").unwrap();
     }
 }

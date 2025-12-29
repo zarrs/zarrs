@@ -99,7 +99,7 @@ impl FromBytes for CustomDataTypeFixedSizeElement {
 /// This defines how an in-memory CustomDataTypeFixedSizeElement is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFixedSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeFixedSize)))
+        (data_type.identifier() == CUSTOM_NAME)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -219,6 +219,10 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
     fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
@@ -287,7 +291,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![2, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeFixedSize)),
+        Arc::new(CustomDataTypeFixedSize) as DataType,
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

@@ -96,6 +96,10 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
     fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
         Some(self)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
@@ -185,7 +189,7 @@ impl CustomDataTypeFloat8e3m4Element {
 /// This defines how an in-memory CustomDataTypeFloat8e3m4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFloat8e3m4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)))
+        (data_type.identifier() == FLOAT8_E3M4)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -235,7 +239,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)),
+        Arc::new(CustomDataTypeFloat8e3m4) as DataType,
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

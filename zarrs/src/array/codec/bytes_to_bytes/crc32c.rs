@@ -71,16 +71,16 @@ mod tests {
         storage::byte_range::ByteRange,
     };
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
 
     #[test]
     fn codec_crc32c_configuration_none() {
-        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
+        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
         let metadata = codec
             .configuration("crc32c", &CodecMetadataOptions::default())
             .unwrap();
-        assert_eq!(serde_json::to_string(&metadata).unwrap(), r#"{}"#);
+        assert_eq!(serde_json::to_string(&metadata).unwrap(), r"{}");
     }
 
     #[test]

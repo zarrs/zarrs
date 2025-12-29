@@ -2,78 +2,31 @@ use std::ffi::c_void;
 
 use dlpark::ffi::Device;
 use dlpark::traits::{RowMajorCompactLayout, TensorLike};
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{DataType, Tensor, TensorError};
-
-macro_rules! unsupported_dtypes {
-    // TODO: Add support for extensions?
-    () => {
-        DataType::Int2
-            | DataType::Int4
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::RawBits(_)
-            | DataType::String
-            | DataType::Bytes
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::Optional(_)
-            | DataType::Extension(_)
-    };
-}
+use crate::array::data_type as dt;
 
 /// Convert a zarrs [`DataType`] to a [`dlpark::ffi::DataType`].
 ///
 /// # Errors
 /// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported.
 fn data_type_to_dlpack(data_type: &DataType) -> Result<dlpark::ffi::DataType, TensorError> {
-    match data_type {
-        DataType::Bool => Ok(dlpark::ffi::DataType::BOOL),
-        DataType::Int8 => Ok(dlpark::ffi::DataType::I8),
-        DataType::Int16 => Ok(dlpark::ffi::DataType::I16),
-        DataType::Int32 => Ok(dlpark::ffi::DataType::I32),
-        DataType::Int64 => Ok(dlpark::ffi::DataType::I64),
-        DataType::UInt8 => Ok(dlpark::ffi::DataType::U8),
-        DataType::UInt16 => Ok(dlpark::ffi::DataType::U16),
-        DataType::UInt32 => Ok(dlpark::ffi::DataType::U32),
-        DataType::UInt64 => Ok(dlpark::ffi::DataType::U64),
-        DataType::Float16 => Ok(dlpark::ffi::DataType::F16),
-        DataType::Float32 => Ok(dlpark::ffi::DataType::F32),
-        DataType::Float64 => Ok(dlpark::ffi::DataType::F64),
-        DataType::BFloat16 => Ok(dlpark::ffi::DataType::BF16),
-        unsupported_dtypes!() => Err(TensorError::UnsupportedDataType(data_type.clone())),
+    match data_type.identifier() {
+        dt::BoolDataType::IDENTIFIER => Ok(dlpark::ffi::DataType::BOOL),
+        dt::Int8DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I8),
+        dt::Int16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I16),
+        dt::Int32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I32),
+        dt::Int64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I64),
+        dt::UInt8DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U8),
+        dt::UInt16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U16),
+        dt::UInt32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U32),
+        dt::UInt64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U64),
+        dt::Float16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F16),
+        dt::Float32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F32),
+        dt::Float64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F64),
+        dt::BFloat16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::BF16),
+        _ => Err(TensorError::UnsupportedDataType(data_type.clone())),
     }
 }
 
@@ -110,17 +63,17 @@ impl TensorLike<RowMajorCompactLayout> for Tensor {
 mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
-    use crate::array::{Tensor, transmute_to_bytes};
+    use crate::array::{Tensor, data_types, transmute_to_bytes};
     use crate::storage::store::MemoryStore;
     use crate::{
-        array::{ArrayBuilder, DataType, codec::CodecOptions},
+        array::{ArrayBuilder, codec::CodecOptions},
         array_subset::ArraySubset,
     };
 
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], DataType::Float32, -1.0f32)
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_types::float32(), -1.0f32)
             .build(store.into(), "/")
             .unwrap();
         array

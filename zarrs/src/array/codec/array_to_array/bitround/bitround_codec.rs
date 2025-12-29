@@ -17,7 +17,6 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
-use zarrs_data_type::DataTypeExtension;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bitround` codec implementation.
