@@ -62,7 +62,7 @@ macro_rules! impl_data_type_extension_numeric {
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
             ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                impl_data_type_extension_numeric!(@encode bytes, endianness, $rust_type, $size)
+                impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
 
             fn decode<'a>(
@@ -70,7 +70,7 @@ macro_rules! impl_data_type_extension_numeric {
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
             ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                impl_data_type_extension_numeric!(@decode bytes, endianness, $rust_type, $size)
+                impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
         }
     };
@@ -278,31 +278,12 @@ macro_rules! impl_data_type_extension_numeric {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }};
 
-    // Encode for single-byte types
-    (@encode $bytes:ident, $_endianness:ident, $rust_type:tt, 1) => {{
+    // Encode/decode for single-byte types (passthrough)
+    (@bytes_codec $bytes:ident, $_endianness:ident, $rust_type:tt, 1) => {{
         Ok($bytes)
     }};
-    // Encode for multi-byte types
-    (@encode $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
-        let endianness = $endianness.ok_or(zarrs_data_type::DataTypeExtensionBytesCodecError::EndiannessNotSpecified)?;
-        if endianness == zarrs_metadata::Endianness::native() {
-            Ok($bytes)
-        } else {
-            // Swap endianness
-            let mut result = $bytes.into_owned();
-            for chunk in result.chunks_exact_mut($size) {
-                chunk.reverse();
-            }
-            Ok(std::borrow::Cow::Owned(result))
-        }
-    }};
-
-    // Decode for single-byte types
-    (@decode $bytes:ident, $_endianness:ident, $rust_type:tt, 1) => {{
-        Ok($bytes)
-    }};
-    // Decode for multi-byte types
-    (@decode $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
+    // Encode/decode for multi-byte types (endianness swap if needed)
+    (@bytes_codec $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
         let endianness = $endianness.ok_or(zarrs_data_type::DataTypeExtensionBytesCodecError::EndiannessNotSpecified)?;
         if endianness == zarrs_metadata::Endianness::native() {
             Ok($bytes)
@@ -317,391 +298,7 @@ macro_rules! impl_data_type_extension_numeric {
     }};
 }
 
-/// Macro to implement `DataTypeExtension` for complex types.
-///
-/// Usage:
-/// - `impl_complex_data_type!(MarkerType, size, component_type)` - basic implementation
-/// - `impl_complex_data_type!(MarkerType, size, component_type; codec_method1, codec_method2, ...)` - with codec overrides
-macro_rules! impl_complex_data_type {
-    // Base case: no additional codec methods
-    ($marker:ty, $size:tt, $component_type:tt) => {
-        impl_complex_data_type!($marker, $size, $component_type;);
-    };
-
-    // With optional codec method overrides
-    ($marker:ty, $size:tt, $component_type:tt; $($codec:ident),* $(,)?) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
-            fn identifier(&self) -> &'static str {
-                <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
-            }
-
-            fn configuration(&self) -> zarrs_metadata::Configuration {
-                zarrs_metadata::Configuration::default()
-            }
-
-            fn size(&self) -> zarrs_metadata::DataTypeSize {
-                zarrs_metadata::DataTypeSize::Fixed($size)
-            }
-
-            fn fill_value(
-                &self,
-                fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
-            ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-                let err = || {
-                    zarrs_data_type::DataTypeFillValueMetadataError::new(
-                        self.identifier().to_string(),
-                        fill_value_metadata.clone(),
-                    )
-                };
-                if let [re, im] = fill_value_metadata.as_array().ok_or_else(err)? {
-                    impl_complex_data_type!(@parse_components self, re, im, $component_type, err)
-                } else {
-                    Err(err())
-                }
-            }
-
-            fn metadata_fill_value(
-                &self,
-                fill_value: &zarrs_data_type::FillValue,
-            ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError> {
-                let error = || {
-                    zarrs_data_type::DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-                };
-                impl_complex_data_type!(@to_metadata self, fill_value, $component_type, $size, error)
-            }
-
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-
-            $(
-                impl_complex_data_type!(@codec_method $codec);
-            )*
-        }
-
-        impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
-            fn encode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                let component_size = $size / 2;
-                if component_size == 1 {
-                    Ok(bytes)
-                } else {
-                    let endianness = endianness.ok_or(zarrs_data_type::DataTypeExtensionBytesCodecError::EndiannessNotSpecified)?;
-                    if endianness == zarrs_metadata::Endianness::native() {
-                        Ok(bytes)
-                    } else {
-                        let mut result = bytes.into_owned();
-                        for chunk in result.chunks_exact_mut(component_size) {
-                            chunk.reverse();
-                        }
-                        Ok(std::borrow::Cow::Owned(result))
-                    }
-                }
-            }
-
-            fn decode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                self.encode(bytes, endianness)
-            }
-        }
-    };
-
-    (@parse_components $self:ident, $re:ident, $im:ident, f32, $err:ident) => {{
-        let re = $re.as_f32().ok_or_else($err)?;
-        let im = $im.as_f32().ok_or_else($err)?;
-        Ok(zarrs_data_type::FillValue::from(num::complex::Complex32::new(re, im)))
-    }};
-    (@parse_components $self:ident, $re:ident, $im:ident, f64, $err:ident) => {{
-        let re = $re.as_f64().ok_or_else($err)?;
-        let im = $im.as_f64().ok_or_else($err)?;
-        Ok(zarrs_data_type::FillValue::from(num::complex::Complex64::new(re, im)))
-    }};
-    (@parse_components $self:ident, $re:ident, $im:ident, f16, $err:ident) => {{
-        let re = $re.as_f16().ok_or_else($err)?;
-        let im = $im.as_f16().ok_or_else($err)?;
-        Ok(zarrs_data_type::FillValue::from(num::complex::Complex::<half::f16>::new(re, im)))
-    }};
-    (@parse_components $self:ident, $re:ident, $im:ident, bf16, $err:ident) => {{
-        let re = $re.as_bf16().ok_or_else($err)?;
-        let im = $im.as_bf16().ok_or_else($err)?;
-        Ok(zarrs_data_type::FillValue::from(num::complex::Complex::<half::bf16>::new(re, im)))
-    }};
-
-    (@to_metadata $self:ident, $fill_value:ident, f32, 8, $error:ident) => {{
-        let bytes: [u8; 8] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
-        let re = f32::from_ne_bytes(bytes[0..4].try_into().unwrap());
-        let im = f32::from_ne_bytes(bytes[4..8].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
-        ]))
-    }};
-    (@to_metadata $self:ident, $fill_value:ident, f64, 16, $error:ident) => {{
-        let bytes: [u8; 16] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
-        let re = f64::from_ne_bytes(bytes[0..8].try_into().unwrap());
-        let im = f64::from_ne_bytes(bytes[8..16].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
-        ]))
-    }};
-    (@to_metadata $self:ident, $fill_value:ident, f16, 4, $error:ident) => {{
-        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
-        let re = half::f16::from_ne_bytes(bytes[0..2].try_into().unwrap());
-        let im = half::f16::from_ne_bytes(bytes[2..4].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
-        ]))
-    }};
-    (@to_metadata $self:ident, $fill_value:ident, bf16, 4, $error:ident) => {{
-        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
-        let re = half::bf16::from_ne_bytes(bytes[0..2].try_into().unwrap());
-        let im = half::bf16::from_ne_bytes(bytes[2..4].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
-        ]))
-    }};
-
-    // Codec method overrides for complex types
-    (@codec_method pcodec) => {
-        fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method bitround) => {
-        fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method packbits) => {
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
-        }
-    };
-}
-
-/// Macro to implement `DataTypeExtension` for subfloat types (single-byte floating point formats).
-macro_rules! impl_subfloat_data_type {
-    ($marker:ty, $bits:tt) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
-            fn identifier(&self) -> &'static str {
-                <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
-            }
-
-            fn configuration(&self) -> zarrs_metadata::Configuration {
-                zarrs_metadata::Configuration::default()
-            }
-
-            fn size(&self) -> zarrs_metadata::DataTypeSize {
-                zarrs_metadata::DataTypeSize::Fixed(1)
-            }
-
-            fn fill_value(
-                &self,
-                fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
-            ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-                let err = || {
-                    zarrs_data_type::DataTypeFillValueMetadataError::new(
-                        self.identifier().to_string(),
-                        fill_value_metadata.clone(),
-                    )
-                };
-                // Subfloats use hex string representation like "0x00"
-                if let Some(s) = fill_value_metadata.as_str() {
-                    if let Some(hex) = s.strip_prefix("0x") {
-                        if let Ok(byte) = u8::from_str_radix(hex, 16) {
-                            return Ok(zarrs_data_type::FillValue::from(byte));
-                        }
-                    }
-                }
-                // Also accept integer values in range
-                if let Some(int) = fill_value_metadata.as_u64() {
-                    if let Ok(byte) = u8::try_from(int) {
-                        return Ok(zarrs_data_type::FillValue::from(byte));
-                    }
-                }
-                Err(err())
-            }
-
-            fn metadata_fill_value(
-                &self,
-                fill_value: &zarrs_data_type::FillValue,
-            ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError> {
-                let error = || {
-                    zarrs_data_type::DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-                };
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                // Return as hex string
-                Ok(zarrs_metadata::v3::FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])))
-            }
-
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
-            fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-                Some(self)
-            }
-
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-        }
-
-        impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
-            fn encode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                _endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                // Single byte, no endianness conversion needed
-                Ok(bytes)
-            }
-
-            fn decode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                _endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                // Single byte, no endianness conversion needed
-                Ok(bytes)
-            }
-        }
-
-        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
-            fn component_size_bits(&self) -> u64 {
-                $bits
-            }
-            fn num_components(&self) -> u64 {
-                1
-            }
-            fn sign_extension(&self) -> bool {
-                false // subfloats don't use sign extension
-            }
-        }
-    };
-}
-
-/// Macro to implement `DataTypeExtension` for complex subfloat types (two subfloats packed together).
-/// The second parameter is the bit size of each component for packbits codec.
-macro_rules! impl_complex_subfloat_data_type {
-    ($marker:ty, $bits:tt) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
-            fn identifier(&self) -> &'static str {
-                <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
-            }
-
-            fn configuration(&self) -> zarrs_metadata::Configuration {
-                zarrs_metadata::Configuration::default()
-            }
-
-            fn size(&self) -> zarrs_metadata::DataTypeSize {
-                zarrs_metadata::DataTypeSize::Fixed(2)
-            }
-
-            fn fill_value(
-                &self,
-                fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
-            ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-                let err = || {
-                    zarrs_data_type::DataTypeFillValueMetadataError::new(
-                        self.identifier().to_string(),
-                        fill_value_metadata.clone(),
-                    )
-                };
-                // Complex subfloats use array of two hex strings like ["0x00", "0x00"]
-                if let Some([re, im]) = fill_value_metadata.as_array() {
-                    let parse_hex = |v: &zarrs_metadata::v3::FillValueMetadataV3| -> Option<u8> {
-                        if let Some(s) = v.as_str() {
-                            if let Some(hex) = s.strip_prefix("0x") {
-                                return u8::from_str_radix(hex, 16).ok();
-                            }
-                        }
-                        if let Some(int) = v.as_u64() {
-                            return u8::try_from(int).ok();
-                        }
-                        None
-                    };
-                    if let (Some(re_byte), Some(im_byte)) = (parse_hex(re), parse_hex(im)) {
-                        return Ok(zarrs_data_type::FillValue::from([re_byte, im_byte]));
-                    }
-                }
-                Err(err())
-            }
-
-            fn metadata_fill_value(
-                &self,
-                fill_value: &zarrs_data_type::FillValue,
-            ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError> {
-                let error = || {
-                    zarrs_data_type::DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-                };
-                let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-                // Return as array of hex strings
-                Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-                    zarrs_metadata::v3::FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])),
-                    zarrs_metadata::v3::FillValueMetadataV3::from(format!("0x{:02x}", bytes[1])),
-                ]))
-            }
-
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
-            fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-                Some(self)
-            }
-
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-        }
-
-        impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
-            fn encode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                _endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                // Two single-byte components, no endianness conversion needed
-                Ok(bytes)
-            }
-
-            fn decode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                _endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-                // Two single-byte components, no endianness conversion needed
-                Ok(bytes)
-            }
-        }
-
-        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
-            fn component_size_bits(&self) -> u64 {
-                $bits
-            }
-            fn num_components(&self) -> u64 {
-                2 // complex = 2 components
-            }
-            fn sign_extension(&self) -> bool {
-                false // subfloats don't use sign extension
-            }
-        }
-    };
-}
+pub(crate) use impl_data_type_extension_numeric;
 
 /// Macro to register a data type as a `DataTypePlugin`.
 macro_rules! register_data_type_plugin {
@@ -719,8 +316,409 @@ macro_rules! register_data_type_plugin {
     };
 }
 
-pub(crate) use impl_complex_data_type;
-pub(crate) use impl_complex_subfloat_data_type;
-pub(crate) use impl_data_type_extension_numeric;
-pub(crate) use impl_subfloat_data_type;
 pub(crate) use register_data_type_plugin;
+
+/// Macro to implement `DataTypeExtensionPackBitsCodec` for data types.
+///
+/// # Usage
+/// ```ignore
+/// // For single-component types:
+/// impl_packbits_codec!(Int32DataType, 32, signed, 1);
+/// impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
+/// impl_packbits_codec!(Float32DataType, 32, float, 1);
+///
+/// // For complex types (2 components):
+/// impl_packbits_codec!(Complex64DataType, 32, float, 2);
+/// ```
+macro_rules! impl_packbits_codec {
+    // Multi-component, signed integer
+    ($marker:ty, $bits:expr, signed, $components:expr) => {
+        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                true
+            }
+        }
+    };
+    // Multi-component, unsigned integer
+    ($marker:ty, $bits:expr, unsigned, $components:expr) => {
+        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                false
+            }
+        }
+    };
+    // Multi-component, float (no sign extension)
+    ($marker:ty, $bits:expr, float, $components:expr) => {
+        impl zarrs_data_type::DataTypeExtensionPackBitsCodec for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                false
+            }
+        }
+    };
+}
+
+pub(crate) use impl_packbits_codec;
+
+/// Macro to implement `DataTypeExtensionPcodecCodec` for data types.
+///
+/// # Usage
+/// ```ignore
+/// // Unsupported type:
+/// impl_pcodec_codec!(BFloat16DataType, None);
+///
+/// // Supported type:
+/// impl_pcodec_codec!(Int32DataType, I32);
+/// impl_pcodec_codec!(Float32DataType, F32);
+///
+/// // Complex type (2 elements per element):
+/// impl_pcodec_codec!(Complex64DataType, F32, 2);
+/// ```
+macro_rules! impl_pcodec_codec {
+    // Unsupported type
+    ($marker:ty, None) => {
+        impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
+            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
+                None
+            }
+        }
+    };
+    // Single element type
+    ($marker:ty, $element_type:ident) => {
+        impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
+            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
+                Some(zarrs_data_type::PcodecElementType::$element_type)
+            }
+        }
+    };
+    // Multi-element type (e.g., complex numbers)
+    ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
+        impl zarrs_data_type::DataTypeExtensionPcodecCodec for $marker {
+            fn pcodec_element_type(&self) -> Option<zarrs_data_type::PcodecElementType> {
+                Some(zarrs_data_type::PcodecElementType::$element_type)
+            }
+            fn pcodec_elements_per_element(&self) -> usize {
+                $elements_per_element
+            }
+        }
+    };
+}
+
+pub(crate) use impl_pcodec_codec;
+
+/// Macro to implement `DataTypeExtensionFixedScaleOffsetCodec` for data types.
+///
+/// # Usage
+/// ```ignore
+/// // Unsupported type:
+/// impl_fixedscaleoffset_codec!(BFloat16DataType, None);
+///
+/// // Supported type:
+/// impl_fixedscaleoffset_codec!(Int32DataType, I32);
+/// impl_fixedscaleoffset_codec!(Float32DataType, F32);
+/// ```
+macro_rules! impl_fixedscaleoffset_codec {
+    // Unsupported type
+    ($marker:ty, None) => {
+        impl zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec for $marker {
+            fn fixedscaleoffset_element_type(
+                &self,
+            ) -> Option<zarrs_data_type::FixedScaleOffsetElementType> {
+                None
+            }
+        }
+    };
+    // Supported type
+    ($marker:ty, $element_type:ident) => {
+        impl zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec for $marker {
+            fn fixedscaleoffset_element_type(
+                &self,
+            ) -> Option<zarrs_data_type::FixedScaleOffsetElementType> {
+                Some(zarrs_data_type::FixedScaleOffsetElementType::$element_type)
+            }
+        }
+    };
+}
+
+pub(crate) use impl_fixedscaleoffset_codec;
+
+/// Macro to implement `DataTypeExtensionZfpCodec` for data types.
+///
+/// # Usage
+/// ```ignore
+/// // Unsupported type:
+/// impl_zfp_codec!(BFloat16DataType, None);
+///
+/// // Native ZFP type (no promotion):
+/// impl_zfp_codec!(Int32DataType, Int32);
+/// impl_zfp_codec!(Float32DataType, Float);
+///
+/// // Promoted type:
+/// impl_zfp_codec!(Int8DataType, Int32, I8ToI32);
+/// impl_zfp_codec!(Int16DataType, Int32, I16ToI32);
+/// ```
+macro_rules! impl_zfp_codec {
+    // Unsupported type
+    ($marker:ty, None) => {
+        impl zarrs_data_type::DataTypeExtensionZfpCodec for $marker {
+            fn zfp_type(&self) -> Option<zarrs_data_type::ZfpType> {
+                None
+            }
+        }
+    };
+    // Native type (no promotion needed)
+    ($marker:ty, $zfp_type:ident) => {
+        impl zarrs_data_type::DataTypeExtensionZfpCodec for $marker {
+            fn zfp_type(&self) -> Option<zarrs_data_type::ZfpType> {
+                Some(zarrs_data_type::ZfpType::$zfp_type)
+            }
+            fn zfp_promotion(&self) -> zarrs_data_type::ZfpPromotion {
+                zarrs_data_type::ZfpPromotion::None
+            }
+        }
+    };
+    // Promoted type
+    ($marker:ty, $zfp_type:ident, $promotion:ident) => {
+        impl zarrs_data_type::DataTypeExtensionZfpCodec for $marker {
+            fn zfp_type(&self) -> Option<zarrs_data_type::ZfpType> {
+                Some(zarrs_data_type::ZfpType::$zfp_type)
+            }
+            fn zfp_promotion(&self) -> zarrs_data_type::ZfpPromotion {
+                zarrs_data_type::ZfpPromotion::$promotion
+            }
+        }
+    };
+}
+
+pub(crate) use impl_zfp_codec;
+
+/// Macro to implement `DataTypeExtensionBitroundCodec` for data types.
+///
+/// # Usage
+/// ```ignore
+/// // Float types (have mantissa bits):
+/// impl_bitround_codec!(Float32DataType, 4, float32, 23);
+/// impl_bitround_codec!(Float64DataType, 8, float64, 52);
+/// impl_bitround_codec!(Float16DataType, 2, float16, 10);
+/// impl_bitround_codec!(BFloat16DataType, 2, float16, 7);
+///
+/// // Integer types (no mantissa bits):
+/// impl_bitround_codec!(Int32DataType, 4, int32);
+/// impl_bitround_codec!(Int64DataType, 8, int64);
+/// ```
+macro_rules! impl_bitround_codec {
+    // Float16/BFloat16 types (use round_bytes_float16 with specified mantissa bits)
+    ($marker:ty, 2, float16, $mantissa_bits:expr) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn component_size(&self) -> usize {
+                2
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_float16(bytes, keepbits, $mantissa_bits);
+            }
+        }
+    };
+    // Float32 types
+    ($marker:ty, 4, float32, $mantissa_bits:expr) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn component_size(&self) -> usize {
+                4
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_float32(bytes, keepbits, $mantissa_bits);
+            }
+        }
+    };
+    // Float64 types
+    ($marker:ty, 8, float64, $mantissa_bits:expr) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn component_size(&self) -> usize {
+                8
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_float64(bytes, keepbits, $mantissa_bits);
+            }
+        }
+    };
+    // Int8 types (no mantissa, round from MSB)
+    ($marker:ty, 1, int8) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                1
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int8(bytes, keepbits);
+            }
+        }
+    };
+    // Int16 types
+    ($marker:ty, 2, int16) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                2
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int16(bytes, keepbits);
+            }
+        }
+    };
+    // Int32 types
+    ($marker:ty, 4, int32) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                4
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int32(bytes, keepbits);
+            }
+        }
+    };
+    // Int64 types
+    ($marker:ty, 8, int64) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                8
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int64(bytes, keepbits);
+            }
+        }
+    };
+    // UInt8 types (use int8 rounding function)
+    ($marker:ty, 1, uint8) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                1
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int8(bytes, keepbits);
+            }
+        }
+    };
+    // UInt16 types (use int16 rounding function)
+    ($marker:ty, 2, uint16) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                2
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int16(bytes, keepbits);
+            }
+        }
+    };
+    // UInt32 types (use int32 rounding function)
+    ($marker:ty, 4, uint32) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                4
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int32(bytes, keepbits);
+            }
+        }
+    };
+    // UInt64 types (use int64 rounding function)
+    ($marker:ty, 8, uint64) => {
+        impl zarrs_data_type::DataTypeExtensionBitroundCodec for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn component_size(&self) -> usize {
+                8
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                zarrs_data_type::round_bytes_int64(bytes, keepbits);
+            }
+        }
+    };
+}
+
+pub(crate) use impl_bitround_codec;
+
+/// Macro to implement a passthrough `DataTypeExtensionBytesCodec` for data types.
+///
+/// This is useful for single-byte types and other types where no byte-swapping
+/// or transformation is needed during encoding/decoding.
+///
+/// # Usage
+/// ```ignore
+/// impl_bytes_codec_passthrough!(BoolDataType);
+/// impl_bytes_codec_passthrough!(UInt4DataType);
+/// impl_bytes_codec_passthrough!(Float8E4M3DataType);
+/// ```
+macro_rules! impl_bytes_codec_passthrough {
+    ($marker:ty) => {
+        impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
+            fn encode<'a>(
+                &self,
+                bytes: std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<zarrs_metadata::Endianness>,
+            ) -> Result<
+                std::borrow::Cow<'a, [u8]>,
+                zarrs_data_type::DataTypeExtensionBytesCodecError,
+            > {
+                Ok(bytes)
+            }
+
+            fn decode<'a>(
+                &self,
+                bytes: std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<zarrs_metadata::Endianness>,
+            ) -> Result<
+                std::borrow::Cow<'a, [u8]>,
+                zarrs_data_type::DataTypeExtensionBytesCodecError,
+            > {
+                Ok(bytes)
+            }
+        }
+    };
+}
+
+pub(crate) use impl_bytes_codec_passthrough;

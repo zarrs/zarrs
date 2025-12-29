@@ -12,12 +12,28 @@
 mod macros;
 mod named_data_type;
 
-mod complex;
+// Individual data type modules with substantial implementations
+mod bool;
+mod bytes;
+mod complex_float;
+mod complex_float8_e4m3;
+mod complex_float8_e5m2;
+mod complex_subfloat;
 mod float;
-mod integer;
+mod float8_e4m3;
+mod float8_e5m2;
+mod int;
+mod int2;
+mod int4;
+mod numpy_datetime64;
+mod numpy_timedelta64;
 mod optional;
-mod special;
+mod raw_bits;
+mod string;
 mod subfloat;
+mod uint;
+mod uint2;
+mod uint4;
 
 use std::{borrow::Cow, num::NonZeroU32, sync::Arc};
 
@@ -34,28 +50,38 @@ pub use zarrs_data_type::{
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
 
-pub use complex::{
-    Complex64DataType, Complex128DataType, ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType,
-    ComplexFloat6E2M3FNDataType, ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType,
-    ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType,
-    ComplexFloat8E5M2DataType, ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType,
-    ComplexFloat16DataType, ComplexFloat32DataType, ComplexFloat64DataType,
+pub use self::bool::BoolDataType;
+pub use self::string::StringDataType;
+pub use bytes::BytesDataType;
+pub use complex_float::{
+    Complex64DataType, Complex128DataType, ComplexBFloat16DataType, ComplexFloat16DataType,
+    ComplexFloat32DataType, ComplexFloat64DataType,
+};
+pub use complex_float8_e4m3::ComplexFloat8E4M3DataType;
+pub use complex_float8_e5m2::ComplexFloat8E5M2DataType;
+pub use complex_subfloat::{
+    ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType, ComplexFloat6E3M2FNDataType,
+    ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3FNUZDataType,
+    ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType,
 };
 pub use float::{BFloat16DataType, Float16DataType, Float32DataType, Float64DataType};
-pub use integer::{
-    Int2DataType, Int4DataType, Int8DataType, Int16DataType, Int32DataType, Int64DataType,
-    UInt2DataType, UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-};
+pub use float8_e4m3::Float8E4M3DataType;
+pub use float8_e5m2::Float8E5M2DataType;
+pub use int::{Int8DataType, Int16DataType, Int32DataType, Int64DataType};
+pub use int2::Int2DataType;
+pub use int4::Int4DataType;
+pub use numpy_datetime64::NumpyDateTime64DataType;
+pub use numpy_timedelta64::NumpyTimeDelta64DataType;
 pub use optional::OptionalDataType;
-pub use special::{
-    BoolDataType, BytesDataType, NumpyDateTime64DataType, NumpyTimeDelta64DataType,
-    RawBitsDataType, StringDataType,
-};
+pub use raw_bits::RawBitsDataType;
 pub use subfloat::{
     Float4E2M1FNDataType, Float6E2M3FNDataType, Float6E3M2FNDataType, Float8E3M4DataType,
-    Float8E4M3B11FNUZDataType, Float8E4M3DataType, Float8E4M3FNUZDataType, Float8E5M2DataType,
-    Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
+    Float8E4M3B11FNUZDataType, Float8E4M3FNUZDataType, Float8E5M2FNUZDataType,
+    Float8E8M0FNUDataType,
 };
+pub use uint::{UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType};
+pub use uint2::UInt2DataType;
+pub use uint4::UInt4DataType;
 
 /// Factory functions for creating built-in data types.
 ///
