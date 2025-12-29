@@ -90,53 +90,53 @@ macro_rules! impl_complex_subfloat_data_type {
 /// The `complex_float4_e2m1fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat4E2M1FNDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat4E2M1FNDataType, "complex_float4_e2m1fn");
 register_data_type_plugin!(ComplexFloat4E2M1FNDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat4E2M1FNDataType, "complex_float4_e2m1fn");
 
 /// The `complex_float6_e2m3fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat6E2M3FNDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat6E2M3FNDataType, "complex_float6_e2m3fn");
 register_data_type_plugin!(ComplexFloat6E2M3FNDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat6E2M3FNDataType, "complex_float6_e2m3fn");
 
 /// The `complex_float6_e3m2fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat6E3M2FNDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat6E3M2FNDataType, "complex_float6_e3m2fn");
 register_data_type_plugin!(ComplexFloat6E3M2FNDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat6E3M2FNDataType, "complex_float6_e3m2fn");
 
 /// The `complex_float8_e3m4` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E3M4DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E3M4DataType, "complex_float8_e3m4");
 register_data_type_plugin!(ComplexFloat8E3M4DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E3M4DataType, "complex_float8_e3m4");
 
 /// The `complex_float8_e4m3b11fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E4M3B11FNUZDataType;
+register_data_type_plugin!(ComplexFloat8E4M3B11FNUZDataType);
 zarrs_plugin::impl_extension_aliases!(
     ComplexFloat8E4M3B11FNUZDataType,
     "complex_float8_e4m3b11fnuz"
 );
-register_data_type_plugin!(ComplexFloat8E4M3B11FNUZDataType);
 
 /// The `complex_float8_e4m3fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E4M3FNUZDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E4M3FNUZDataType, "complex_float8_e4m3fnuz");
 register_data_type_plugin!(ComplexFloat8E4M3FNUZDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E4M3FNUZDataType, "complex_float8_e4m3fnuz");
 
 /// The `complex_float8_e5m2fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E5M2FNUZDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E5M2FNUZDataType, "complex_float8_e5m2fnuz");
 register_data_type_plugin!(ComplexFloat8E5M2FNUZDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E5M2FNUZDataType, "complex_float8_e5m2fnuz");
 
 /// The `complex_float8_e8m0fnu` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E8M0FNUDataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E8M0FNUDataType, "complex_float8_e8m0fnu");
 register_data_type_plugin!(ComplexFloat8E8M0FNUDataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E8M0FNUDataType, "complex_float8_e8m0fnu");
 
 // DataTypeExtension implementations for complex subfloats
 impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType);

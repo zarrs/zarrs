@@ -137,7 +137,3 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
         *decoded_representation
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ShuffleCodec, "shuffle",
-    v3: "numcodecs.shuffle", []
-);

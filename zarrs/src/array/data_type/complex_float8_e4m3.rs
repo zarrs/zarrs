@@ -5,8 +5,8 @@ use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_
 /// The `complex_float8_e4m3` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E4M3DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E4M3DataType, "complex_float8_e4m3");
 register_data_type_plugin!(ComplexFloat8E4M3DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E4M3DataType, "complex_float8_e4m3");
 
 // Default implementation when float8 feature is not enabled
 #[cfg(not(feature = "float8"))]

@@ -91,6 +91,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(ShardingCodec::IDENTIFIER, ShardingCodec::matches_name, ShardingCodec::default_name, create_codec_sharding)
 }
+zarrs_plugin::impl_extension_aliases!(ShardingCodec, "sharding_indexed");
 
 pub(crate) fn create_codec_sharding(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ShardingCodecConfiguration = metadata.to_configuration().map_err(|_| {

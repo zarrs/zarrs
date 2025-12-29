@@ -130,7 +130,3 @@ impl BytesToBytesCodecTraits for ZlibCodec {
             })
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ZlibCodec, "zlib",
-    v3: "numcodecs.zlib", []
-);

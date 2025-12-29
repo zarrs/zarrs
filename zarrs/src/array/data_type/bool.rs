@@ -7,11 +7,11 @@ use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_
 /// The `bool` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct BoolDataType;
+register_data_type_plugin!(BoolDataType);
 zarrs_plugin::impl_extension_aliases!(BoolDataType, "bool",
     v3: "bool", [],
     v2: "|b1", ["|b1"]
 );
-register_data_type_plugin!(BoolDataType);
 
 impl zarrs_data_type::DataTypeExtension for BoolDataType {
     fn identifier(&self) -> &'static str {

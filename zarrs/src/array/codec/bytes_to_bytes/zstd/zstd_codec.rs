@@ -147,5 +147,3 @@ impl BytesToBytesCodecTraits for ZstdCodec {
             })
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ZstdCodec, "zstd");

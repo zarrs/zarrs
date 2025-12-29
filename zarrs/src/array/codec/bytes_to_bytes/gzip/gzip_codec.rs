@@ -139,5 +139,3 @@ impl BytesToBytesCodecTraits for GzipCodec {
             })
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(GzipCodec, "gzip");

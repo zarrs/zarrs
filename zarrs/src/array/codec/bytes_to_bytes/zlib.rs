@@ -48,6 +48,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(ZlibCodec::IDENTIFIER, ZlibCodec::matches_name, ZlibCodec::default_name, create_codec_zlib)
 }
+zarrs_plugin::impl_extension_aliases!(ZlibCodec, "zlib",
+    v3: "numcodecs.zlib", []
+);
 
 pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ZlibCodecConfiguration = metadata.to_configuration().map_err(|_| {

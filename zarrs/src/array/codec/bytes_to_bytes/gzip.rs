@@ -45,6 +45,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(GzipCodec::IDENTIFIER, GzipCodec::matches_name, GzipCodec::default_name, create_codec_gzip)
 }
+zarrs_plugin::impl_extension_aliases!(GzipCodec, "gzip");
 
 pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: GzipCodecConfiguration = metadata.to_configuration().map_err(|_| {

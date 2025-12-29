@@ -18,6 +18,32 @@ pub struct NumpyDateTime64DataType {
     /// The `NumPy` temporal scale factor.
     pub scale_factor: NonZeroU32,
 }
+
+inventory::submit! {
+    zarrs_data_type::DataTypePlugin::new(
+        <NumpyDateTime64DataType as ExtensionIdentifier>::IDENTIFIER,
+        <NumpyDateTime64DataType as ExtensionIdentifier>::matches_name,
+        <NumpyDateTime64DataType as ExtensionIdentifier>::default_name,
+        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+            let configuration = metadata.configuration().ok_or_else(|| {
+                PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                    NumpyDateTime64DataType::IDENTIFIER,
+                    "data_type",
+                    "missing configuration".to_string(),
+                ))
+            })?;
+            let config = NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
+                .map_err(|_| {
+                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                        NumpyDateTime64DataType::IDENTIFIER,
+                        "data_type",
+                        metadata.to_string(),
+                    ))
+                })?;
+            Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)))
+        },
+    )
+}
 zarrs_plugin::impl_extension_aliases!(NumpyDateTime64DataType, "numpy.datetime64");
 
 impl NumpyDateTime64DataType {
@@ -147,30 +173,3 @@ impl_pcodec_codec!(NumpyDateTime64DataType, I64);
 impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
 impl_zfp_codec!(NumpyDateTime64DataType, Int64);
 impl_packbits_codec!(NumpyDateTime64DataType, 64, signed, 1);
-
-// Custom plugin registration for NumpyDateTime64DataType (has configuration)
-inventory::submit! {
-    zarrs_data_type::DataTypePlugin::new(
-        <NumpyDateTime64DataType as ExtensionIdentifier>::IDENTIFIER,
-        <NumpyDateTime64DataType as ExtensionIdentifier>::matches_name,
-        <NumpyDateTime64DataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
-            let configuration = metadata.configuration().ok_or_else(|| {
-                PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                    NumpyDateTime64DataType::IDENTIFIER,
-                    "data_type",
-                    "missing configuration".to_string(),
-                ))
-            })?;
-            let config = NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
-                .map_err(|_| {
-                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                        NumpyDateTime64DataType::IDENTIFIER,
-                        "data_type",
-                        metadata.to_string(),
-                    ))
-                })?;
-            Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)))
-        },
-    )
-}

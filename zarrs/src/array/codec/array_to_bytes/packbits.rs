@@ -48,6 +48,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(PackBitsCodec::IDENTIFIER, PackBitsCodec::matches_name, PackBitsCodec::default_name, create_codec_packbits)
 }
+zarrs_plugin::impl_extension_aliases!(PackBitsCodec, "packbits");
 
 pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: PackBitsCodecConfiguration = metadata.to_configuration().map_err(|_| {

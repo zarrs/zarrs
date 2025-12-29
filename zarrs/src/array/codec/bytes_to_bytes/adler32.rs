@@ -49,6 +49,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(Adler32Codec::IDENTIFIER, Adler32Codec::matches_name, Adler32Codec::default_name, create_codec_adler32)
 }
+zarrs_plugin::impl_extension_aliases!(Adler32Codec, "adler32",
+    v3: "numcodecs.adler32", []
+);
 
 pub(crate) fn create_codec_adler32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration = metadata.to_configuration().map_err(|_| {

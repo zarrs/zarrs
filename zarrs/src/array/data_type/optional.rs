@@ -14,6 +14,42 @@ use crate::array::NamedDataType;
 /// to access the wrapped data type's properties.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OptionalDataType(Box<NamedDataType>);
+
+inventory::submit! {
+    zarrs_data_type::DataTypePlugin::new(
+        <OptionalDataType as ExtensionIdentifier>::IDENTIFIER,
+        <OptionalDataType as ExtensionIdentifier>::matches_name,
+        <OptionalDataType as ExtensionIdentifier>::default_name,
+        |metadata: &MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+            let configuration = metadata.configuration().ok_or_else(|| {
+                PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                    OptionalDataType::IDENTIFIER,
+                    "data_type",
+                    "missing configuration".to_string(),
+                ))
+            })?;
+            let config = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
+                .map_err(|_| {
+                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                        OptionalDataType::IDENTIFIER,
+                        "data_type",
+                        metadata.to_string(),
+                    ))
+                })?;
+
+            // Create metadata for the inner data type
+            let inner_metadata = if config.configuration.is_empty() {
+                MetadataV3::new(config.name)
+            } else {
+                MetadataV3::new_with_configuration(config.name, config.configuration)
+            };
+
+            // Recursively parse the inner data type
+            let inner_data_type = NamedDataType::try_from(&inner_metadata)?;
+            Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)))
+        },
+    )
+}
 zarrs_plugin::impl_extension_aliases!(OptionalDataType, "zarrs.optional");
 
 impl OptionalDataType {
@@ -194,41 +230,4 @@ impl zarrs_data_type::DataTypeExtension for OptionalDataType {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-}
-
-// Plugin registration for OptionalDataType
-inventory::submit! {
-    zarrs_data_type::DataTypePlugin::new(
-        <OptionalDataType as ExtensionIdentifier>::IDENTIFIER,
-        <OptionalDataType as ExtensionIdentifier>::matches_name,
-        <OptionalDataType as ExtensionIdentifier>::default_name,
-        |metadata: &MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
-            let configuration = metadata.configuration().ok_or_else(|| {
-                PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                    OptionalDataType::IDENTIFIER,
-                    "data_type",
-                    "missing configuration".to_string(),
-                ))
-            })?;
-            let config = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
-                .map_err(|_| {
-                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                        OptionalDataType::IDENTIFIER,
-                        "data_type",
-                        metadata.to_string(),
-                    ))
-                })?;
-
-            // Create metadata for the inner data type
-            let inner_metadata = if config.configuration.is_empty() {
-                MetadataV3::new(config.name)
-            } else {
-                MetadataV3::new_with_configuration(config.name, config.configuration)
-            };
-
-            // Recursively parse the inner data type
-            let inner_data_type = NamedDataType::try_from(&inner_metadata)?;
-            Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)))
-        },
-    )
 }

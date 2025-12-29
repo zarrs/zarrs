@@ -128,7 +128,3 @@ impl BytesToBytesCodecTraits for Bz2Codec {
             })
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(Bz2Codec, "bz2",
-    v3: "numcodecs.bz2", []
-);

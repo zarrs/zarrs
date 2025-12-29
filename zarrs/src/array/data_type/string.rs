@@ -7,11 +7,11 @@ use super::macros::register_data_type_plugin;
 /// The `string` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct StringDataType;
+register_data_type_plugin!(StringDataType);
 zarrs_plugin::impl_extension_aliases!(StringDataType, "string",
     v3: "string", [],
     v2: "|O", ["|O"]
 );
-register_data_type_plugin!(StringDataType);
 
 impl zarrs_data_type::DataTypeExtension for StringDataType {
     fn identifier(&self) -> &'static str {

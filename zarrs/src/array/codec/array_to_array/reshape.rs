@@ -102,6 +102,7 @@ fn get_encoded_shape(
 inventory::submit! {
     CodecPlugin::new(ReshapeCodec::IDENTIFIER, ReshapeCodec::matches_name, ReshapeCodec::default_name, create_codec_reshape)
 }
+zarrs_plugin::impl_extension_aliases!(ReshapeCodec, "reshape");
 
 pub(crate) fn create_codec_reshape(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ReshapeCodecConfiguration = metadata.to_configuration().map_err(|_| {

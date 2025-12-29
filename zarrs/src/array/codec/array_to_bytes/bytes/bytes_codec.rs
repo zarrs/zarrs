@@ -289,7 +289,3 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(BytesCodec, "bytes",
-    v3: "bytes", ["endian"]
-);

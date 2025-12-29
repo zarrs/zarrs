@@ -7,11 +7,11 @@ use super::macros::register_data_type_plugin;
 /// The `bytes` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct BytesDataType;
+register_data_type_plugin!(BytesDataType);
 zarrs_plugin::impl_extension_aliases!(BytesDataType, "bytes",
     v3: "bytes", ["binary", "variable_length_bytes"],
     v2: "|VX", ["|VX"]
 );
-register_data_type_plugin!(BytesDataType);
 
 impl zarrs_data_type::DataTypeExtension for BytesDataType {
     fn identifier(&self) -> &'static str {

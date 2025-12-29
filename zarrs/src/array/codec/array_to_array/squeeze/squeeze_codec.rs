@@ -226,5 +226,3 @@ impl ArrayCodecTraits for SqueezeCodec {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(SqueezeCodec, "zarrs.squeeze");

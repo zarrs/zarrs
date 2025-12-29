@@ -5,8 +5,8 @@ use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_
 /// The `uint4` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct UInt4DataType;
-zarrs_plugin::impl_extension_aliases!(UInt4DataType, "uint4");
 register_data_type_plugin!(UInt4DataType);
+zarrs_plugin::impl_extension_aliases!(UInt4DataType, "uint4");
 
 impl zarrs_data_type::DataTypeExtension for UInt4DataType {
     fn identifier(&self) -> &'static str {

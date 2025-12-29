@@ -488,8 +488,3 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec, "fixedscaleoffset",
-    v3: "numcodecs.fixedscaleoffset", [],
-    v2: "fixedscaleoffset", []
-);

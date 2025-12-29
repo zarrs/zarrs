@@ -71,6 +71,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(BloscCodec::IDENTIFIER, BloscCodec::matches_name, BloscCodec::default_name, create_codec_blosc)
 }
+zarrs_plugin::impl_extension_aliases!(BloscCodec, "blosc");
 
 pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: BloscCodecConfiguration = metadata.to_configuration().map_err(|_| {

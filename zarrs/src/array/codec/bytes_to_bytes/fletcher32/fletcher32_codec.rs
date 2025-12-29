@@ -196,7 +196,3 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(Fletcher32Codec, "fletcher32",
-    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"]
-);

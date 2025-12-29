@@ -8,41 +8,41 @@ use super::macros::{
 /// The `uint8` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct UInt8DataType;
+register_data_type_plugin!(UInt8DataType);
 zarrs_plugin::impl_extension_aliases!(UInt8DataType, "uint8",
     v3: "uint8", [],
     v2: "|u1", ["|u1"]
 );
-register_data_type_plugin!(UInt8DataType);
 impl_data_type_extension_numeric!(UInt8DataType, 1, u8; bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `uint16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct UInt16DataType;
+register_data_type_plugin!(UInt16DataType);
 zarrs_plugin::impl_extension_aliases!(UInt16DataType, "uint16",
     v3: "uint16", [],
     v2: "<u2", ["<u2", ">u2"]
 );
-register_data_type_plugin!(UInt16DataType);
 impl_data_type_extension_numeric!(UInt16DataType, 2, u16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `uint32` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct UInt32DataType;
+register_data_type_plugin!(UInt32DataType);
 zarrs_plugin::impl_extension_aliases!(UInt32DataType, "uint32",
     v3: "uint32", [],
     v2: "<u4", ["<u4", ">u4"]
 );
-register_data_type_plugin!(UInt32DataType);
 impl_data_type_extension_numeric!(UInt32DataType, 4, u32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `uint64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct UInt64DataType;
+register_data_type_plugin!(UInt64DataType);
 zarrs_plugin::impl_extension_aliases!(UInt64DataType, "uint64",
     v3: "uint64", [],
     v2: "<u8", ["<u8", ">u8"]
 );
-register_data_type_plugin!(UInt64DataType);
 impl_data_type_extension_numeric!(UInt64DataType, 8, u64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 // Bitround codec implementations for standard unsigned integers

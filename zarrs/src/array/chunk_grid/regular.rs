@@ -40,6 +40,7 @@ use zarrs_plugin::ExtensionIdentifier;
 inventory::submit! {
     ChunkGridPlugin::new(RegularChunkGrid::IDENTIFIER, RegularChunkGrid::matches_name, RegularChunkGrid::default_name, create_chunk_grid_regular)
 }
+zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, "regular");
 
 /// Create a `regular` chunk grid from metadata.
 ///
@@ -301,8 +302,6 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
         self.chunks_in_array_subset(array_subset).map(Option::Some)
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, "regular");
 
 #[cfg(test)]
 mod tests {

@@ -48,6 +48,7 @@ use crate::{
 inventory::submit! {
     ChunkGridPlugin::new(RegularBoundedChunkGrid::IDENTIFIER, RegularBoundedChunkGrid::matches_name, RegularBoundedChunkGrid::default_name, create_chunk_grid_regular_bounded)
 }
+zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "zarrs.regular_bounded");
 
 /// Create a `regular_bounded` chunk grid from metadata.
 ///
@@ -294,8 +295,6 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "zarrs.regular_bounded");
 
 #[cfg(test)]
 mod tests {

@@ -1005,5 +1005,3 @@ impl ShardingCodec {
         )
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ShardingCodec, "sharding_indexed");

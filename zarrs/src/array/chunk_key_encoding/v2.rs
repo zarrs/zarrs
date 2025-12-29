@@ -16,6 +16,7 @@ use crate::{
 inventory::submit! {
     ChunkKeyEncodingPlugin::new(V2ChunkKeyEncoding::IDENTIFIER, V2ChunkKeyEncoding::matches_name, V2ChunkKeyEncoding::default_name, create_chunk_key_encoding_v2)
 }
+zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, "v2");
 
 pub(crate) fn create_chunk_key_encoding_v2(
     metadata: &MetadataV3,
@@ -76,8 +77,6 @@ impl Default for V2ChunkKeyEncoding {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, "v2");
 
 impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
     fn create_metadata(&self) -> MetadataV3 {

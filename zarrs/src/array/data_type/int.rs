@@ -8,41 +8,41 @@ use super::macros::{
 /// The `int8` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Int8DataType;
+register_data_type_plugin!(Int8DataType);
 zarrs_plugin::impl_extension_aliases!(Int8DataType, "int8",
     v3: "int8", [],
     v2: "|i1", ["|i1"]
 );
-register_data_type_plugin!(Int8DataType);
 impl_data_type_extension_numeric!(Int8DataType, 1, i8; bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `int16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Int16DataType;
+register_data_type_plugin!(Int16DataType);
 zarrs_plugin::impl_extension_aliases!(Int16DataType, "int16",
     v3: "int16", [],
     v2: "<i2", ["<i2", ">i2"]
 );
-register_data_type_plugin!(Int16DataType);
 impl_data_type_extension_numeric!(Int16DataType, 2, i16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `int32` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Int32DataType;
+register_data_type_plugin!(Int32DataType);
 zarrs_plugin::impl_extension_aliases!(Int32DataType, "int32",
     v3: "int32", [],
     v2: "<i4", ["<i4", ">i4"]
 );
-register_data_type_plugin!(Int32DataType);
 impl_data_type_extension_numeric!(Int32DataType, 4, i32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 /// The `int64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Int64DataType;
+register_data_type_plugin!(Int64DataType);
 zarrs_plugin::impl_extension_aliases!(Int64DataType, "int64",
     v3: "int64", [],
     v2: "<i8", ["<i8", ">i8"]
 );
-register_data_type_plugin!(Int64DataType);
 impl_data_type_extension_numeric!(Int64DataType, 8, i64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
 
 // Bitround codec implementations for standard integers

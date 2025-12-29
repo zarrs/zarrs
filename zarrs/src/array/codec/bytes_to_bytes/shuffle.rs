@@ -53,6 +53,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(ShuffleCodec::IDENTIFIER, ShuffleCodec::matches_name, ShuffleCodec::default_name, create_codec_shuffle)
 }
+zarrs_plugin::impl_extension_aliases!(ShuffleCodec, "shuffle",
+    v3: "numcodecs.shuffle", []
+);
 
 pub(crate) fn create_codec_shuffle(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration = metadata.to_configuration().map_err(|_| {

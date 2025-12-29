@@ -128,6 +128,9 @@ use zarrs_data_type::{ZfpPromotion, ZfpType};
 inventory::submit! {
     CodecPlugin::new(ZfpCodec::IDENTIFIER, ZfpCodec::matches_name, ZfpCodec::default_name, create_codec_zfp)
 }
+zarrs_plugin::impl_extension_aliases!(ZfpCodec, "zfp",
+    v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
+);
 
 pub(crate) fn create_codec_zfp(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ZfpCodecConfiguration = metadata.to_configuration().map_err(|_| {

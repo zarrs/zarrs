@@ -201,7 +201,3 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(BitroundCodec, "bitround",
-    v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
-);

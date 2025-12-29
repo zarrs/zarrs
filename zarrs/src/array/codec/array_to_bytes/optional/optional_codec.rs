@@ -500,8 +500,6 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
     }
 }
 
-zarrs_plugin::impl_extension_aliases!(OptionalCodec, "zarrs.optional");
-
 #[cfg(test)]
 mod tests {
     use super::*;

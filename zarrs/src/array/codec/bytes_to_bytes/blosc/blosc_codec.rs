@@ -257,5 +257,3 @@ impl BytesToBytesCodecTraits for BloscCodec {
             })
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(BloscCodec, "blosc");

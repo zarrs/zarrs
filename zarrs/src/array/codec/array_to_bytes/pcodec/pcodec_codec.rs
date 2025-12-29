@@ -294,7 +294,3 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         ))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(PcodecCodec, "pcodec",
-    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"]
-);

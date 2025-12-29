@@ -57,6 +57,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(BitroundCodec::IDENTIFIER, BitroundCodec::matches_name, BitroundCodec::default_name, create_codec_bitround)
 }
+zarrs_plugin::impl_extension_aliases!(BitroundCodec, "bitround",
+    v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
+);
 
 pub(crate) fn create_codec_bitround(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: BitroundCodecConfiguration = metadata.to_configuration().map_err(|_| {

@@ -158,5 +158,3 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(Crc32cCodec, "crc32c");

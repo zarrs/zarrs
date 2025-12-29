@@ -87,50 +87,50 @@ macro_rules! impl_subfloat_data_type {
 /// The `float4_e2m1fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float4E2M1FNDataType;
-zarrs_plugin::impl_extension_aliases!(Float4E2M1FNDataType, "float4_e2m1fn");
 register_data_type_plugin!(Float4E2M1FNDataType);
+zarrs_plugin::impl_extension_aliases!(Float4E2M1FNDataType, "float4_e2m1fn");
 
 /// The `float6_e2m3fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float6E2M3FNDataType;
-zarrs_plugin::impl_extension_aliases!(Float6E2M3FNDataType, "float6_e2m3fn");
 register_data_type_plugin!(Float6E2M3FNDataType);
+zarrs_plugin::impl_extension_aliases!(Float6E2M3FNDataType, "float6_e2m3fn");
 
 /// The `float6_e3m2fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float6E3M2FNDataType;
-zarrs_plugin::impl_extension_aliases!(Float6E3M2FNDataType, "float6_e3m2fn");
 register_data_type_plugin!(Float6E3M2FNDataType);
+zarrs_plugin::impl_extension_aliases!(Float6E3M2FNDataType, "float6_e3m2fn");
 
 /// The `float8_e3m4` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E3M4DataType;
-zarrs_plugin::impl_extension_aliases!(Float8E3M4DataType, "float8_e3m4");
 register_data_type_plugin!(Float8E3M4DataType);
+zarrs_plugin::impl_extension_aliases!(Float8E3M4DataType, "float8_e3m4");
 
 /// The `float8_e4m3b11fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E4M3B11FNUZDataType;
-zarrs_plugin::impl_extension_aliases!(Float8E4M3B11FNUZDataType, "float8_e4m3b11fnuz");
 register_data_type_plugin!(Float8E4M3B11FNUZDataType);
+zarrs_plugin::impl_extension_aliases!(Float8E4M3B11FNUZDataType, "float8_e4m3b11fnuz");
 
 /// The `float8_e4m3fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E4M3FNUZDataType;
-zarrs_plugin::impl_extension_aliases!(Float8E4M3FNUZDataType, "float8_e4m3fnuz");
 register_data_type_plugin!(Float8E4M3FNUZDataType);
+zarrs_plugin::impl_extension_aliases!(Float8E4M3FNUZDataType, "float8_e4m3fnuz");
 
 /// The `float8_e5m2fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E5M2FNUZDataType;
-zarrs_plugin::impl_extension_aliases!(Float8E5M2FNUZDataType, "float8_e5m2fnuz");
 register_data_type_plugin!(Float8E5M2FNUZDataType);
+zarrs_plugin::impl_extension_aliases!(Float8E5M2FNUZDataType, "float8_e5m2fnuz");
 
 /// The `float8_e8m0fnu` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E8M0FNUDataType;
-zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, "float8_e8m0fnu");
 register_data_type_plugin!(Float8E8M0FNUDataType);
+zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, "float8_e8m0fnu");
 
 // DataTypeExtension implementations for subfloats
 impl_subfloat_data_type!(Float4E2M1FNDataType);

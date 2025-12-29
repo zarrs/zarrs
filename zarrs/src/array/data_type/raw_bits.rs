@@ -11,6 +11,53 @@ pub struct RawBitsDataType {
     /// Size in bytes.
     size_bytes: usize,
 }
+
+inventory::submit! {
+    zarrs_data_type::DataTypePlugin::new(
+        <RawBitsDataType as ExtensionIdentifier>::IDENTIFIER,
+        <RawBitsDataType as ExtensionIdentifier>::matches_name,
+        <RawBitsDataType as ExtensionIdentifier>::default_name,
+        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+            let name = metadata.name();
+            // Parse size from name (e.g., "r8" -> 1 byte, "r16" -> 2 bytes)
+            // Also handle V2 format like "|V2"
+            let size_bits = if let Some(stripped) = name.strip_prefix('r') {
+                stripped.parse::<usize>().map_err(|_| {
+                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                        RawBitsDataType::IDENTIFIER,
+                        "data_type",
+                        format!("invalid raw bits name: {name}"),
+                    ))
+                })?
+            } else if let Some(stripped) = name.strip_prefix("|V") {
+                // V2 format: |V{bytes}
+                let size_bytes = stripped.parse::<usize>().map_err(|_| {
+                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                        RawBitsDataType::IDENTIFIER,
+                        "data_type",
+                        format!("invalid raw bits name: {name}"),
+                    ))
+                })?;
+                size_bytes * 8
+            } else {
+                return Err(PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                    RawBitsDataType::IDENTIFIER,
+                    "data_type",
+                    format!("invalid raw bits name: {name}"),
+                )));
+            };
+            if size_bits % 8 != 0 {
+                return Err(PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
+                    RawBitsDataType::IDENTIFIER,
+                    "data_type",
+                    format!("raw bits size must be a multiple of 8: {size_bits}"),
+                )));
+            }
+            let size_bytes = size_bits / 8;
+            Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)))
+        },
+    )
+}
 zarrs_plugin::impl_extension_aliases!(RawBitsDataType, "r*",
     v3: "r*", [], [Regex::new(r"^r\d+$").unwrap()],
     v2: "r*", [], [Regex::new(r"^r\d+$").unwrap(), Regex::new(r"^\|V\d+$").unwrap()]
@@ -116,51 +163,3 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
 }
 
 impl_bytes_codec_passthrough!(RawBitsDataType);
-
-// Custom plugin registration for RawBitsDataType (size parsed from name)
-inventory::submit! {
-    zarrs_data_type::DataTypePlugin::new(
-        <RawBitsDataType as ExtensionIdentifier>::IDENTIFIER,
-        <RawBitsDataType as ExtensionIdentifier>::matches_name,
-        <RawBitsDataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
-            let name = metadata.name();
-            // Parse size from name (e.g., "r8" -> 1 byte, "r16" -> 2 bytes)
-            // Also handle V2 format like "|V2"
-            let size_bits = if let Some(stripped) = name.strip_prefix('r') {
-                stripped.parse::<usize>().map_err(|_| {
-                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                        RawBitsDataType::IDENTIFIER,
-                        "data_type",
-                        format!("invalid raw bits name: {name}"),
-                    ))
-                })?
-            } else if let Some(stripped) = name.strip_prefix("|V") {
-                // V2 format: |V{bytes}
-                let size_bytes = stripped.parse::<usize>().map_err(|_| {
-                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                        RawBitsDataType::IDENTIFIER,
-                        "data_type",
-                        format!("invalid raw bits name: {name}"),
-                    ))
-                })?;
-                size_bytes * 8
-            } else {
-                return Err(PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                    RawBitsDataType::IDENTIFIER,
-                    "data_type",
-                    format!("invalid raw bits name: {name}"),
-                )));
-            };
-            if size_bits % 8 != 0 {
-                return Err(PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                    RawBitsDataType::IDENTIFIER,
-                    "data_type",
-                    format!("raw bits size must be a multiple of 8: {size_bits}"),
-                )));
-            }
-            let size_bytes = size_bits / 8;
-            Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)))
-        },
-    )
-}

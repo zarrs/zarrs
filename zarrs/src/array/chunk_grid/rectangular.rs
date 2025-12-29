@@ -49,6 +49,7 @@ use zarrs_plugin::ExtensionIdentifier;
 inventory::submit! {
     ChunkGridPlugin::new(RectangularChunkGrid::IDENTIFIER, RectangularChunkGrid::matches_name, RectangularChunkGrid::default_name, create_chunk_grid_rectangular)
 }
+zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, "rectangular");
 
 /// Create a `rectangular` chunk grid from metadata.
 ///
@@ -362,8 +363,6 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             )
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, "rectangular");
 
 #[cfg(test)]
 mod tests {

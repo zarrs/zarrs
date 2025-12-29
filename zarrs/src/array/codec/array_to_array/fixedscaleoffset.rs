@@ -52,6 +52,10 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(FixedScaleOffsetCodec::IDENTIFIER, FixedScaleOffsetCodec::matches_name, FixedScaleOffsetCodec::default_name, create_codec_fixedscaleoffset)
 }
+zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec, "fixedscaleoffset",
+    v3: "numcodecs.fixedscaleoffset", [],
+    v2: "fixedscaleoffset", []
+);
 
 pub(crate) fn create_codec_fixedscaleoffset(
     metadata: &MetadataV3,

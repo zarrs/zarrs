@@ -192,5 +192,3 @@ impl ArrayCodecTraits for ReshapeCodec {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ReshapeCodec, "reshape");

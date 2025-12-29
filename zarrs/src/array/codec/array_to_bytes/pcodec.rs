@@ -58,6 +58,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(PcodecCodec::IDENTIFIER, PcodecCodec::matches_name, PcodecCodec::default_name, create_codec_pcodec)
 }
+zarrs_plugin::impl_extension_aliases!(PcodecCodec, "pcodec",
+    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"]
+);
 
 pub(crate) fn create_codec_pcodec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration = metadata.to_configuration().map_err(|_| {

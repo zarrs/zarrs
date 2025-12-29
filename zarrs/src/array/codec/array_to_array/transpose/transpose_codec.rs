@@ -275,5 +275,3 @@ impl ArrayCodecTraits for TransposeCodec {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(TransposeCodec, "transpose");

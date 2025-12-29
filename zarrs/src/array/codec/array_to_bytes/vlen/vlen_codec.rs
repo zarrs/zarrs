@@ -343,7 +343,3 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(VlenCodec, "zarrs.vlen",
-    v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
-);

@@ -296,7 +296,3 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ZfpCodec, "zfp",
-    v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
-);

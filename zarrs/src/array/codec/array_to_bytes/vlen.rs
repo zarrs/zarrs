@@ -126,6 +126,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(VlenCodec::IDENTIFIER, VlenCodec::matches_name, VlenCodec::default_name, create_codec_vlen)
 }
+zarrs_plugin::impl_extension_aliases!(VlenCodec, "zarrs.vlen",
+    v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
+);
 
 pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");

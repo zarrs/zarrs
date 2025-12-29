@@ -49,6 +49,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(ZstdCodec::IDENTIFIER, ZstdCodec::matches_name, ZstdCodec::default_name, create_codec_zstd)
 }
+zarrs_plugin::impl_extension_aliases!(ZstdCodec, "zstd");
 
 pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ZstdCodecConfiguration = metadata.to_configuration().map_err(|_| {

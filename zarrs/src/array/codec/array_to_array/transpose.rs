@@ -54,6 +54,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(TransposeCodec::IDENTIFIER, TransposeCodec::matches_name, TransposeCodec::default_name, create_codec_transpose)
 }
+zarrs_plugin::impl_extension_aliases!(TransposeCodec, "transpose");
 
 pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: TransposeCodecConfiguration = metadata.to_configuration().map_err(|_| {

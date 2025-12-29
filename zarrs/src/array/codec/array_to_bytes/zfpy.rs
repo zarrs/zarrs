@@ -78,6 +78,9 @@ pub use zfpy_codec::ZfpyCodec;
 inventory::submit! {
     CodecPlugin::new(ZfpyCodec::IDENTIFIER, ZfpyCodec::matches_name, ZfpyCodec::default_name, create_codec_zfpy)
 }
+zarrs_plugin::impl_extension_aliases!(ZfpyCodec, "zfpy",
+    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"]
+);
 
 pub(crate) fn create_codec_zfpy(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: ZfpyCodecConfiguration = metadata.to_configuration().map_err(|_| {

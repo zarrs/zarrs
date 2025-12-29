@@ -447,5 +447,3 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         ))
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(PackBitsCodec, "packbits");

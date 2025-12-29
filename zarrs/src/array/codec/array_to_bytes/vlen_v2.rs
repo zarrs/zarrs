@@ -54,6 +54,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(VlenV2Codec::IDENTIFIER, VlenV2Codec::matches_name, VlenV2Codec::default_name, create_codec_vlen_v2)
 }
+zarrs_plugin::impl_extension_aliases!(VlenV2Codec, "vlen_v2",
+    v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
+);
 inventory::submit! {
     CodecPlugin::new(VlenArrayCodec::IDENTIFIER, VlenArrayCodec::matches_name, VlenArrayCodec::default_name, create_codec_vlen_v2)
 }

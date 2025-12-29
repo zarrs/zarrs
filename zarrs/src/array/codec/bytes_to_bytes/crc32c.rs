@@ -44,6 +44,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(Crc32cCodec::IDENTIFIER, Crc32cCodec::matches_name, Crc32cCodec::default_name, create_codec_crc32c)
 }
+zarrs_plugin::impl_extension_aliases!(Crc32cCodec, "crc32c");
 
 pub(crate) fn create_codec_crc32c(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration = metadata.to_configuration().map_err(|_| {

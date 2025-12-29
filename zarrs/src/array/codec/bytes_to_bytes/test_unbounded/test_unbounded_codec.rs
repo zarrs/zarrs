@@ -13,6 +13,8 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");
+
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
 pub struct TestUnboundedCodec {}
@@ -116,5 +118,3 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         BytesRepresentation::UnboundedSize
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");

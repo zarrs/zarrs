@@ -65,6 +65,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(GDeflateCodec::IDENTIFIER, GDeflateCodec::matches_name, GDeflateCodec::default_name, create_codec_gdeflate)
 }
+zarrs_plugin::impl_extension_aliases!(GDeflateCodec, "gdeflate",
+    v3: "zarrs.gdeflate", []
+);
 
 pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");

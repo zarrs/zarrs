@@ -209,7 +209,3 @@ impl BytesToBytesCodecTraits for Adler32Codec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(Adler32Codec, "adler32",
-    v3: "numcodecs.adler32", []
-);

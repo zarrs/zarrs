@@ -51,6 +51,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(Fletcher32Codec::IDENTIFIER, Fletcher32Codec::matches_name, Fletcher32Codec::default_name, create_codec_fletcher32)
 }
+zarrs_plugin::impl_extension_aliases!(Fletcher32Codec, "fletcher32",
+    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"]
+);
 
 pub(crate) fn create_codec_fletcher32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration = metadata.to_configuration().map_err(|_| {

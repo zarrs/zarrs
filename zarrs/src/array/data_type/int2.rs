@@ -5,6 +5,7 @@ use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_
 /// The `int2` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Int2DataType;
+register_data_type_plugin!(Int2DataType);
 zarrs_plugin::impl_extension_aliases!(Int2DataType, "int2");
 
 impl zarrs_data_type::DataTypeExtension for Int2DataType {
@@ -70,5 +71,3 @@ impl zarrs_data_type::DataTypeExtension for Int2DataType {
 
 impl_packbits_codec!(Int2DataType, 2, signed, 1);
 impl_bytes_codec_passthrough!(Int2DataType);
-
-register_data_type_plugin!(Int2DataType);

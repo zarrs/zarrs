@@ -152,7 +152,3 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
         }
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(GDeflateCodec, "gdeflate",
-    v3: "zarrs.gdeflate", []
-);

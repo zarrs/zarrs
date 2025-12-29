@@ -196,7 +196,3 @@ impl ArrayToBytesCodecTraits for ZfpyCodec {
             .encoded_representation(shape, data_type, fill_value)
     }
 }
-
-zarrs_plugin::impl_extension_aliases!(ZfpyCodec, "zfpy",
-    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"]
-);

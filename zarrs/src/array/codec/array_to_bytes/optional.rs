@@ -104,6 +104,7 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(OptionalCodec::IDENTIFIER, OptionalCodec::matches_name, OptionalCodec::default_name, create_codec_optional)
 }
+zarrs_plugin::impl_extension_aliases!(OptionalCodec, "zarrs.optional");
 
 pub(crate) fn create_codec_optional(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");

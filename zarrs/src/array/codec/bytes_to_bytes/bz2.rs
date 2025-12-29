@@ -51,6 +51,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(Bz2Codec::IDENTIFIER, Bz2Codec::matches_name, Bz2Codec::default_name, create_codec_bz2)
 }
+zarrs_plugin::impl_extension_aliases!(Bz2Codec, "bz2",
+    v3: "numcodecs.bz2", []
+);
 
 pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     let configuration: Bz2CodecConfiguration = metadata.to_configuration().map_err(|_| {

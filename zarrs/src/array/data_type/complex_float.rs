@@ -182,44 +182,44 @@ macro_rules! impl_complex_data_type {
 /// The `complex_bfloat16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexBFloat16DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexBFloat16DataType, "complex_bfloat16");
 register_data_type_plugin!(ComplexBFloat16DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexBFloat16DataType, "complex_bfloat16");
 
 /// The `complex_float16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat16DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat16DataType, "complex_float16");
 register_data_type_plugin!(ComplexFloat16DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat16DataType, "complex_float16");
 
 /// The `complex_float32` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat32DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat32DataType, "complex_float32");
 register_data_type_plugin!(ComplexFloat32DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat32DataType, "complex_float32");
 
 /// The `complex_float64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat64DataType;
-zarrs_plugin::impl_extension_aliases!(ComplexFloat64DataType, "complex_float64");
 register_data_type_plugin!(ComplexFloat64DataType);
+zarrs_plugin::impl_extension_aliases!(ComplexFloat64DataType, "complex_float64");
 
 /// The `complex64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Complex64DataType;
+register_data_type_plugin!(Complex64DataType);
 zarrs_plugin::impl_extension_aliases!(Complex64DataType, "complex64",
     v3: "complex64", [],
     v2: "<c8", ["<c8", ">c8"]
 );
-register_data_type_plugin!(Complex64DataType);
 
 /// The `complex128` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Complex128DataType;
+register_data_type_plugin!(Complex128DataType);
 zarrs_plugin::impl_extension_aliases!(Complex128DataType, "complex128",
     v3: "complex128", [],
     v2: "<c16", ["<c16", ">c16"]
 );
-register_data_type_plugin!(Complex128DataType);
 
 // DataTypeExtension implementations for standard complex types
 impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16; pcodec, bitround, packbits);

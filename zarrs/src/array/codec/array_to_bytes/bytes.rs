@@ -54,6 +54,9 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(BytesCodec::IDENTIFIER, BytesCodec::matches_name, BytesCodec::default_name, create_codec_bytes)
 }
+zarrs_plugin::impl_extension_aliases!(BytesCodec, "bytes",
+    v3: "bytes", ["endian"]
+);
 
 pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     if metadata.name() == "binary" {
