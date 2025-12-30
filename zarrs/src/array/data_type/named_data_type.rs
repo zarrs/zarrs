@@ -11,23 +11,7 @@ use zarrs_plugin::{
     ZarrVersions,
 };
 
-use crate::array::{
-    DataType, DataTypeExt,
-    data_type::{
-        self, BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
-        ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
-        ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType,
-        ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType, ComplexFloat8E5M2DataType,
-        ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType, ComplexFloat16DataType,
-        ComplexFloat32DataType, ComplexFloat64DataType, Float4E2M1FNDataType, Float6E2M3FNDataType,
-        Float6E3M2FNDataType, Float8E3M4DataType, Float8E4M3B11FNUZDataType, Float8E4M3DataType,
-        Float8E4M3FNUZDataType, Float8E5M2DataType, Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
-        Float16DataType, Float32DataType, Float64DataType, Int2DataType, Int4DataType,
-        Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
-        NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
-        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-    },
-};
+use crate::array::{DataType, DataTypeExt, data_type};
 
 /// A named data type.
 #[derive(Debug, Clone)]
@@ -149,7 +133,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
 
         // Handle data types with configuration
         if let Some(configuration) = metadata.configuration() {
-            if NumpyDateTime64DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::NumpyDateTime64DataType::matches_name(name, ZarrVersions::V3) {
                 use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
                 let NumpyDateTime64DataTypeConfigurationV1 { unit, scale_factor } =
                     NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(
@@ -157,18 +141,18 @@ impl TryFrom<&MetadataV3> for NamedDataType {
                     )
                     .map_err(|_| {
                         PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                            NumpyDateTime64DataType::IDENTIFIER,
+                            data_type::NumpyDateTime64DataType::IDENTIFIER,
                             "data_type",
                             metadata.to_string(),
                         ))
                     })?;
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(NumpyDateTime64DataType::new(unit, scale_factor)),
+                    Arc::new(data_type::NumpyDateTime64DataType::new(unit, scale_factor)),
                 ));
             }
 
-            if NumpyTimeDelta64DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::NumpyTimeDelta64DataType::matches_name(name, ZarrVersions::V3) {
                 use crate::metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
                 let NumpyTimeDelta64DataTypeConfigurationV1 { unit, scale_factor } =
                     NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(
@@ -176,18 +160,18 @@ impl TryFrom<&MetadataV3> for NamedDataType {
                     )
                     .map_err(|_| {
                         PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                            NumpyTimeDelta64DataType::IDENTIFIER,
+                            data_type::NumpyTimeDelta64DataType::IDENTIFIER,
                             "data_type",
                             metadata.to_string(),
                         ))
                     })?;
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(NumpyTimeDelta64DataType::new(unit, scale_factor)),
+                    Arc::new(data_type::NumpyTimeDelta64DataType::new(unit, scale_factor)),
                 ));
             }
 
-            if OptionalDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::OptionalDataType::matches_name(name, ZarrVersions::V3) {
                 use crate::metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
                 let OptionalDataTypeConfigurationV1 {
                     name: inner_name,
@@ -195,7 +179,7 @@ impl TryFrom<&MetadataV3> for NamedDataType {
                 } = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
                     .map_err(|_| {
                         PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                            OptionalDataType::IDENTIFIER,
+                            data_type::OptionalDataType::IDENTIFIER,
                             "data_type",
                             metadata.to_string(),
                         ))
@@ -218,216 +202,300 @@ impl TryFrom<&MetadataV3> for NamedDataType {
         // Handle data types with no configuration
         if metadata.configuration_is_none_or_empty() {
             // Boolean
-            if BoolDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(BoolDataType)));
+            if data_type::BoolDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::BoolDataType),
+                ));
             }
 
             // Signed integers
-            if Int2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int2DataType)));
+            if data_type::Int2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int2DataType),
+                ));
             }
-            if Int4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int4DataType)));
+            if data_type::Int4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int4DataType),
+                ));
             }
-            if Int8DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int8DataType)));
+            if data_type::Int8DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int8DataType),
+                ));
             }
-            if Int16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int16DataType)));
+            if data_type::Int16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int16DataType),
+                ));
             }
-            if Int32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int32DataType)));
+            if data_type::Int32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int32DataType),
+                ));
             }
-            if Int64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Int64DataType)));
+            if data_type::Int64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Int64DataType),
+                ));
             }
 
             // Unsigned integers
-            if UInt2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt2DataType)));
+            if data_type::UInt2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt2DataType),
+                ));
             }
-            if UInt4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt4DataType)));
+            if data_type::UInt4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt4DataType),
+                ));
             }
-            if UInt8DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt8DataType)));
+            if data_type::UInt8DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt8DataType),
+                ));
             }
-            if UInt16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt16DataType)));
+            if data_type::UInt16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt16DataType),
+                ));
             }
-            if UInt32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt32DataType)));
+            if data_type::UInt32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt32DataType),
+                ));
             }
-            if UInt64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(UInt64DataType)));
+            if data_type::UInt64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::UInt64DataType),
+                ));
             }
 
             // Subfloats
-            if Float4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float4E2M1FNDataType)));
-            }
-            if Float6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float6E2M3FNDataType)));
-            }
-            if Float6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float6E3M2FNDataType)));
-            }
-            if Float8E3M4DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float8E3M4DataType)));
-            }
-            if Float8E4M3DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float8E4M3DataType)));
-            }
-            if Float8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::Float4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(Float8E4M3B11FNUZDataType),
+                    Arc::new(data_type::Float4E2M1FNDataType),
                 ));
             }
-            if Float8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::Float6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(Float8E4M3FNUZDataType),
+                    Arc::new(data_type::Float6E2M3FNDataType),
                 ));
             }
-            if Float8E5M2DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float8E5M2DataType)));
-            }
-            if Float8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::Float6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(Float8E5M2FNUZDataType),
+                    Arc::new(data_type::Float6E3M2FNDataType),
                 ));
             }
-            if Float8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float8E8M0FNUDataType)));
+            if data_type::Float8E3M4DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E3M4DataType),
+                ));
+            }
+            if data_type::Float8E4M3DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E4M3DataType),
+                ));
+            }
+            if data_type::Float8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E4M3B11FNUZDataType),
+                ));
+            }
+            if data_type::Float8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E4M3FNUZDataType),
+                ));
+            }
+            if data_type::Float8E5M2DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E5M2DataType),
+                ));
+            }
+            if data_type::Float8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E5M2FNUZDataType),
+                ));
+            }
+            if data_type::Float8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float8E8M0FNUDataType),
+                ));
             }
 
             // Standard floats
-            if BFloat16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(BFloat16DataType)));
+            if data_type::BFloat16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::BFloat16DataType),
+                ));
             }
-            if Float16DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float16DataType)));
+            if data_type::Float16DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float16DataType),
+                ));
             }
-            if Float32DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float32DataType)));
+            if data_type::Float32DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float32DataType),
+                ));
             }
-            if Float64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Float64DataType)));
+            if data_type::Float64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Float64DataType),
+                ));
             }
 
             // Complex subfloats
-            if ComplexFloat4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat4E2M1FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat4E2M1FNDataType),
+                    Arc::new(data_type::ComplexFloat4E2M1FNDataType),
                 ));
             }
-            if ComplexFloat6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat6E2M3FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat6E2M3FNDataType),
+                    Arc::new(data_type::ComplexFloat6E2M3FNDataType),
                 ));
             }
-            if ComplexFloat6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat6E3M2FNDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat6E3M2FNDataType),
+                    Arc::new(data_type::ComplexFloat6E3M2FNDataType),
                 ));
             }
-            if ComplexFloat8E3M4DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E3M4DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E3M4DataType),
+                    Arc::new(data_type::ComplexFloat8E3M4DataType),
                 ));
             }
-            if ComplexFloat8E4M3DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E4M3DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E4M3DataType),
+                    Arc::new(data_type::ComplexFloat8E4M3DataType),
                 ));
             }
-            if ComplexFloat8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E4M3B11FNUZDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E4M3B11FNUZDataType),
+                    Arc::new(data_type::ComplexFloat8E4M3B11FNUZDataType),
                 ));
             }
-            if ComplexFloat8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E4M3FNUZDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E4M3FNUZDataType),
+                    Arc::new(data_type::ComplexFloat8E4M3FNUZDataType),
                 ));
             }
-            if ComplexFloat8E5M2DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E5M2DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E5M2DataType),
+                    Arc::new(data_type::ComplexFloat8E5M2DataType),
                 ));
             }
-            if ComplexFloat8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E5M2FNUZDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E5M2FNUZDataType),
+                    Arc::new(data_type::ComplexFloat8E5M2FNUZDataType),
                 ));
             }
-            if ComplexFloat8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat8E8M0FNUDataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat8E8M0FNUDataType),
+                    Arc::new(data_type::ComplexFloat8E8M0FNUDataType),
                 ));
             }
 
             // Complex floats
-            if ComplexBFloat16DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexBFloat16DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexBFloat16DataType),
+                    Arc::new(data_type::ComplexBFloat16DataType),
                 ));
             }
-            if ComplexFloat16DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat16DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat16DataType),
+                    Arc::new(data_type::ComplexFloat16DataType),
                 ));
             }
-            if ComplexFloat32DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat32DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat32DataType),
+                    Arc::new(data_type::ComplexFloat32DataType),
                 ));
             }
-            if ComplexFloat64DataType::matches_name(name, ZarrVersions::V3) {
+            if data_type::ComplexFloat64DataType::matches_name(name, ZarrVersions::V3) {
                 return Ok(Self::new(
                     name.to_string(),
-                    Arc::new(ComplexFloat64DataType),
+                    Arc::new(data_type::ComplexFloat64DataType),
                 ));
             }
-            if Complex64DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Complex64DataType)));
+            if data_type::Complex64DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Complex64DataType),
+                ));
             }
-            if Complex128DataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(Complex128DataType)));
+            if data_type::Complex128DataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::Complex128DataType),
+                ));
             }
 
             // Variable-length types
-            if StringDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(StringDataType)));
+            if data_type::StringDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::StringDataType),
+                ));
             }
-            if BytesDataType::matches_name(name, ZarrVersions::V3) {
-                return Ok(Self::new(name.to_string(), Arc::new(BytesDataType)));
+            if data_type::BytesDataType::matches_name(name, ZarrVersions::V3) {
+                return Ok(Self::new(
+                    name.to_string(),
+                    Arc::new(data_type::BytesDataType),
+                ));
             }
 
             // RawBits (r8, r16, r24, etc.)
-            if RawBitsDataType::matches_name(name, ZarrVersions::V3)
+            if data_type::RawBitsDataType::matches_name(name, ZarrVersions::V3)
                 && let Ok(size_bits) = name[1..].parse::<usize>()
             {
                 if size_bits % 8 == 0 {
                     let size_bytes = size_bits / 8;
                     return Ok(Self::new(
                         name.to_string(),
-                        Arc::new(RawBitsDataType::new(size_bytes)),
+                        Arc::new(data_type::RawBitsDataType::new(size_bytes)),
                     ));
                 }
                 return Err(

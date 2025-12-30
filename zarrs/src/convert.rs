@@ -21,7 +21,7 @@ use crate::{
         chunk_grid::RegularChunkGrid,
         chunk_key_encoding::V2ChunkKeyEncoding,
         codec::{BytesCodec, CodecPlugin, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec},
-        data_type::{BoolDataType, DataTypePlugin, RawBitsDataType, StringDataType},
+        data_type,
     },
     metadata_ext::{
         chunk_grid::regular::RegularChunkGridConfiguration,
@@ -63,7 +63,7 @@ use crate::{
 fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
     // Special handling for RawBits V2 format (|V8 -> r64)
     // Must be checked before plugin iteration since the plugin won't know the size
-    if RawBitsDataType::matches_name(v2_name, ZarrVersions::V2) {
+    if data_type::RawBitsDataType::matches_name(v2_name, ZarrVersions::V2) {
         if let Some(size_str) = v2_name.strip_prefix("|V")
             && let Ok(size_bytes) = size_str.parse::<usize>()
         {
@@ -74,7 +74,7 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
     }
 
     // Check plugins (all registered data types including bool, string, bytes, numeric, etc.)
-    for plugin in inventory::iter::<DataTypePlugin> {
+    for plugin in inventory::iter::<data_type::DataTypePlugin> {
         if plugin.match_name(v2_name, ZarrVersions::V2) {
             return Some(plugin.default_name(ZarrVersions::V3));
         }
@@ -319,57 +319,51 @@ pub fn codec_metadata_v2_to_v3(
 fn get_data_type_size_for_blosc(
     name: &str,
 ) -> Result<Option<DataTypeSize>, ArrayMetadataV2ToV3Error> {
-    use crate::array::data_type::{
-        BFloat16DataType, BytesDataType, Complex64DataType, Complex128DataType, Float16DataType,
-        Float32DataType, Float64DataType, Int8DataType, Int16DataType, Int32DataType,
-        Int64DataType, RawBitsDataType, UInt8DataType, UInt16DataType, UInt32DataType,
-        UInt64DataType,
-    };
     use zarrs_plugin::ExtensionIdentifier;
 
     // Check using ExtensionIdentifier matches for known data types
-    if BoolDataType::matches_name(name, ZarrVersions::V3)
-        || Int8DataType::matches_name(name, ZarrVersions::V3)
-        || UInt8DataType::matches_name(name, ZarrVersions::V3)
+    if data_type::BoolDataType::matches_name(name, ZarrVersions::V3)
+        || data_type::Int8DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::UInt8DataType::matches_name(name, ZarrVersions::V3)
     {
         return Ok(Some(DataTypeSize::Fixed(1)));
     }
 
-    if Int16DataType::matches_name(name, ZarrVersions::V3)
-        || UInt16DataType::matches_name(name, ZarrVersions::V3)
-        || Float16DataType::matches_name(name, ZarrVersions::V3)
-        || BFloat16DataType::matches_name(name, ZarrVersions::V3)
+    if data_type::Int16DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::UInt16DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::Float16DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::BFloat16DataType::matches_name(name, ZarrVersions::V3)
     {
         return Ok(Some(DataTypeSize::Fixed(2)));
     }
 
-    if Int32DataType::matches_name(name, ZarrVersions::V3)
-        || UInt32DataType::matches_name(name, ZarrVersions::V3)
-        || Float32DataType::matches_name(name, ZarrVersions::V3)
+    if data_type::Int32DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::UInt32DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::Float32DataType::matches_name(name, ZarrVersions::V3)
     {
         return Ok(Some(DataTypeSize::Fixed(4)));
     }
 
-    if Int64DataType::matches_name(name, ZarrVersions::V3)
-        || UInt64DataType::matches_name(name, ZarrVersions::V3)
-        || Float64DataType::matches_name(name, ZarrVersions::V3)
-        || Complex64DataType::matches_name(name, ZarrVersions::V3)
+    if data_type::Int64DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::UInt64DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::Float64DataType::matches_name(name, ZarrVersions::V3)
+        || data_type::Complex64DataType::matches_name(name, ZarrVersions::V3)
     {
         return Ok(Some(DataTypeSize::Fixed(8)));
     }
 
-    if Complex128DataType::matches_name(name, ZarrVersions::V3) {
+    if data_type::Complex128DataType::matches_name(name, ZarrVersions::V3) {
         return Ok(Some(DataTypeSize::Fixed(16)));
     }
 
-    if StringDataType::matches_name(name, ZarrVersions::V3)
-        || BytesDataType::matches_name(name, ZarrVersions::V3)
+    if data_type::StringDataType::matches_name(name, ZarrVersions::V3)
+        || data_type::BytesDataType::matches_name(name, ZarrVersions::V3)
     {
         return Ok(Some(DataTypeSize::Variable));
     }
 
     // Raw bits data types (r8, r16, r24, etc.)
-    if RawBitsDataType::matches_name(name, ZarrVersions::V3)
+    if data_type::RawBitsDataType::matches_name(name, ZarrVersions::V3)
         && let Ok(size_bits) = name[1..].parse::<usize>()
     {
         if size_bits % 8 == 0 {
@@ -475,8 +469,8 @@ pub fn fill_value_metadata_v2_to_v3(
 
     let data_type_name = data_type.name();
 
-    let is_string = StringDataType::matches_name(data_type_name, ZarrVersions::V3);
-    let is_bool = BoolDataType::matches_name(data_type_name, ZarrVersions::V3);
+    let is_string = data_type::StringDataType::matches_name(data_type_name, ZarrVersions::V3);
+    let is_bool = data_type::BoolDataType::matches_name(data_type_name, ZarrVersions::V3);
 
     // Add some special cases which are supported in v2 but not v3
     let converted_value = match converted_value {

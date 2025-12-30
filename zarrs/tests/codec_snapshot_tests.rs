@@ -240,22 +240,12 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
 
 /// Generate deterministic fixed-length test data bytes for a given data type
 fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
-    use zarrs::array::data_type::{
-        BFloat16DataType, BoolDataType, Complex64DataType, Complex128DataType,
-        ComplexBFloat16DataType, ComplexFloat8E4M3DataType, ComplexFloat8E5M2DataType,
-        ComplexFloat16DataType, ComplexFloat32DataType, ComplexFloat64DataType, Float8E4M3DataType,
-        Float8E5M2DataType, Float16DataType, Float32DataType, Float64DataType, Int2DataType,
-        Int4DataType, Int8DataType, Int16DataType, Int32DataType, Int64DataType,
-        NumpyDateTime64DataType, NumpyTimeDelta64DataType, RawBitsDataType, UInt2DataType,
-        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-    };
-
     match data_type.identifier() {
-        BoolDataType::IDENTIFIER => (0..num_elements).map(|i| (i % 2) as u8).collect(),
+        data_type::BoolDataType::IDENTIFIER => (0..num_elements).map(|i| (i % 2) as u8).collect(),
 
         // Sub-byte integer types use i8/u8 representation in memory (unpacked)
         // The packbits codec handles packing to sub-byte sizes
-        Int2DataType::IDENTIFIER => {
+        data_type::Int2DataType::IDENTIFIER => {
             // Int2 values range from -2 to 1 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -264,13 +254,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-
-        UInt2DataType::IDENTIFIER => {
+        data_type::UInt2DataType::IDENTIFIER => {
             // UInt2 values range from 0 to 3 (stored as u8)
             (0..num_elements).map(|i| (i % 4) as u8).collect()
         }
-
-        Int4DataType::IDENTIFIER => {
+        data_type::Int4DataType::IDENTIFIER => {
             // Int4 values range from -8 to 7 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -279,65 +267,58 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-
-        UInt4DataType::IDENTIFIER => {
+        data_type::UInt4DataType::IDENTIFIER => {
             // UInt4 values range from 0 to 15 (stored as u8)
             (0..num_elements).map(|i| (i % 16) as u8).collect()
         }
 
-        Int8DataType::IDENTIFIER => (0..num_elements)
+        // Integer types
+        data_type::Int8DataType::IDENTIFIER => (0..num_elements)
             .map(|i| ((i % 256) as i8).to_ne_bytes()[0])
             .collect(),
-
-        UInt8DataType::IDENTIFIER => (0..num_elements).map(|i| (i % 256) as u8).collect(),
-
-        Int16DataType::IDENTIFIER => (0..num_elements)
+        data_type::UInt8DataType::IDENTIFIER => {
+            (0..num_elements).map(|i| (i % 256) as u8).collect()
+        }
+        data_type::Int16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i % 65536) as i16).to_ne_bytes())
             .collect(),
-
-        UInt16DataType::IDENTIFIER => (0..num_elements)
+        data_type::UInt16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i % 65536) as u16).to_ne_bytes())
             .collect(),
-
-        Int32DataType::IDENTIFIER => (0..num_elements)
+        data_type::Int32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i32).to_ne_bytes())
             .collect(),
-
-        UInt32DataType::IDENTIFIER => (0..num_elements)
+        data_type::UInt32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as u32).to_ne_bytes())
             .collect(),
-
-        Int64DataType::IDENTIFIER => (0..num_elements)
+        data_type::Int64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
-
-        UInt64DataType::IDENTIFIER => (0..num_elements)
+        data_type::UInt64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as u64).to_ne_bytes())
             .collect(),
-
-        BFloat16DataType::IDENTIFIER => (0..num_elements)
+        data_type::BFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| bf16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
-
-        Float16DataType::IDENTIFIER => (0..num_elements)
+        data_type::Float16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| f16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
         // Float8 variants (1 byte each)
-        Float8E4M3DataType::IDENTIFIER | Float8E5M2DataType::IDENTIFIER => {
+        data_type::Float8E4M3DataType::IDENTIFIER | data_type::Float8E5M2DataType::IDENTIFIER => {
             (0..num_elements).map(|i| (i % 128) as u8).collect()
         }
 
-        Float32DataType::IDENTIFIER => (0..num_elements)
+        data_type::Float32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
-        Float64DataType::IDENTIFIER => (0..num_elements)
+        data_type::Float64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i as f64) * 0.5).to_ne_bytes())
             .collect(),
 
         // Complex half-precision (4 bytes total)
-        ComplexBFloat16DataType::IDENTIFIER => (0..num_elements)
+        data_type::ComplexBFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = bf16::from_f32((i as f32) * 0.5);
                 let imag = bf16::from_f32((i as f32) * 0.25);
@@ -347,7 +328,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        ComplexFloat16DataType::IDENTIFIER => (0..num_elements)
+        data_type::ComplexFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = f16::from_f32((i as f32) * 0.5);
                 let imag = f16::from_f32((i as f32) * 0.25);
@@ -358,12 +339,13 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // Complex float8 (2 bytes total)
-        ComplexFloat8E4M3DataType::IDENTIFIER | ComplexFloat8E5M2DataType::IDENTIFIER => (0
-            ..num_elements)
+        data_type::ComplexFloat8E4M3DataType::IDENTIFIER
+        | data_type::ComplexFloat8E5M2DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| vec![(i % 128) as u8, ((i + 1) % 128) as u8])
             .collect(),
 
-        ComplexFloat32DataType::IDENTIFIER | Complex64DataType::IDENTIFIER => (0..num_elements)
+        data_type::ComplexFloat32DataType::IDENTIFIER
+        | data_type::Complex64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f32) * 0.5;
                 let imag = (i as f32) * 0.25;
@@ -373,7 +355,8 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        ComplexFloat64DataType::IDENTIFIER | Complex128DataType::IDENTIFIER => (0..num_elements)
+        data_type::ComplexFloat64DataType::IDENTIFIER
+        | data_type::Complex128DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f64) * 0.5;
                 let imag = (i as f64) * 0.25;
@@ -384,12 +367,12 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // NumPy datetime/timedelta (8 bytes - stored as i64)
-        NumpyDateTime64DataType::IDENTIFIER | NumpyTimeDelta64DataType::IDENTIFIER => (0
-            ..num_elements)
+        data_type::NumpyDateTime64DataType::IDENTIFIER
+        | data_type::NumpyTimeDelta64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
 
-        RawBitsDataType::IDENTIFIER => {
+        data_type::RawBitsDataType::IDENTIFIER => {
             let size = data_type.fixed_size().unwrap();
             (0..num_elements)
                 .flat_map(|i| vec![(i % 256) as u8; size])
@@ -412,11 +395,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
 /// Generate deterministic test data for a given data type and element count
 /// Returns `ArrayBytes` which can be Fixed, Variable, or Optional
 pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayBytes<'static> {
-    use zarrs::array::data_type::{BytesDataType, OptionalDataType, StringDataType};
+    use zarrs::array::data_type;
 
     match data_type.identifier() {
         // Variable-length String type
-        StringDataType::IDENTIFIER => {
+        data_type::StringDataType::IDENTIFIER => {
             let strings: Vec<String> = (0..num_elements)
                 .map(|i| format!("str_{:04}", i % 10000))
                 .collect();
@@ -434,7 +417,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Variable-length Bytes type
-        BytesDataType::IDENTIFIER => {
+        data_type::BytesDataType::IDENTIFIER => {
             let byte_arrays: Vec<Vec<u8>> = (0..num_elements)
                 .map(|i| vec![(i % 256) as u8; (i % 8) + 1])
                 .collect();
@@ -452,7 +435,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Optional types - wrap inner data with validity mask
-        OptionalDataType::IDENTIFIER => {
+        data_type::OptionalDataType::IDENTIFIER => {
             let opt = data_type.as_optional().unwrap();
             let inner_bytes = generate_test_data(opt.data_type(), num_elements);
             // Create validity mask - every 4th element is null
@@ -1353,21 +1336,18 @@ fn codec_registry() -> Vec<CodecDef> {
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |dt| {
-            use zarrs::array::data_type::{
-                Float32DataType, Float64DataType, Int16DataType, Int32DataType, Int64DataType,
-                UInt16DataType, UInt32DataType, UInt64DataType,
-            };
+            use zarrs::array::data_type;
             // fixedscaleoffset requires a dtype configuration - use a sensible default
             // based on the data type, or fall back to f64 for unsupported types
             let dtype_str = match dt.identifier() {
-                Int16DataType::IDENTIFIER => "<i2",
-                Int32DataType::IDENTIFIER => "<i4",
-                Int64DataType::IDENTIFIER => "<i8",
-                UInt16DataType::IDENTIFIER => "<u2",
-                UInt32DataType::IDENTIFIER => "<u4",
-                UInt64DataType::IDENTIFIER => "<u8",
-                Float32DataType::IDENTIFIER => "<f4",
-                Float64DataType::IDENTIFIER => "<f8",
+                data_type::Int16DataType::IDENTIFIER => "<i2",
+                data_type::Int32DataType::IDENTIFIER => "<i4",
+                data_type::Int64DataType::IDENTIFIER => "<i8",
+                data_type::UInt16DataType::IDENTIFIER => "<u2",
+                data_type::UInt32DataType::IDENTIFIER => "<u4",
+                data_type::UInt64DataType::IDENTIFIER => "<u8",
+                data_type::Float32DataType::IDENTIFIER => "<f4",
+                data_type::Float64DataType::IDENTIFIER => "<f8",
                 // For unsupported types, use f64 as a fallback - the codec will fail at runtime
                 _ => "<f8",
             };
@@ -1623,28 +1603,9 @@ mod compatibility_matrix {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    use zarrs::array::codec;
     use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
-    use zarrs::array::codec::{
-        Adler32Codec, BitroundCodec, BloscCodec, BytesCodec, Bz2Codec, Crc32cCodec,
-        FixedScaleOffsetCodec, Fletcher32Codec, GDeflateCodec, GzipCodec, PackBitsCodec,
-        PcodecCodec, ReshapeCodec, ShardingCodec, ShuffleCodec, SqueezeCodec, TransposeCodec,
-        VlenArrayCodec, VlenBytesCodec, VlenCodec, VlenUtf8Codec, VlenV2Codec, ZfpCodec, ZlibCodec,
-        ZstdCodec,
-    };
-    use zarrs::array::data_type::{
-        BFloat16DataType, BoolDataType, BytesDataType, Complex64DataType, Complex128DataType,
-        ComplexBFloat16DataType, ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType,
-        ComplexFloat6E3M2FNDataType, ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType,
-        ComplexFloat8E4M3DataType, ComplexFloat8E4M3FNUZDataType, ComplexFloat8E5M2DataType,
-        ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType, ComplexFloat16DataType,
-        ComplexFloat32DataType, ComplexFloat64DataType, Float4E2M1FNDataType, Float6E2M3FNDataType,
-        Float6E3M2FNDataType, Float8E3M4DataType, Float8E4M3B11FNUZDataType, Float8E4M3DataType,
-        Float8E4M3FNUZDataType, Float8E5M2DataType, Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
-        Float16DataType, Float32DataType, Float64DataType, Int2DataType, Int4DataType,
-        Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
-        NumpyTimeDelta64DataType, OptionalDataType, RawBitsDataType, StringDataType, UInt2DataType,
-        UInt4DataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
-    };
+    use zarrs::array::data_type;
     use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
     /// Get codecs for a specific category from `registered_codecs`
@@ -1677,7 +1638,8 @@ mod compatibility_matrix {
             .iter()
             .filter(|dt| {
                 // Exclude parameterized types - these are tested via specific instances
-                **dt != RawBitsDataType::IDENTIFIER && **dt != OptionalDataType::IDENTIFIER
+                **dt != data_type::RawBitsDataType::IDENTIFIER
+                    && **dt != data_type::OptionalDataType::IDENTIFIER
             })
             .map(|dt| sanitize_data_type_name(dt))
             .collect()
@@ -1738,90 +1700,96 @@ mod compatibility_matrix {
     fn registered_codecs() -> Vec<(Cow<'static, str>, &'static str)> {
         vec![
             // Array-to-Array
-            (BitroundCodec::default_name(ZarrVersions::V3), "a2a"),
-            (FixedScaleOffsetCodec::default_name(ZarrVersions::V3), "a2a"),
-            (ReshapeCodec::default_name(ZarrVersions::V3), "a2a"),
-            (SqueezeCodec::default_name(ZarrVersions::V3), "a2a"),
-            (TransposeCodec::default_name(ZarrVersions::V3), "a2a"),
+            (codec::BitroundCodec::default_name(ZarrVersions::V3), "a2a"),
+            (
+                codec::FixedScaleOffsetCodec::default_name(ZarrVersions::V3),
+                "a2a",
+            ),
+            (codec::ReshapeCodec::default_name(ZarrVersions::V3), "a2a"),
+            (codec::SqueezeCodec::default_name(ZarrVersions::V3), "a2a"),
+            (codec::TransposeCodec::default_name(ZarrVersions::V3), "a2a"),
             // Array-to-Bytes
-            (BytesCodec::default_name(ZarrVersions::V3), "a2b"),
-            (OptionalCodec::default_name(ZarrVersions::V3), "a2b"),
-            (PackBitsCodec::default_name(ZarrVersions::V3), "a2b"),
-            (PcodecCodec::default_name(ZarrVersions::V3), "a2b"),
-            (ShardingCodec::default_name(ZarrVersions::V3), "a2b"),
-            (VlenCodec::default_name(ZarrVersions::V3), "a2b"),
-            (VlenArrayCodec::default_name(ZarrVersions::V3), "a2b"),
-            (VlenBytesCodec::default_name(ZarrVersions::V3), "a2b"),
-            (VlenUtf8Codec::default_name(ZarrVersions::V3), "a2b"),
-            (VlenV2Codec::default_name(ZarrVersions::V3), "a2b"),
-            (ZfpCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::BytesCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::OptionalCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::PackBitsCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::PcodecCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::ShardingCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenArrayCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenBytesCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenUtf8Codec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenV2Codec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::ZfpCodec::default_name(ZarrVersions::V3), "a2b"),
             // (ZfpyCodec::default_name(ZarrVersions::V3), "a2b"),
             // Bytes-to-Bytes
-            (Adler32Codec::default_name(ZarrVersions::V3), "b2b"),
-            (BloscCodec::default_name(ZarrVersions::V3), "b2b"),
-            (Bz2Codec::default_name(ZarrVersions::V3), "b2b"),
-            (Crc32cCodec::default_name(ZarrVersions::V3), "b2b"),
-            (Fletcher32Codec::default_name(ZarrVersions::V3), "b2b"),
-            (GDeflateCodec::default_name(ZarrVersions::V3), "b2b"),
-            (GzipCodec::default_name(ZarrVersions::V3), "b2b"),
-            (ShuffleCodec::default_name(ZarrVersions::V3), "b2b"),
-            (ZlibCodec::default_name(ZarrVersions::V3), "b2b"),
-            (ZstdCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::Adler32Codec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::BloscCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::Bz2Codec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::Crc32cCodec::default_name(ZarrVersions::V3), "b2b"),
+            (
+                codec::Fletcher32Codec::default_name(ZarrVersions::V3),
+                "b2b",
+            ),
+            (codec::GDeflateCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::GzipCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ShuffleCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ZlibCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ZstdCodec::default_name(ZarrVersions::V3), "b2b"),
         ]
     }
 
     /// All registered data types from `zarrs_registry::data_type`
     #[rustfmt::skip]
     const REGISTERED_DATA_TYPES: &[&str] = &[
-        BoolDataType::IDENTIFIER,
-        Int2DataType::IDENTIFIER,
-        Int4DataType::IDENTIFIER,
-        Int8DataType::IDENTIFIER,
-        Int16DataType::IDENTIFIER,
-        Int32DataType::IDENTIFIER,
-        Int64DataType::IDENTIFIER,
-        UInt2DataType::IDENTIFIER,
-        UInt4DataType::IDENTIFIER,
-        UInt8DataType::IDENTIFIER,
-        UInt16DataType::IDENTIFIER,
-        UInt32DataType::IDENTIFIER,
-        UInt64DataType::IDENTIFIER,
-        Float4E2M1FNDataType::IDENTIFIER,
-        Float6E2M3FNDataType::IDENTIFIER,
-        Float6E3M2FNDataType::IDENTIFIER,
-        Float8E3M4DataType::IDENTIFIER,
-        Float8E4M3DataType::IDENTIFIER,
-        Float8E4M3B11FNUZDataType::IDENTIFIER,
-        Float8E4M3FNUZDataType::IDENTIFIER,
-        Float8E5M2DataType::IDENTIFIER,
-        Float8E5M2FNUZDataType::IDENTIFIER,
-        Float8E8M0FNUDataType::IDENTIFIER,
-        Float16DataType::IDENTIFIER,
-        Float32DataType::IDENTIFIER,
-        Float64DataType::IDENTIFIER,
-        Complex64DataType::IDENTIFIER,
-        Complex128DataType::IDENTIFIER,
-        RawBitsDataType::IDENTIFIER,
-        BFloat16DataType::IDENTIFIER,
-        ComplexBFloat16DataType::IDENTIFIER,
-        ComplexFloat16DataType::IDENTIFIER,
-        ComplexFloat32DataType::IDENTIFIER,
-        ComplexFloat64DataType::IDENTIFIER,
-        ComplexFloat4E2M1FNDataType::IDENTIFIER,
-        ComplexFloat6E2M3FNDataType::IDENTIFIER,
-        ComplexFloat6E3M2FNDataType::IDENTIFIER,
-        ComplexFloat8E3M4DataType::IDENTIFIER,
-        ComplexFloat8E4M3DataType::IDENTIFIER,
-        ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
-        ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
-        ComplexFloat8E5M2DataType::IDENTIFIER,
-        ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
-        ComplexFloat8E8M0FNUDataType::IDENTIFIER,
-        StringDataType::IDENTIFIER,
-        BytesDataType::IDENTIFIER,
-        NumpyDateTime64DataType::IDENTIFIER,
-        NumpyTimeDelta64DataType::IDENTIFIER,
-        OptionalDataType::IDENTIFIER,
+        data_type::BoolDataType::IDENTIFIER,
+        data_type::Int2DataType::IDENTIFIER,
+        data_type::Int4DataType::IDENTIFIER,
+        data_type::Int8DataType::IDENTIFIER,
+        data_type::Int16DataType::IDENTIFIER,
+        data_type::Int32DataType::IDENTIFIER,
+        data_type::Int64DataType::IDENTIFIER,
+        data_type::UInt2DataType::IDENTIFIER,
+        data_type::UInt4DataType::IDENTIFIER,
+        data_type::UInt8DataType::IDENTIFIER,
+        data_type::UInt16DataType::IDENTIFIER,
+        data_type::UInt32DataType::IDENTIFIER,
+        data_type::UInt64DataType::IDENTIFIER,
+        data_type::Float4E2M1FNDataType::IDENTIFIER,
+        data_type::Float6E2M3FNDataType::IDENTIFIER,
+        data_type::Float6E3M2FNDataType::IDENTIFIER,
+        data_type::Float8E3M4DataType::IDENTIFIER,
+        data_type::Float8E4M3DataType::IDENTIFIER,
+        data_type::Float8E4M3B11FNUZDataType::IDENTIFIER,
+        data_type::Float8E4M3FNUZDataType::IDENTIFIER,
+        data_type::Float8E5M2DataType::IDENTIFIER,
+        data_type::Float8E5M2FNUZDataType::IDENTIFIER,
+        data_type::Float8E8M0FNUDataType::IDENTIFIER,
+        data_type::Float16DataType::IDENTIFIER,
+        data_type::Float32DataType::IDENTIFIER,
+        data_type::Float64DataType::IDENTIFIER,
+        data_type::Complex64DataType::IDENTIFIER,
+        data_type::Complex128DataType::IDENTIFIER,
+        data_type::RawBitsDataType::IDENTIFIER,
+        data_type::BFloat16DataType::IDENTIFIER,
+        data_type::ComplexBFloat16DataType::IDENTIFIER,
+        data_type::ComplexFloat16DataType::IDENTIFIER,
+        data_type::ComplexFloat32DataType::IDENTIFIER,
+        data_type::ComplexFloat64DataType::IDENTIFIER,
+        data_type::ComplexFloat4E2M1FNDataType::IDENTIFIER,
+        data_type::ComplexFloat6E2M3FNDataType::IDENTIFIER,
+        data_type::ComplexFloat6E3M2FNDataType::IDENTIFIER,
+        data_type::ComplexFloat8E3M4DataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3DataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E5M2DataType::IDENTIFIER,
+        data_type::ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E8M0FNUDataType::IDENTIFIER,
+        data_type::StringDataType::IDENTIFIER,
+        data_type::BytesDataType::IDENTIFIER,
+        data_type::NumpyDateTime64DataType::IDENTIFIER,
+        data_type::NumpyTimeDelta64DataType::IDENTIFIER,
+        data_type::OptionalDataType::IDENTIFIER,
     ];
 
     /// Extract the base codec name from a directory name like "gzip(level5)" -> "gzip"

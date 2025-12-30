@@ -25,6 +25,7 @@ pub use array_to_array::bitround::*;
 pub use array_to_array::transpose::*;
 pub use array_to_array::{fixedscaleoffset::*, reshape::*, squeeze::*};
 // Array to bytes
+pub use array_to_bytes::optional::*;
 #[cfg(feature = "pcodec")]
 pub use array_to_bytes::pcodec::*;
 #[cfg(feature = "sharding")]
@@ -37,6 +38,7 @@ pub use array_to_bytes::{
     bytes::*, codec_chain::CodecChain, packbits::*, vlen::*, vlen_array::*, vlen_bytes::*,
     vlen_utf8::*, vlen_v2::*,
 };
+
 // Bytes to bytes
 #[cfg(feature = "adler32")]
 pub use bytes_to_bytes::adler32::*;
