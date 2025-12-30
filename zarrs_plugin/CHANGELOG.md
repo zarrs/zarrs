@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: `Plugin[2]::new()` now takes a `default_name_fn` parameter
 - **Breaking**: `Plugin[2]::match_name()` now takes a `ZarrVersions` parameter
+- **Breaking**: Bump MSRV to 1.88
 
 ## [0.2.3] - 2025-12-26
 
