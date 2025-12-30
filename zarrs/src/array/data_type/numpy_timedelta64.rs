@@ -8,7 +8,6 @@ use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalid
 use crate::metadata_ext::data_type::{
     NumpyTimeUnit, numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
 };
-use crate::{impl_bitround_codec, impl_packbits_codec, impl_pcodec_codec, impl_zfp_codec};
 
 /// The `numpy.timedelta64` data type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,7 +154,10 @@ crate::register_data_type_extension_codec!(
     crate::array::codec::BytesPlugin,
     crate::array::codec::BytesCodecDataTypeTraits
 );
-impl_pcodec_codec!(NumpyTimeDelta64DataType, I64, 1);
-impl_bitround_codec!(NumpyTimeDelta64DataType, 8, int64);
-impl_zfp_codec!(NumpyTimeDelta64DataType, Int64);
-impl_packbits_codec!(NumpyTimeDelta64DataType, 64, signed, 1);
+#[cfg(feature = "pcodec")]
+crate::impl_pcodec_codec!(NumpyTimeDelta64DataType, I64, 1);
+#[cfg(feature = "bitround")]
+crate::impl_bitround_codec!(NumpyTimeDelta64DataType, 8, int64);
+#[cfg(feature = "zfp")]
+crate::impl_zfp_codec!(NumpyTimeDelta64DataType, Int64);
+crate::impl_packbits_codec!(NumpyTimeDelta64DataType, 64, signed, 1);
