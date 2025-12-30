@@ -19,7 +19,6 @@ workspace = true
 all-features = true
 
 [dependencies]
-half.workspace = true
 thiserror.workspace = true
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 zarrs_metadata.workspace = true

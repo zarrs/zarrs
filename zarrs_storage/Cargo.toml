@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_storage"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.82"
@@ -29,7 +29,6 @@ bytes = "1.7.0"
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 futures = { version = "0.3.29", optional = true }
 itertools = "0.14.0"
-parking_lot = "0.12.0" # TODO: Remove with Rust 1.78+
 thiserror.workspace = true
 unsafe_cell_slice = "0.2.0"
 
