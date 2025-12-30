@@ -1,7 +1,11 @@
 //! The `r*` (raw bits) data type.
 
+use std::borrow::Cow;
+
 use super::macros::impl_bytes_codec_passthrough;
-use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, Regex};
+use zarrs_plugin::{
+    ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, Regex, ZarrVersions,
+};
 
 /// The `r*` data type.
 ///
@@ -85,12 +89,17 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }
 
-    fn metadata_name(
-        &self,
-        _zarr_version: zarrs_plugin::ZarrVersions,
-    ) -> std::borrow::Cow<'static, str> {
-        // Return "r{bits}" where bits = size_bytes * 8
-        std::borrow::Cow::Owned(format!("r{}", self.size_bytes * 8))
+    fn default_name(&self, zarr_version: ZarrVersions) -> Option<Cow<'static, str>> {
+        Some(match zarr_version {
+            zarrs_plugin::ZarrVersions::V3 => {
+                // Return "r{bits}" where bits = size_bytes * 8
+                std::borrow::Cow::Owned(format!("r{}", self.size_bytes * 8))
+            }
+            zarrs_plugin::ZarrVersions::V2 => {
+                // Return "|V{bytes}"
+                std::borrow::Cow::Owned(format!("|V{}", self.size_bytes))
+            }
+        })
     }
 
     fn configuration(&self) -> zarrs_metadata::Configuration {
@@ -107,7 +116,9 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         use base64::{Engine, prelude::BASE64_STANDARD};
         // Use metadata_name for better error messages (e.g., "r16" instead of "r*")
-        let name = self.metadata_name(zarrs_plugin::ZarrVersions::V3);
+        let name = self
+            .default_name(zarrs_plugin::ZarrVersions::V3)
+            .unwrap_or(self.identifier().into());
         let err = || {
             zarrs_data_type::DataTypeFillValueMetadataError::new(
                 name.to_string(),

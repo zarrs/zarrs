@@ -371,9 +371,6 @@ pub trait DataTypeExt {
     /// Returns `true` if the data type has a variable size.
     fn is_variable(&self) -> bool;
 
-    /// Returns the default serialization name for this data type.
-    fn default_name(&self) -> Cow<'static, str>;
-
     /// Converts this data type into a named data type using the default name.
     fn to_named(&self) -> NamedDataType;
 
@@ -409,13 +406,8 @@ impl DataTypeExt for DataType {
         matches!(self.size(), DataTypeSize::Variable)
     }
 
-    fn default_name(&self) -> Cow<'static, str> {
-        self.metadata_name(ZarrVersions::V3)
-    }
-
     fn to_named(&self) -> NamedDataType {
-        let name = self.default_name().into_owned();
-        NamedDataType::new(name, Arc::clone(self))
+        NamedDataType::new_default_name(self.clone())
     }
 
     fn to_optional(&self) -> DataType {

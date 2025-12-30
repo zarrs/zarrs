@@ -11,7 +11,7 @@ use zarrs_plugin::{
     ZarrVersions,
 };
 
-use crate::array::{DataType, DataTypeExt, data_type};
+use crate::array::{DataType, data_type};
 
 /// A named data type.
 #[derive(Debug, Clone)]
@@ -36,10 +36,22 @@ impl NamedDataType {
     }
 
     /// Create a new [`NamedDataType`] with the default name for the data type.
+    ///
+    /// Uses the instance `default_name` if it provides one, otherwise uses the type-level registered default name.
     #[must_use]
     pub fn new_default_name(data_type: DataType) -> Self {
-        let name = data_type.default_name().into_owned();
-        Self { name, data_type }
+        let name = data_type.default_name(ZarrVersions::V3);
+        if let Some(name) = name {
+            Self::new(name.into_owned(), data_type)
+        } else {
+            for plugin in inventory::iter::<DataTypePlugin> {
+                if plugin.identifier() == data_type.identifier() {
+                    let default_name = plugin.default_name(ZarrVersions::V3);
+                    return Self::new(default_name.into_owned(), data_type);
+                }
+            }
+            Self::new(data_type.identifier().to_string(), data_type)
+        }
     }
 
     /// The name of the data type.
@@ -71,8 +83,7 @@ impl NamedDataType {
     #[must_use]
     pub fn into_optional(self) -> Self {
         let data_type = data_type::optional(self);
-        let name = data_type.default_name().into_owned();
-        Self::new(name, data_type)
+        Self::new_default_name(data_type)
     }
 
     /// Create the data type metadata.

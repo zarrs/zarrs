@@ -41,14 +41,9 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     ///
     /// This is used when creating metadata. Most data types return their identifier,
     /// but some (like `RawBitsDataType`) return a version-specific name like `r{bits}`.
-    ///
-    /// The default implementation returns the identifier.
-    ///
-    /// Note: This is distinct from `ExtensionIdentifier::default_name()` which operates
-    /// on the type level. This method operates on the instance level, allowing for
-    /// data types that have instance-specific names (like `r16`, `r32`, etc.).
-    fn metadata_name(&self, _zarr_version: ZarrVersions) -> Cow<'static, str> {
-        Cow::Borrowed(self.identifier())
+    #[allow(unused_variables)]
+    fn default_name(&self, zarr_version: ZarrVersions) -> Option<Cow<'static, str>> {
+        None
     }
 
     /// The configuration of the data type.

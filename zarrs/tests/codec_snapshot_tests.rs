@@ -1604,7 +1604,6 @@ mod compatibility_matrix {
     use std::path::{Path, PathBuf};
 
     use zarrs::array::codec;
-    use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
     use zarrs::array::data_type;
     use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
