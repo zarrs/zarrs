@@ -1118,7 +1118,7 @@ mod array_async_readable_writable;
 #[cfg(feature = "async")]
 mod array_async_sharded_readable_ext;
 
-/// Transmute from `Vec<u8>` to `Vec<T>`.
+/// Transmute from `&[u8]` to `Vec<T>`.
 #[must_use]
 pub fn convert_from_bytes_slice<T: bytemuck::Pod>(from: &[u8]) -> Vec<T> {
     bytemuck::allocation::pod_collect_to_vec(from)
