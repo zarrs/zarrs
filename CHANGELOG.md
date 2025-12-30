@@ -61,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `Default` implementation for `MetadataConvertVersion` and `MetadataEraseVersion`
 - Add `Array::named_data_type()`
 - Implement `From<NamedDataType>` for `DataType`
+- Add runtime extension registration
+  - Add `[un]register_{codec,chunk_key_encoding,storage_transformer}`
+  - Add `{Codec,ChunkKeyEncoding,StorageTransformer}Runtime{Plugin,RegistryHandle}`
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition

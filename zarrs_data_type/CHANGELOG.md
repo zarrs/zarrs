@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `DataTypeExtension::default_name()` method
 - Add `DataTypeExtension::eq()` method with default implementation
 - Add `DataTypeExtension::as_any()` method
+- Add runtime data type registration: `[un]register_data_type` and `DataTypeRuntime{Plugin,RegistryHandle}`
 
 ### Changed
 - **Breaking**: `DataTypePlugin::new()` now takes a `default_name_fn` parameter

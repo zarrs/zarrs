@@ -9,10 +9,10 @@
 #![doc = include_str!("../../doc/status/storage_transformers.md")]
 
 mod storage_transformer_chain;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 pub use storage_transformer_chain::StorageTransformerChain;
-use zarrs_plugin::{Plugin2, PluginUnsupportedError};
+use zarrs_plugin::{Plugin2, PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry};
 
 #[cfg(feature = "async")]
 use crate::storage::{
@@ -54,6 +54,37 @@ impl StorageTransformerPlugin {
     }
 }
 
+/// A runtime storage transformer plugin for dynamic registration.
+pub type StorageTransformerRuntimePlugin = RuntimePlugin2<StorageTransformer, MetadataV3, NodePath>;
+
+/// Global runtime registry for storage transformer plugins.
+pub static STORAGE_TRANSFORMER_RUNTIME_REGISTRY: LazyLock<
+    RuntimeRegistry<StorageTransformerRuntimePlugin>,
+> = LazyLock::new(RuntimeRegistry::new);
+
+/// A handle to a registered storage transformer plugin.
+pub type StorageTransformerRuntimeRegistryHandle = Arc<StorageTransformerRuntimePlugin>;
+
+/// Register a storage transformer plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+/// A handle that can be used to unregister the plugin later.
+pub fn register_storage_transformer(
+    plugin: StorageTransformerRuntimePlugin,
+) -> StorageTransformerRuntimeRegistryHandle {
+    STORAGE_TRANSFORMER_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime storage transformer plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_storage_transformer(handle: &StorageTransformerRuntimeRegistryHandle) -> bool {
+    STORAGE_TRANSFORMER_RUNTIME_REGISTRY.unregister(handle)
+}
+
 /// Create a storage transformer from metadata.
 ///
 /// # Errors
@@ -63,8 +94,26 @@ pub fn try_create_storage_transformer(
     metadata: &MetadataV3,
     path: &NodePath,
 ) -> Result<StorageTransformer, PluginCreateError> {
+    let name = metadata.name();
+
+    // Check runtime registry first (higher priority)
+    {
+        let result = STORAGE_TRANSFORMER_RUNTIME_REGISTRY.with_plugins(|plugins| {
+            for plugin in plugins {
+                if plugin.match_name(name, ZarrVersions::V3) {
+                    return Some(plugin.create(metadata, path));
+                }
+            }
+            None
+        });
+        if let Some(result) = result {
+            return result;
+        }
+    }
+
+    // Fall back to compile-time registered plugins
     for plugin in inventory::iter::<StorageTransformerPlugin> {
-        if plugin.match_name(metadata.name(), ZarrVersions::V3) {
+        if plugin.match_name(name, ZarrVersions::V3) {
             return plugin.create(metadata, path);
         }
     }

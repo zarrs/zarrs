@@ -10,10 +10,10 @@
 pub mod array_subset;
 pub mod indexer;
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use derive_more::{Deref, From};
-use zarrs_plugin::PluginUnsupportedError;
+use zarrs_plugin::{PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry};
 
 pub use zarrs_metadata::{ArrayShape, ChunkShape};
 
@@ -60,6 +60,36 @@ impl ChunkGridPlugin {
     }
 }
 
+/// A runtime chunk grid plugin for dynamic registration.
+pub type ChunkGridRuntimePlugin = RuntimePlugin2<ChunkGrid, MetadataV3, ArrayShape>;
+
+/// A handle to a registered chunk grid plugin.
+pub type ChunkGridRuntimeRegistryHandle = Arc<ChunkGridRuntimePlugin>;
+
+/// Global runtime registry for chunk grid plugins.
+pub static CHUNK_GRID_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry<ChunkGridRuntimePlugin>> =
+    LazyLock::new(RuntimeRegistry::new);
+
+/// Register a chunk grid plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+///
+/// A handle that can be used to unregister the plugin later.
+pub fn register_chunk_grid(plugin: ChunkGridRuntimePlugin) -> ChunkGridRuntimeRegistryHandle {
+    CHUNK_GRID_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime chunk grid plugin.
+///
+/// # Returns
+///
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_chunk_grid(handle: &ChunkGridRuntimeRegistryHandle) -> bool {
+    CHUNK_GRID_RUNTIME_REGISTRY.unregister(handle)
+}
+
 impl ChunkGrid {
     /// Create a chunk grid.
     pub fn new<T: ChunkGridTraits + 'static>(chunk_grid: T) -> Self {
@@ -76,8 +106,26 @@ impl ChunkGrid {
         metadata: &MetadataV3,
         array_shape: &[u64],
     ) -> Result<Self, PluginCreateError> {
+        let name = metadata.name();
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = CHUNK_GRID_RUNTIME_REGISTRY.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name, ZarrVersions::V3) {
+                        return Some(plugin.create(metadata, &array_shape.to_vec()));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
         for plugin in inventory::iter::<ChunkGridPlugin> {
-            if plugin.match_name(metadata.name(), ZarrVersions::V3) {
+            if plugin.match_name(name, ZarrVersions::V3) {
                 return plugin.create(metadata, &array_shape.to_vec());
             }
         }

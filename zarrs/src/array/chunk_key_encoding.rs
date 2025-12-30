@@ -9,7 +9,7 @@ pub mod default_suffix;
 pub mod v2;
 
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration};
 pub use default_suffix::{
@@ -17,7 +17,7 @@ pub use default_suffix::{
 };
 use derive_more::{Deref, From};
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
-use zarrs_plugin::PluginUnsupportedError;
+use zarrs_plugin::{PluginUnsupportedError, RuntimePlugin, RuntimeRegistry};
 
 pub use crate::metadata::ChunkKeySeparator;
 use crate::storage::{MaybeSend, MaybeSync};
@@ -53,6 +53,37 @@ impl ChunkKeyEncodingPlugin {
     }
 }
 
+/// A runtime chunk key encoding plugin for dynamic registration.
+pub type ChunkKeyEncodingRuntimePlugin = RuntimePlugin<ChunkKeyEncoding, MetadataV3>;
+
+/// Global runtime registry for chunk key encoding plugins.
+pub static CHUNK_KEY_ENCODING_RUNTIME_REGISTRY: LazyLock<
+    RuntimeRegistry<ChunkKeyEncodingRuntimePlugin>,
+> = LazyLock::new(RuntimeRegistry::new);
+
+/// A handle to a registered chunk key encoding plugin.
+pub type ChunkKeyEncodingRuntimeRegistryHandle = Arc<ChunkKeyEncodingRuntimePlugin>;
+
+/// Register a chunk key encoding plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+/// A handle that can be used to unregister the plugin later.
+pub fn register_chunk_key_encoding(
+    plugin: ChunkKeyEncodingRuntimePlugin,
+) -> ChunkKeyEncodingRuntimeRegistryHandle {
+    CHUNK_KEY_ENCODING_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime chunk key encoding plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_chunk_key_encoding(handle: &ChunkKeyEncodingRuntimeRegistryHandle) -> bool {
+    CHUNK_KEY_ENCODING_RUNTIME_REGISTRY.unregister(handle)
+}
+
 impl ChunkKeyEncoding {
     /// Create a chunk key encoding.
     pub fn new<T: ChunkKeyEncodingTraits + 'static>(chunk_key_encoding: T) -> Self {
@@ -66,8 +97,26 @@ impl ChunkKeyEncoding {
     ///
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered chunk key encoding plugin.
     pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+        let name = metadata.name();
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = CHUNK_KEY_ENCODING_RUNTIME_REGISTRY.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name, ZarrVersions::V3) {
+                        return Some(plugin.create(metadata));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
         for plugin in inventory::iter::<ChunkKeyEncodingPlugin> {
-            if plugin.match_name(metadata.name(), ZarrVersions::V3) {
+            if plugin.match_name(name, ZarrVersions::V3) {
                 return plugin.create(metadata);
             }
         }
