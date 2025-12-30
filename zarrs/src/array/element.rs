@@ -4,7 +4,7 @@ use ArrayError::IncompatibleElementType as IET;
 use itertools::Itertools;
 use zarrs_plugin::ExtensionIdentifier;
 
-use crate::array::data_type::{BoolDataType, RawBitsDataType, StringDataType};
+use crate::array::data_type;
 
 use super::{
     ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeExt, convert_from_bytes_slice,
@@ -79,7 +79,7 @@ impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type.identifier() == BoolDataType::IDENTIFIER)
+        (data_type.identifier() == data_type::BoolDataType::IDENTIFIER)
             .then_some(())
             .ok_or(IET)
     }
@@ -125,11 +125,11 @@ impl ElementOwned for bool {
 /// Helper macro to implement `Element` for POD (plain old data) types.
 /// Uses identifier matching instead of pattern matching for data type validation.
 macro_rules! impl_element_pod {
-    ($raw_type:ty, $($identifier:literal),+ $(,)?) => {
+    ($raw_type:ty, $($data_type:ty),+ $(,)?) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
                 let id = data_type.identifier();
-                if $( id == $identifier )||+ {
+                if $( id == <$data_type>::IDENTIFIER )||+ {
                     Ok(())
                 } else {
                     Err(IET)
@@ -166,27 +166,56 @@ macro_rules! impl_element_pod {
     };
 }
 
-impl_element_pod!(i8, "int8", "int4", "int2");
-impl_element_pod!(i16, "int16");
-impl_element_pod!(i32, "int32");
-impl_element_pod!(i64, "int64", "numpy.datetime64", "numpy.timedelta64");
-impl_element_pod!(u8, "uint8", "uint4", "uint2");
-impl_element_pod!(u16, "uint16");
-impl_element_pod!(u32, "uint32");
-impl_element_pod!(u64, "uint64");
-impl_element_pod!(half::f16, "float16");
-impl_element_pod!(f32, "float32");
-impl_element_pod!(f64, "float64");
-impl_element_pod!(half::bf16, "bfloat16");
-impl_element_pod!(num::complex::Complex<half::bf16>, "complex_bfloat16");
-impl_element_pod!(num::complex::Complex<half::f16>, "complex_float16");
-impl_element_pod!(num::complex::Complex32, "complex64", "complex_float32");
-impl_element_pod!(num::complex::Complex64, "complex128", "complex_float64");
+impl_element_pod!(
+    i8,
+    data_type::Int8DataType,
+    data_type::Int4DataType,
+    data_type::Int2DataType
+);
+impl_element_pod!(i16, data_type::Int16DataType);
+impl_element_pod!(i32, data_type::Int32DataType);
+impl_element_pod!(
+    i64,
+    data_type::Int64DataType,
+    data_type::NumpyDateTime64DataType,
+    data_type::NumpyTimeDelta64DataType
+);
+impl_element_pod!(
+    u8,
+    data_type::UInt8DataType,
+    data_type::UInt4DataType,
+    data_type::UInt2DataType
+);
+impl_element_pod!(u16, data_type::UInt16DataType);
+impl_element_pod!(u32, data_type::UInt32DataType);
+impl_element_pod!(u64, data_type::UInt64DataType);
+impl_element_pod!(half::f16, data_type::Float16DataType);
+impl_element_pod!(f32, data_type::Float32DataType);
+impl_element_pod!(f64, data_type::Float64DataType);
+impl_element_pod!(half::bf16, data_type::BFloat16DataType);
+impl_element_pod!(
+    num::complex::Complex<half::bf16>,
+    data_type::ComplexBFloat16DataType
+);
+impl_element_pod!(
+    num::complex::Complex<half::f16>,
+    data_type::ComplexFloat16DataType
+);
+impl_element_pod!(
+    num::complex::Complex32,
+    data_type::Complex64DataType,
+    data_type::ComplexFloat32DataType
+);
+impl_element_pod!(
+    num::complex::Complex64,
+    data_type::Complex128DataType,
+    data_type::ComplexFloat64DataType
+);
 
 impl<const N: usize> Element for &[u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
         // RawBits has identifier "r*" and fixed size equal to N
-        if data_type.identifier() == RawBitsDataType::IDENTIFIER
+        if data_type.identifier() == data_type::RawBitsDataType::IDENTIFIER
             && data_type.fixed_size() == Some(N)
         {
             Ok(())
@@ -217,7 +246,7 @@ impl<const N: usize> Element for &[u8; N] {
 impl<const N: usize> Element for [u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
         // RawBits has identifier "r*" and fixed size equal to N
-        if data_type.identifier() == RawBitsDataType::IDENTIFIER
+        if data_type.identifier() == data_type::RawBitsDataType::IDENTIFIER
             && data_type.fixed_size() == Some(N)
         {
             Ok(())
@@ -258,7 +287,7 @@ macro_rules! impl_element_string {
     ($raw_type:ty) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-                (data_type.identifier() == StringDataType::IDENTIFIER)
+                (data_type.identifier() == data_type::StringDataType::IDENTIFIER)
                     .then_some(())
                     .ok_or(IET)
             }
@@ -392,16 +421,22 @@ impl ElementOwned for Vec<u8> {
 }
 
 #[cfg(feature = "float8")]
-impl_element_pod!(float8::F8E4M3, "float8_e4m3");
+impl_element_pod!(float8::F8E4M3, data_type::Float8E4M3DataType);
 
 #[cfg(feature = "float8")]
-impl_element_pod!(float8::F8E5M2, "float8_e5m2");
+impl_element_pod!(float8::F8E5M2, data_type::Float8E5M2DataType);
 
 #[cfg(feature = "float8")]
-impl_element_pod!(num::Complex<float8::F8E4M3>, "complex_float8_e4m3");
+impl_element_pod!(
+    num::Complex<float8::F8E4M3>,
+    data_type::ComplexFloat8E4M3DataType
+);
 
 #[cfg(feature = "float8")]
-impl_element_pod!(num::Complex<float8::F8E5M2>, "complex_float8_e5m2");
+impl_element_pod!(
+    num::Complex<float8::F8E5M2>,
+    data_type::ComplexFloat8E5M2DataType
+);
 
 impl<T> Element for Option<T>
 where
