@@ -86,7 +86,6 @@ pub use self::{
     bytes_representation::BytesRepresentation,
     chunk_grid::ChunkGrid,
     chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator},
-    codec::ArrayCodecTraits,
     codec::CodecChain,
     concurrency::RecommendedConcurrency,
     element::{Element, ElementFixedLength, ElementOwned},
@@ -96,6 +95,7 @@ pub use self::{
     tensor::{Tensor, TensorError},
 };
 use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::codec::ArrayCodecTraits;
 use crate::convert::array_metadata_v2_to_v3;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{

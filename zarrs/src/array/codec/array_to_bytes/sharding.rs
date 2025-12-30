@@ -73,11 +73,11 @@ pub use crate::metadata_ext::codec::sharding::{
 };
 use crate::{
     array::{
-        ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkShape, ChunkShapeTraits,
-        CodecChain, DataType, FillValue, RecommendedConcurrency,
+        ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
+        FillValue, RecommendedConcurrency,
         codec::{
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
-            CodecPlugin,
+            ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec,
+            CodecError, CodecOptions, CodecPlugin,
         },
         concurrency::calc_concurrency_outer_inner,
         ravel_indices,
