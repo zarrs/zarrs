@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-12-31
+
 ### Added
 - Add `DataType` type alias (`Arc<dyn DataTypeExtension>`)
 - Add `DataTypeExtension::default_name()` method
 - Add `DataTypeExtension::eq()` method with default implementation
-- Add `DataTypeExtension::as_any()` method
+- **Breaking**: Add `DataTypeExtension::as_any()` method
 - Add runtime data type registration: `[un]register_data_type` and `DataTypeRuntime{Plugin,RegistryHandle}`
 
 ### Changed
@@ -105,14 +107,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.5.0...HEAD
-[0.5.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.5.0
-[0.4.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.2
-[0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.1
-[0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.0
-[0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.3
-[0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.2
-[0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.1
-[0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.0
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.6.0...HEAD
+[0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.6.0
+[0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.5.0
+[0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.2
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.0
+[0.3.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.3
+[0.3.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.2
+[0.3.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.1
+[0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.0
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.2.0
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.1.0

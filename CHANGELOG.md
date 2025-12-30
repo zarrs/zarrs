@@ -176,6 +176,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
+## [0.23.0-beta.2] - 2025-12-31
+
+## [0.23.0-beta.1] - 2025-12-29
+
+## [0.23.0-beta.0] - 2025-12-29
+
 ## [0.22.10] - 2025-11-29
 
 ### Fixed
@@ -2024,31 +2030,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release
 
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.10...HEAD
-[0.23.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.23.0-beta.1
-[0.23.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.23.0-beta.0
-[0.22.10]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.10
-[0.22.9]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.9
-[0.22.8]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.8
-[0.22.7]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.7
-[0.22.6]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.6
-[0.22.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.5
-[0.22.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.4
-[0.22.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.3
-[0.22.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.2
-[0.22.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.1
-[0.22.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0
-[0.22.0-beta.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.3
-[0.22.0-beta.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.2
-[0.22.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.1
-[0.22.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.22.0-beta.0
-[0.21.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.2
-[0.21.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.1
-[0.21.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.21.0
-[0.20.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.1
-[0.20.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0
-[0.20.0-beta.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0-beta.2
-[0.20.0-beta.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0-beta.1
-[0.20.0-beta.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.20.0-beta.0
+[0.23.0-beta.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.2
+[0.23.0-beta.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.1
+[0.23.0-beta.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.0
+[0.22.10]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.10
+[0.22.9]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.9
+[0.22.8]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.8
+[0.22.7]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.7
+[0.22.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.6
+[0.22.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.5
+[0.22.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.4
+[0.22.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.3
+[0.22.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.2
+[0.22.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.1
+[0.22.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.0
+[0.22.0-beta.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.0-beta.3
+[0.22.0-beta.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.0-beta.2
+[0.22.0-beta.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.0-beta.1
+[0.22.0-beta.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.22.0-beta.0
+[0.21.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.21.2
+[0.21.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.21.1
+[0.21.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.21.0
+[0.20.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.20.1
+[0.20.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.20.0
+[0.20.0-beta.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.20.0-beta.2
+[0.20.0-beta.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.20.0-beta.1
+[0.20.0-beta.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.20.0-beta.0
 [0.19.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.19.2
 [0.19.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.19.1
 [0.19.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs-v0.19.0

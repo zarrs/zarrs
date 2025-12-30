@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-12-31
+
 ### Changed
 - Bump MSRV to 1.85 (matches `object_store` MSRV)
 
@@ -71,11 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_object_store-v0.6.0...HEAD
-[0.6.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.6.0
-[0.5.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.5.0
-[0.4.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.4.3
-[0.4.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.4.2
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_object_store-v0.6.1...HEAD
+[0.6.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.6.1
+[0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.6.0
+[0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.5.0
+[0.4.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.4.3
+[0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_object_store-v0.4.2
 [0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.4.1
 [0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.4.0
 [0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_object_store-v0.3.0

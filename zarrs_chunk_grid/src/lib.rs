@@ -13,7 +13,6 @@ pub mod indexer;
 use std::sync::{Arc, LazyLock};
 
 use derive_more::{Deref, From};
-use zarrs_plugin::{PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry};
 
 pub use zarrs_metadata::{ArrayShape, ChunkShape};
 
@@ -29,7 +28,10 @@ use array_subset::{
     ArraySubset, IncompatibleDimensionalityError,
 };
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{
+    MaybeSend, MaybeSync, Plugin2, PluginCreateError, PluginUnsupportedError, RuntimePlugin2,
+    RuntimeRegistry, ZarrVersions,
+};
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]

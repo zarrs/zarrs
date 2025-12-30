@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2025-12-31
+
 ### Changed
 - Remove `parking_lot` dependency (use `std::sync::RwLock` instead)
 
@@ -89,15 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.6...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.7...HEAD
+[0.3.7]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.7
 [0.3.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.6
-[0.3.5]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.5
-[0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.4
-[0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.3
-[0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.2
-[0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.1
-[0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.3.0
-[0.2.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.3
+[0.3.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.5
+[0.3.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.4
+[0.3.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.3
+[0.3.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.2
+[0.3.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.1
+[0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.0
+[0.2.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.2.3
 [0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.2
 [0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.1
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_filesystem-v0.2.0

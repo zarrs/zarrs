@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-12-31
+
 ### Fixed
 - Replace use of removed `doc_auto_cfg` feature with `doc_cfg` (fixes `docs.rs` build)
 - Remove unused `parking_lot` dependency
@@ -138,9 +140,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.0...HEAD
-[0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.4.0
-[0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.4
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.1...HEAD
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.0
+[0.3.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.3.4
 [0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.3
 [0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.2
 [0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.1
