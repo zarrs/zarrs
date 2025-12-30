@@ -14,7 +14,6 @@ use super::{
 };
 use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeSize};
 use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
-use crate::config::global_config;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::AsyncReadableStorageTraits;
@@ -159,11 +158,9 @@ impl AsyncArrayShardedReadableExtCache {
                 ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)
                     .expect("valid sharding configuration");
             let sharding_codec = Arc::new(
-                ShardingCodec::new_with_configuration(
-                    &sharding_codec_configuration,
-                    global_config().codec_aliases_v3(),
-                )
-                .expect("supported sharding codec configuration, already instantiated in array"),
+                ShardingCodec::new_with_configuration(&sharding_codec_configuration).expect(
+                    "supported sharding codec configuration, already instantiated in array",
+                ),
             );
             let partial_decoder = MaybeShardingPartialDecoder::Sharding(Arc::new(
                 AsyncShardingPartialDecoder::new(
@@ -731,8 +728,9 @@ mod tests {
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::{
         array::{
-            ArrayBuilder, DataType,
+            ArrayBuilder,
             codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
+            data_type,
         },
         array_subset::ArraySubset,
         storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
@@ -745,7 +743,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![8, 8], // array shape
             vec![4, 4], // regular chunk shape
-            DataType::UInt16,
+            data_type::uint16(),
             0u16,
         );
         builder.bytes_to_bytes_codecs(vec![
@@ -757,7 +755,7 @@ mod tests {
         }
         let array = builder.build(store, array_path)?;
 
-        let data: Vec<u16> = (0..array.shape().into_iter().product())
+        let data: Vec<u16> = (0..array.shape().iter().product())
             .map(|i| i as u16)
             .collect();
 
@@ -961,7 +959,7 @@ mod tests {
         let mut builder = ArrayBuilder::new(
             vec![16, 16, 9], // array shape
             vec![8, 4, 3],   // regular chunk shape
-            DataType::UInt32,
+            data_type::uint32(),
             0u32,
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
@@ -978,7 +976,7 @@ mod tests {
                     },
                     NonZeroU64::new(3).unwrap(),
                 ],
-                &DataType::UInt32,
+                &data_type::uint32(),
             )
             .bytes_to_bytes_codecs(vec![
                 #[cfg(feature = "gzip")]
@@ -1025,7 +1023,7 @@ mod tests {
             // CodecError(Other("invalid inner chunk shape [1, 3, 3], it must evenly divide [4, 8, 3]"))
         }
 
-        let data: Vec<u32> = (0..array.shape().into_iter().product())
+        let data: Vec<u32> = (0..array.shape().iter().product())
             .map(|i| i as u32)
             .collect();
         array
@@ -1045,7 +1043,7 @@ mod tests {
 
     #[tokio::test]
     async fn async_array_sharded_ext_impl_transpose_valid_inner_chunk_shape() {
-        assert!(array_sharded_ext_impl_transpose(true).await.is_ok())
+        assert!(array_sharded_ext_impl_transpose(true).await.is_ok());
     }
 
     #[tokio::test]
@@ -1056,6 +1054,6 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "invalid subchunk shape [1, 3, 3], it must evenly divide shard shape [4, 8, 3]"
-        )
+        );
     }
 }

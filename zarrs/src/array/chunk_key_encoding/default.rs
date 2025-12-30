@@ -1,10 +1,10 @@
 //! The `default` chunk key encoding.
 
 use itertools::Itertools;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 pub use crate::metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
-use crate::registry::chunk_key_encoding::DEFAULT;
 use crate::{
     array::chunk_key_encoding::ChunkKeyEncodingPlugin,
     metadata::v3::MetadataV3,
@@ -14,19 +14,20 @@ use crate::{
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DEFAULT, is_name_default, create_chunk_key_encoding_default)
+    ChunkKeyEncodingPlugin::new(DefaultChunkKeyEncoding::IDENTIFIER, DefaultChunkKeyEncoding::matches_name, DefaultChunkKeyEncoding::default_name, create_chunk_key_encoding_default)
 }
-
-fn is_name_default(name: &str) -> bool {
-    name.eq(DEFAULT)
-}
+zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, "default");
 
 pub(crate) fn create_chunk_key_encoding_default(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
     let configuration: DefaultChunkKeyEncodingConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(DEFAULT, "chunk key encoding", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                DefaultChunkKeyEncoding::IDENTIFIER,
+                "chunk key encoding",
+                metadata.to_string(),
+            )
         })?;
     let default = DefaultChunkKeyEncoding::new(configuration.separator);
     Ok(ChunkKeyEncoding::new(default))
@@ -82,8 +83,11 @@ impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
         let configuration = DefaultChunkKeyEncodingConfiguration {
             separator: self.separator,
         };
-        MetadataV3::new_with_serializable_configuration(DEFAULT.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

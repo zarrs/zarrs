@@ -16,6 +16,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
+use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
@@ -23,11 +24,10 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -100,7 +100,7 @@ impl FromBytes for CustomDataTypeFixedSizeElement {
 /// This defines how an in-memory CustomDataTypeFixedSizeElement is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFixedSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeFixedSize)))
+        (data_type.identifier() == CUSTOM_NAME)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -137,10 +137,11 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
         let bytes_len = bytes.len();
         let mut elements =
             Vec::with_capacity(bytes_len / size_of::<CustomDataTypeFixedSizeBytes>());
-        for bytes in bytes.chunks_exact(size_of::<CustomDataTypeFixedSizeBytes>()) {
-            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(unsafe {
-                bytes.try_into().unwrap_unchecked()
-            }))
+        for bytes in bytes
+            .as_chunks::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
+            .0
+        {
+            elements.push(CustomDataTypeFixedSizeElement::from_ne_bytes(bytes))
         }
         Ok(elements)
     }
@@ -151,15 +152,19 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
 struct CustomDataTypeFixedSize;
 
 /// A custom unique identifier
-const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeFixedSize";
+const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeFixedSize";
 
-fn is_custom_dtype(name: &str) -> bool {
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeFixedSize, CUSTOM_NAME);
+
+fn matches_name_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == CUSTOM_NAME
 }
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+fn default_name_dtype(_version: ZarrVersions) -> Cow<'static, str> {
+    CUSTOM_NAME.into()
+}
+
+fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeFixedSize))
     } else {
@@ -169,7 +174,7 @@ fn create_custom_dtype(
 
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(CUSTOM_NAME, matches_name_dtype, default_name_dtype, create_custom_dtype)
 }
 
 /// Implement the core data type extension methods
@@ -213,29 +218,30 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
         DataTypeSize::Fixed(size_of::<CustomDataTypeFixedSizeBytes>())
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
+impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
-                for bytes in bytes.chunks_exact_mut(size_of::<CustomDataTypeFixedSizeBytes>()) {
-                    let value = CustomDataTypeFixedSizeElement::from_ne_bytes(&unsafe {
-                        bytes.try_into().unwrap_unchecked()
-                    });
+                for bytes in bytes
+                    .as_chunks_mut::<{ size_of::<CustomDataTypeFixedSizeBytes>() }>()
+                    .0
+                {
+                    let value = CustomDataTypeFixedSizeElement::from_ne_bytes(bytes);
                     if endianness == Endianness::Little {
-                        bytes.copy_from_slice(&value.to_le_bytes());
+                        *bytes = value.to_le_bytes();
                     } else {
-                        bytes.copy_from_slice(&value.to_be_bytes());
+                        *bytes = value.to_be_bytes();
                     }
                 }
                 Ok(Cow::Owned(bytes))
@@ -243,7 +249,9 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
                 Ok(bytes)
             }
         } else {
-            Err(DataTypeExtensionBytesCodecError::EndiannessNotSpecified)
+            Err(CodecError::from(
+                "endianness must be specified for multi-byte data types",
+            ))
         }
     }
 
@@ -251,31 +259,39 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
-                for bytes in bytes.chunks_exact_mut(size_of::<u64>() + size_of::<f32>()) {
+                for bytes in bytes
+                    .as_chunks_mut::<{ size_of::<u64>() + size_of::<f32>() }>()
+                    .0
+                {
                     let value = if endianness == Endianness::Little {
-                        CustomDataTypeFixedSizeElement::from_le_bytes(&unsafe {
-                            bytes.try_into().unwrap_unchecked()
-                        })
+                        CustomDataTypeFixedSizeElement::from_le_bytes(bytes)
                     } else {
-                        CustomDataTypeFixedSizeElement::from_be_bytes(&unsafe {
-                            bytes.try_into().unwrap_unchecked()
-                        })
+                        CustomDataTypeFixedSizeElement::from_be_bytes(bytes)
                     };
-                    bytes.copy_from_slice(&value.to_ne_bytes());
+                    *bytes = value.to_ne_bytes();
                 }
                 Ok(Cow::Owned(bytes))
             } else {
                 Ok(bytes)
             }
         } else {
-            Err(DataTypeExtensionBytesCodecError::EndiannessNotSpecified)
+            Err(CodecError::from(
+                "endianness must be specified for multi-byte data types",
+            ))
         }
     }
 }
+
+// Register codec support
+zarrs::array::codec::register_data_type_extension_codec!(
+    CustomDataTypeFixedSize,
+    zarrs::array::codec::BytesPlugin,
+    zarrs::array::codec::BytesCodecDataTypeTraits
+);
 
 fn main() {
     let store = std::sync::Arc::new(MemoryStore::default());
@@ -284,7 +300,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![2, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeFixedSize)),
+        Arc::new(CustomDataTypeFixedSize) as DataType,
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

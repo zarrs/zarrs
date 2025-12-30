@@ -7,26 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.23.0-beta.1] - 2025-12-29
-
-## [0.23.0-beta.0] - 2025-12-29
-
 ### Highlights
 - Generic array store and retrieve methods
 - Support for the `optional` data type and codec (aliased as `zarrs.optional`)
+- Revised extension alias handling for codecs, chunk grids, chunk key encodings, and data types
+- `DataType` is now a trait object (`Arc<dyn DataTypeExtension>`) rather than an enum
 - Improved performance
 
 ### Added
-
+- Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
+- Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
+- Add `DataType::default_name()` method
+- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type`
+  - These implement `ExtensionIdentifier` for per-data-type alias management
 - Add `ArrayBytesVariableLength`
 - Add `ArrayBytesDecodeIntoTarget`
 - Add support for the `optional` data type and codec:
   - Add `OptionalCodec`
   - Add `ArrayBytesOptional`
-  - Add `DataTypeOptional`
-  - Add `DataType::Optional` variant holding a `DataTypeOptional`
+  - Add `OptionalDataType`
   - Add `NamedDataType::into_optional()`
-  - Add `DataType::optional()`
   - Implement `Element` for `Option<T>` where `T: Element`
   - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
   - Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
@@ -63,19 +63,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `From<NamedDataType>` for `DataType`
 
 ### Changed
-
-- **Breaking**: Bump MSRV to 1.87 and use Rust 2024 edition
+- **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition
 - **Breaking**: Bump `zarrs_metadata` to 0.7.0
-- **Breaking**: Bump `zarrs_data_type` to 0.5.0
-- **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.3.0
+- **Breaking**: Bump `zarrs_data_type` to 0.6.0
+- **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.4.0
+- **Breaking**: Bump `zarrs_plugin` to 0.3.0
+- **Breaking**: Bump `zarrs_chunk_grid` to 0.2.0
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
-- Bump `zarrs_registry` to 0.1.9
+- **Breaking**: Bump `ndarray` to 0.17.1
 - Bump `zarrs_filesystem` to 0.3.6
-- Bump `zarrs_plugin` to 0.2.3
 - Bump `zfp-sys` to 0.4.2
 - Bump `pco` to 0.4.7
 - Bump `criterion` (dev) to 0.8.1
+- **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
+  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
+- **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
+  - Extensions now implement `ExtensionIdentifier` and `ExtensionAliases<V>` traits for per-extension alias management
+  - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
+  - Remove `NamedDataType::from_metadata()` (replaced with `TryFrom<&MetadataV3>`)
+  - Remove aliases parameter from `NamedCodec::new_default_name()` and `NamedDataType::new_default_name()`
+  - Rename `DataType::into_named()` to `to_named()` (no longer takes aliases parameter)
+- **Breaking**: Change `CodecTraits::identifier()` return type from `&str` to `&'static str`
+- **Breaking**: Change `StorageTransformerPlugin::new()` to take a `default_name_fn` parameter
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
   - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
@@ -92,7 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 - **Breaking**: `{Array,Chunk}Representation::shape_u64()` now returns `&[u64]` instead of `Vec<u64>`
 - Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
-- **Breaking**: Bump `ndarray` to 0.17.1
 - **Breaking**: Switch to `&ndarray::ArrayRef` from `impl Into<ndarray::Array<T, D>>` in `Array::store_*_ndarray` methods
 - **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()`
   - This is necessary to choose an appropriate default array-to-bytes codec
@@ -101,7 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
   - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
     - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
-    - This is a breaking change for existing code expecting relying on type inference for `ArrayBytes`
+    - This is a breaking change for existing code relying on type inference for `ArrayBytes`
 
   - `Array::store_*` methods are now generic over the input type
     - Store any array type implementing `IntoArrayBytes`, e.g. `ArrayBytes`, `&[T]`, `Vec<T>`, or `&ndarray::Array<T>` where `T: Element`
@@ -138,13 +147,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Rename `ArrayMetadataOptions::codec_options[_mut]()` to `codec_metadata_options[_mut]()`
   - Rename `CodecTraits::configuration_opt()` to `configuration()`
   - Rename `CodecChain::create_metadatas_opt()` to `create_metadatas()` (now requires `&CodecMetadataOptions`)
-  - Add `&ExtensionAliasesCodecV3` parameter to `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, `{Sharding,Optional,Vlen}Codec::new_with_configuration()`
   - Remove `CodecTraits::default_name()`
 - **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `identifier()` (`String` -> `&'static str`)
 - **Breaking**: Replace `DataType::metadata()` with `configuration()` (`MetadataV3` -> `Configuration`)
 
 ### Removed
-
+- **Breaking**: Remove `zarrs_registry` dependency
+- **Breaking**: Remove `Config::codec_aliases_{v2,v3}()` and `Config::data_type_aliases_{v2,v3}()` methods
+- **Breaking**: Remove `ZfpCodec::new_with_configuration_zfpy()` (use `ZfpyCodec` instead)
 - **Breaking**: Remove `DataType::into_optional()` and `DataType::from_metadata()` (use `NamedDataType` equivalents)
 - **Breaking**: Remove `ArraySize`
 - **Breaking**: Remove `{Array,Chunk}Representation::size()`
@@ -154,7 +164,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
 
 ### Fixed
-
 - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
 - Add missing complex subfloats to `NamedDataType::from_metadata()`
 - Fix `transpose` codec decoding with variable-size data types

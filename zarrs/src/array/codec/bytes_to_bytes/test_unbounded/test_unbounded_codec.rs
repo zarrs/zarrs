@@ -13,6 +13,8 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");
+
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
 pub struct TestUnboundedCodec {}
@@ -22,6 +24,7 @@ impl TestUnboundedCodec {
     ///
     /// # Errors
     /// Returns [`TestUnboundedCompressionLevelError`] if `compression_level` is not valid.
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }

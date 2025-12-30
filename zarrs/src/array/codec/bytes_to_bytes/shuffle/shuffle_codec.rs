@@ -11,7 +11,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::SHUFFLE;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -45,8 +45,8 @@ impl ShuffleCodec {
 }
 
 impl CodecTraits for ShuffleCodec {
-    fn identifier(&self) -> &str {
-        SHUFFLE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

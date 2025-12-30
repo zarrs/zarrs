@@ -14,7 +14,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::GDEFLATE;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]
@@ -53,8 +53,8 @@ impl GDeflateCodec {
 }
 
 impl CodecTraits for GDeflateCodec {
-    fn identifier(&self) -> &str {
-        GDEFLATE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

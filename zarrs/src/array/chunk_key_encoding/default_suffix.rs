@@ -3,6 +3,7 @@
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 use crate::metadata::ConfigurationSerialize;
@@ -12,9 +13,6 @@ use crate::{
     plugin::{PluginCreateError, PluginMetadataInvalidError},
     storage::StoreKey,
 };
-
-/// Unique identifier for the `default_suffix` chunk key encoding (extension).
-const DEFAULT_SUFFIX: &str = "zarrs.default_suffix"; // TODO: Move to zarrs_registry on stabilisation
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
 // TODO: move to zarrs_metadata_ex on stabilisation
@@ -37,12 +35,9 @@ const fn default_separator() -> ChunkKeySeparator {
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DEFAULT_SUFFIX, is_name_default_suffix, create_chunk_key_encoding_default_suffix)
+    ChunkKeyEncodingPlugin::new(DefaultSuffixChunkKeyEncoding::IDENTIFIER, DefaultSuffixChunkKeyEncoding::matches_name, DefaultSuffixChunkKeyEncoding::default_name, create_chunk_key_encoding_default_suffix)
 }
-
-fn is_name_default_suffix(name: &str) -> bool {
-    name.eq(DEFAULT_SUFFIX)
-}
+zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding, "zarrs.default_suffix");
 
 pub(crate) fn create_chunk_key_encoding_default_suffix(
     metadata: &MetadataV3,
@@ -51,7 +46,7 @@ pub(crate) fn create_chunk_key_encoding_default_suffix(
     let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
         metadata.to_configuration().map_err(|_| {
             PluginMetadataInvalidError::new(
-                DEFAULT_SUFFIX,
+                DefaultSuffixChunkKeyEncoding::IDENTIFIER,
                 "chunk key encoding",
                 metadata.to_string(),
             )
@@ -87,8 +82,11 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
             separator: self.separator,
             suffix: self.suffix.clone(),
         };
-        MetadataV3::new_with_serializable_configuration(DEFAULT_SUFFIX.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

@@ -265,8 +265,8 @@ mod tests {
     #[test]
     fn codec_pcodec_valid_empty() {
         serde_json::from_str::<PcodecCodecConfiguration>(
-            r#"{
-        }"#,
+            r"{
+        }",
         )
         .unwrap();
     }

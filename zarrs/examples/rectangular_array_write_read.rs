@@ -16,7 +16,7 @@ use zarrs::{
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::{
-        array::{DataType, ZARR_NAN_F32, codec},
+        array::{ZARR_NAN_F32, codec, data_type},
         array_subset::ArraySubset,
         node::Node,
         storage::store,
@@ -77,7 +77,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                 ], // chunk sizes
             },
         ),
-        DataType::Float32,
+        data_type::float32(),
         ZARR_NAN_F32,
     )
     .bytes_to_bytes_codecs(vec![

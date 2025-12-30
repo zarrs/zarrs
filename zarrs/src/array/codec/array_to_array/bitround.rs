@@ -39,12 +39,11 @@ mod bitround_codec_partial;
 use std::sync::Arc;
 
 pub use bitround_codec::BitroundCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use crate::registry::codec::BITROUND;
 use crate::{
     array::{
         DataType,
@@ -54,94 +53,38 @@ use crate::{
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
 
-macro_rules! supported_dtypes {
-    () => {
-        DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::BFloat16
-            | DataType::Float16
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-    };
-}
-macro_rules! unsupported_dtypes {
-    // TODO: Add support for all int/float types?
-    // TODO: Add support for extensions?
-    () => {
-        DataType::Bool
-            | DataType::Int2
-            | DataType::Int4
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::RawBits(_)
-            | DataType::String
-            | DataType::Bytes
-            | DataType::Optional(_)
-            | DataType::Extension(_)
-    };
-}
-
-use supported_dtypes;
-use unsupported_dtypes;
-
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BITROUND, is_identifier_bitround, create_codec_bitround)
+    CodecPlugin::new(BitroundCodec::IDENTIFIER, BitroundCodec::matches_name, BitroundCodec::default_name, create_codec_bitround)
 }
+zarrs_plugin::impl_extension_aliases!(BitroundCodec, "bitround",
+    v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
+);
 
-fn is_identifier_bitround(identifier: &str) -> bool {
-    identifier == BITROUND
-}
-
-pub(crate) fn create_codec_bitround(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: BitroundCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BITROUND, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_bitround(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: BitroundCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(BitroundCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
+}
+
+/// Traits for a data type supporting the `bitround` codec.
+///
+/// The bitround codec rounds the mantissa of floating point data types or
+/// rounds integers from the most significant set bit to the specified number of bits.
+pub trait BitroundCodecDataTypeTraits {
+    /// The number of bits to round to for floating point types.
+    ///
+    /// Returns `None` for integer types where rounding is from the MSB.
+    fn mantissa_bits(&self) -> Option<u32>;
+
+    /// Apply bit rounding to the bytes in-place.
+    ///
+    /// # Arguments
+    /// * `bytes` - The bytes to round in-place
+    /// * `keepbits` - The number of bits to keep
+    fn round(&self, bytes: &mut [u8], keepbits: u32);
 }
 
 fn round_bits8(mut input: u8, keepbits: u32, maxbits: u32) -> u8 {
@@ -188,98 +131,293 @@ const fn round_bits64(mut input: u64, keepbits: u32, maxbits: u32) -> u64 {
     input
 }
 
-fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
-    match data_type {
-        DataType::UInt8 | DataType::Int8 => {
-            let round = |element: &mut u8| {
-                *element = round_bits8(*element, keepbits, 8 - element.leading_zeros());
-            };
-            bytes.iter_mut().for_each(round);
-            Ok(())
-        }
-        DataType::Float16
-        | DataType::BFloat16
-        | DataType::ComplexBFloat16
-        | DataType::ComplexFloat16 => {
-            let round = |chunk: &mut [u8]| {
-                let element = u16::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u16::to_ne_bytes(round_bits16(element, keepbits, 10));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(2).for_each(round);
-            Ok(())
-        }
-        DataType::UInt16 | DataType::Int16 => {
-            let round = |chunk: &mut [u8]| {
-                let element = u16::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u16::to_ne_bytes(round_bits16(
-                    element,
-                    keepbits,
-                    16 - element.leading_zeros(),
-                ));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(2).for_each(round);
-            Ok(())
-        }
-        DataType::Float32 | DataType::Complex64 | DataType::ComplexFloat32 => {
-            let round = |chunk: &mut [u8]| {
-                let element = u32::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u32::to_ne_bytes(round_bits32(element, keepbits, 23));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(4).for_each(round);
-            Ok(())
-        }
-        DataType::UInt32 | DataType::Int32 => {
-            let round = |chunk: &mut [u8]| {
-                let element = u32::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u32::to_ne_bytes(round_bits32(
-                    element,
-                    keepbits,
-                    32 - element.leading_zeros(),
-                ));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(4).for_each(round);
-            Ok(())
-        }
-        DataType::Float64 | DataType::Complex128 | DataType::ComplexFloat64 => {
-            let round = |chunk: &mut [u8]| {
-                let element = u64::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u64::to_ne_bytes(round_bits64(element, keepbits, 52));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(8).for_each(round);
-            Ok(())
-        }
-        DataType::UInt64
-        | DataType::Int64
-        | DataType::NumpyDateTime64 {
-            unit: _,
-            scale_factor: _,
-        }
-        | DataType::NumpyTimeDelta64 {
-            unit: _,
-            scale_factor: _,
-        } => {
-            let round = |chunk: &mut [u8]| {
-                let element = u64::from_ne_bytes(chunk.try_into().unwrap());
-                let element = u64::to_ne_bytes(round_bits64(
-                    element,
-                    keepbits,
-                    64 - element.leading_zeros(),
-                ));
-                chunk.copy_from_slice(&element);
-            };
-            bytes.chunks_exact_mut(8).for_each(round);
-            Ok(())
-        }
-        unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-            data_type.clone(),
-            BITROUND.to_string(),
-        )),
+/// Helper to round 8-bit integer values (from MSB).
+pub fn round_bytes_int8(bytes: &mut [u8], keepbits: u32) {
+    for element in bytes.iter_mut() {
+        *element = round_bits8(*element, keepbits, 8 - element.leading_zeros());
     }
+}
+
+/// Helper to round 16-bit integer values (from MSB).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 2.
+pub fn round_bytes_int16(bytes: &mut [u8], keepbits: u32) {
+    for chunk in bytes.as_chunks_mut::<2>().0 {
+        let element = u16::from_ne_bytes(*chunk);
+        let rounded = round_bits16(element, keepbits, 16 - element.leading_zeros());
+        chunk.copy_from_slice(&u16::to_ne_bytes(rounded));
+    }
+}
+
+/// Helper to round 32-bit integer values (from MSB).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 4.
+pub fn round_bytes_int32(bytes: &mut [u8], keepbits: u32) {
+    for chunk in bytes.as_chunks_mut::<4>().0 {
+        let element = u32::from_ne_bytes(*chunk);
+        let rounded = round_bits32(element, keepbits, 32 - element.leading_zeros());
+        chunk.copy_from_slice(&u32::to_ne_bytes(rounded));
+    }
+}
+
+/// Helper to round 64-bit integer values (from MSB).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 8.
+pub fn round_bytes_int64(bytes: &mut [u8], keepbits: u32) {
+    for chunk in bytes.as_chunks_mut::<8>().0 {
+        let element = u64::from_ne_bytes(*chunk);
+        let rounded = round_bits64(element, keepbits, 64 - element.leading_zeros());
+        chunk.copy_from_slice(&u64::to_ne_bytes(rounded));
+    }
+}
+
+/// Helper to round 16-bit float values (fixed mantissa bits).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 2.
+pub fn round_bytes_float16(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) {
+    for chunk in bytes.as_chunks_mut::<2>().0 {
+        let element = u16::from_ne_bytes(*chunk);
+        let rounded = round_bits16(element, keepbits, mantissa_bits);
+        chunk.copy_from_slice(&u16::to_ne_bytes(rounded));
+    }
+}
+
+/// Helper to round 32-bit float values (fixed mantissa bits).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 4.
+pub fn round_bytes_float32(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) {
+    for chunk in bytes.as_chunks_mut::<4>().0 {
+        let element = u32::from_ne_bytes(*chunk);
+        let rounded = round_bits32(element, keepbits, mantissa_bits);
+        chunk.copy_from_slice(&u32::to_ne_bytes(rounded));
+    }
+}
+
+/// Helper to round 64-bit float values (fixed mantissa bits).
+///
+/// # Panics
+/// Panics if `bytes.len()` is not a multiple of 8.
+pub fn round_bytes_float64(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) {
+    for chunk in bytes.as_chunks_mut::<8>().0 {
+        let element = u64::from_ne_bytes(*chunk);
+        let rounded = round_bits64(element, keepbits, mantissa_bits);
+        chunk.copy_from_slice(&u64::to_ne_bytes(rounded));
+    }
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(Bitround, BitroundCodecDataTypeTraits);
+
+/// Macro to implement `BitroundCodecDataTypeTraits` for data types and register support.
+///
+/// # Usage
+/// ```ignore
+/// // Float types (have mantissa bits):
+/// impl_bitround_codec!(Float32DataType, 4, float32, 23);
+/// impl_bitround_codec!(Float64DataType, 8, float64, 52);
+/// impl_bitround_codec!(Float16DataType, 2, float16, 10);
+/// impl_bitround_codec!(BFloat16DataType, 2, float16, 7);
+///
+/// // Integer types (no mantissa bits):
+/// impl_bitround_codec!(Int32DataType, 4, int32);
+/// impl_bitround_codec!(Int64DataType, 8, int64);
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _impl_bitround_codec {
+    // Float16/BFloat16 types (use round_bytes_float16 with specified mantissa bits)
+    ($marker:ty, 2, float16, $mantissa_bits:expr) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_float16(bytes, keepbits, $mantissa_bits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Float32 types
+    ($marker:ty, 4, float32, $mantissa_bits:expr) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_float32(bytes, keepbits, $mantissa_bits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Float64 types
+    ($marker:ty, 8, float64, $mantissa_bits:expr) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                Some($mantissa_bits)
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_float64(bytes, keepbits, $mantissa_bits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Int8 types (no mantissa, round from MSB)
+    ($marker:ty, 1, int8) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int8(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Int16 types
+    ($marker:ty, 2, int16) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int16(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Int32 types
+    ($marker:ty, 4, int32) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int32(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // Int64 types
+    ($marker:ty, 8, int64) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int64(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // UInt8 types (use int8 rounding function)
+    ($marker:ty, 1, uint8) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int8(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // UInt16 types (use int16 rounding function)
+    ($marker:ty, 2, uint16) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int16(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // UInt32 types (use int32 rounding function)
+    ($marker:ty, 4, uint32) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int32(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+    // UInt64 types (use int64 rounding function)
+    ($marker:ty, 8, uint64) => {
+        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+            fn mantissa_bits(&self) -> Option<u32> {
+                None
+            }
+            fn round(&self, bytes: &mut [u8], keepbits: u32) {
+                $crate::array::codec::round_bytes_int64(bytes, keepbits);
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BitroundPlugin,
+            $crate::array::codec::BitroundCodecDataTypeTraits
+        );
+    };
+}
+
+#[doc(inline)]
+pub use _impl_bitround_codec as impl_bitround_codec;
+
+fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
+    // Use get_bitround_support() for all types
+    let bitround = get_bitround_support(&**data_type).ok_or_else(|| {
+        CodecError::UnsupportedDataType(data_type.clone(), BitroundCodec::IDENTIFIER.to_string())
+    })?;
+    bitround.round(bytes, keepbits);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -289,6 +427,7 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
+    use crate::array::data_type;
     use crate::{
         array::{
             ArrayBytes,
@@ -300,9 +439,9 @@ mod tests {
     #[test]
     fn codec_bitround_float() {
         // 1 sign bit, 8 exponent, 3 mantissa
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let elements: Vec<f32> = vec![
             //                         |
@@ -349,9 +488,9 @@ mod tests {
 
     #[test]
     fn codec_bitround_uint() {
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(7).unwrap()];
-        let data_type = DataType::UInt32;
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = vec![0, 1024, 1280, 1664, 1685, 123145182, 4294967295];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -392,9 +531,9 @@ mod tests {
 
     #[test]
     fn codec_bitround_uint8() {
-        const JSON: &'static str = r#"{ "keepbits": 3 }"#;
+        const JSON: &str = r#"{ "keepbits": 3 }"#;
         let shape = vec![NonZeroU64::new(9).unwrap()];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u32> = vec![0, 3, 7, 15, 17, 54, 89, 128, 255];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -432,13 +571,13 @@ mod tests {
 
     #[test]
     fn codec_bitround_partial_decode() {
-        const JSON: &'static str = r#"{ "keepbits": 2 }"#;
+        const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();
 
@@ -494,13 +633,13 @@ mod tests {
     async fn codec_bitround_async_partial_decode() {
         use zarrs_data_type::FillValue;
 
-        const JSON: &'static str = r#"{ "keepbits": 2 }"#;
+        const JSON: &str = r#"{ "keepbits": 2 }"#;
         let codec_configuration: BitroundCodecConfiguration = serde_json::from_str(JSON).unwrap();
         let codec = Arc::new(BitroundCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let elements: Vec<f32> = (0..32).map(|i| i as f32).collect();
         let shape = vec![(elements.len() as u64).try_into().unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);

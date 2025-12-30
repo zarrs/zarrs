@@ -2,8 +2,6 @@
 
 use std::{num::NonZeroU64, sync::Arc};
 
-use zarrs_registry::ExtensionAliasesCodecV3;
-
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
@@ -22,8 +20,8 @@ use crate::{
             PartialEncoderCapability,
         },
         concurrency::RecommendedConcurrency,
+        data_type::DataTypeExt,
     },
-    config::global_config,
     metadata::{Configuration, v3::MetadataV3},
     plugin::PluginCreateError,
 };
@@ -51,16 +49,14 @@ impl CodecChain {
         array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
         bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         let array_to_array = array_to_array
             .into_iter()
-            .map(|codec| NamedArrayToArrayCodec::new_default_name(codec, aliases))
+            .map(NamedArrayToArrayCodec::new_default_name)
             .collect();
-        let array_to_bytes = NamedArrayToBytesCodec::new_default_name(array_to_bytes, aliases);
+        let array_to_bytes = NamedArrayToBytesCodec::new_default_name(array_to_bytes);
         let bytes_to_bytes = bytes_to_bytes
             .into_iter()
-            .map(|codec| NamedBytesToBytesCodec::new_default_name(codec, aliases))
+            .map(NamedBytesToBytesCodec::new_default_name)
             .collect();
         Self::new_named(array_to_array, array_to_bytes, bytes_to_bytes)
     }
@@ -136,15 +132,12 @@ impl CodecChain {
     ///  - a codec could not be created,
     ///  - no array to bytes codec is supplied, or
     ///  - more than one array to bytes codec is supplied.
-    pub fn from_metadata(
-        metadatas: &[MetadataV3],
-        codec_aliases: &ExtensionAliasesCodecV3,
-    ) -> Result<Self, PluginCreateError> {
+    pub fn from_metadata(metadatas: &[MetadataV3]) -> Result<Self, PluginCreateError> {
         let mut array_to_array: Vec<NamedArrayToArrayCodec> = vec![];
         let mut array_to_bytes: Option<NamedArrayToBytesCodec> = None;
         let mut bytes_to_bytes: Vec<NamedBytesToBytesCodec> = vec![];
         for metadata in metadatas {
-            let codec = match Codec::from_metadata(metadata, codec_aliases) {
+            let codec = match Codec::from_metadata(metadata) {
                 Ok(codec) => Ok(codec),
                 Err(err) => {
                     if metadata.must_understand() {
@@ -889,7 +882,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        array::{ChunkShapeTraits, DataType},
+        array::{ChunkShapeTraits, data_type},
         array_subset::ArraySubset,
     };
 
@@ -1003,10 +996,7 @@ mod tests {
         ];
         println!("{codec_configurations:?}");
         let not_just_bytes = codec_configurations.len() > 1;
-        let codec = Arc::new(
-            CodecChain::from_metadata(&codec_configurations, &ExtensionAliasesCodecV3::default())
-                .unwrap(),
-        );
+        let codec = Arc::new(CodecChain::from_metadata(&codec_configurations).unwrap());
 
         let encoded = codec
             .encode(
@@ -1061,8 +1051,10 @@ mod tests {
         let decoded_partial_chunk: Vec<f32> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<f32>())
-            .map(|b| f32::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_ne_bytes(*b))
             .collect();
         println!("decoded_partial_chunk {decoded_partial_chunk:?}");
         assert_eq!(decoded_partial_chunk_true, decoded_partial_chunk);
@@ -1085,7 +1077,7 @@ mod tests {
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             &chunk_shape,
-            &DataType::Float32,
+            &data_type::float32(),
             &FillValue::from(0f32),
             elements,
             JSON_BYTES,
@@ -1110,7 +1102,7 @@ mod tests {
         let decoded_partial_chunk_true = vec![2.0, 6.0];
         codec_chain_round_trip_impl(
             &chunk_shape,
-            &DataType::Float32,
+            &data_type::float32(),
             &FillValue::from(0f32),
             elements,
             JSON_PCODEC,

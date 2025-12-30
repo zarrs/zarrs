@@ -6,8 +6,7 @@
 use std::sync::Arc;
 
 use ndarray::ArrayD;
-use zarrs::array::{ArrayBuilder, DataType, FillValue};
-use zarrs::registry::ExtensionAliasesDataTypeV3;
+use zarrs::array::{ArrayBuilder, DataTypeExt, FillValue, data_type};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
@@ -18,12 +17,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Build the codec chains for the optional codec
     let array = ArrayBuilder::new(
-        vec![4, 4], // 4x4 array
-        vec![2, 2], // 2x2 chunks
-        DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional()
-            .into_optional(), // Optional optional uint8 => Option<Option<u8>>
+        vec![4, 4],                                     // 4x4 array
+        vec![2, 2],                                     // 2x2 chunks
+        data_type::uint8().to_optional().to_optional(), // Optional optional uint8 => Option<Option<u8>>
         FillValue::new_optional_null().into_optional(), // Fill value => Some(None)
     )
     .dimension_names(["y", "x"].into())

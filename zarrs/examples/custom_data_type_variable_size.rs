@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use derive_more::Deref;
@@ -28,7 +29,7 @@ impl From<Option<f32>> for CustomDataTypeVariableSizeElement {
 
 impl Element for CustomDataTypeVariableSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeVariableSize)))
+        (data_type.identifier() == CUSTOM_NAME)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -94,13 +95,15 @@ struct CustomDataTypeVariableSize;
 
 const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_custom(name: &str, _version: zarrs_plugin::ZarrVersions) -> bool {
     name == CUSTOM_NAME
 }
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+fn default_name_custom(_version: zarrs_plugin::ZarrVersions) -> Cow<'static, str> {
+    CUSTOM_NAME.into()
+}
+
+fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeVariableSize))
     } else {
@@ -109,7 +112,7 @@ fn create_custom_dtype(
 }
 
 inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(CUSTOM_NAME, matches_name_custom, default_name_custom, create_custom_dtype)
 }
 
 impl DataTypeExtension for CustomDataTypeVariableSize {
@@ -160,6 +163,10 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Variable
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 fn main() {
@@ -168,7 +175,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![3, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
+        Arc::new(CustomDataTypeVariableSize) as DataType,
         [],
     )
     .array_to_array_codecs(vec![

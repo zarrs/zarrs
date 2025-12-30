@@ -15,14 +15,10 @@ use std::sync::Arc;
 use derive_more::{Deref, From};
 use zarrs_plugin::PluginUnsupportedError;
 
+pub use zarrs_metadata::{ArrayShape, ChunkShape};
+
 /// An ND index to an element in an array or chunk.
 pub type ArrayIndices = Vec<u64>;
-
-/// An array shape. Dimensions may be zero.
-pub type ArrayShape = Vec<u64>;
-
-/// A chunk shape. Dimensions must be non-zero.
-pub type ChunkShape = Vec<std::num::NonZeroU64>;
 
 /// An ND index to an element in an array or chunk.
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
@@ -33,7 +29,7 @@ use array_subset::{
     ArraySubset, IncompatibleDimensionalityError,
 };
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError};
+use zarrs_plugin::{MaybeSend, MaybeSync, Plugin2, PluginCreateError, ZarrVersions};
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
@@ -48,13 +44,19 @@ impl ChunkGridPlugin {
     /// Create a new [`ChunkGridPlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
         create_fn: fn(
             metadata: &MetadataV3,
             array_shape: &ArrayShape,
         ) -> Result<ChunkGrid, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(identifier, match_name_fn, create_fn))
+        Self(Plugin2::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -75,7 +77,7 @@ impl ChunkGrid {
         array_shape: &[u64],
     ) -> Result<Self, PluginCreateError> {
         for plugin in inventory::iter::<ChunkGridPlugin> {
-            if plugin.match_name(metadata.name()) {
+            if plugin.match_name(metadata.name(), ZarrVersions::V3) {
                 return plugin.create(metadata, &array_shape.to_vec());
             }
         }

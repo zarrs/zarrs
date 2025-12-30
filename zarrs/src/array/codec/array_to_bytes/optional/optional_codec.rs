@@ -5,7 +5,6 @@ use std::{mem::size_of, num::NonZeroU64, sync::Arc};
 
 use zarrs_data_type::FillValue;
 use zarrs_plugin::PluginCreateError;
-use zarrs_registry::ExtensionAliasesCodecV3;
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::{
@@ -16,9 +15,10 @@ use crate::array::{
         CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
         PartialEncoderCapability, RecommendedConcurrency,
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata::{Configuration, DataTypeSize};
-use crate::registry::codec::OPTIONAL;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -43,18 +43,11 @@ impl OptionalCodec {
     /// Returns an error if the configuration is not supported.
     pub fn new_with_configuration(
         configuration: &OptionalCodecConfiguration,
-        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             OptionalCodecConfiguration::V1(configuration) => {
-                let mask_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.mask_codecs,
-                    codec_aliases,
-                )?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.data_codecs,
-                    codec_aliases,
-                )?);
+                let mask_codecs = Arc::new(CodecChain::from_metadata(&configuration.mask_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(mask_codecs, data_codecs))
             }
             _ => Err(PluginCreateError::Other(
@@ -116,13 +109,13 @@ impl OptionalCodec {
                 }
 
                 // Get the inner-inner type (unwrap the Optional)
-                let inner_opt = inner_type.optional().ok_or(CodecError::Other(
+                let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
                     "nested optional ArrayBytes requires nested optional DataType".to_string(),
                 ))?;
 
                 // Recursively extract sparse data from the inner data
                 let sparse_inner_data =
-                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt)?;
+                    Self::extract_sparse_data(optional_bytes.data(), mask, inner_opt.data_type())?;
 
                 Ok(sparse_inner_data.with_optional_mask(sparse_inner_mask))
             }
@@ -191,17 +184,18 @@ impl OptionalCodec {
                 // Nested optional: Expand the inner data and then expand the inner mask
 
                 // Get the inner-inner type (unwrap the Optional)
-                let DataType::Optional(inner_opt) = inner_type else {
-                    return Err(CodecError::Other(
+                let inner_opt = inner_type.as_optional().ok_or_else(|| {
+                    CodecError::Other(
                         "nested optional ArrayBytes requires nested optional DataType".to_string(),
-                    ));
-                };
+                    )
+                })?;
 
                 // Destructure to get owned data and mask
                 let (sparse_inner_data, sparse_inner_mask) = sparse_optional_bytes.into_parts();
 
                 // Recursively expand the inner data
-                let dense_inner_data = Self::expand_to_dense(*sparse_inner_data, mask, inner_opt)?;
+                let dense_inner_data =
+                    Self::expand_to_dense(*sparse_inner_data, mask, inner_opt.data_type())?;
 
                 // Expand the sparse inner mask to dense format
                 let num_elements = mask.len();
@@ -254,10 +248,10 @@ impl OptionalCodec {
 
         if inner_type.is_optional() {
             // Nested optional: create nested structure with all-zero inner mask
-            let inner_opt = inner_type.optional().ok_or(CodecError::Other(
+            let inner_opt = inner_type.as_optional().ok_or(CodecError::Other(
                 "nested optional requires nested optional DataType".to_string(),
             ))?;
-            let inner_data = Self::create_empty_dense_data(mask, inner_opt)?;
+            let inner_data = Self::create_empty_dense_data(mask, inner_opt.data_type())?;
             let inner_mask = vec![0u8; num_elements];
             Ok(inner_data.with_optional_mask(inner_mask))
         } else {
@@ -278,8 +272,8 @@ impl OptionalCodec {
 }
 
 impl CodecTraits for OptionalCodec {
-    fn identifier(&self) -> &str {
-        OPTIONAL
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -354,32 +348,35 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
             )));
         }
 
-        let DataType::Optional(opt) = data_type else {
-            return Err(CodecError::Other(
-                "optional codec requires an optional data type".to_string(),
-            ));
-        };
+        let opt = data_type.as_optional().ok_or_else(|| {
+            CodecError::Other("optional codec requires an optional data type".to_string())
+        })?;
 
         // Encode mask
         let encoded_mask = self.mask_codecs.encode(
             ArrayBytes::from(mask.as_ref()),
             shape,
-            &DataType::Bool,
+            &crate::array::data_type::bool(),
             &FillValue::from(0u8),
             options,
         )?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt)?;
+        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(opt);
-            self.data_codecs
-                .encode(sparse_data, &data_shape, opt, &fill_value, options)?
+            let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
+            self.data_codecs.encode(
+                sparse_data,
+                &data_shape,
+                opt.data_type(),
+                &fill_value,
+                options,
+            )?
         } else {
             ArrayBytesRaw::from(vec![])
         };
@@ -421,35 +418,39 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         let decoded_mask = self.mask_codecs.decode(
             encoded_mask.into(),
             shape,
-            &DataType::Bool,
+            &crate::array::data_type::bool(),
             &FillValue::from(0u8),
             options,
         )?;
         let mask = decoded_mask.into_fixed()?.into_owned();
 
         // Decode data
-        let DataType::Optional(opt) = data_type else {
-            return Err(CodecError::Other(
-                "optional codec requires an optional data type".to_string(),
-            ));
-        };
+        let opt = data_type.as_optional().ok_or_else(|| {
+            CodecError::Other("optional codec requires an optional data type".to_string())
+        })?;
 
         // Decode sparse data (only valid elements)
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
             let sparse_data = {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-                let fill_value = Self::create_fill_value_for_inner_type(opt);
+                let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
                 self.data_codecs
-                    .decode(encoded_data.into(), &data_shape, opt, &fill_value, options)?
+                    .decode(
+                        encoded_data.into(),
+                        &data_shape,
+                        opt.data_type(),
+                        &fill_value,
+                        options,
+                    )?
                     .into_owned()
             };
 
             // Expand sparse data to dense format (supports nested optional types)
-            Self::expand_to_dense(sparse_data, &mask, opt)?
+            Self::expand_to_dense(sparse_data, &mask, opt.data_type())?
         } else {
             // No valid elements - create empty dense data of the right type/size
-            Self::create_empty_dense_data(&mask, opt)?
+            Self::create_empty_dense_data(&mask, opt.data_type())?
         };
 
         // Return ArrayBytes with mask and dense data
@@ -466,24 +467,22 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
         const HEADER_SIZE: u64 = 16;
 
         // Get the inner data type (unwrap Optional)
-        let DataType::Optional(inner_type) = data_type else {
-            return Err(CodecError::Other(
-                "optional codec requires an optional data type".to_string(),
-            ));
-        };
+        let inner_type = data_type.as_optional().ok_or_else(|| {
+            CodecError::Other("optional codec requires an optional data type".to_string())
+        })?;
 
         // Compute mask representation: bool array with same shape
         let mask_bytes_repr = self.mask_codecs.encoded_representation(
             shape,
-            &DataType::Bool,
+            &crate::array::data_type::bool(),
             &FillValue::from(0u8),
         )?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
-        let fill_value = Self::create_fill_value_for_inner_type(inner_type);
+        let fill_value = Self::create_fill_value_for_inner_type(inner_type.data_type());
         let data_bytes_repr =
             self.data_codecs
-                .encoded_representation(shape, inner_type, &fill_value)?;
+                .encoded_representation(shape, inner_type.data_type(), &fill_value)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
         match (mask_bytes_repr.size(), data_bytes_repr.size()) {
@@ -505,10 +504,11 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 mod tests {
     use super::*;
     use crate::array::{
-        ArrayBytes, ChunkShapeTraits, DataType, NamedDataType,
+        ArrayBytes, ChunkShapeTraits, DataType,
         codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
+        data_type,
+        data_type::DataTypeExt,
     };
-    use crate::registry::ExtensionAliasesDataTypeV3;
 
     #[test]
     fn codec_optional_configuration() {
@@ -519,30 +519,25 @@ mod tests {
                 }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )
-        .unwrap();
-        let configuration = codec.configuration(OPTIONAL, &CodecMetadataOptions::default());
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let configuration =
+            codec.configuration(OptionalCodec::IDENTIFIER, &CodecMetadataOptions::default());
         assert!(configuration.is_some());
     }
 
     /// Helper to build codec config recursively for nested optional types
     fn build_codec_config_for_type(data_type: &DataType) -> String {
-        match data_type {
-            DataType::Optional(opt) if opt.is_optional() => {
+        if let Some(opt) = data_type.as_optional() {
+            if opt.data_type().is_optional() {
                 // Nested optional - need another optional codec
-                let inner_config = build_codec_config_for_type(opt);
+                let inner_config = build_codec_config_for_type(opt.data_type());
                 format!(
-                    r#"[{{"name": "optional", "configuration": {{
+                    r#"[{{"name": "zarrs.optional", "configuration": {{
                         "mask_codecs": [{{"name": "packbits", "configuration": {{}}}}],
-                        "data_codecs": {}
-                    }}}}]"#,
-                    inner_config
+                        "data_codecs": {inner_config}
+                    }}}}]"#
                 )
-            }
-            DataType::Optional(opt) => {
+            } else {
                 // Non-nested optional inner type - use bytes codec
                 if opt.fixed_size().unwrap() > 1 {
                     r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
@@ -550,30 +545,28 @@ mod tests {
                     r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
                 }
             }
-            _ => {
-                // Non-optional type
-                if data_type.fixed_size().unwrap() > 1 {
-                    r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
-                } else {
-                    r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
-                }
+        } else {
+            // Non-optional type
+            if data_type.fixed_size().unwrap() > 1 {
+                r#"[{"name": "bytes", "configuration": {"endian": "little"}}]"#.to_string()
+            } else {
+                r#"[{"name": "bytes", "configuration": {}}]"#.to_string()
             }
         }
     }
 
-    /// Helper to build nested ArrayBytes for testing
+    /// Helper to build nested `ArrayBytes` for testing
     fn build_nested_array_bytes(data_type: &DataType, num_elements: usize) -> ArrayBytes<'_> {
-        match data_type {
-            DataType::Optional(opt) if opt.is_optional() => {
+        if let Some(opt) = data_type.as_optional() {
+            if opt.data_type().is_optional() {
                 // Build nested optional structure
-                let inner_array_bytes = build_nested_array_bytes(opt, num_elements);
+                let inner_array_bytes = build_nested_array_bytes(opt.data_type(), num_elements);
 
                 // Create outer mask (every third element is invalid at this level)
                 let outer_mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 3 != 0)).collect();
 
                 inner_array_bytes.with_optional_mask(outer_mask)
-            }
-            DataType::Optional(opt) => {
+            } else {
                 // Innermost optional level - create data and mask
                 let inner_size = opt.fixed_size().unwrap();
                 let mut mask = Vec::new();
@@ -597,15 +590,14 @@ mod tests {
 
                 ArrayBytes::new_flen(data).with_optional_mask(mask)
             }
-            _ => {
-                // Non-optional type - shouldn't reach here in these tests
-                panic!("Expected Optional data type");
-            }
+        } else {
+            // Non-optional type - shouldn't reach here in these tests
+            panic!("Expected Optional data type");
         }
     }
 
     fn codec_optional_round_trip_impl(
-        data_type: NamedDataType,
+        data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         use std::num::NonZeroU64;
@@ -621,15 +613,11 @@ mod tests {
         let codec_configuration: OptionalCodecConfiguration = serde_json::from_str(&format!(
             r#"{{
                     "mask_codecs": [{{"name": "packbits", "configuration": {{}}}}],
-                    "data_codecs": {}
-                }}"#,
-            data_codecs_config
+                    "data_codecs": {data_codecs_config}
+                }}"#
         ))
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )?;
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration)?;
 
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
@@ -657,16 +645,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_null() {
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::uint8().to_named().into_optional().into(),
             FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::uint8().to_named().into_optional().into(),
             FillValue::new_optional_null(), // null/missing value: [0]
         )
         .unwrap();
@@ -675,16 +659,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_nonnull() {
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::uint8().to_named().into_optional().into(),
             FillValue::from(Some(0u8)),
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::uint8().to_named().into_optional().into(),
             FillValue::from(0u8).into_optional(),
         )
         .unwrap();
@@ -693,9 +673,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_i32() {
         codec_optional_round_trip_impl(
-            DataType::Int32
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::int32().to_named().into_optional().into(),
             FillValue::from(None::<i32>), // null/missing value: [0]
         )
         .unwrap();
@@ -704,9 +682,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_f32() {
         codec_optional_round_trip_impl(
-            DataType::Float32
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::float32().to_named().into_optional().into(),
             FillValue::from(None::<f32>), // null/missing value: [0]
         )
         .unwrap();
@@ -716,10 +692,11 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level() {
         // Test Option<Option<u8>> with null fill value
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::uint8()
+                .to_named()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             FillValue::from(None::<Option<u8>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -729,10 +706,11 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level_i32() {
         // Test Option<Option<i32>> with null fill value
         codec_optional_round_trip_impl(
-            DataType::Int32
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::int32()
+                .to_named()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             FillValue::from(None::<Option<i32>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -742,11 +720,12 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level() {
         // Test Option<Option<Option<u8>>> with null fill value
         codec_optional_round_trip_impl(
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::uint8()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             FillValue::from(None::<Option<Option<u8>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -756,11 +735,12 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_none() {
         // Test Option<Option<Option<f64>>> with null fill value
         codec_optional_round_trip_impl(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::float64()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             FillValue::from(None::<Option<Option<f64>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -769,11 +749,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none() {
         codec_optional_round_trip_impl(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::float64()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             Some(Some(None::<f64>)),
         )
         .unwrap();
@@ -782,11 +763,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none_alt() {
         codec_optional_round_trip_impl(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::float64()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             FillValue::new_optional_null()
                 .into_optional()
                 .into_optional(), // null/missing value for outer optional: [0]
@@ -797,11 +779,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_none() {
         codec_optional_round_trip_impl(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::float64()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             Some(None::<Option<f64>>),
         )
         .unwrap();
@@ -810,11 +793,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_nested_3_level_f64_some_some_some() {
         codec_optional_round_trip_impl(
-            DataType::Float64
-                .into_named(&ExtensionAliasesDataTypeV3::default())
+            data_type::float64()
+                .to_named()
                 .into_optional()
                 .into_optional()
-                .into_optional(),
+                .into_optional()
+                .into(),
             Some(Some(Some(0.0f64))),
         )
         .unwrap();
@@ -825,10 +809,11 @@ mod tests {
         use std::num::NonZeroU64;
 
         // Test Option<Option<u8>> with explicit mask construction
-        let data_type = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
+        let data_type: DataType = data_type::uint8()
+            .to_named()
             .into_optional()
-            .into_optional();
+            .into_optional()
+            .into();
         let fill_value = FillValue::from(None::<Option<u8>>);
         let chunk_shape = vec![NonZeroU64::new(8).unwrap()];
 
@@ -855,7 +840,7 @@ mod tests {
             r#"{
                 "mask_codecs": [{"name": "packbits", "configuration": {}}],
                 "data_codecs": [{
-                    "name": "optional",
+                    "name": "zarrs.optional",
                     "configuration": {
                         "mask_codecs": [{"name": "packbits", "configuration": {}}],
                         "data_codecs": [{"name": "bytes", "configuration": {}}]
@@ -864,11 +849,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )
-        .unwrap();
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
             .encode(
@@ -918,9 +899,7 @@ mod tests {
 
         // Test Option<u8> where the u8 has a non-zero fill value
         // This represents the outer optional wrapping a non-optional type
-        let data_type = DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional();
+        let data_type: DataType = data_type::uint8().to_named().into_optional().into();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         // Use a non-null fill value of 255 for missing elements
         let fill_value = FillValue::new(vec![255u8]);
@@ -945,11 +924,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )
-        .unwrap();
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
             .encode(
@@ -999,11 +974,12 @@ mod tests {
         use std::num::NonZeroU64;
 
         // Test Option<Option<Option<u16>>> with explicit mask construction
-        let data_type = DataType::UInt16
-            .into_named(&ExtensionAliasesDataTypeV3::default())
+        let data_type: DataType = data_type::uint16()
+            .to_named()
             .into_optional()
             .into_optional()
-            .into_optional();
+            .into_optional()
+            .into();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         let fill_value = FillValue::from(None::<Option<Option<u16>>>);
 
@@ -1038,11 +1014,11 @@ mod tests {
             r#"{
                 "mask_codecs": [{"name": "packbits", "configuration": {}}],
                 "data_codecs": [{
-                    "name": "optional",
+                    "name": "zarrs.optional",
                     "configuration": {
                         "mask_codecs": [{"name": "packbits", "configuration": {}}],
                         "data_codecs": [{
-                            "name": "optional",
+                            "name": "zarrs.optional",
                             "configuration": {
                                 "mask_codecs": [{"name": "packbits", "configuration": {}}],
                                 "data_codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
@@ -1053,11 +1029,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )
-        .unwrap();
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
             .encode(
@@ -1112,9 +1084,7 @@ mod tests {
         use std::num::NonZeroU64;
 
         // Test Option<f32> with a specific fill value (e.g., NaN)
-        let data_type = DataType::Float32
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional();
+        let data_type: DataType = data_type::float32().to_named().into_optional().into();
         let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
         let fill_value = FillValue::from(Some(f32::NAN));
 
@@ -1138,11 +1108,7 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(
-            &codec_configuration,
-            &ExtensionAliasesCodecV3::default(),
-        )
-        .unwrap();
+        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
 
         let encoded = codec
             .encode(

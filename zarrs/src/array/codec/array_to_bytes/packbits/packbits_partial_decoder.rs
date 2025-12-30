@@ -7,7 +7,7 @@ use async_generic::async_generic;
 use num::Integer;
 use std::num::NonZeroU64;
 
-use super::DataTypeExtensionPackBitsCodecComponents;
+use super::PackBitsCodecComponents;
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::{
@@ -16,6 +16,7 @@ use crate::array::{
         ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
         array_to_bytes::packbits::{div_rem_8bit, pack_bits_components},
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use crate::storage::{StorageError, byte_range::ByteRange};
@@ -46,7 +47,7 @@ fn partial_decode<'a>(
     indexer: &dyn crate::indexer::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    let DataTypeExtensionPackBitsCodecComponents {
+    let PackBitsCodecComponents {
         component_size_bits,
         num_components,
         sign_extension,

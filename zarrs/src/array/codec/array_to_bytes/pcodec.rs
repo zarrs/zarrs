@@ -42,13 +42,12 @@ mod pcodec_codec;
 use std::sync::Arc;
 
 pub use pcodec_codec::PcodecCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use crate::registry::codec::PCODEC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -57,65 +56,100 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(PCODEC, is_identifier_pcodec, create_codec_pcodec)
+    CodecPlugin::new(PcodecCodec::IDENTIFIER, PcodecCodec::matches_name, PcodecCodec::default_name, create_codec_pcodec)
 }
+zarrs_plugin::impl_extension_aliases!(PcodecCodec, "pcodec",
+    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"]
+);
 
-fn is_identifier_pcodec(identifier: &str) -> bool {
-    identifier == PCODEC
-}
-
-pub(crate) fn create_codec_pcodec(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(PCODEC, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_pcodec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(PcodecCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
-macro_rules! unsupported_dtypes {
-    // TODO: Add support for all int/float types?
-    // TODO: Add support for extensions?
-    () => {
-        DataType::Bool
-            | DataType::Int2
-            | DataType::Int4
-            | DataType::Int8
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::UInt8
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::BFloat16
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::RawBits(_)
-            | DataType::String
-            | DataType::Bytes
-            | DataType::Optional(_)
-            | DataType::Extension(_)
+/// The pcodec element type for dispatching to the pcodec library.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PcodecElementType {
+    /// 16-bit unsigned integer
+    U16,
+    /// 32-bit unsigned integer
+    U32,
+    /// 64-bit unsigned integer
+    U64,
+    /// 16-bit signed integer
+    I16,
+    /// 32-bit signed integer
+    I32,
+    /// 64-bit signed integer
+    I64,
+    /// 16-bit floating point
+    F16,
+    /// 32-bit floating point
+    F32,
+    /// 64-bit floating point
+    F64,
+}
+
+impl PcodecElementType {
+    /// Returns the element size in bytes.
+    #[must_use]
+    pub const fn size(&self) -> usize {
+        match self {
+            Self::U16 | Self::I16 | Self::F16 => 2,
+            Self::U32 | Self::I32 | Self::F32 => 4,
+            Self::U64 | Self::I64 | Self::F64 => 8,
+        }
+    }
+}
+
+/// Traits for a data type supporting the `pcodec` codec.
+///
+/// The pcodec codec losslessly compresses numerical data with high compression ratio.
+pub trait PcodecCodecDataTypeTraits {
+    /// Returns the pcodec element type for this data type.
+    fn pcodec_element_type(&self) -> PcodecElementType;
+
+    /// Returns the number of elements per data type element.
+    fn pcodec_elements_per_element(&self) -> usize;
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(Pcodec, PcodecCodecDataTypeTraits);
+
+/// Macro to implement `PcodecCodecDataTypeTraits` for data types and register support.
+///
+/// # Usage
+/// ```ignore
+/// impl_pcodec_codec!(Int32DataType, I32, 1);
+/// impl_pcodec_codec!(Float32DataType, F32, 1);
+/// impl_pcodec_codec!(Complex64DataType, F32, 2);
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _impl_pcodec_codec {
+    ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
+        impl $crate::array::codec::PcodecCodecDataTypeTraits for $marker {
+            fn pcodec_element_type(&self) -> $crate::array::codec::PcodecElementType {
+                $crate::array::codec::PcodecElementType::$element_type
+            }
+            fn pcodec_elements_per_element(&self) -> usize {
+                $elements_per_element
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::PcodecPlugin,
+            $crate::array::codec::PcodecCodecDataTypeTraits
+        );
     };
 }
-use unsupported_dtypes;
+
+#[doc(inline)]
+pub use _impl_pcodec_codec as impl_pcodec_codec;
 
 #[cfg(test)]
 mod tests {
@@ -126,6 +160,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
+            data_type,
+            data_type::DataTypeExt,
             transmute_to_bytes_vec,
         },
         array_subset::ArraySubset,
@@ -184,7 +220,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::UInt16,
+            data_type::uint16(),
             0u16,
         )
         .unwrap();
@@ -195,7 +231,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::UInt32,
+            data_type::uint32(),
             0u32,
         )
         .unwrap();
@@ -206,7 +242,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::UInt64,
+            data_type::uint64(),
             0u64,
         )
         .unwrap();
@@ -217,7 +253,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Int16,
+            data_type::int16(),
             0i16,
         )
         .unwrap();
@@ -228,7 +264,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Int32,
+            data_type::int32(),
             0i32,
         )
         .unwrap();
@@ -239,7 +275,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Int64,
+            data_type::int64(),
             0i64,
         )
         .unwrap();
@@ -250,7 +286,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Float16,
+            data_type::float16(),
             half::f16::from_f32(0.0),
         )
         .unwrap();
@@ -261,7 +297,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Float32,
+            data_type::float32(),
             0f32,
         )
         .unwrap();
@@ -272,7 +308,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Float64,
+            data_type::float64(),
             0f64,
         )
         .unwrap();
@@ -283,7 +319,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::ComplexFloat16,
+            data_type::complex_float16(),
             num::complex::Complex::<half::f16>::new(
                 half::f16::from_f32(0f32),
                 half::f16::from_f32(0f32),
@@ -297,7 +333,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::ComplexFloat32,
+            data_type::complex_float32(),
             num::complex::Complex::<f32>::new(0f32, 0f32),
         )
         .unwrap();
@@ -308,7 +344,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::ComplexFloat64,
+            data_type::complex_float64(),
             num::complex::Complex::<f64>::new(0f64, 0f64),
         )
         .unwrap();
@@ -319,7 +355,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Complex64,
+            data_type::complex64(),
             num::complex::Complex32::new(0f32, 0f32),
         )
         .unwrap();
@@ -330,7 +366,7 @@ mod tests {
         codec_pcodec_round_trip_impl(
             &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                 .unwrap(),
-            DataType::Complex128,
+            data_type::complex128(),
             num::complex::Complex64::new(0f64, 0f64),
         )
         .unwrap();
@@ -342,7 +378,7 @@ mod tests {
             codec_pcodec_round_trip_impl(
                 &PcodecCodec::new_with_configuration(&serde_json::from_str(JSON_VALID).unwrap())
                     .unwrap(),
-                DataType::UInt8,
+                data_type::uint8(),
                 0u8,
             )
             .is_err()
@@ -352,7 +388,7 @@ mod tests {
     #[test]
     fn codec_pcodec_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt32;
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
@@ -391,8 +427,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u32> = vec![4, 8];
         assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);
@@ -402,7 +440,7 @@ mod tests {
     #[tokio::test]
     async fn codec_pcodec_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt32;
+        let data_type = data_type::uint32();
         let fill_value = FillValue::from(0u32);
         let elements: Vec<u32> = (0..chunk_shape.num_elements_usize() as u32).collect();
         let bytes = transmute_to_bytes_vec(elements);
@@ -442,8 +480,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u32> = vec![4, 8];
         assert_eq!(transmute_to_bytes_vec(answer), decoded_partial_chunk);

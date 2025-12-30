@@ -7,7 +7,7 @@ use std::{
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -20,7 +20,6 @@ use super::{
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::metadata::Configuration;
-use crate::registry::codec::SHARDING;
 use crate::{
     array::{
         ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkShape,
@@ -35,6 +34,7 @@ use crate::{
             RecommendedConcurrency,
         },
         concurrency::calc_concurrency_outer_inner,
+        data_type::DataTypeExt,
         transmute_to_bytes_vec, unravel_index,
     },
     array_subset::ArraySubset,
@@ -78,18 +78,12 @@ impl ShardingCodec {
     /// Returns [`PluginCreateError`] if there is a configuration issue.
     pub fn new_with_configuration(
         configuration: &ShardingCodecConfiguration,
-        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             ShardingCodecConfiguration::V1(configuration) => {
-                let inner_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.codecs,
-                    codec_aliases,
-                )?);
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
+                let inner_codecs = Arc::new(CodecChain::from_metadata(&configuration.codecs)?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
                 Ok(Self::new(
                     configuration.chunk_shape.clone(),
                     inner_codecs,
@@ -105,8 +99,8 @@ impl ShardingCodec {
 }
 
 impl CodecTraits for ShardingCodec {
-    fn identifier(&self) -> &str {
-        SHARDING
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -232,7 +226,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::SHARDING.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -374,10 +368,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         // Check if compaction is needed (no-op optimization)
         let mut needs_compaction = false;
         let mut chunks_size = 0;
-        for chunk in shard_index.chunks_exact(2) {
-            let offset = chunk[0];
-            let size = chunk[1];
-
+        for &[offset, size] in shard_index.as_chunks::<2>().0 {
             if offset != u64::MAX && size != u64::MAX {
                 chunks_size += size;
             }
@@ -392,7 +383,9 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
 
         // Calculate compact size
         let data_size: usize = shard_index
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .filter(|chunk| chunk[0] != u64::MAX)
             .map(|chunk| usize::try_from(chunk[1]).unwrap())
             .sum();
@@ -408,10 +401,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             ShardingIndexLocation::End => 0,
         };
 
-        for (i, chunk) in shard_index.chunks_exact(2).enumerate() {
-            let old_offset = chunk[0];
-            let size = chunk[1];
-
+        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
             if old_offset != u64::MAX && size != u64::MAX {
                 let old_offset_usize = usize::try_from(old_offset).unwrap();
                 let size_usize = usize::try_from(size).unwrap();
@@ -441,7 +431,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         let encoded_index = self.index_codecs.encode(
             ArrayBytes::from(index_bytes),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;
@@ -475,7 +465,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             ArrayBytesDecodeIntoTarget::Optional(..) => {
                 return Err(CodecError::UnsupportedDataType(
                     data_type.clone(),
-                    zarrs_registry::codec::SHARDING.to_string(),
+                    Self::IDENTIFIER.to_string(),
                 ));
             }
         };
@@ -805,7 +795,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             shard_index_bytes.into(),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             &options,
         )?;
@@ -955,7 +945,7 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
             &index_shape,
-            &DataType::UInt64,
+            &crate::array::data_type::uint64(),
             &FillValue::from(u64::MAX),
             options,
         )?;

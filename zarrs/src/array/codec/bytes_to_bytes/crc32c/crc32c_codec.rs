@@ -15,7 +15,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::CRC32C;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -36,8 +36,8 @@ impl Crc32cCodec {
 }
 
 impl CodecTraits for Crc32cCodec {
-    fn identifier(&self) -> &str {
-        CRC32C
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

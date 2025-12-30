@@ -34,35 +34,27 @@ mod zstd_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
 pub use zstd_codec::ZstdCodec;
 
 pub use crate::metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
 };
-use crate::registry::codec::ZSTD;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
 };
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(ZSTD, is_identifier_zstd, create_codec_zstd)
+    CodecPlugin::new(ZstdCodec::IDENTIFIER, ZstdCodec::matches_name, ZstdCodec::default_name, create_codec_zstd)
 }
+zarrs_plugin::impl_extension_aliases!(ZstdCodec, "zstd");
 
-fn is_identifier_zstd(identifier: &str) -> bool {
-    identifier == ZSTD
-}
-
-pub(crate) fn create_codec_zstd(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZSTD, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZstdCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ZstdCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
@@ -141,9 +133,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -188,9 +182,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

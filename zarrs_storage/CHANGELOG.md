@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Replace use of removed `doc_auto_cfg` feature with `doc_cfg` (fixes `docs.rs` build)
+- Remove unused `parking_lot` dependency
 
 ## [0.4.0] - 2025-09-18
 

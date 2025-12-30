@@ -17,6 +17,7 @@ use zarrs::{
             ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
         },
+        data_type,
     },
     array_subset::ArraySubset,
     indexer::{IncompatibleIndexerError, Indexer},
@@ -74,7 +75,7 @@ fn indexer_basic<T: Indexer>(
     )); // OOB
     let subset = ArraySubset::new_with_shape(vec![4, 4]);
     assert!(matches!(
-        subset.extract_elements(&vec![0u8, 4 * 4], &[5, 5]),
+        subset.extract_elements(&[0u8, 4 * 4], &[5, 5]),
         Err(IncompatibleIndexerError::IncompatibleLength(_, _))
     ));
 }
@@ -337,7 +338,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     );
 
     // TODO: Async partial encoder
-    let output = Arc::new(Mutex::new(Some((&encoded_chunk).to_vec())));
+    let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
     let partial_encoder = codec
         .clone()
         .partial_encoder(
@@ -387,8 +388,7 @@ async fn async_indexer_array_subsets_fixed() {
         NonZeroU64::new(1).unwrap(),
         NonZeroU64::new(4).unwrap(),
         NonZeroU64::new(4).unwrap(),
-    ]
-    .into();
+    ];
     let indexer = [
         ArraySubset::new_with_ranges(&[0..1, 1..4, 2..4]),
         ArraySubset::new_with_ranges(&[0..1, 0..1, 0..4]),
@@ -430,8 +430,8 @@ async fn async_indexer_array_subsets_fixed() {
                     Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
                 ],
                 ShardingCodecBuilder::new(
-                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
-                    &DataType::Float32,
+                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()],
+                    &data_type::float32(),
                 )
                 .build_arc(),
                 vec![],
@@ -446,7 +446,7 @@ async fn async_indexer_array_subsets_fixed() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                DataType::Float32,
+                data_type::float32(),
                 &elements
             ),
             expected
@@ -457,7 +457,7 @@ async fn async_indexer_array_subsets_fixed() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                DataType::Float32,
+                data_type::float32(),
                 &elements
             )
             .await,
@@ -470,7 +470,7 @@ async fn async_indexer_array_subsets_fixed() {
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    DataType::Float32,
+                    data_type::float32(),
                     &elements,
                 ),
                 expected_partial_encode
@@ -486,8 +486,7 @@ async fn async_indexer_array_subsets_variable() {
         NonZeroU64::new(1).unwrap(),
         NonZeroU64::new(4).unwrap(),
         NonZeroU64::new(4).unwrap(),
-    ]
-    .into();
+    ];
     let indexer = [
         ArraySubset::new_with_ranges(&[0..1, 1..4, 2..4]),
         ArraySubset::new_with_ranges(&[0..1, 0..1, 0..4]),
@@ -517,7 +516,7 @@ async fn async_indexer_array_subsets_variable() {
         "60.0", "70.0", "100.0", "110.0", "140.0", "150.0", "0.0", "10.0", "20.0", "30.0",
     ]
     .into_iter()
-    .map(|s| s.to_string())
+    .map(std::string::ToString::to_string)
     .collect::<Vec<_>>();
     let expected_partial_encode = vec![
         "0.0",
@@ -559,8 +558,8 @@ async fn async_indexer_array_subsets_variable() {
                     Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap())),
                 ],
                 ShardingCodecBuilder::new(
-                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()].into(),
-                    &DataType::String,
+                    vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(2).unwrap()],
+                    &data_type::string(),
                 )
                 .array_to_bytes_codec(Arc::new(VlenCodec::default()))
                 .build_arc(),
@@ -576,7 +575,7 @@ async fn async_indexer_array_subsets_variable() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                DataType::String,
+                data_type::string(),
                 &elements
             ),
             expected
@@ -586,7 +585,7 @@ async fn async_indexer_array_subsets_variable() {
                 codec.clone(),
                 &shape,
                 &indexer,
-                DataType::String,
+                data_type::string(),
                 &elements
             )
             .await,
@@ -599,7 +598,7 @@ async fn async_indexer_array_subsets_variable() {
                     &shape,
                     &indexer,
                     &elements_partial_encode,
-                    DataType::String,
+                    data_type::string(),
                     &elements
                 ),
                 expected_partial_encode

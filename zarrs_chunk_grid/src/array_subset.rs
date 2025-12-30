@@ -575,8 +575,8 @@ mod tests {
                 .unwrap()
                 .into_iter()
                 .next(),
-            Some(4 * 1 + 3 * 7 * 1)
-        )
+            Some(4 + (3 * 7))
+        );
     }
 
     #[test]

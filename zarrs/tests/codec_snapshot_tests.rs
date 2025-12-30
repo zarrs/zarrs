@@ -5,26 +5,32 @@
 //!
 //! Run with: `cargo test --all-features -p zarrs codec_snapshot_tests`
 //! Update snapshots: `UPDATE_SNAPSHOTS=1 cargo test --all-features -p zarrs codec_snapshot_tests`
+//! Add newly supported: `ADD_SNAPSHOTS=1 cargo test --all-features -p zarrs codec_snapshot_tests`
+//!
+//! The `ADD_SNAPSHOTS` mode only permits adding new snapshots for combinations that were
+//! previously marked as unsupported but now succeed. It will not update existing snapshots.
 
 #![allow(missing_docs)]
 
 use half::{bf16, f16};
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fs;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
 use zarrs::array::codec::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
 };
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
-    NamedDataType,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, DataTypeExt,
+    FillValue, data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_filesystem::FilesystemStore;
-use zarrs_registry::{ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV3};
+use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
 // =============================================================================
 // Core Types
@@ -49,7 +55,7 @@ pub enum CodecTestResult {
 #[derive(Clone)]
 pub struct TestConfig {
     /// Data type to test
-    pub data_type: NamedDataType,
+    pub data_type: DataType,
     /// Fill value for the array
     pub fill_value: FillValue,
     /// Array shape
@@ -73,7 +79,7 @@ pub struct TestConfig {
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
-            data_type: DataType::UInt8.into_named(&ExtensionAliasesDataTypeV3::default()),
+            data_type: data_type::uint8(),
             fill_value: 0u8.into(),
             array_shape: vec![8, 24],
             chunk_shape: vec![4, 6],
@@ -92,183 +98,136 @@ impl Default for TestConfig {
 // =============================================================================
 
 /// All data types to test with their fill values and description
-pub fn all_data_types() -> Vec<(NamedDataType, FillValue, &'static str)> {
-    let a = ExtensionAliasesDataTypeV3::default();
+#[must_use]
+pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
     vec![
         // Core integers
-        (DataType::Bool.into_named(&a), false.into(), "fill_false"),
-        (DataType::Int8.into_named(&a), 0i8.into(), "fill_0"),
-        (DataType::Int16.into_named(&a), 0i16.into(), "fill_0"),
-        (DataType::Int32.into_named(&a), 0i32.into(), "fill_0"),
-        (DataType::Int64.into_named(&a), 0i64.into(), "fill_0"),
-        (DataType::UInt8.into_named(&a), 0u8.into(), "fill_0"),
-        (DataType::UInt16.into_named(&a), 0u16.into(), "fill_0"),
-        (DataType::UInt32.into_named(&a), 0u32.into(), "fill_0"),
-        (DataType::UInt64.into_named(&a), 0u64.into(), "fill_0"),
+        (data_type::bool(), false.into(), "fill_false"),
+        (data_type::int8(), 0i8.into(), "fill_0"),
+        (data_type::int16(), 0i16.into(), "fill_0"),
+        (data_type::int32(), 0i32.into(), "fill_0"),
+        (data_type::int64(), 0i64.into(), "fill_0"),
+        (data_type::uint8(), 0u8.into(), "fill_0"),
+        (data_type::uint16(), 0u16.into(), "fill_0"),
+        (data_type::uint32(), 0u32.into(), "fill_0"),
+        (data_type::uint64(), 0u64.into(), "fill_0"),
         // Sub-byte integers (fill value should be 1 byte packed value)
-        (
-            DataType::Int2.into_named(&a),
-            FillValue::new(vec![0u8]),
-            "fill_0",
-        ),
-        (
-            DataType::Int4.into_named(&a),
-            FillValue::new(vec![0u8]),
-            "fill_0",
-        ),
-        (
-            DataType::UInt2.into_named(&a),
-            FillValue::new(vec![0u8]),
-            "fill_0",
-        ),
-        (
-            DataType::UInt4.into_named(&a),
-            FillValue::new(vec![0u8]),
-            "fill_0",
-        ),
+        (data_type::int2(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::int4(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::uint2(), FillValue::new(vec![0u8]), "fill_0"),
+        (data_type::uint4(), FillValue::new(vec![0u8]), "fill_0"),
         // Half-precision floats (2 bytes)
         (
-            DataType::BFloat16.into_named(&a),
+            data_type::bfloat16(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
-        (
-            DataType::Float16.into_named(&a),
-            FillValue::new(vec![0u8; 2]),
-            "fill_0",
-        ),
+        (data_type::float16(), FillValue::new(vec![0u8; 2]), "fill_0"),
         // Float8 variants (1 byte each)
         (
-            DataType::Float8E4M3.into_named(&a),
+            data_type::float8_e4m3(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
         (
-            DataType::Float8E5M2.into_named(&a),
+            data_type::float8_e5m2(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
         // Standard floats
-        (DataType::Float32.into_named(&a), 0.0f32.into(), "fill_0"),
-        (
-            DataType::Float32.into_named(&a),
-            f32::NAN.into(),
-            "fill_nan",
-        ),
-        (DataType::Float64.into_named(&a), 0.0f64.into(), "fill_0"),
-        (
-            DataType::Float64.into_named(&a),
-            f64::NAN.into(),
-            "fill_nan",
-        ),
+        (data_type::float32(), 0.0f32.into(), "fill_0"),
+        (data_type::float32(), f32::NAN.into(), "fill_nan"),
+        (data_type::float64(), 0.0f64.into(), "fill_0"),
+        (data_type::float64(), f64::NAN.into(), "fill_nan"),
         // Complex half-precision (2 bytes each = 4 bytes total)
         (
-            DataType::ComplexBFloat16.into_named(&a),
+            data_type::complex_bfloat16(),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat16.into_named(&a),
+            data_type::complex_float16(),
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
         // Complex float8 (1 byte each = 2 bytes total)
         (
-            DataType::ComplexFloat8E4M3.into_named(&a),
+            data_type::complex_float8_e4m3(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat8E5M2.into_named(&a),
+            data_type::complex_float8_e5m2(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         // Complex standard (8 and 16 bytes)
         (
-            DataType::ComplexFloat32.into_named(&a),
+            data_type::complex_float32(),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            DataType::ComplexFloat64.into_named(&a),
+            data_type::complex_float64(),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
         (
-            DataType::Complex64.into_named(&a),
+            data_type::complex64(),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            DataType::Complex128.into_named(&a),
+            data_type::complex128(),
             FillValue::new(vec![0u8; 16]),
             "fill_0",
         ),
         // NumPy datetime/timedelta (8 bytes - stored as i64)
         (
-            DataType::NumpyDateTime64 {
-                unit: NumpyTimeUnit::Second,
-                scale_factor: std::num::NonZeroU32::new(1).unwrap(),
-            }
-            .into_named(&a),
+            data_type::numpy_datetime64(
+                NumpyTimeUnit::Second,
+                std::num::NonZeroU32::new(1).unwrap(),
+            ),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         (
-            DataType::NumpyTimeDelta64 {
-                unit: NumpyTimeUnit::Second,
-                scale_factor: std::num::NonZeroU32::new(1).unwrap(),
-            }
-            .into_named(&ExtensionAliasesDataTypeV3::default()),
+            data_type::numpy_timedelta64(
+                NumpyTimeUnit::Second,
+                std::num::NonZeroU32::new(1).unwrap(),
+            ),
             FillValue::new(vec![0u8; 8]),
             "fill_0",
         ),
         // Variable-length
-        (
-            DataType::String.into_named(&ExtensionAliasesDataTypeV3::default()),
-            "".into(),
-            "fill_empty",
-        ),
-        (
-            DataType::Bytes.into_named(&ExtensionAliasesDataTypeV3::default()),
-            FillValue::new(vec![]),
-            "fill_empty",
-        ),
+        (data_type::string(), "".into(), "fill_empty"),
+        (data_type::bytes(), FillValue::new(vec![]), "fill_empty"),
         // RawBits
         (
-            DataType::RawBits(3).into_named(&ExtensionAliasesDataTypeV3::default()),
+            data_type::raw_bits(3),
             FillValue::new(vec![0, 0, 0]),
             "fill_zeros",
         ),
         // Optional types
         (
-            DataType::UInt8
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::uint8().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         (
-            DataType::Float32
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::float32().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Nested optional (Optional<Optional<Float32>>)
         (
-            DataType::Float32
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional()
-                .into_optional(),
+            data_type::float32().to_optional().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
         // Optional string
         (
-            DataType::String
-                .into_named(&ExtensionAliasesDataTypeV3::default())
-                .into_optional(),
+            data_type::string().to_optional(),
             FillValue::new_optional_null(),
             "fill_null",
         ),
@@ -281,12 +240,12 @@ pub fn all_data_types() -> Vec<(NamedDataType, FillValue, &'static str)> {
 
 /// Generate deterministic fixed-length test data bytes for a given data type
 fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
-    match data_type {
-        DataType::Bool => (0..num_elements).map(|i| (i % 2) as u8).collect(),
+    match data_type.identifier() {
+        data_type::BoolDataType::IDENTIFIER => (0..num_elements).map(|i| (i % 2) as u8).collect(),
 
         // Sub-byte integer types use i8/u8 representation in memory (unpacked)
         // The packbits codec handles packing to sub-byte sizes
-        DataType::Int2 => {
+        data_type::Int2DataType::IDENTIFIER => {
             // Int2 values range from -2 to 1 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -295,13 +254,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-
-        DataType::UInt2 => {
+        data_type::UInt2DataType::IDENTIFIER => {
             // UInt2 values range from 0 to 3 (stored as u8)
             (0..num_elements).map(|i| (i % 4) as u8).collect()
         }
-
-        DataType::Int4 => {
+        data_type::Int4DataType::IDENTIFIER => {
             // Int4 values range from -8 to 7 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -310,65 +267,58 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-
-        DataType::UInt4 => {
+        data_type::UInt4DataType::IDENTIFIER => {
             // UInt4 values range from 0 to 15 (stored as u8)
             (0..num_elements).map(|i| (i % 16) as u8).collect()
         }
 
-        DataType::Int8 => (0..num_elements)
+        // Integer types
+        data_type::Int8DataType::IDENTIFIER => (0..num_elements)
             .map(|i| ((i % 256) as i8).to_ne_bytes()[0])
             .collect(),
-
-        DataType::UInt8 => (0..num_elements).map(|i| (i % 256) as u8).collect(),
-
-        DataType::Int16 => (0..num_elements)
+        data_type::UInt8DataType::IDENTIFIER => {
+            (0..num_elements).map(|i| (i % 256) as u8).collect()
+        }
+        data_type::Int16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i % 65536) as i16).to_ne_bytes())
             .collect(),
-
-        DataType::UInt16 => (0..num_elements)
+        data_type::UInt16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i % 65536) as u16).to_ne_bytes())
             .collect(),
-
-        DataType::Int32 => (0..num_elements)
+        data_type::Int32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i32).to_ne_bytes())
             .collect(),
-
-        DataType::UInt32 => (0..num_elements)
+        data_type::UInt32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as u32).to_ne_bytes())
             .collect(),
-
-        DataType::Int64 => (0..num_elements)
+        data_type::Int64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
-
-        DataType::UInt64 => (0..num_elements)
+        data_type::UInt64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as u64).to_ne_bytes())
             .collect(),
-
-        DataType::BFloat16 => (0..num_elements)
+        data_type::BFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| bf16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
-
-        DataType::Float16 => (0..num_elements)
+        data_type::Float16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| f16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
         // Float8 variants (1 byte each)
-        DataType::Float8E4M3 | DataType::Float8E5M2 => {
+        data_type::Float8E4M3DataType::IDENTIFIER | data_type::Float8E5M2DataType::IDENTIFIER => {
             (0..num_elements).map(|i| (i % 128) as u8).collect()
         }
 
-        DataType::Float32 => (0..num_elements)
+        data_type::Float32DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
-        DataType::Float64 => (0..num_elements)
+        data_type::Float64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| ((i as f64) * 0.5).to_ne_bytes())
             .collect(),
 
         // Complex half-precision (4 bytes total)
-        DataType::ComplexBFloat16 => (0..num_elements)
+        data_type::ComplexBFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = bf16::from_f32((i as f32) * 0.5);
                 let imag = bf16::from_f32((i as f32) * 0.25);
@@ -378,7 +328,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        DataType::ComplexFloat16 => (0..num_elements)
+        data_type::ComplexFloat16DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = f16::from_f32((i as f32) * 0.5);
                 let imag = f16::from_f32((i as f32) * 0.25);
@@ -389,11 +339,13 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // Complex float8 (2 bytes total)
-        DataType::ComplexFloat8E4M3 | DataType::ComplexFloat8E5M2 => (0..num_elements)
+        data_type::ComplexFloat8E4M3DataType::IDENTIFIER
+        | data_type::ComplexFloat8E5M2DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| vec![(i % 128) as u8, ((i + 1) % 128) as u8])
             .collect(),
 
-        DataType::ComplexFloat32 | DataType::Complex64 => (0..num_elements)
+        data_type::ComplexFloat32DataType::IDENTIFIER
+        | data_type::Complex64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f32) * 0.5;
                 let imag = (i as f32) * 0.25;
@@ -403,7 +355,8 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        DataType::ComplexFloat64 | DataType::Complex128 => (0..num_elements)
+        data_type::ComplexFloat64DataType::IDENTIFIER
+        | data_type::Complex128DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f64) * 0.5;
                 let imag = (i as f64) * 0.25;
@@ -414,13 +367,17 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // NumPy datetime/timedelta (8 bytes - stored as i64)
-        DataType::NumpyDateTime64 { .. } | DataType::NumpyTimeDelta64 { .. } => (0..num_elements)
+        data_type::NumpyDateTime64DataType::IDENTIFIER
+        | data_type::NumpyTimeDelta64DataType::IDENTIFIER => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
 
-        DataType::RawBits(size) => (0..num_elements)
-            .flat_map(|i| vec![(i % 256) as u8; *size])
-            .collect(),
+        data_type::RawBitsDataType::IDENTIFIER => {
+            let size = data_type.fixed_size().unwrap();
+            (0..num_elements)
+                .flat_map(|i| vec![(i % 256) as u8; size])
+                .collect()
+        }
 
         // Handle remaining fixed-size types generically
         _ => {
@@ -436,11 +393,13 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
 }
 
 /// Generate deterministic test data for a given data type and element count
-/// Returns ArrayBytes which can be Fixed, Variable, or Optional
+/// Returns `ArrayBytes` which can be Fixed, Variable, or Optional
 pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayBytes<'static> {
-    match data_type {
+    use zarrs::array::data_type;
+
+    match data_type.identifier() {
         // Variable-length String type
-        DataType::String => {
+        data_type::StringDataType::IDENTIFIER => {
             let strings: Vec<String> = (0..num_elements)
                 .map(|i| format!("str_{:04}", i % 10000))
                 .collect();
@@ -458,7 +417,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Variable-length Bytes type
-        DataType::Bytes => {
+        data_type::BytesDataType::IDENTIFIER => {
             let byte_arrays: Vec<Vec<u8>> = (0..num_elements)
                 .map(|i| vec![(i % 256) as u8; (i % 8) + 1])
                 .collect();
@@ -476,12 +435,11 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Optional types - wrap inner data with validity mask
-        DataType::Optional(inner) => {
-            let inner_bytes = generate_test_data(inner, num_elements);
+        data_type::OptionalDataType::IDENTIFIER => {
+            let opt = data_type.as_optional().unwrap();
+            let inner_bytes = generate_test_data(opt.data_type(), num_elements);
             // Create validity mask - every 4th element is null
-            let mask: Vec<u8> = (0..num_elements)
-                .map(|i| if i % 4 == 3 { 0u8 } else { 1u8 })
-                .collect();
+            let mask: Vec<u8> = (0..num_elements).map(|i| u8::from(i % 4 != 3)).collect();
             inner_bytes.with_optional_mask(mask)
         }
 
@@ -495,6 +453,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
 // =============================================================================
 
 /// Get the path to the snapshots directory
+#[must_use]
 pub fn snapshots_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -503,14 +462,16 @@ pub fn snapshots_dir() -> PathBuf {
 }
 
 /// Sanitize a data type name for use in file paths
-pub fn sanitize_data_type_name(data_type: &NamedDataType) -> String {
+pub fn sanitize_data_type_name(data_type: &DataType) -> String {
     // For optional types, use the default name and include the inner type name
-    let name = if let Some(inner) = data_type.optional() {
-        let aliases = ExtensionAliasesDataTypeV3::default();
-        let optional_name = aliases.default_name(zarrs_registry::data_type::OPTIONAL);
-        format!("{}({})", optional_name, sanitize_data_type_name(inner))
+    let name = if let Some(opt) = data_type.as_optional() {
+        format!(
+            "{}({})",
+            OptionalCodec::default_name(ZarrVersions::V3),
+            sanitize_data_type_name(opt.data_type())
+        )
     } else {
-        data_type.name().to_string()
+        data_type.clone().to_named().name().to_string()
     };
     name.chars()
         .map(|c| {
@@ -532,6 +493,7 @@ pub enum CodecCategory {
 }
 
 impl CodecCategory {
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             CodecCategory::BytesToBytes => "b2b",
@@ -551,7 +513,7 @@ fn compute_metadata_checksum(metadata_json: &str) -> String {
 }
 
 /// Snapshot path configuration
-/// Structure: <supported/unsupported>/<chunk_grid>/<data_type>/<category>/<codec>/<checksum>
+/// Structure: <supported/unsupported>/<`chunk_grid`>/<`data_type`>/<category>/<codec>/<checksum>
 #[derive(Clone)]
 pub struct SnapshotPath {
     pub chunk_grid: String,
@@ -563,13 +525,13 @@ pub struct SnapshotPath {
 impl SnapshotPath {
     pub fn new(
         chunk_grid: &str,
-        data_type: &NamedDataType,
+        data_type: &DataType,
         category: CodecCategory,
         codec_name: &str,
         codec_suffix: Option<&str>,
     ) -> Self {
         let codec = match codec_suffix {
-            Some(s) if !s.is_empty() => format!("{}_{}", codec_name, s),
+            Some(s) if !s.is_empty() => format!("{codec_name}({s})"),
             _ => codec_name.to_string(),
         };
         Self {
@@ -581,6 +543,7 @@ impl SnapshotPath {
     }
 
     /// Get the relative path for this snapshot (without supported/unsupported prefix and without ID)
+    #[must_use]
     pub fn relative_path(&self) -> PathBuf {
         PathBuf::from(&self.chunk_grid)
             .join(&self.data_type)
@@ -589,6 +552,7 @@ impl SnapshotPath {
     }
 
     /// Get the full path for a supported snapshot with a checksum ID
+    #[must_use]
     pub fn supported_path(&self, base_dir: &Path, checksum: &str) -> PathBuf {
         base_dir
             .join("supported")
@@ -597,23 +561,26 @@ impl SnapshotPath {
     }
 
     /// Get the full path for an unsupported marker with a checksum ID
+    #[must_use]
     pub fn unsupported_path(&self, base_dir: &Path, checksum: &str) -> PathBuf {
         base_dir
             .join("unsupported")
             .join(self.relative_path())
-            .join(format!("{}.json", checksum))
+            .join(format!("{checksum}.json"))
     }
 
     /// Get the full path for a failure marker with a checksum ID
+    #[must_use]
     pub fn failure_path(&self, base_dir: &Path, checksum: &str) -> PathBuf {
         base_dir
             .join("failure")
             .join(self.relative_path())
-            .join(format!("{}.json", checksum))
+            .join(format!("{checksum}.json"))
     }
 
     /// Find an existing snapshot by checksum
     /// Returns: Some(SnapshotStatus) if found, None if not found
+    #[must_use]
     pub fn find_existing(&self, base_dir: &Path, checksum: &str) -> Option<SnapshotStatus> {
         // Check supported first
         let supported_path = self.supported_path(base_dir, checksum);
@@ -646,8 +613,9 @@ pub enum SnapshotStatus {
 // Test Execution
 // =============================================================================
 
-/// Generate array metadata JSON from a TestConfig (for use in unsupported markers)
+/// Generate array metadata JSON from a `TestConfig` (for use in unsupported markers)
 /// Returns None if the metadata cannot be generated (e.g., codec creation fails)
+#[must_use]
 pub fn generate_array_metadata(config: &TestConfig) -> Option<serde_json::Value> {
     use zarrs::storage::store::MemoryStore;
 
@@ -680,13 +648,14 @@ pub fn generate_array_metadata(config: &TestConfig) -> Option<serde_json::Value>
 }
 
 /// Execute a single codec test
+#[must_use]
 pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult {
     // Create filesystem store at output directory
     let store = match FilesystemStore::new(output_dir) {
         Ok(s) => Arc::new(s),
         Err(e) => {
             return CodecTestResult::Unsupported {
-                reason: format!("Failed to create store: {}", e),
+                reason: format!("Failed to create store: {e}"),
             };
         }
     };
@@ -717,7 +686,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
         Ok(a) => a,
         Err(e) => {
             return CodecTestResult::Unsupported {
-                reason: format!("Array creation failed: {}", e),
+                reason: format!("Array creation failed: {e}"),
             };
         }
     };
@@ -726,7 +695,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     let metadata_options = ArrayMetadataOptions::default().with_include_zarrs_metadata(false);
     if let Err(e) = array.store_metadata_opt(&metadata_options) {
         return CodecTestResult::Unsupported {
-            reason: format!("Metadata storage failed: {}", e),
+            reason: format!("Metadata storage failed: {e}"),
         };
     }
 
@@ -738,7 +707,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     let subset = zarrs::array_subset::ArraySubset::new_with_shape(config.array_shape.clone());
     if let Err(e) = array.store_array_subset(&subset, test_data.clone()) {
         return CodecTestResult::Unsupported {
-            reason: format!("Data storage failed: {}", e),
+            reason: format!("Data storage failed: {e}"),
         };
     }
 
@@ -747,7 +716,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
         Ok(data) => data,
         Err(e) => {
             return CodecTestResult::Unsupported {
-                reason: format!("Round-trip read failed: {}", e),
+                reason: format!("Round-trip read failed: {e}"),
             };
         }
     };
@@ -807,15 +776,15 @@ pub fn verify_snapshot(
     }
 
     let gen_meta = fs::read_to_string(&gen_meta_path)
-        .map_err(|e| format!("Failed to read generated metadata: {}", e))?;
+        .map_err(|e| format!("Failed to read generated metadata: {e}"))?;
     let ref_meta = fs::read_to_string(&ref_meta_path)
-        .map_err(|e| format!("Failed to read reference metadata: {}", e))?;
+        .map_err(|e| format!("Failed to read reference metadata: {e}"))?;
 
     // Parse and compare JSON for better error messages
     let gen_json: serde_json::Value = serde_json::from_str(&gen_meta)
-        .map_err(|e| format!("Failed to parse generated metadata: {}", e))?;
+        .map_err(|e| format!("Failed to parse generated metadata: {e}"))?;
     let ref_json: serde_json::Value = serde_json::from_str(&ref_meta)
-        .map_err(|e| format!("Failed to parse reference metadata: {}", e))?;
+        .map_err(|e| format!("Failed to parse reference metadata: {e}"))?;
 
     if gen_json != ref_json {
         return Err(format!(
@@ -842,8 +811,8 @@ fn compare_directories(gen_dir: &Path, ref_dir: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    for entry in fs::read_dir(ref_dir).map_err(|e| format!("Failed to read dir: {}", e))? {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+    for entry in fs::read_dir(ref_dir).map_err(|e| format!("Failed to read dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let ref_path = entry.path();
         let rel_path = ref_path.strip_prefix(ref_dir).unwrap();
         let gen_path = gen_dir.join(rel_path);
@@ -880,6 +849,16 @@ fn compare_directories(gen_dir: &Path, ref_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Check if we're in update mode (full updates allowed)
+fn update_mode() -> bool {
+    std::env::var("UPDATE_SNAPSHOTS").is_ok()
+}
+
+/// Check if we're in add mode (only add newly supported snapshots)
+fn add_mode() -> bool {
+    std::env::var("ADD_SNAPSHOTS").is_ok()
+}
+
 /// Run a test and verify/update snapshot using new nested directory structure
 pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotPath) {
     let snapshots = snapshots_dir();
@@ -898,7 +877,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         // For unsupported tests, compute checksum from config description
         compute_metadata_checksum(&format!(
             "{}:{}:{}",
-            config.data_type.name(),
+            config.data_type.clone().to_named().name(),
             config.chunk_grid_name,
             snapshot_path.codec
         ))
@@ -929,18 +908,16 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
     match result {
         CodecTestResult::Success => {
             // Verify that chunks were written (test data should never all equal the fill value)
-            if !has_chunks(generated_dir) {
-                panic!(
-                    "Snapshot {} has no chunks. This likely indicates a bug in test data generation \
-                     where all values equal the fill value.",
-                    display_path
-                );
-            }
+            assert!(
+                has_chunks(generated_dir),
+                "Snapshot {display_path} has no chunks. This likely indicates a bug in test data generation \
+                 where all values equal the fill value."
+            );
 
             let reference_dir = snapshot_path.supported_path(&snapshots, &checksum);
 
             // Check if we should update snapshots
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Supported);
 
                 // Update the reference snapshot
@@ -949,7 +926,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                 }
                 fs::create_dir_all(reference_dir.parent().unwrap()).ok();
                 copy_dir_all(generated_dir, &reference_dir).expect("Failed to copy snapshot");
-                println!("Updated snapshot: {}/{}", display_path, checksum);
+                println!("Updated snapshot: {display_path}/{checksum}");
             } else {
                 // Find existing reference
                 match snapshot_path.find_existing(&snapshots, &checksum) {
@@ -959,29 +936,54 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                             verify_snapshot(generated_dir, &reference_dir, config.non_deterministic)
                         {
                             panic!(
-                                "Snapshot verification failed for {}/{}: {}",
-                                display_path, checksum, e
+                                "Snapshot verification failed for {display_path}/{checksum}: {e}"
                             );
                         }
                     }
                     Some(SnapshotStatus::Unsupported) => {
-                        panic!(
-                            "Test {} was previously unsupported but now succeeds. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path
-                        );
+                        // In add mode, promote unsupported to supported
+                        if add_mode() {
+                            cleanup_old_markers(SnapshotStatus::Supported);
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!("Added newly supported snapshot: {display_path}/{checksum}");
+                        } else {
+                            panic!(
+                                "Test {} was previously unsupported but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update.",
+                                display_path
+                            );
+                        }
                     }
                     Some(SnapshotStatus::Failure) => {
-                        panic!(
-                            "Test {} was previously a failure but now succeeds. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path
-                        );
+                        // In add mode, promote failure to supported
+                        if add_mode() {
+                            cleanup_old_markers(SnapshotStatus::Supported);
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!(
+                                "Added newly supported snapshot (was failure): {display_path}/{checksum}"
+                            );
+                        } else {
+                            panic!(
+                                "Test {display_path} was previously a failure but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update."
+                            );
+                        }
                     }
                     None => {
                         // No reference exists - this is a new test
-                        panic!(
-                            "No reference snapshot found for {}/{}. Run with UPDATE_SNAPSHOTS=1 to create it.",
-                            display_path, checksum
-                        );
+                        // In add mode, we also allow adding completely new snapshots
+                        if add_mode() {
+                            fs::create_dir_all(reference_dir.parent().unwrap()).ok();
+                            copy_dir_all(generated_dir, &reference_dir)
+                                .expect("Failed to copy snapshot");
+                            println!("Added new snapshot: {display_path}/{checksum}");
+                        } else {
+                            panic!(
+                                "No reference snapshot found for {display_path}/{checksum}. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to create it."
+                            );
+                        }
                     }
                 }
             }
@@ -989,7 +991,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         CodecTestResult::Unsupported { reason } => {
             let marker_path = snapshot_path.unsupported_path(&snapshots, &checksum);
 
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Unsupported);
 
                 fs::create_dir_all(marker_path.parent().unwrap()).ok();
@@ -1007,7 +1009,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
 
                 fs::write(&marker_path, serde_json::to_string_pretty(&marker).unwrap())
                     .expect("Failed to write unsupported marker");
-                println!("Marked as unsupported: {}/{}", display_path, checksum);
+                println!("Marked as unsupported: {display_path}/{checksum}");
             } else {
                 // Check if this was expected to be unsupported
                 match snapshot_path.find_existing(&snapshots, &checksum) {
@@ -1016,20 +1018,17 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                     }
                     Some(SnapshotStatus::Supported) => {
                         panic!(
-                            "Test {} was previously supported but now unsupported: {}. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path, reason
+                            "Test {display_path} was previously supported but now unsupported: {reason}. Run with UPDATE_SNAPSHOTS=1 to update."
                         );
                     }
                     Some(SnapshotStatus::Failure) => {
                         panic!(
-                            "Test {} was previously a failure but now unsupported: {}. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path, reason
+                            "Test {display_path} was previously a failure but now unsupported: {reason}. Run with UPDATE_SNAPSHOTS=1 to update."
                         );
                     }
                     None => {
                         panic!(
-                            "Test {} is unsupported ({}). Run with UPDATE_SNAPSHOTS=1 to record this.",
-                            display_path, reason
+                            "Test {display_path} is unsupported ({reason}). Run with UPDATE_SNAPSHOTS=1 to record this."
                         );
                     }
                 }
@@ -1038,19 +1037,19 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         CodecTestResult::Failure { reason } => {
             let marker_path = snapshot_path.failure_path(&snapshots, &checksum);
 
-            if std::env::var("UPDATE_SNAPSHOTS").is_ok() {
+            if update_mode() {
                 cleanup_old_markers(SnapshotStatus::Failure);
 
                 fs::create_dir_all(marker_path.parent().unwrap()).ok();
                 let marker = serde_json::json!({
                     "status": "failure",
                     "reason": reason,
-                    "data_type": config.data_type.name(),
+                    "data_type": config.data_type.clone().to_named().name(),
                     "chunk_grid": config.chunk_grid_name,
                 });
                 fs::write(&marker_path, serde_json::to_string_pretty(&marker).unwrap())
                     .expect("Failed to write failure marker");
-                println!("Marked as failure: {}/{}", display_path, checksum);
+                println!("Marked as failure: {display_path}/{checksum}");
             } else {
                 // Check if this was expected to be a failure
                 match snapshot_path.find_existing(&snapshots, &checksum) {
@@ -1059,20 +1058,17 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                     }
                     Some(SnapshotStatus::Supported) => {
                         panic!(
-                            "Test {} was previously supported but now fails: {}. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path, reason
+                            "Test {display_path} was previously supported but now fails: {reason}. Run with UPDATE_SNAPSHOTS=1 to update."
                         );
                     }
                     Some(SnapshotStatus::Unsupported) => {
                         panic!(
-                            "Test {} was previously unsupported but now fails differently: {}. Run with UPDATE_SNAPSHOTS=1 to update.",
-                            display_path, reason
+                            "Test {display_path} was previously unsupported but now fails differently: {reason}. Run with UPDATE_SNAPSHOTS=1 to update."
                         );
                     }
                     None => {
                         panic!(
-                            "Test {} failed ({}). Run with UPDATE_SNAPSHOTS=1 to record this.",
-                            display_path, reason
+                            "Test {display_path} failed ({reason}). Run with UPDATE_SNAPSHOTS=1 to record this."
                         );
                     }
                 }
@@ -1111,7 +1107,7 @@ pub enum CodecInstance {
 /// Definition of a codec for testing
 pub struct CodecDef {
     /// Codec name for snapshot paths
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
     /// Codec category
     pub category: CodecCategory,
     /// Optional name suffix (e.g., "level5", "keepbits10")
@@ -1142,7 +1138,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "gzip")]
     codecs.push(CodecDef {
-        name: "gzip",
+        name: GzipCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(GzipCodec::new(5).unwrap())),
@@ -1153,7 +1149,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zstd")]
     codecs.push(CodecDef {
-        name: "zstd",
+        name: ZstdCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(ZstdCodec::new(5, false))),
@@ -1164,7 +1160,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "blosc")]
     codecs.push(CodecDef {
-        name: "blosc",
+        name: BloscCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| {
@@ -1186,7 +1182,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "crc32c")]
     codecs.push(CodecDef {
-        name: "crc32c",
+        name: Crc32cCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Crc32cCodec::new())),
@@ -1197,7 +1193,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zlib")]
     codecs.push(CodecDef {
-        name: "zlib",
+        name: ZlibCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| {
@@ -1213,7 +1209,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "bz2")]
     codecs.push(CodecDef {
-        name: "bz2",
+        name: Bz2Codec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| {
@@ -1229,7 +1225,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "adler32")]
     codecs.push(CodecDef {
-        name: "adler32",
+        name: Adler32Codec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Adler32Codec::default())),
@@ -1240,7 +1236,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "fletcher32")]
     codecs.push(CodecDef {
-        name: "fletcher32",
+        name: Fletcher32Codec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Fletcher32Codec::new())),
@@ -1251,7 +1247,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "gdeflate")]
     codecs.push(CodecDef {
-        name: "gdeflate",
+        name: GDeflateCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(GDeflateCodec::new(5).unwrap())),
@@ -1261,7 +1257,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "shuffle",
+        name: ShuffleCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |dt| {
@@ -1281,7 +1277,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "transpose")]
     codecs.push(CodecDef {
-        name: "transpose",
+        name: TransposeCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |_dt| {
@@ -1296,12 +1292,12 @@ fn codec_registry() -> Vec<CodecDef> {
 
     // Helper: skip for variable-length and optional data types
     fn is_vlen_or_optional(dt: &DataType) -> bool {
-        dt.fixed_size().is_none() || dt.optional().is_some()
+        dt.fixed_size().is_none() || dt.as_optional().is_some()
     }
 
     #[cfg(feature = "bitround")]
     codecs.push(CodecDef {
-        name: "bitround",
+        name: BitroundCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToArray,
         name_suffix: Some("keepbits10"),
         factory: |_dt| CodecInstance::ArrayToArray(Arc::new(BitroundCodec::new(10))),
@@ -1311,7 +1307,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "squeeze",
+        name: SqueezeCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToArray(Arc::new(SqueezeCodec::new())),
@@ -1321,7 +1317,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "reshape",
+        name: ReshapeCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToArray,
         name_suffix: Some("flatten"),
         factory: |_dt| {
@@ -1336,21 +1332,22 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "fixedscaleoffset",
+        name: FixedScaleOffsetCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |dt| {
+            use zarrs::array::data_type;
             // fixedscaleoffset requires a dtype configuration - use a sensible default
             // based on the data type, or fall back to f64 for unsupported types
-            let dtype_str = match dt {
-                DataType::Int16 => "<i2",
-                DataType::Int32 => "<i4",
-                DataType::Int64 => "<i8",
-                DataType::UInt16 => "<u2",
-                DataType::UInt32 => "<u4",
-                DataType::UInt64 => "<u8",
-                DataType::Float32 => "<f4",
-                DataType::Float64 => "<f8",
+            let dtype_str = match dt.identifier() {
+                data_type::Int16DataType::IDENTIFIER => "<i2",
+                data_type::Int32DataType::IDENTIFIER => "<i4",
+                data_type::Int64DataType::IDENTIFIER => "<i8",
+                data_type::UInt16DataType::IDENTIFIER => "<u2",
+                data_type::UInt32DataType::IDENTIFIER => "<u4",
+                data_type::UInt64DataType::IDENTIFIER => "<u8",
+                data_type::Float32DataType::IDENTIFIER => "<f4",
+                data_type::Float64DataType::IDENTIFIER => "<f8",
                 // For unsupported types, use f64 as a fallback - the codec will fail at runtime
                 _ => "<f8",
             };
@@ -1379,7 +1376,7 @@ fn codec_registry() -> Vec<CodecDef> {
     // =========================================================================
 
     codecs.push(CodecDef {
-        name: "bytes",
+        name: BytesCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(BytesCodec::default())),
@@ -1390,12 +1387,12 @@ fn codec_registry() -> Vec<CodecDef> {
 
     // Helper: skip for optional data types
     fn is_optional(dt: &DataType) -> bool {
-        dt.optional().is_some()
+        dt.as_optional().is_some()
     }
 
     #[cfg(feature = "sharding")]
     codecs.push(CodecDef {
-        name: "sharding",
+        name: ShardingCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: Some("inner2x2"),
         factory: |dt| {
@@ -1410,7 +1407,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "pcodec")]
     codecs.push(CodecDef {
-        name: "pcodec",
+        name: PcodecCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| {
@@ -1426,7 +1423,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zfp")]
     codecs.push(CodecDef {
-        name: "zfp",
+        name: ZfpCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: Some("reversible"),
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(ZfpCodec::new_reversible())),
@@ -1437,11 +1434,11 @@ fn codec_registry() -> Vec<CodecDef> {
 
     // Helper: skip vlen codecs for fixed-length or optional data types
     fn is_fixed_length_or_optional(dt: &DataType) -> bool {
-        dt.fixed_size().is_some() || dt.optional().is_some()
+        dt.fixed_size().is_some() || dt.as_optional().is_some()
     }
 
     codecs.push(CodecDef {
-        name: "vlen",
+        name: VlenCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenCodec::default())),
@@ -1451,7 +1448,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "vlen_v2",
+        name: VlenV2Codec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenV2Codec::new())),
@@ -1461,7 +1458,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "vlen-array",
+        name: VlenArrayCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenArrayCodec::new())),
@@ -1471,7 +1468,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "vlen-bytes",
+        name: VlenBytesCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenBytesCodec::new())),
@@ -1481,7 +1478,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "vlen-utf8",
+        name: VlenUtf8Codec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenUtf8Codec::new())),
@@ -1491,7 +1488,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: "packbits",
+        name: PackBitsCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(PackBitsCodec::default())),
@@ -1502,17 +1499,16 @@ fn codec_registry() -> Vec<CodecDef> {
 
     // Helper: skip optional codec for non-optional data types
     fn is_not_optional(dt: &DataType) -> bool {
-        dt.optional().is_none()
+        dt.as_optional().is_none()
     }
 
     codecs.push(CodecDef {
-        name: "optional",
+        name: OptionalCodec::default_name(ZarrVersions::V3),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |dt| {
-            let aliases = ExtensionAliasesCodecV3::default();
             // For optional types, default_array_to_bytes_codec returns an OptionalCodec
-            CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt, &aliases).codec().clone())
+            CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt).codec().clone())
         },
         lossy: false,
         non_deterministic: false,
@@ -1522,11 +1518,11 @@ fn codec_registry() -> Vec<CodecDef> {
     codecs
 }
 
-/// Build a TestConfig from a codec definition and instance
+/// Build a `TestConfig` from a codec definition and instance
 fn build_test_config(
     codec: &CodecDef,
     instance: CodecInstance,
-    data_type: &NamedDataType,
+    data_type: &DataType,
     fill_value: &FillValue,
 ) -> TestConfig {
     let mut config = TestConfig {
@@ -1574,10 +1570,10 @@ fn run_all_codec_datatype_combinations() {
         for codec in &codecs {
             for (data_type, fill_value, _fill_desc) in &data_types {
                 // Skip this codec/data type combination if the skip predicate returns true
-                if let Some(skip_fn) = codec.skip {
-                    if skip_fn(data_type) {
-                        continue;
-                    }
+                if let Some(skip_fn) = codec.skip
+                    && skip_fn(data_type)
+                {
+                    continue;
                 }
 
                 let instance = (codec.factory)(data_type);
@@ -1587,7 +1583,7 @@ fn run_all_codec_datatype_combinations() {
                     "regular",
                     data_type,
                     codec.category,
-                    codec.name,
+                    &codec.name,
                     codec.name_suffix,
                 );
 
@@ -1602,22 +1598,25 @@ fn run_all_codec_datatype_combinations() {
 // =============================================================================
 
 mod compatibility_matrix {
+    use std::borrow::Cow;
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use zarrs_registry::{ExtensionAliasesCodecV3, codec, data_type};
+    use zarrs::array::codec;
+    use zarrs::array::data_type;
+    use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
-    /// Get codecs for a specific category from REGISTERED_CODECS
-    fn get_codecs_for_category(category: &str) -> Vec<&'static str> {
-        REGISTERED_CODECS
+    /// Get codecs for a specific category from `registered_codecs`
+    fn get_codecs_for_category(category: &str) -> Vec<String> {
+        registered_codecs()
             .iter()
             .filter(|(_, cat)| *cat == category)
-            .map(|(id, _)| *id)
+            .map(|(id, _)| id.to_string())
             .collect()
     }
 
-    /// Sanitize a data type identifier to match directory naming convention
+    /// Sanitize a data type name to match directory naming convention
     fn sanitize_data_type_name(name: &str) -> String {
         name.chars()
             .map(|c| {
@@ -1638,7 +1637,8 @@ mod compatibility_matrix {
             .iter()
             .filter(|dt| {
                 // Exclude parameterized types - these are tested via specific instances
-                **dt != data_type::RAWBITS && **dt != data_type::OPTIONAL
+                **dt != data_type::RawBitsDataType::IDENTIFIER
+                    && **dt != data_type::OptionalDataType::IDENTIFIER
             })
             .map(|dt| sanitize_data_type_name(dt))
             .collect()
@@ -1695,146 +1695,112 @@ mod compatibility_matrix {
         name.to_string()
     }
 
-    /// Get the default codec name for display using the aliases
-    /// E.g., "optional" -> "zarrs.optional", "fixedscaleoffset" -> "numcodecs.fixedscaleoffset"
-    fn default_codec_name(identifier: &str) -> String {
-        let aliases = ExtensionAliasesCodecV3::default();
-        aliases.default_name(identifier).to_string()
+    /// All registered codecs with their categories
+    fn registered_codecs() -> Vec<(Cow<'static, str>, &'static str)> {
+        vec![
+            // Array-to-Array
+            (codec::BitroundCodec::default_name(ZarrVersions::V3), "a2a"),
+            (
+                codec::FixedScaleOffsetCodec::default_name(ZarrVersions::V3),
+                "a2a",
+            ),
+            (codec::ReshapeCodec::default_name(ZarrVersions::V3), "a2a"),
+            (codec::SqueezeCodec::default_name(ZarrVersions::V3), "a2a"),
+            (codec::TransposeCodec::default_name(ZarrVersions::V3), "a2a"),
+            // Array-to-Bytes
+            (codec::BytesCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::OptionalCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::PackBitsCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::PcodecCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::ShardingCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenArrayCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenBytesCodec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenUtf8Codec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::VlenV2Codec::default_name(ZarrVersions::V3), "a2b"),
+            (codec::ZfpCodec::default_name(ZarrVersions::V3), "a2b"),
+            // (ZfpyCodec::default_name(ZarrVersions::V3), "a2b"),
+            // Bytes-to-Bytes
+            (codec::Adler32Codec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::BloscCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::Bz2Codec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::Crc32cCodec::default_name(ZarrVersions::V3), "b2b"),
+            (
+                codec::Fletcher32Codec::default_name(ZarrVersions::V3),
+                "b2b",
+            ),
+            (codec::GDeflateCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::GzipCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ShuffleCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ZlibCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::ZstdCodec::default_name(ZarrVersions::V3), "b2b"),
+        ]
     }
 
-    // All known codec names (used for extracting base codec from directory names)
-    const ALL_CODECS: &[&str] = &[
-        "adler32",
-        "bitround",
-        "blosc",
-        "bytes",
-        "bz2",
-        "crc32c",
-        "fixedscaleoffset",
-        "fletcher32",
-        "gdeflate",
-        "gzip",
-        "optional",
-        "packbits",
-        "pcodec",
-        "reshape",
-        "sharding",
-        "squeeze",
-        "transpose",
-        "vlen_v2", // Must come before "vlen" to match first
-        "vlen-utf8",
-        "vlen-bytes",
-        "vlen-array",
-        "vlen",
-        "zfp",
-        // "zfpy",
-        "zlib",
-        "zstd",
-        "shuffle",
-    ];
-
-    /// All registered codecs from zarrs_registry::codec with their categories
-    const REGISTERED_CODECS: &[(&str, &str)] = &[
-        // Array-to-Array
-        (codec::BITROUND, "a2a"),
-        (codec::FIXEDSCALEOFFSET, "a2a"),
-        (codec::RESHAPE, "a2a"),
-        (codec::SQUEEZE, "a2a"),
-        (codec::TRANSPOSE, "a2a"),
-        // Array-to-Bytes
-        (codec::BYTES, "a2b"),
-        (codec::OPTIONAL, "a2b"),
-        (codec::PACKBITS, "a2b"),
-        (codec::PCODEC, "a2b"),
-        (codec::SHARDING, "a2b"),
-        (codec::VLEN, "a2b"),
-        (codec::VLEN_ARRAY, "a2b"),
-        (codec::VLEN_BYTES, "a2b"),
-        (codec::VLEN_UTF8, "a2b"),
-        (codec::VLEN_V2, "a2b"),
-        (codec::ZFP, "a2b"),
-        // (codec::ZFPY, "a2b"),
-        // Bytes-to-Bytes
-        (codec::ADLER32, "b2b"),
-        (codec::BLOSC, "b2b"),
-        (codec::BZ2, "b2b"),
-        (codec::CRC32C, "b2b"),
-        (codec::FLETCHER32, "b2b"),
-        (codec::GDEFLATE, "b2b"),
-        (codec::GZIP, "b2b"),
-        (codec::SHUFFLE, "b2b"),
-        (codec::ZLIB, "b2b"),
-        (codec::ZSTD, "b2b"),
-    ];
-
-    /// All registered data types from zarrs_registry::data_type
+    /// All registered data types from `zarrs_registry::data_type`
     #[rustfmt::skip]
     const REGISTERED_DATA_TYPES: &[&str] = &[
-        data_type::BOOL,
-        data_type::INT2,
-        data_type::INT4,
-        data_type::INT8,
-        data_type::INT16,
-        data_type::INT32,
-        data_type::INT64,
-        data_type::UINT2,
-        data_type::UINT4,
-        data_type::UINT8,
-        data_type::UINT16,
-        data_type::UINT32,
-        data_type::UINT64,
-        data_type::FLOAT4_E2M1FN,
-        data_type::FLOAT6_E2M3FN,
-        data_type::FLOAT6_E3M2FN,
-        data_type::FLOAT8_E3M4,
-        data_type::FLOAT8_E4M3,
-        data_type::FLOAT8_E4M3B11FNUZ,
-        data_type::FLOAT8_E4M3FNUZ,
-        data_type::FLOAT8_E5M2,
-        data_type::FLOAT8_E5M2FNUZ,
-        data_type::FLOAT8_E8M0FNU,
-        data_type::FLOAT16,
-        data_type::FLOAT32,
-        data_type::FLOAT64,
-        data_type::COMPLEX64,
-        data_type::COMPLEX128,
-        data_type::RAWBITS,
-        data_type::BFLOAT16,
-        data_type::COMPLEX_BFLOAT16,
-        data_type::COMPLEX_FLOAT16,
-        data_type::COMPLEX_FLOAT32,
-        data_type::COMPLEX_FLOAT64,
-        data_type::COMPLEX_FLOAT4_E2M1FN,
-        data_type::COMPLEX_FLOAT6_E2M3FN,
-        data_type::COMPLEX_FLOAT6_E3M2FN,
-        data_type::COMPLEX_FLOAT8_E3M4,
-        data_type::COMPLEX_FLOAT8_E4M3,
-        data_type::COMPLEX_FLOAT8_E4M3B11FNUZ,
-        data_type::COMPLEX_FLOAT8_E4M3FNUZ,
-        data_type::COMPLEX_FLOAT8_E5M2,
-        data_type::COMPLEX_FLOAT8_E5M2FNUZ,
-        data_type::COMPLEX_FLOAT8_E8M0FNU,
-        data_type::STRING,
-        data_type::BYTES,
-        data_type::NUMPY_DATETIME64,
-        data_type::NUMPY_TIMEDELTA64,
-        data_type::OPTIONAL,
+        data_type::BoolDataType::IDENTIFIER,
+        data_type::Int2DataType::IDENTIFIER,
+        data_type::Int4DataType::IDENTIFIER,
+        data_type::Int8DataType::IDENTIFIER,
+        data_type::Int16DataType::IDENTIFIER,
+        data_type::Int32DataType::IDENTIFIER,
+        data_type::Int64DataType::IDENTIFIER,
+        data_type::UInt2DataType::IDENTIFIER,
+        data_type::UInt4DataType::IDENTIFIER,
+        data_type::UInt8DataType::IDENTIFIER,
+        data_type::UInt16DataType::IDENTIFIER,
+        data_type::UInt32DataType::IDENTIFIER,
+        data_type::UInt64DataType::IDENTIFIER,
+        data_type::Float4E2M1FNDataType::IDENTIFIER,
+        data_type::Float6E2M3FNDataType::IDENTIFIER,
+        data_type::Float6E3M2FNDataType::IDENTIFIER,
+        data_type::Float8E3M4DataType::IDENTIFIER,
+        data_type::Float8E4M3DataType::IDENTIFIER,
+        data_type::Float8E4M3B11FNUZDataType::IDENTIFIER,
+        data_type::Float8E4M3FNUZDataType::IDENTIFIER,
+        data_type::Float8E5M2DataType::IDENTIFIER,
+        data_type::Float8E5M2FNUZDataType::IDENTIFIER,
+        data_type::Float8E8M0FNUDataType::IDENTIFIER,
+        data_type::Float16DataType::IDENTIFIER,
+        data_type::Float32DataType::IDENTIFIER,
+        data_type::Float64DataType::IDENTIFIER,
+        data_type::Complex64DataType::IDENTIFIER,
+        data_type::Complex128DataType::IDENTIFIER,
+        data_type::RawBitsDataType::IDENTIFIER,
+        data_type::BFloat16DataType::IDENTIFIER,
+        data_type::ComplexBFloat16DataType::IDENTIFIER,
+        data_type::ComplexFloat16DataType::IDENTIFIER,
+        data_type::ComplexFloat32DataType::IDENTIFIER,
+        data_type::ComplexFloat64DataType::IDENTIFIER,
+        data_type::ComplexFloat4E2M1FNDataType::IDENTIFIER,
+        data_type::ComplexFloat6E2M3FNDataType::IDENTIFIER,
+        data_type::ComplexFloat6E3M2FNDataType::IDENTIFIER,
+        data_type::ComplexFloat8E3M4DataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3DataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E5M2DataType::IDENTIFIER,
+        data_type::ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
+        data_type::ComplexFloat8E8M0FNUDataType::IDENTIFIER,
+        data_type::StringDataType::IDENTIFIER,
+        data_type::BytesDataType::IDENTIFIER,
+        data_type::NumpyDateTime64DataType::IDENTIFIER,
+        data_type::NumpyTimeDelta64DataType::IDENTIFIER,
+        data_type::OptionalDataType::IDENTIFIER,
     ];
 
-    /// Extract the base codec name from a directory name like "gzip_level5" -> "gzip"
-    /// Handles codecs with underscores in their names (e.g., "vlen_v2")
+    /// Extract the base codec name from a directory name like "gzip(level5)" -> "gzip"
     fn extract_codec_name(dir_name: &str) -> String {
-        // Check if any known codec is a prefix of the directory name
-        for codec in ALL_CODECS {
-            if dir_name == *codec || dir_name.starts_with(&format!("{}_", codec)) {
-                return (*codec).to_string();
-            }
-        }
-        // Fallback: take first part before underscore
-        dir_name.split('_').next().unwrap_or(dir_name).to_string()
+        // Strip any parenthesized suffix (e.g., "gzip(level5)" -> "gzip")
+        dir_name
+            .split_once('(')
+            .map_or(dir_name, |(base, _)| base)
+            .to_string()
     }
 
-    /// Scan a specific chunk_grid directory: <data_type>/<category>/<codec>/<checksum>
+    /// Scan a specific `chunk_grid` directory: <`data_type`>/<category>/<codec>/<checksum>
     /// Returns: codec -> set of data_types
     fn scan_chunk_grid_dir(chunk_grid_dir: &Path) -> BTreeMap<String, BTreeSet<String>> {
         let mut results: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -1873,10 +1839,10 @@ mod compatibility_matrix {
                     let codec = extract_codec_name(&codec_full);
 
                     // Check if there are any checksum subdirectories/files
-                    if let Ok(checksums) = fs::read_dir(codec_entry.path()) {
-                        if checksums.flatten().next().is_some() {
-                            results.entry(codec).or_default().insert(data_type.clone());
-                        }
+                    if let Ok(checksums) = fs::read_dir(codec_entry.path())
+                        && checksums.flatten().next().is_some()
+                    {
+                        results.entry(codec).or_default().insert(data_type.clone());
                     }
                 }
             }
@@ -1889,7 +1855,7 @@ mod compatibility_matrix {
     /// Shows all registered codecs and data types, with "-" for untested combinations
     fn generate_category_table(
         title: &str,
-        codec_list: &[&str],
+        codec_list: &[String],
         supported: &BTreeMap<String, BTreeSet<String>>,
         unsupported: &BTreeMap<String, BTreeSet<String>>,
         failure: &BTreeMap<String, BTreeSet<String>>,
@@ -1901,12 +1867,12 @@ mod compatibility_matrix {
             return output;
         }
 
-        output.push_str(&format!("## {}\n\n", title));
+        output.push_str(&format!("## {title}\n\n"));
 
         // Header row - include all codecs in the category with default names
         output.push_str("| Data Type |");
         for codec in codec_list {
-            output.push_str(&format!(" {} |", default_codec_name(codec)));
+            output.push_str(&format!(" {codec} |"));
         }
         output.push('\n');
 
@@ -1920,21 +1886,19 @@ mod compatibility_matrix {
         // Data rows - include all registered data types
         for datatype in all_datatypes {
             let display_name = canonical_data_type_name(datatype);
-            output.push_str(&format!("| {} |", display_name));
+            output.push_str(&format!("| {display_name} |"));
             for codec in codec_list {
                 // Look up using both the identifier and common variations
-                let codec_str = *codec;
                 let codec_underscore = codec.replace('-', "_");
                 let codec_hyphen = codec.replace('_', "-");
                 let codec_base = codec.trim_end_matches("_indexed");
 
                 let lookup = |map: &BTreeMap<String, BTreeSet<String>>| -> bool {
-                    map.get(codec_str)
+                    map.get(codec)
                         .or_else(|| map.get(&codec_underscore))
                         .or_else(|| map.get(&codec_hyphen))
                         .or_else(|| map.get(codec_base))
-                        .map(|dt| dt.contains(datatype))
-                        .unwrap_or(false)
+                        .is_some_and(|dt| dt.contains(datatype))
                 };
 
                 let is_supported = lookup(supported);
@@ -1950,7 +1914,7 @@ mod compatibility_matrix {
                 } else {
                     "-"
                 };
-                output.push_str(&format!(" {} |", symbol));
+                output.push_str(&format!(" {symbol} |"));
             }
             output.push('\n');
         }
@@ -2055,7 +2019,7 @@ mod compatibility_matrix {
             .join("DATA_TYPE_AND_CODEC_COMPATIBILITY.md");
         fs::write(&output_path, &matrix).expect("Failed to write matrix");
         println!("Generated: {}", output_path.display());
-        println!("\n{}", matrix);
+        println!("\n{matrix}");
     }
 }
 

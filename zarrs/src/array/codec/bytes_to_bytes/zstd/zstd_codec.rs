@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
@@ -12,7 +12,6 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::ZSTD;
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
@@ -55,8 +54,8 @@ impl ZstdCodec {
 }
 
 impl CodecTraits for ZstdCodec {
-    fn identifier(&self) -> &str {
-        ZSTD
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

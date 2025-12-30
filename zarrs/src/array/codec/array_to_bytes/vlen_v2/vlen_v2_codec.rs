@@ -1,6 +1,7 @@
 use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::Itertools;
+use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -12,6 +13,7 @@ use crate::array::{
         BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
         PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 
@@ -28,8 +30,8 @@ impl VlenV2Codec {
 }
 
 impl CodecTraits for VlenV2Codec {
-    fn identifier(&self) -> &str {
-        zarrs_registry::codec::VLEN_V2
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -164,7 +166,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN_V2.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -172,7 +174,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN_V2.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }

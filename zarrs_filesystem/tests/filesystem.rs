@@ -109,7 +109,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         .to_owned()
         .into();
 
-    store.set(&"big_buff".try_into()?, base_vec.into())?;
+    store.set(&"big_buff".try_into()?, base_vec)?;
     // Mix up ordering of requests to ensure returned order is independent of the underlying coalescing operation
     let expected = vec![
         prefix,
@@ -161,7 +161,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
                 e.len(),
                 r.len()
             )
-        )
+        );
     });
     Ok(())
 }

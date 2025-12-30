@@ -18,6 +18,10 @@ pub mod bytes_to_bytes;
 mod options;
 
 mod named_codec;
+
+mod data_type_support;
+pub use data_type_support::{define_data_type_support, register_data_type_extension_codec};
+
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
@@ -25,6 +29,7 @@ pub use array_to_array::bitround::*;
 pub use array_to_array::transpose::*;
 pub use array_to_array::{fixedscaleoffset::*, reshape::*, squeeze::*};
 // Array to bytes
+pub use array_to_bytes::optional::*;
 #[cfg(feature = "pcodec")]
 pub use array_to_bytes::pcodec::*;
 #[cfg(feature = "sharding")]
@@ -37,6 +42,7 @@ pub use array_to_bytes::{
     bytes::*, codec_chain::CodecChain, packbits::*, vlen::*, vlen_array::*, vlen_bytes::*,
     vlen_utf8::*, vlen_v2::*,
 };
+
 // Bytes to bytes
 #[cfg(feature = "adler32")]
 pub use bytes_to_bytes::adler32::*;
@@ -87,16 +93,17 @@ use codec_partial_default::{
     BytesToBytesCodecPartialDefault,
 };
 use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
-use zarrs_plugin::PluginUnsupportedError;
+use zarrs_plugin::{ExtensionIdentifier, PluginUnsupportedError, ZarrVersions};
 
 use super::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayShape, BytesRepresentation,
     ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError, array_bytes::RawBytesOffsetsCreateError,
-    concurrency::RecommendedConcurrency,
+    concurrency::RecommendedConcurrency, data_type::DataTypeExt,
 };
+use crate::array::data_type::BytesDataType;
+use crate::array::data_type::StringDataType;
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
-use crate::registry::ExtensionAliasesCodecV3;
 use crate::storage::OffsetBytesIterator;
 use crate::storage::byte_range::extract_byte_ranges;
 #[cfg(feature = "async")]
@@ -105,7 +112,7 @@ use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array_subset::{ArraySubset, IncompatibleDimensionalityError},
     indexer::IncompatibleIndexerError,
-    plugin::{Plugin2, PluginCreateError},
+    plugin::{Plugin, PluginCreateError},
     storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError},
     storage::{ReadableStorage, ReadableWritableStorage, StorageError, StoreKey},
 };
@@ -175,20 +182,23 @@ pub struct PartialEncoderCapability {
 
 /// A codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPlugin(Plugin2<Codec, MetadataV3, ExtensionAliasesCodecV3>);
+pub struct CodecPlugin(Plugin<Codec, MetadataV3>);
 inventory::collect!(CodecPlugin);
 
 impl CodecPlugin {
     /// Create a new [`CodecPlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(
-            metadata: &MetadataV3,
-            aliases: &ExtensionAliasesCodecV3,
-        ) -> Result<Codec, PluginCreateError>,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
+        create_fn: fn(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(identifier, match_name_fn, create_fn))
+        Self(Plugin::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -208,14 +218,11 @@ impl Codec {
     ///
     /// # Errors
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    pub fn from_metadata(
-        metadata: &MetadataV3,
-        codec_aliases: &ExtensionAliasesCodecV3,
-    ) -> Result<Self, PluginCreateError> {
-        let identifier = codec_aliases.identifier(metadata.name());
+    pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+        let name = metadata.name();
         for plugin in inventory::iter::<CodecPlugin> {
-            if plugin.match_name(identifier) {
-                return plugin.create(metadata, codec_aliases);
+            if plugin.match_name(name, ZarrVersions::V3) {
+                return plugin.create(metadata);
             }
         }
         #[cfg(miri)]
@@ -224,72 +231,60 @@ impl Codec {
             match metadata.name() {
                 #[cfg(feature = "transpose")]
                 codec::TRANSPOSE => {
-                    return array_to_array::transpose::create_codec_transpose(
-                        metadata,
-                        codec_aliases,
-                    );
+                    return array_to_array::transpose::create_codec_transpose(metadata);
                 }
                 #[cfg(feature = "bitround")]
                 codec::BITROUND => {
-                    return array_to_array::bitround::create_codec_bitround(
-                        metadata,
-                        codec_aliases,
-                    );
+                    return array_to_array::bitround::create_codec_bitround(metadata);
                 }
                 codec::BYTES => {
-                    return array_to_bytes::bytes::create_codec_bytes(metadata, codec_aliases);
+                    return array_to_bytes::bytes::create_codec_bytes(metadata);
                 }
                 #[cfg(feature = "pcodec")]
                 codec::PCODEC => {
-                    return array_to_bytes::pcodec::create_codec_pcodec(metadata, codec_aliases);
+                    return array_to_bytes::pcodec::create_codec_pcodec(metadata);
                 }
                 #[cfg(feature = "sharding")]
                 codec::SHARDING => {
-                    return array_to_bytes::sharding::create_codec_sharding(
-                        metadata,
-                        codec_aliases,
-                    );
+                    return array_to_bytes::sharding::create_codec_sharding(metadata);
                 }
                 #[cfg(feature = "zfp")]
                 codec::ZFP => {
-                    return array_to_bytes::zfp::create_codec_zfp(metadata, codec_aliases);
+                    return array_to_bytes::zfp::create_codec_zfp(metadata);
                 }
                 #[cfg(feature = "zfp")]
                 codec::ZFPY => {
-                    return array_to_bytes::zfpy::create_codec_zfpy(metadata, codec_aliases);
+                    return array_to_bytes::zfpy::create_codec_zfpy(metadata);
                 }
                 codec::VLEN => {
-                    return array_to_bytes::vlen::create_codec_vlen(metadata, codec_aliases);
+                    return array_to_bytes::vlen::create_codec_vlen(metadata);
                 }
                 codec::VLEN_V2 => {
-                    return array_to_bytes::vlen_v2::create_codec_vlen_v2(metadata, codec_aliases);
+                    return array_to_bytes::vlen_v2::create_codec_vlen_v2(metadata);
                 }
                 #[cfg(feature = "blosc")]
                 codec::BLOSC => {
-                    return bytes_to_bytes::blosc::create_codec_blosc(metadata, codec_aliases);
+                    return bytes_to_bytes::blosc::create_codec_blosc(metadata);
                 }
                 #[cfg(feature = "bz2")]
                 codec::BZ2 => {
-                    return bytes_to_bytes::bz2::create_codec_bz2(metadata, codec_aliases);
+                    return bytes_to_bytes::bz2::create_codec_bz2(metadata);
                 }
                 #[cfg(feature = "crc32c")]
                 codec::CRC32C => {
-                    return bytes_to_bytes::crc32c::create_codec_crc32c(metadata, codec_aliases);
+                    return bytes_to_bytes::crc32c::create_codec_crc32c(metadata);
                 }
                 #[cfg(feature = "gdeflate")]
                 codec::GDEFLATE => {
-                    return bytes_to_bytes::gdeflate::create_codec_gdeflate(
-                        metadata,
-                        codec_aliases,
-                    );
+                    return bytes_to_bytes::gdeflate::create_codec_gdeflate(metadata);
                 }
                 #[cfg(feature = "gzip")]
                 codec::GZIP => {
-                    return bytes_to_bytes::gzip::create_codec_gzip(metadata, codec_aliases);
+                    return bytes_to_bytes::gzip::create_codec_gzip(metadata);
                 }
                 #[cfg(feature = "zstd")]
                 codec::ZSTD => {
-                    return bytes_to_bytes::zstd::create_codec_zstd(metadata, codec_aliases);
+                    return bytes_to_bytes::zstd::create_codec_zstd(metadata);
                 }
                 _ => {}
             }
@@ -301,7 +296,7 @@ impl Codec {
 /// Codec traits.
 pub trait CodecTraits: MaybeSend + MaybeSync {
     /// Unique identifier for the codec.
-    fn identifier(&self) -> &str;
+    fn identifier(&self) -> &'static str;
 
     /// Create the codec configuration.
     ///
@@ -1846,10 +1841,14 @@ pub enum CodecError {
 fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {
     if data_type.is_optional() {
         format!(
-            "Unsupported data type {data_type} for codec {codec}. Use the optional codec to handle optional data types.",
+            "Unsupported data type {:?} for codec {codec}. Use the optional codec to handle optional data types.",
+            data_type.identifier()
         )
     } else {
-        format!("Unsupported data type {data_type} for codec {codec}")
+        format!(
+            "Unsupported data type {:?} for codec {codec}",
+            data_type.identifier()
+        )
     }
 }
 
@@ -1875,113 +1874,49 @@ impl From<String> for CodecError {
 ///
 /// The default codec is dependent on the data type:
 ///  - [`bytes`](array_to_bytes::bytes) for fixed-length data types,
-///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`String`](DataType::String) variable-length data type,
-///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`Bytes`](DataType::Bytes) variable-length data type,
+///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`StringDataType`] variable-length data type,
+///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`BytesDataType`] variable-length data type,
 ///  - [`vlen`](array_to_bytes::vlen) for any other variable-length data type, and
 ///  - [`optional`](array_to_bytes::optional) wrapping the appropriate inner codec for optional data types.
 #[must_use]
-pub fn default_array_to_bytes_codec(
-    data_type: &DataType,
-    aliases: &ExtensionAliasesCodecV3,
-) -> NamedArrayToBytesCodec {
+pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
     // Special handling for optional types
-    if let Some(opt) = data_type.optional() {
+    if let Some(opt) = data_type.as_optional() {
         // Create mask codec chain using PackBitsCodec
         let mask_codec_chain = Arc::new(CodecChain::new_named(
             vec![],
-            NamedCodec::new_default_name(Arc::new(PackBitsCodec::default()), aliases),
+            NamedCodec::new_default_name(Arc::new(PackBitsCodec::default())),
             vec![],
         ));
 
         // For data codec chain, recursively handle nested data types
         let data_codec_chain = Arc::new(CodecChain::new_named(
             vec![],
-            default_array_to_bytes_codec(opt, aliases), // Recursive call handles nested Optional types
+            default_array_to_bytes_codec(opt.data_type()), // Recursive call handles nested Optional types
             vec![],
         ));
 
-        return NamedArrayToBytesCodec::new_default_name(
-            Arc::new(array_to_bytes::optional::OptionalCodec::new(
-                mask_codec_chain,
-                data_codec_chain,
-            )),
-            aliases,
-        );
+        return NamedArrayToBytesCodec::new_default_name(Arc::new(
+            array_to_bytes::optional::OptionalCodec::new(mask_codec_chain, data_codec_chain),
+        ));
     }
 
     // Handle non-optional types based on size
-    if data_type.fixed_size().is_some() {
-        NamedArrayToBytesCodec::new_default_name(Arc::<BytesCodec>::default(), aliases)
+    if data_type.is_fixed() {
+        NamedArrayToBytesCodec::new_default_name(Arc::<BytesCodec>::default())
     } else {
         // FIXME: Default to VlenCodec if ever stabilised
-        match data_type {
-            DataType::String => NamedArrayToBytesCodec::new(
-                zarrs_registry::codec::VLEN_UTF8.to_string(),
+        // Variable-sized types
+        match data_type.identifier() {
+            StringDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
+                VlenUtf8Codec::IDENTIFIER.to_string(),
                 Arc::new(VlenV2Codec::new()),
             ),
-            DataType::Bytes => NamedArrayToBytesCodec::new(
-                zarrs_registry::codec::VLEN_BYTES.to_string(),
+            BytesDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
+                VlenBytesCodec::IDENTIFIER.to_string(),
                 Arc::new(VlenV2Codec::new()),
             ),
-            DataType::Extension(_) => {
-                NamedArrayToBytesCodec::new_default_name(Arc::new(VlenCodec::default()), aliases)
-            }
-            // Fixed size data types
-            DataType::Bool
-            | DataType::Int2
-            | DataType::Int4
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::BFloat16
-            | DataType::Float16
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::RawBits(_) => unreachable!("fixed size data types handled above"),
-            DataType::Optional(_) => {
-                unreachable!("optional data types handled above")
-            }
+            _ => NamedArrayToBytesCodec::new_default_name(Arc::new(VlenCodec::default())),
         }
     }
 }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use object_store::memory::InMemory;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, DataType};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
@@ -19,7 +19,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        DataType::UInt8,
+        data_type::uint8(),
         0u8,
     );
     // builder.storage_transformers(vec![].into());
@@ -34,7 +34,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     }
     let array = builder.build(store, array_path).unwrap();
 
-    assert_eq!(array.data_type(), &DataType::UInt8);
+    assert!(array.data_type().eq(data_type::uint8().as_ref()));
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);
@@ -261,7 +261,7 @@ async fn array_str_async_simple() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        DataType::String,
+        data_type::string(),
         "",
     );
     builder.bytes_to_bytes_codecs(vec![
@@ -281,7 +281,7 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         let mut builder = ArrayBuilder::new(
             vec![4, 4], // array shape
             vec![2, 2], // regular chunk shape
-            DataType::String,
+            data_type::string(),
             "",
         );
         builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(
@@ -290,7 +290,7 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         builder.array_to_bytes_codec(Arc::new(
             zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder::new(
                 vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(1).unwrap()],
-                &DataType::String,
+                &data_type::string(),
             )
             .array_to_bytes_codec(Arc::new(
                 VlenCodec::default().with_index_location(index_location),

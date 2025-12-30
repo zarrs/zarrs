@@ -36,12 +36,11 @@ mod fletcher32_codec;
 use std::sync::Arc;
 
 pub use fletcher32_codec::Fletcher32Codec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::fletcher32::{
     Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1,
 };
-use crate::registry::codec::FLETCHER32;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -50,20 +49,16 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(FLETCHER32, is_identifier_fletcher32, create_codec_fletcher32)
+    CodecPlugin::new(Fletcher32Codec::IDENTIFIER, Fletcher32Codec::matches_name, Fletcher32Codec::default_name, create_codec_fletcher32)
 }
+zarrs_plugin::impl_extension_aliases!(Fletcher32Codec, "fletcher32",
+    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"]
+);
 
-fn is_identifier_fletcher32(identifier: &str) -> bool {
-    identifier == FLETCHER32
-}
-
-pub(crate) fn create_codec_fletcher32(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(FLETCHER32, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_fletcher32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(Fletcher32Codec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(Fletcher32Codec::new_with_configuration(&configuration));
     Ok(Codec::BytesToBytes(codec))
 }
@@ -86,17 +81,17 @@ mod tests {
         storage::byte_range::ByteRange,
     };
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
 
     #[test]
     fn codec_fletcher32_configuration_none() {
         let codec_configuration: Fletcher32CodecConfiguration =
-            serde_json::from_str(r#"{}"#).unwrap();
+            serde_json::from_str(r"{}").unwrap();
         let codec = Fletcher32Codec::new_with_configuration(&codec_configuration);
         let configuration = codec
             .configuration("numcodecs.fletcher32", &CodecMetadataOptions::default())
             .unwrap();
-        assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
+        assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }
 
     #[test]

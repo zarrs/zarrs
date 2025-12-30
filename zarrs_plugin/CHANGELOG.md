@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `Plugin::default_name()` method
+- Add `ExtensionAliasesConfig` struct for per-extension alias configuration
+- Add `ExtensionAliases<V>` trait for version-specific alias handling
+- Add `ExtensionIdentifier` trait for extensions with unique identifiers
+- Add `ZarrVersions` enum with `V2` and `V3` variants
+- Implement `From<ZarrVersion2>` and `From<ZarrVersion3>` for `ZarrVersions`
+- Add `ExtensionType*` and `ZarrVersion{2,3}` types (moved from `zarrs_registry`)
+
+### Changed
+- **Breaking**: `Plugin[2]::new()` now takes a `default_name_fn` parameter
+- **Breaking**: `Plugin[2]::match_name()` now takes a `ZarrVersions` parameter
+- **Breaking**: Bump MSRV to 1.88
+
 ## [0.2.3] - 2025-12-26
 
 ### Added

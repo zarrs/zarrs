@@ -1,13 +1,15 @@
-use std::fmt::Debug;
+use std::{any::Any, borrow::Cow, fmt::Debug, sync::Arc};
 
 use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-use zarrs_plugin::{MaybeSend, MaybeSync};
+use zarrs_plugin::{MaybeSend, MaybeSync, ZarrVersions};
 
-use crate::{
-    data_type_extension_packbits_codec::DataTypeExtensionPackBitsCodec,
-    DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, FillValue,
-};
+use crate::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};
+
+/// A data type.
+///
+/// This is a type alias for `Arc<dyn DataTypeExtension>`, providing a unified
+/// interface for all data types (both built-in and custom extensions).
+pub type DataType = Arc<dyn DataTypeExtension>;
 
 /// Traits for a data type extension.
 ///
@@ -19,13 +21,19 @@ use crate::{
 /// These methods should encode data to and from native endianness if endianness is applicable, unless the endianness should be explicitly fixed.
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///
-/// The [`DataTypeExtensionBytesCodec`] traits methods allow a fixed-size custom data type to be encoded with the `bytes` codec with a requested endianness.
-/// These methods are not invoked for variable-size data types, and can be pass-through for a fixed-size data types that use an explicitly fixed endianness or where endianness is not applicable.
-///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     /// The identifier of the data type.
     fn identifier(&self) -> &'static str;
+
+    /// The name to use when creating metadata for this data type.
+    ///
+    /// This is used when creating metadata. Most data types return their identifier,
+    /// but some (like `RawBitsDataType`) return a version-specific name like `r{bits}`.
+    #[allow(unused_variables)]
+    fn default_name(&self, zarr_version: ZarrVersions) -> Option<Cow<'static, str>> {
+        None
+    }
 
     /// The configuration of the data type.
     fn configuration(&self) -> Configuration;
@@ -54,37 +62,18 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
         fill_value: &FillValue,
     ) -> Result<FillValueMetadataV3, DataTypeFillValueError>;
 
-    /// Return [`DataTypeExtensionBytesCodec`] if the data type supports the `bytes` codec.
+    /// Compare this data type with another for equality.
     ///
-    /// Fixed-size data types are expected to support the `bytes` codec, even if bytes pass through it unmodified.
-    ///
-    /// The default implementation returns [`DataTypeExtensionError::CodecUnsupported`].
-    ///
-    /// # Errors
-    /// Returns [`DataTypeExtensionError::CodecUnsupported`] if the `bytes` codec is unsupported.
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.identifier().to_string(),
-            codec: "bytes".to_string(),
-        })
+    /// The default implementation compares identifier and configuration.
+    /// Custom data types may override this for more efficient comparison.
+    fn eq(&self, other: &dyn DataTypeExtension) -> bool {
+        self.identifier() == other.identifier() && self.configuration() == other.configuration()
     }
 
-    /// Return [`DataTypeExtensionPackBitsCodec`] if the data type supports the `packbits` codec.
+    /// Returns self as `Any` for downcasting.
     ///
-    /// Types that can be encoded smaller in less than a byte should support the `packbits` codec.
-    ///
-    /// The default implementation returns [`DataTypeExtensionError::CodecUnsupported`].
-    ///
-    /// # Errors
-    /// Returns [`DataTypeExtensionError::CodecUnsupported`] if the `packbits` codec is unsupported.
-    fn codec_packbits(
-        &self,
-    ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
-        Err(DataTypeExtensionError::CodecUnsupported {
-            data_type: self.identifier().to_string(),
-            codec: "packbits".to_string(),
-        })
-    }
+    /// This enables accessing concrete type-specific methods (like `OptionalDataType::data_type()`).
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// A data type extension error.
@@ -99,6 +88,4 @@ pub enum DataTypeExtensionError {
         /// The codec name.
         codec: String,
     },
-    /// A `bytes` codec error.
-    BytesCodec(#[from] DataTypeExtensionBytesCodecError),
 }

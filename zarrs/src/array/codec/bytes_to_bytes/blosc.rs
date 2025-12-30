@@ -55,13 +55,12 @@ use blosc_src::{
 };
 use derive_more::From;
 use thiserror::Error;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
     BloscShuffleMode,
 };
-use crate::registry::codec::BLOSC;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -70,20 +69,14 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BLOSC, is_identifier_blosc, create_codec_blosc)
+    CodecPlugin::new(BloscCodec::IDENTIFIER, BloscCodec::matches_name, BloscCodec::default_name, create_codec_blosc)
 }
+zarrs_plugin::impl_extension_aliases!(BloscCodec, "blosc");
 
-fn is_identifier_blosc(identifier: &str) -> bool {
-    identifier == BLOSC
-}
-
-pub(crate) fn create_codec_blosc(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: BloscCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BLOSC, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: BloscCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(BloscCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
@@ -272,8 +265,10 @@ mod tests {
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            BytesRepresentation, ChunkShapeTraits, DataType,
+            BytesRepresentation, ChunkShapeTraits,
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
+            data_type,
+            data_type::DataTypeExt,
         },
         array_subset::ArraySubset,
         indexer::Indexer,
@@ -373,7 +368,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -408,9 +403,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];
@@ -424,7 +421,7 @@ mod tests {
         use crate::indexer::Indexer;
 
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -460,9 +457,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];

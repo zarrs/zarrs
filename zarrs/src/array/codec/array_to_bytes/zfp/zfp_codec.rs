@@ -24,12 +24,9 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::metadata_ext::codec::{
-    zfp::ZfpMode,
-    zfpy::{ZfpyCodecConfiguration, ZfpyCodecConfigurationMode},
-};
-use crate::registry::codec::ZFP;
+use crate::metadata_ext::codec::zfp::ZfpMode;
 use std::num::NonZeroU64;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]
@@ -89,37 +86,17 @@ impl ZfpCodec {
         }
     }
 
-    /// Create a new `zfp` codec a `zfpy` codec configuration.
-    ///
-    /// # Errors
-    /// Returns an error if the configuration is not supported.
-    pub fn new_with_configuration_zfpy(
-        configuration: &ZfpyCodecConfiguration,
-    ) -> Result<Self, PluginCreateError> {
-        // zfpy writes a redundant header
-        match configuration {
-            ZfpyCodecConfiguration::Numcodecs(configuration) => match configuration.mode {
-                ZfpyCodecConfigurationMode::FixedRate { rate } => Ok(Self {
-                    mode: ZfpMode::FixedRate { rate },
-                    write_header: true,
-                }),
-                ZfpyCodecConfigurationMode::FixedPrecision { precision } => Ok(Self {
-                    mode: ZfpMode::FixedPrecision { precision },
-                    write_header: true,
-                }),
-                ZfpyCodecConfigurationMode::FixedAccuracy { tolerance } => Ok(Self {
-                    mode: ZfpMode::FixedAccuracy { tolerance },
-                    write_header: true,
-                }),
-                ZfpyCodecConfigurationMode::Reversible => Ok(Self {
-                    mode: ZfpMode::Reversible,
-                    write_header: true,
-                }),
-            },
-            _ => Err(PluginCreateError::Other(
-                "this zfpy codec configuration variant is unsupported".to_string(),
-            ))?,
-        }
+    /// Returns the zfp mode.
+    #[must_use]
+    pub(crate) const fn mode(&self) -> ZfpMode {
+        self.mode
+    }
+
+    /// Set whether to write the zfp header.
+    #[must_use]
+    pub(crate) const fn with_write_header(mut self, write_header: bool) -> Self {
+        self.write_header = write_header;
+        self
     }
 
     /// Create a new `zfp` codec from configuration.
@@ -152,12 +129,11 @@ impl ZfpCodec {
 }
 
 impl CodecTraits for ZfpCodec {
-    fn identifier(&self) -> &str {
-        ZFP
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
-        // ZfpyCodecConfigurationNumcodecs is forward compatible with ZfpCodecConfigurationV1
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
     }
 
@@ -289,8 +265,9 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let zfp_type = zarr_to_zfp_data_type(data_type)
-            .ok_or_else(|| CodecError::UnsupportedDataType(data_type.clone(), ZFP.to_string()))?;
+        let zfp_type = zarr_to_zfp_data_type(data_type).ok_or_else(|| {
+            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+        })?;
 
         let bufsize = {
             let field = unsafe {
@@ -314,29 +291,8 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
             }
         };
 
-        match data_type {
-            DataType::Int8
-            | DataType::UInt8
-            | DataType::Int16
-            | DataType::UInt16
-            | DataType::Int32
-            | DataType::UInt32
-            | DataType::Int64
-            | DataType::UInt64
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => Ok(BytesRepresentation::BoundedSize(bufsize as u64)),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                ZFP.to_string(),
-            )),
-        }
+        // If we got a valid zfp_type, the data type is supported
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(BytesRepresentation::BoundedSize(bufsize as u64))
     }
 }

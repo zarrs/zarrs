@@ -266,8 +266,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(2)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             4 => {
@@ -278,8 +280,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(4)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             8 => {
@@ -290,8 +294,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(8)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<8>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             16 => {
@@ -302,8 +308,10 @@ impl FillValue {
                     aligned.iter().all(|x| x == &fill_value_128)
                 } else {
                     bytes
-                        .chunks_exact(16)
-                        .all(|x| x == fill_value_bytes.as_slice())
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .all(|x| x.as_slice() == fill_value_bytes.as_slice())
                 }
             }
             _ => bytes
@@ -409,7 +417,7 @@ mod tests {
 
     #[test]
     fn fill_value_equals_u8() {
-        assert!(FillValue::from(vec![1u8; 32]).equals_all(&vec![1u8; 32 * 5]));
+        assert!(FillValue::from(vec![1u8; 32]).equals_all(&[1u8; 32 * 5]));
     }
 
     #[test]
@@ -468,7 +476,7 @@ mod tests {
         assert_eq!(null_fill_value.size(), 1);
         assert_eq!(null_fill_value.as_ne_bytes(), &[0u8]);
         assert!(null_fill_value.equals_all(&[0u8]));
-        assert_eq!(format!("{}", null_fill_value), "[0]");
+        assert_eq!(format!("{null_fill_value}"), "[0]");
 
         // Some(42u8) -> [42, 1] (value + non-null suffix)
         let some_fill_value: FillValue = Some(42u8).into();

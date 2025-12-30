@@ -17,7 +17,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::FLETCHER32;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `fletcher32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -38,8 +38,8 @@ impl Fletcher32Codec {
 }
 
 impl CodecTraits for Fletcher32Codec {
-    fn identifier(&self) -> &str {
-        FLETCHER32
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

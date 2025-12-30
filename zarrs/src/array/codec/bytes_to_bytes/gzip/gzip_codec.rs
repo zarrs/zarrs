@@ -5,7 +5,6 @@ use std::{
 };
 
 use flate2::bufread::{GzDecoder, GzEncoder};
-use zarrs_plugin::PluginCreateError;
 
 use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
@@ -19,7 +18,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::GZIP;
+use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]
@@ -56,8 +55,8 @@ impl GzipCodec {
 }
 
 impl CodecTraits for GzipCodec {
-    fn identifier(&self) -> &str {
-        GZIP
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

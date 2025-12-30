@@ -1,7 +1,6 @@
 use std::{num::NonZeroU64, sync::Arc};
 
-use zarrs_registry::ExtensionAliasesCodecV3;
-use zarrs_registry::codec::BYTES;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::NamedCodec;
@@ -18,6 +17,7 @@ use crate::{
             BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
             PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
         },
+        data_type::DataTypeExt,
         transmute_to_bytes_vec,
     },
     plugin::PluginCreateError,
@@ -37,14 +37,17 @@ impl Default for VlenCodec {
         let index_codecs = Arc::new(CodecChain::new_named(
             vec![],
             NamedCodec::new(
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
                 Arc::new(BytesCodec::new(Some(Endianness::Little))),
             ),
             vec![],
         ));
         let data_codecs = Arc::new(CodecChain::new_named(
             vec![],
-            NamedCodec::new(BYTES.to_string(), Arc::new(BytesCodec::new(None))),
+            NamedCodec::new(
+                BytesCodec::IDENTIFIER.to_string(),
+                Arc::new(BytesCodec::new(None)),
+            ),
             vec![],
         ));
         Self {
@@ -86,18 +89,12 @@ impl VlenCodec {
     /// Returns a [`PluginCreateError`] if the codecs cannot be constructed from the codec metadata.
     pub fn new_with_configuration(
         configuration: &VlenCodecConfiguration,
-        codec_aliases: &ExtensionAliasesCodecV3,
     ) -> Result<Self, PluginCreateError> {
         match configuration {
             VlenCodecConfiguration::V0_1(configuration) => {
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.data_codecs,
-                    codec_aliases,
-                )?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -106,14 +103,9 @@ impl VlenCodec {
                 ))
             }
             VlenCodecConfiguration::V0(configuration) => {
-                let index_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.index_codecs,
-                    codec_aliases,
-                )?);
-                let data_codecs = Arc::new(CodecChain::from_metadata(
-                    &configuration.data_codecs,
-                    codec_aliases,
-                )?);
+                let index_codecs =
+                    Arc::new(CodecChain::from_metadata(&configuration.index_codecs)?);
+                let data_codecs = Arc::new(CodecChain::from_metadata(&configuration.data_codecs)?);
                 Ok(Self::new(
                     index_codecs,
                     data_codecs,
@@ -129,8 +121,8 @@ impl VlenCodec {
 }
 
 impl CodecTraits for VlenCodec {
-    fn identifier(&self) -> &str {
-        zarrs_registry::codec::VLEN
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -209,7 +201,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &DataType::UInt32,
+                    &crate::array::data_type::uint32(),
                     &FillValue::from(0u32),
                     options,
                 )?
@@ -224,7 +216,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
                 self.index_codecs.encode(
                     offsets.into(),
                     &index_shape,
-                    &DataType::UInt64,
+                    &crate::array::data_type::uint64(),
                     &FillValue::from(0u64),
                     options,
                 )?
@@ -237,7 +229,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             self.data_codecs.encode(
                 data.into(),
                 &data_shape,
-                &DataType::UInt8,
+                &crate::array::data_type::uint8(),
                 &FillValue::from(0u8),
                 options,
             )?
@@ -338,7 +330,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
 
@@ -346,7 +338,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                zarrs_registry::codec::VLEN.to_string(),
+                Self::IDENTIFIER.to_string(),
             )),
         }
     }

@@ -2,9 +2,10 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::{borrow::Cow, sync::Arc};
+use std::{any::Any, borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
+use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs::{
@@ -15,18 +16,19 @@ use zarrs::{
     array_subset::ArraySubset,
 };
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// A unique identifier for  the custom data type.
-const UINT4: &'static str = "zarrs.test.uint4";
+const UINT4: &str = "zarrs.test.uint4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeUInt4;
+
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, UINT4);
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -34,16 +36,18 @@ struct CustomDataTypeUInt4Element(u8);
 
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePlugin::new(UINT4, is_custom_dtype, create_custom_dtype)
+    DataTypePlugin::new(UINT4, matches_name_custom_dtype, default_name_custom_dtype, create_custom_dtype)
 }
 
-fn is_custom_dtype(name: &str) -> bool {
+fn matches_name_custom_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == UINT4
 }
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
+    UINT4.into()
+}
+
+fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeUInt4))
     } else {
@@ -94,24 +98,18 @@ impl DataTypeExtension for CustomDataTypeUInt4 {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
-    }
-
-    fn codec_packbits(
-        &self,
-    ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeUInt4 {
+impl BytesCodecDataTypeTraits for CustomDataTypeUInt4 {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 
@@ -119,13 +117,13 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeUInt4 {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 }
 
 /// Add support for the `packbits` codec.
-impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
+impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt4 {
     fn component_size_bits(&self) -> u64 {
         4
     }
@@ -138,6 +136,18 @@ impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
         false
     }
 }
+
+// Register codec support
+zarrs::array::codec::register_data_type_extension_codec!(
+    CustomDataTypeUInt4,
+    zarrs::array::codec::BytesPlugin,
+    zarrs::array::codec::BytesCodecDataTypeTraits
+);
+zarrs::array::codec::register_data_type_extension_codec!(
+    CustomDataTypeUInt4,
+    zarrs::array::codec::PackBitsPlugin,
+    zarrs::array::codec::PackBitsCodecDataTypeTraits
+);
 
 impl TryFrom<u64> for CustomDataTypeUInt4Element {
     type Error = u64;
@@ -168,7 +178,8 @@ impl CustomDataTypeUInt4Element {
 /// This defines how an in-memory CustomDataTypeUInt4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeUInt4)))
+        // Check if the data type identifier matches our custom data type
+        (data_type.identifier() == UINT4)
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -218,7 +229,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeUInt4)),
+        Arc::new(CustomDataTypeUInt4) as DataType,
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

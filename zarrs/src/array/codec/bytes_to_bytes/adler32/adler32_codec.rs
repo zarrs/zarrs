@@ -24,7 +24,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
-use crate::registry::codec::ADLER32;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `adler32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -58,8 +58,8 @@ impl Adler32Codec {
 }
 
 impl CodecTraits for Adler32Codec {
-    fn identifier(&self) -> &str {
-        ADLER32
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

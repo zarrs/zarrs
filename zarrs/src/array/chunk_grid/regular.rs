@@ -25,7 +25,6 @@ use std::num::NonZeroU64;
 use thiserror::Error;
 
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::registry::chunk_grid::REGULAR;
 use crate::{
     array::{
         ArrayIndices, ArrayShape, ChunkShape,
@@ -35,15 +34,13 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(REGULAR, is_name_regular, create_chunk_grid_regular)
+    ChunkGridPlugin::new(RegularChunkGrid::IDENTIFIER, RegularChunkGrid::matches_name, RegularChunkGrid::default_name, create_chunk_grid_regular)
 }
-
-fn is_name_regular(name: &str) -> bool {
-    name.eq(REGULAR)
-}
+zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, "regular");
 
 /// Create a `regular` chunk grid from metadata.
 ///
@@ -55,7 +52,11 @@ pub(crate) fn create_chunk_grid_regular(
 ) -> Result<ChunkGrid, PluginCreateError> {
     let configuration: RegularChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(REGULAR, "chunk grid", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                RegularChunkGrid::IDENTIFIER,
+                "chunk grid",
+                metadata.to_string(),
+            )
         })?;
     let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
         .map_err(|_| {
@@ -208,8 +209,11 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
         let configuration = RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
         };
-        MetadataV3::new_with_serializable_configuration(REGULAR.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn dimensionality(&self) -> usize {
@@ -323,7 +327,7 @@ mod tests {
         assert_eq!(
             configuration.to_string(),
             r#"regular chunk grid {"chunk_shape":[1,2,3]}"#
-        )
+        );
     }
 
     #[test]

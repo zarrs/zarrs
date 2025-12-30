@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_chunk_grid"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.88"
 description = "The chunk grid API for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_chunk_grid"
@@ -19,7 +19,6 @@ workspace = true
 all-features = true
 
 [dependencies]
-half.workspace = true
 thiserror.workspace = true
 derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
 zarrs_metadata.workspace = true

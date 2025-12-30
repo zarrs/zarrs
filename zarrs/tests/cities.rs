@@ -10,16 +10,16 @@ use std::{
 
 use zarrs::{
     array::{
-        ArrayBuilder, ArrayBytes, ArrayMetadataOptions, DataType,
+        ArrayBuilder, ArrayBytes, ArrayMetadataOptions,
         codec::{
             ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
             array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
         },
+        data_type,
     },
     storage::{ReadableWritableListableStorage, store::MemoryStore},
 };
 use zarrs_filesystem::FilesystemStore;
-use zarrs_registry::ExtensionAliasesCodecV3;
 
 fn read_cities() -> std::io::Result<Vec<String>> {
     let reader = BufReader::new(File::open("tests/data/cities.csv")?);
@@ -48,7 +48,7 @@ fn cities_impl(
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
         vec![chunk_size],          // regular chunk shape
-        DataType::String,
+        data_type::string(),
         "",
     );
     builder.array_to_bytes_codec(vlen_codec);
@@ -98,7 +98,7 @@ fn cities() -> Result<(), Box<dyn Error>> {
         "index_data_type": "uint32",
         "index_location": "start"
     }"#)?;
-    let vlen = Arc::new(VlenCodec::new_with_configuration(&vlen_configuration, &ExtensionAliasesCodecV3::default())?);
+    let vlen = Arc::new(VlenCodec::new_with_configuration(&vlen_configuration)?);
 
     let vlen_compressed_configuration: VlenCodecConfiguration = serde_json::from_str(r#"{
         "data_codecs": [{"name": "bytes"},{"name": "blosc","configuration": {"cname": "zstd", "clevel":5,"shuffle": "bitshuffle", "typesize":1,"blocksize":0}}],
@@ -106,14 +106,14 @@ fn cities() -> Result<(), Box<dyn Error>> {
         "index_data_type": "uint32",
         "index_location": "end"
     }"#)?;
-    let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration, &ExtensionAliasesCodecV3::default())?);
+    let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration)?);
 
-    print!("| encoding         | compression | size   |\n");
-    print!("| ---------------- | ----------- | ------ |\n");
-    print!("| vlen_utf8 |             | {} |\n", cities_impl(&cities, None, 1000, None, vlen_utf8.clone(), true)?);
-    print!("| vlen_utf8 | zstd 5      | {} |\n", cities_impl(&cities, Some(5), 1000, None, vlen_utf8.clone(), false)?);
-    print!("| vlen             |             | {} |\n", cities_impl(&cities, None, 1000, None, vlen.clone(), false)?);
-    print!("| vlen             | zstd 5      | {} |\n", cities_impl(&cities, None, 1000, None, vlen_compressed.clone(), false)?);
+    println!("| encoding         | compression | size   |");
+    println!("| ---------------- | ----------- | ------ |");
+    println!("| vlen_utf8 |             | {} |", cities_impl(&cities, None, 1000, None, vlen_utf8.clone(), true)?);
+    println!("| vlen_utf8 | zstd 5      | {} |", cities_impl(&cities, Some(5), 1000, None, vlen_utf8.clone(), false)?);
+    println!("| vlen             |             | {} |", cities_impl(&cities, None, 1000, None, vlen.clone(), false)?);
+    println!("| vlen             | zstd 5      | {} |", cities_impl(&cities, None, 1000, None, vlen_compressed.clone(), false)?);
     println!();
     // panic!();
 

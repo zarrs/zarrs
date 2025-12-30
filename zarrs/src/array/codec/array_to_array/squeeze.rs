@@ -34,12 +34,11 @@ use std::{num::NonZeroU64, sync::Arc};
 
 use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
         ArrayIndices,
@@ -53,21 +52,15 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(SQUEEZE, is_identifier_squeeze, create_codec_squeeze)
+    CodecPlugin::new(SqueezeCodec::IDENTIFIER, SqueezeCodec::matches_name, SqueezeCodec::default_name, create_codec_squeeze)
 }
+zarrs_plugin::impl_extension_aliases!(SqueezeCodec, "zarrs.squeeze");
 
-fn is_identifier_squeeze(identifier: &str) -> bool {
-    identifier == SQUEEZE
-}
-
-pub(crate) fn create_codec_squeeze(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: SqueezeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SQUEEZE, "codec", metadata.to_string()))?;
+    let configuration: SqueezeCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(SqueezeCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }
@@ -132,6 +125,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
+            data_type,
+            data_type::DataTypeExt,
         },
         array_subset::ArraySubset,
     };
@@ -187,8 +182,8 @@ mod tests {
 
     #[test]
     fn codec_squeeze_round_trip_array1() {
-        const JSON: &str = r#"{}"#;
-        codec_squeeze_round_trip_impl(JSON, DataType::UInt8, 0u8);
+        const JSON: &str = r"{}";
+        codec_squeeze_round_trip_impl(JSON, data_type::uint8(), 0u8);
     }
 
     #[test]
@@ -203,7 +198,7 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(1).unwrap(),
         ];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();

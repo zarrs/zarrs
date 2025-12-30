@@ -10,7 +10,7 @@
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/bytes>
 //!
 //! ### Specification Deviations
-//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`DataTypeExtensionBytesCodec`](zarrs_data_type::DataTypeExtensionBytesCodec) trait.
+//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`BytesCodecDataTypeTraits`] trait.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `bytes`
@@ -36,15 +36,15 @@ use std::sync::Arc;
 
 pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
-use crate::metadata::Endianness;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
-use crate::registry::codec::BYTES;
+use crate::{array::codec::CodecError, metadata::Endianness};
 use crate::{
     array::{
         DataType,
         codec::{Codec, CodecPlugin},
+        data_type::DataTypeExt,
     },
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
@@ -52,103 +52,134 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BYTES, is_identifier_bytes, create_codec_bytes)
+    CodecPlugin::new(BytesCodec::IDENTIFIER, BytesCodec::matches_name, BytesCodec::default_name, create_codec_bytes)
 }
+zarrs_plugin::impl_extension_aliases!(BytesCodec, "bytes",
+    v3: "bytes", ["endian"]
+);
 
-fn is_identifier_bytes(identifier: &str) -> bool {
-    identifier == BYTES
-}
-
-pub(crate) fn create_codec_bytes(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     if metadata.name() == "binary" {
         crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
     }
-    let configuration: BytesCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BYTES, "codec", metadata.to_string()))?;
+    let configuration: BytesCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(BytesCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(BytesCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
+use std::borrow::Cow;
+
+/// Traits for a data type supporting the `bytes` codec.
+pub trait BytesCodecDataTypeTraits {
+    /// Encode the bytes of a fixed-size data type to a specified endianness for the `bytes` codec.
+    ///
+    /// Returns the input bytes unmodified for fixed-size data where endianness is not applicable (i.e. the bytes are serialised directly from the in-memory representation).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `endianness` is [`None`] but must be specified or the `bytes` do not have the correct length.
+    #[allow(unused_variables)]
+    fn encode<'a>(
+        &self,
+        bytes: Cow<'a, [u8]>,
+        endianness: Option<Endianness>,
+    ) -> Result<Cow<'a, [u8]>, CodecError>;
+
+    /// Decode the bytes of a fixed-size data type from a specified endianness for the `bytes` codec.
+    ///
+    /// This performs the inverse operation of [`encode`](BytesCodecDataTypeTraits::encode).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `endianness` is [`None`] but must be specified or the `bytes` do not have the correct length.
+    #[allow(unused_variables)]
+    fn decode<'a>(
+        &self,
+        bytes: Cow<'a, [u8]>,
+        endianness: Option<Endianness>,
+    ) -> Result<Cow<'a, [u8]>, CodecError>;
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(Bytes, BytesCodecDataTypeTraits);
+
+/// Macro to implement a passthrough `BytesCodecDataTypeTraits` for data types and register support.
+///
+/// This is useful for single-byte types and other types where no byte-swapping
+/// or transformation is needed during encoding/decoding.
+///
+/// # Usage
+/// ```ignore
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(BoolDataType);
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(UInt4DataType);
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(Float8E4M3DataType);
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _impl_bytes_codec_passthrough {
+    ($marker:ty) => {
+        impl $crate::array::codec::BytesCodecDataTypeTraits for $marker {
+            fn encode<'a>(
+                &self,
+                bytes: ::std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+                Ok(bytes)
+            }
+
+            fn decode<'a>(
+                &self,
+                bytes: ::std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+                Ok(bytes)
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BytesPlugin,
+            $crate::array::codec::BytesCodecDataTypeTraits
+        );
+    };
+}
+
+#[doc(inline)]
+pub use _impl_bytes_codec_passthrough as impl_bytes_codec_passthrough;
+
 /// Reverse the endianness of bytes for a given data type.
 pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
-    match data_type {
-        DataType::Bool
-        | DataType::Int2
-        | DataType::Int4
-        | DataType::Int8
-        | DataType::UInt2
-        | DataType::UInt4
-        | DataType::UInt8
-        | DataType::Float4E2M1FN
-        | DataType::Float6E2M3FN
-        | DataType::Float6E3M2FN
-        | DataType::Float8E3M4
-        | DataType::Float8E4M3
-        | DataType::Float8E4M3B11FNUZ
-        | DataType::Float8E4M3FNUZ
-        | DataType::Float8E5M2
-        | DataType::Float8E5M2FNUZ
-        | DataType::Float8E8M0FNU
-        | DataType::ComplexFloat4E2M1FN
-        | DataType::ComplexFloat6E2M3FN
-        | DataType::ComplexFloat6E3M2FN
-        | DataType::ComplexFloat8E3M4
-        | DataType::ComplexFloat8E4M3
-        | DataType::ComplexFloat8E4M3B11FNUZ
-        | DataType::ComplexFloat8E4M3FNUZ
-        | DataType::ComplexFloat8E5M2
-        | DataType::ComplexFloat8E5M2FNUZ
-        | DataType::ComplexFloat8E8M0FNU
-        | DataType::RawBits(_) => {}
-        DataType::Int16
-        | DataType::UInt16
-        | DataType::Float16
-        | DataType::BFloat16
-        | DataType::ComplexFloat16
-        | DataType::ComplexBFloat16 => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u16::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(2).for_each(swap);
+    // Get the fixed size of the data type. Variable-sized types are not supported.
+    let Some(size) = data_type.fixed_size() else {
+        // Variable-sized data types are rejected outside of this function
+        unreachable!()
+    };
+
+    match size {
+        // Single-byte types don't need endianness reversal
+        1 => {}
+        2 => {
+            for chunk in v.as_chunks_mut::<2>().0 {
+                let bytes = u16::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
-        DataType::Int32
-        | DataType::UInt32
-        | DataType::Float32
-        | DataType::Complex64
-        | DataType::ComplexFloat32 => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u32::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(4).for_each(swap);
+        4 => {
+            for chunk in v.as_chunks_mut::<4>().0 {
+                let bytes = u32::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
-        DataType::Int64
-        | DataType::UInt64
-        | DataType::Float64
-        | DataType::Complex128
-        | DataType::ComplexFloat64
-        | DataType::NumpyDateTime64 {
-            unit: _,
-            scale_factor: _,
+        8 => {
+            for chunk in v.as_chunks_mut::<8>().0 {
+                let bytes = u64::from_ne_bytes(*chunk);
+                *chunk = bytes.swap_bytes().to_ne_bytes();
+            }
         }
-        | DataType::NumpyTimeDelta64 {
-            unit: _,
-            scale_factor: _,
-        } => {
-            let swap = |chunk: &mut [u8]| {
-                let bytes = u64::from_ne_bytes(unsafe { chunk.try_into().unwrap_unchecked() });
-                chunk.copy_from_slice(bytes.swap_bytes().to_ne_bytes().as_slice());
-            };
-            v.chunks_exact_mut(8).for_each(swap);
-        }
-        // Variable-sized data types and extensions are not supported and are rejected outside of this function
-        DataType::Extension(_) | DataType::String | DataType::Bytes | DataType::Optional(_) => {
-            unreachable!()
+        // Other sizes: swap bytes pairwise for each element
+        _ => {
+            for chunk in v.chunks_exact_mut(size) {
+                chunk.reverse();
+            }
         }
     }
 }
@@ -165,6 +196,8 @@ mod tests {
                 ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions,
                 CodecOptions, CodecTraits,
             },
+            data_type,
+            data_type::DataTypeExt,
         },
         array_subset::ArraySubset,
     };
@@ -175,7 +208,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"big"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BYTES, &CodecMetadataOptions::default())
+            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -189,7 +222,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"little"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BYTES, &CodecMetadataOptions::default())
+            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -199,12 +232,12 @@ mod tests {
 
     #[test]
     fn codec_bytes_configuration_none() {
-        let codec_configuration: BytesCodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
+        let codec_configuration: BytesCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BYTES, &CodecMetadataOptions::default())
+            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
             .unwrap();
-        assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
+        assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }
 
     fn codec_bytes_round_trip_impl(
@@ -244,51 +277,52 @@ mod tests {
 
     #[test]
     fn codec_bytes_round_trip_f32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::Float32, 0.0f32).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::Float32, 0.0f32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::float32(), 0.0f32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::float32(), 0.0f32)
+            .unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt32, 0u32).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt32, 0u32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint32(), 0u32).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint32(), 0u32).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u16() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt16, 0u16).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt16, 0u16).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint16(), 0u16).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint16(), 0u16).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_u8() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::UInt8, 0u8).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::UInt8, 0u8).unwrap();
-        codec_bytes_round_trip_impl(None, DataType::UInt8, 0u8).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::uint8(), 0u8).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::uint8(), 0u8).unwrap();
+        codec_bytes_round_trip_impl(None, data_type::uint8(), 0u8).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32() {
-        codec_bytes_round_trip_impl(Some(Endianness::Big), DataType::Int32, 0).unwrap();
-        codec_bytes_round_trip_impl(Some(Endianness::Little), DataType::Int32, 0).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Big), data_type::int32(), 0).unwrap();
+        codec_bytes_round_trip_impl(Some(Endianness::Little), data_type::int32(), 0).unwrap();
     }
 
     #[test]
     fn codec_bytes_round_trip_i32_endianness_none() {
-        assert!(codec_bytes_round_trip_impl(None, DataType::Int32, 0).is_err());
+        assert!(codec_bytes_round_trip_impl(None, data_type::int32(), 0).is_err());
     }
 
     #[test]
     fn codec_bytes_round_trip_complex64() {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
-            DataType::Complex64,
+            data_type::complex64(),
             num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
-            DataType::Complex64,
+            data_type::complex64(),
             num::complex::Complex32::new(0.0, 0.0),
         )
         .unwrap();
@@ -298,13 +332,13 @@ mod tests {
     fn codec_bytes_round_trip_complex128() {
         codec_bytes_round_trip_impl(
             Some(Endianness::Big),
-            DataType::Complex128,
+            data_type::complex128(),
             num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
         codec_bytes_round_trip_impl(
             Some(Endianness::Little),
-            DataType::Complex128,
+            data_type::complex128(),
             num::complex::Complex64::new(0.0, 0.0),
         )
         .unwrap();
@@ -313,7 +347,7 @@ mod tests {
     #[test]
     fn codec_bytes_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
 
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
@@ -349,8 +383,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);
@@ -360,7 +396,7 @@ mod tests {
     #[tokio::test]
     async fn codec_bytes_async_partial_decode() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();
@@ -396,8 +432,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);

@@ -32,13 +32,12 @@ mod transpose_codec_partial;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 use crate::metadata::DataTypeSize;
 pub use crate::metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         ArrayBytes, ArrayBytesRaw, DataType,
@@ -53,20 +52,14 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(TRANSPOSE, is_identifier_transpose, create_codec_transpose)
+    CodecPlugin::new(TransposeCodec::IDENTIFIER, TransposeCodec::matches_name, TransposeCodec::default_name, create_codec_transpose)
 }
+zarrs_plugin::impl_extension_aliases!(TransposeCodec, "transpose");
 
-fn is_identifier_transpose(identifier: &str) -> bool {
-    identifier == TRANSPOSE
-}
-
-pub(crate) fn create_codec_transpose(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: TransposeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(TRANSPOSE, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: TransposeCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(TransposeCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }
@@ -237,7 +230,7 @@ pub(crate) fn apply_permutation<'a>(
         }
         (ArrayBytes::Optional(..), _) => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            TRANSPOSE.to_string(),
+            TransposeCodec::IDENTIFIER.to_string(),
         )),
         (_, _) => Err(CodecError::Other(
             "dev error: transpose data type mismatch".to_string(),
@@ -254,6 +247,8 @@ mod tests {
         array::{
             ArrayBytes, ChunkShapeTraits, DataType, FillValue,
             codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
+            data_type,
+            data_type::DataTypeExt,
         },
         array_subset::ArraySubset,
     };
@@ -302,7 +297,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [0, 2, 1]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt8, 0u8);
+        codec_transpose_round_trip_impl(JSON, data_type::uint8(), 0u8);
     }
 
     #[test]
@@ -310,7 +305,7 @@ mod tests {
         const JSON: &str = r#"{
             "order": [2, 1, 0]
         }"#;
-        codec_transpose_round_trip_impl(JSON, DataType::UInt16, 0u16);
+        codec_transpose_round_trip_impl(JSON, data_type::uint16(), 0u16);
     }
 
     #[test]
@@ -319,12 +314,12 @@ mod tests {
 
         // Create a 2x3 array of strings
         let shape = vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(3).unwrap()];
-        let data_type = DataType::String;
+        let data_type = data_type::string();
         let fill_value = FillValue::from("");
 
         // Create test data: 6 strings in row-major order
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let bytes = Element::into_array_bytes(&DataType::String, strings).unwrap();
+        let bytes = Element::into_array_bytes(&data_type::string(), strings).unwrap();
 
         // Create transpose codec with order [1, 0] (swap axes)
         let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
@@ -363,24 +358,25 @@ mod tests {
         // Create test data: 6 strings in row-major order for shape [2, 3]
         // [[s00, s01, s02], [s10, s11, s12]]
         let strings: Vec<&str> = vec!["s00", "s01a", "s02ab", "s10abc", "s11abcd", "s12abcde"];
-        let original = Element::into_array_bytes(&DataType::String, strings).unwrap();
+        let original = Element::into_array_bytes(&data_type::string(), strings).unwrap();
 
         // Encode: apply transpose order [1, 0] to get shape [3, 2]
         // Transposed should be: [[s00, s10], [s01, s11], [s02, s12]]
         let transposed_strings: Vec<&str> =
             vec!["s00", "s10abc", "s01a", "s11abcd", "s02ab", "s12abcde"];
         let expected_transposed =
-            Element::into_array_bytes(&DataType::String, transposed_strings).unwrap();
+            Element::into_array_bytes(&data_type::string(), transposed_strings).unwrap();
 
         // Test encoding (forward permutation)
-        let encoded = apply_permutation(&original, &[2, 3], &order.0, &DataType::String).unwrap();
+        let encoded =
+            apply_permutation(&original, &[2, 3], &order.0, &data_type::string()).unwrap();
         assert_eq!(encoded, expected_transposed);
 
         // Test decoding (inverse permutation)
         // Inverse of [1, 0] is [1, 0]
         let order_decode = [1, 0];
         let decoded =
-            apply_permutation(&encoded, &[3, 2], &order_decode, &DataType::String).unwrap();
+            apply_permutation(&encoded, &[3, 2], &order_decode, &data_type::string()).unwrap();
         assert_eq!(decoded, original);
     }
 
@@ -390,7 +386,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
@@ -456,7 +452,7 @@ mod tests {
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float32;
+        let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();

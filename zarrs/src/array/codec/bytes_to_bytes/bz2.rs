@@ -35,13 +35,12 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use self::bz2_codec::Bz2Codec;
 pub use crate::metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use crate::registry::codec::BZ2;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -50,20 +49,16 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(BZ2, is_identifier_bz2, create_codec_bz2)
+    CodecPlugin::new(Bz2Codec::IDENTIFIER, Bz2Codec::matches_name, Bz2Codec::default_name, create_codec_bz2)
 }
+zarrs_plugin::impl_extension_aliases!(Bz2Codec, "bz2",
+    v3: "numcodecs.bz2", []
+);
 
-fn is_identifier_bz2(identifier: &str) -> bool {
-    identifier == BZ2
-}
-
-pub(crate) fn create_codec_bz2(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: Bz2CodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BZ2, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: Bz2CodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(Bz2Codec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
@@ -76,8 +71,10 @@ mod tests {
     use crate::storage::byte_range::ByteRange;
     use crate::{
         array::{
-            BytesRepresentation, ChunkShapeTraits, DataType,
+            BytesRepresentation, ChunkShapeTraits,
             codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
+            data_type,
+            data_type::DataTypeExt,
         },
         array_subset::ArraySubset,
         indexer::Indexer,
@@ -111,7 +108,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn codec_bz2_partial_decode() {
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -145,9 +142,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];
@@ -161,7 +160,7 @@ mod tests {
         use crate::indexer::Indexer;
 
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let data_type_size = data_type.fixed_size().unwrap();
         let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
@@ -196,9 +195,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];

@@ -15,7 +15,7 @@ use crate::array::{
     },
 };
 use crate::metadata::Configuration;
-use crate::registry::codec::BZ2;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bz2` codec implementation.
 #[derive(Clone, Debug)]
@@ -48,8 +48,8 @@ impl Bz2Codec {
 }
 
 impl CodecTraits for Bz2Codec {
-    fn identifier(&self) -> &str {
-        BZ2
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

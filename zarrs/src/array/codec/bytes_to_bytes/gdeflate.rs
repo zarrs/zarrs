@@ -46,13 +46,12 @@ mod gdeflate_codec;
 use std::sync::Arc;
 
 pub use gdeflate_codec::GDeflateCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use crate::registry::codec::GDEFLATE;
 use crate::{
     array::{
         ArrayBytesRaw,
@@ -64,21 +63,17 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(GDEFLATE, is_identifier_gdeflate, create_codec_gdeflate)
+    CodecPlugin::new(GDeflateCodec::IDENTIFIER, GDeflateCodec::matches_name, GDeflateCodec::default_name, create_codec_gdeflate)
 }
+zarrs_plugin::impl_extension_aliases!(GDeflateCodec, "gdeflate",
+    v3: "zarrs.gdeflate", []
+);
 
-fn is_identifier_gdeflate(identifier: &str) -> bool {
-    identifier == GDEFLATE
-}
-
-pub(crate) fn create_codec_gdeflate(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: GDeflateCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(GDEFLATE, "codec", metadata.to_string()))?;
+    let configuration: GDeflateCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(GDeflateCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
@@ -364,9 +359,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -411,9 +408,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

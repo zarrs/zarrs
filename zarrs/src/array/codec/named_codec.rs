@@ -1,10 +1,10 @@
 use std::{ops::Deref, sync::Arc};
 
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ZarrVersions;
 
 use super::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-    CodecMetadataOptions, CodecTraits,
+    CodecMetadataOptions, CodecPlugin, CodecTraits,
 };
 use crate::metadata::Configuration;
 
@@ -24,8 +24,14 @@ impl<T: CodecTraits + ?Sized> NamedCodec<T> {
 
     /// Create a new [`NamedCodec`] with the default name for the codec.
     #[must_use]
-    pub fn new_default_name(codec: Arc<T>, aliases: &ExtensionAliasesCodecV3) -> Self {
-        let name = aliases.default_name(codec.identifier()).to_string();
+    pub fn new_default_name(codec: Arc<T>) -> Self {
+        let identifier = codec.identifier();
+        let name = inventory::iter::<CodecPlugin>()
+            .find(|plugin| plugin.identifier() == identifier)
+            .map_or_else(
+                || identifier.to_string(),
+                |plugin| plugin.default_name(ZarrVersions::V3).into_owned(),
+            );
         Self { name, codec }
     }
 

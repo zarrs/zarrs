@@ -15,7 +15,6 @@ use crate::metadata::Configuration;
 use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
-use crate::registry::codec::RESHAPE;
 use crate::{
     array::{
         ChunkShape,
@@ -26,6 +25,7 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]
@@ -59,8 +59,8 @@ impl ReshapeCodec {
 }
 
 impl CodecTraits for ReshapeCodec {
-    fn identifier(&self) -> &str {
-        RESHAPE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

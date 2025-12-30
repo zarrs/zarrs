@@ -1,12 +1,11 @@
 use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
 
-use super::{Endianness, reverse_endianness};
+use super::{BytesCodec, Endianness, reverse_endianness};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::registry::codec::BYTES;
 use crate::storage::{StorageError, byte_range::ByteRange};
 use crate::{
     array::{
@@ -15,10 +14,12 @@ use crate::{
             ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
             BytesPartialEncoderTraits, CodecError, CodecOptions,
         },
+        data_type::DataTypeExt,
         update_array_bytes,
     },
     indexer::IncompatibleIndexerError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {
@@ -72,7 +73,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -97,10 +98,10 @@ where
 
         let decoded = if let Some(decoded) = decoded {
             let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut decoded, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut decoded, &self.data_type);
             }
             ArrayBytes::from(decoded)
         } else {
@@ -142,7 +143,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -169,10 +170,10 @@ where
 
         let decoded = if let Some(decoded) = decoded {
             let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut decoded, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut decoded, &self.data_type);
             }
             ArrayBytes::from(decoded)
         } else {
@@ -208,7 +209,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -226,10 +227,10 @@ where
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut bytes_to_encode, &self.data_type);
             }
 
             let offset_bytes: Vec<_> = byte_ranges
@@ -264,10 +265,10 @@ where
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut chunk_bytes, &self.data_type);
             }
 
             self.input_output_handle
@@ -304,7 +305,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BYTES.to_string(),
+                BytesCodec::IDENTIFIER.to_string(),
             ));
         };
 
@@ -322,10 +323,10 @@ where
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
             let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut bytes_to_encode, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut bytes_to_encode, &self.data_type);
             }
 
             let offset_bytes: Vec<_> = byte_ranges
@@ -361,10 +362,10 @@ where
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian {
-                if !endian.is_native() {
-                    reverse_endianness(&mut chunk_bytes, &self.data_type);
-                }
+            if let Some(endian) = &self.endian
+                && !endian.is_native()
+            {
+                reverse_endianness(&mut chunk_bytes, &self.data_type);
             }
 
             self.input_output_handle

@@ -66,19 +66,18 @@ pub use sharding_codec_builder::ShardingCodecBuilder;
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use crate::registry::codec::SHARDING;
 use crate::{
     array::{
-        ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkShape, ChunkShapeTraits,
-        CodecChain, DataType, FillValue, RecommendedConcurrency,
+        ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
+        FillValue, RecommendedConcurrency,
         codec::{
-            ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions,
-            CodecPlugin,
+            ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec,
+            CodecError, CodecOptions, CodecPlugin,
         },
         concurrency::calc_concurrency_outer_inner,
         ravel_indices,
@@ -90,24 +89,15 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(SHARDING, is_identifier_sharding, create_codec_sharding)
+    CodecPlugin::new(ShardingCodec::IDENTIFIER, ShardingCodec::matches_name, ShardingCodec::default_name, create_codec_sharding)
 }
+zarrs_plugin::impl_extension_aliases!(ShardingCodec, "sharding_indexed");
 
-fn is_identifier_sharding(identifier: &str) -> bool {
-    identifier == SHARDING
-}
-
-pub(crate) fn create_codec_sharding(
-    metadata: &MetadataV3,
-    aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: ShardingCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SHARDING, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ShardingCodec::new_with_configuration(
-        &configuration,
-        aliases,
-    )?);
+pub(crate) fn create_codec_sharding(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ShardingCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ShardingCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
+    let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
@@ -143,7 +133,7 @@ fn compute_index_encoded_size(
 ) -> Result<u64, CodecError> {
     let bytes_representation = index_codecs.encoded_representation(
         sharding_index_shape,
-        &DataType::UInt64,
+        &crate::array::data_type::uint64(),
         &FillValue::from(u64::MAX),
     )?;
     match bytes_representation {
@@ -166,14 +156,16 @@ fn decode_shard_index(
     let decoded_shard_index = index_codecs.decode(
         Cow::Borrowed(encoded_shard_index),
         index_shape,
-        &DataType::UInt64,
+        &crate::array::data_type::uint64(),
         &FillValue::from(u64::MAX),
         options,
     )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
-        .chunks_exact(size_of::<u64>())
-        .map(|v| u64::from_ne_bytes(v.try_into().unwrap() /* safe */))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|v| u64::from_ne_bytes(*v))
         .collect())
 }
 
@@ -296,13 +288,12 @@ async fn decode_shard_index_async_partial_decoder(
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use zarrs_registry::ExtensionAliasesCodecV3;
-
     use super::*;
     use crate::{
         array::{
             ArrayBytes,
             codec::{BytesToBytesCodecTraits, bytes_to_bytes::test_unbounded::TestUnboundedCodec},
+            data_type,
         },
         array_subset::ArraySubset,
     };
@@ -372,7 +363,7 @@ mod tests {
     ) {
         let chunk_shape = vec![NonZeroU64::new(4).unwrap(); 2];
         let subchunk_shape = vec![NonZeroU64::new(2).unwrap(); 2];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -383,9 +374,9 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         if unbounded {
-            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()))
+            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec = ShardingCodecBuilder::new(subchunk_shape, &DataType::UInt16)
+        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
             .index_location(if index_at_end {
                 ShardingIndexLocation::End
             } else {
@@ -476,7 +467,7 @@ mod tests {
         mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) {
         let shape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = if all_fill_value {
             vec![0; shape.num_elements_usize()]
@@ -487,10 +478,10 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         if unbounded {
-            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()))
+            bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
         let codec =
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &DataType::UInt16)
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {
@@ -540,7 +531,7 @@ mod tests {
         all_fill_value: bool,
     ) {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -592,8 +583,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         assert_eq!(answer, decoded_partial_chunk);
     }
@@ -627,7 +620,7 @@ mod tests {
         all_fill_value: bool,
     ) {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = if all_fill_value {
             vec![0; chunk_shape.num_elements_usize()]
@@ -647,7 +640,7 @@ mod tests {
             vec![]
         };
         let codec = Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &DataType::UInt8)
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint8())
                 .index_location(if index_at_end {
                     ShardingIndexLocation::End
                 } else {
@@ -680,8 +673,10 @@ mod tests {
             .unwrap();
 
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         assert_eq!(answer, decoded_partial_chunk);
     }
@@ -713,14 +708,12 @@ mod tests {
     #[cfg(feature = "crc32c")]
     #[test]
     fn codec_sharding_partial_decode2() {
-        use zarrs_registry::ExtensionAliasesCodecV3;
-
         let chunk_shape: ChunkShape = vec![
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(4).unwrap(),
         ];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -728,13 +721,7 @@ mod tests {
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID2).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
             .encode(
@@ -767,8 +754,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![16, 17, 18, 20, 21, 22];
@@ -778,20 +767,14 @@ mod tests {
     #[test]
     fn codec_sharding_partial_decode3() {
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt8;
+        let data_type = data_type::uint8();
         let fill_value = FillValue::from(0u8);
         let elements: Vec<u8> = (0..chunk_shape.num_elements_usize() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         let encoded = codec
             .encode(
@@ -824,8 +807,10 @@ mod tests {
         let decoded_partial_chunk: Vec<u8> = decoded_partial_chunk
             .into_fixed()
             .unwrap()
-            .chunks(size_of::<u8>())
-            .map(|b| u8::from_ne_bytes(b.try_into().unwrap()))
+            .as_chunks::<1>()
+            .0
+            .iter()
+            .map(|b| u8::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u8> = vec![4, 8];
         assert_eq!(answer, decoded_partial_chunk);
@@ -839,7 +824,7 @@ mod tests {
         // 3. Compact and check that the size matches the original fully encoded shard
 
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
-        let data_type = DataType::UInt16;
+        let data_type = data_type::uint16();
         let fill_value = FillValue::from(0u16);
         let elements: Vec<u16> = (0..chunk_shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -848,13 +833,7 @@ mod tests {
         // Create a sharding codec with 2x2 inner chunks
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
-        let codec = Arc::new(
-            ShardingCodec::new_with_configuration(
-                &codec_configuration,
-                &ExtensionAliasesCodecV3::default(),
-            )
-            .unwrap(),
-        );
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
 
         // Step 1: Fully encode the shard
         let original_encoded = codec
@@ -916,9 +895,7 @@ mod tests {
         let updated_size = updated_encoded.len();
         assert!(
             updated_size > original_size,
-            "Updated shard size ({}) should be > original size ({})",
-            updated_size,
-            original_size
+            "Updated shard size ({updated_size}) should be > original size ({original_size})"
         );
 
         // Step 3: Compact the updated shard
@@ -937,8 +914,7 @@ mod tests {
         let compacted_size = compacted.len();
         assert_eq!(
             compacted_size, original_size,
-            "Compacted size ({}) should be equal to original size ({})",
-            compacted_size, original_size
+            "Compacted size ({compacted_size}) should be equal to original size ({original_size})"
         );
 
         // Verify the compacted shard decodes correctly

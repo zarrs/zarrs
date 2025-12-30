@@ -34,7 +34,6 @@ use thiserror::Error;
 pub use crate::metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use crate::registry::chunk_grid::RECTANGULAR;
 use crate::{
     array::{
         ArrayIndices, ArrayShape, ChunkShape,
@@ -44,15 +43,13 @@ use crate::{
     metadata::v3::MetadataV3,
     plugin::{PluginCreateError, PluginMetadataInvalidError},
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RECTANGULAR, is_name_rectangular, create_chunk_grid_rectangular)
+    ChunkGridPlugin::new(RectangularChunkGrid::IDENTIFIER, RectangularChunkGrid::matches_name, RectangularChunkGrid::default_name, create_chunk_grid_rectangular)
 }
-
-fn is_name_rectangular(name: &str) -> bool {
-    name.eq(RECTANGULAR)
-}
+zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, "rectangular");
 
 /// Create a `rectangular` chunk grid from metadata.
 ///
@@ -65,7 +62,11 @@ pub(crate) fn create_chunk_grid_rectangular(
     crate::warn_experimental_extension(metadata.name(), "chunk grid");
     let configuration: RectangularChunkGridConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(RECTANGULAR, "chunk grid", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                RectangularChunkGrid::IDENTIFIER,
+                "chunk grid",
+                metadata.to_string(),
+            )
         })?;
     let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
         .map_err(|err| PluginCreateError::Other(err.to_string()))?;
@@ -192,8 +193,11 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
             })
             .collect();
         let configuration = RectangularChunkGridConfiguration { chunk_shape };
-        MetadataV3::new_with_serializable_configuration(RECTANGULAR.to_string(), &configuration)
-            .unwrap()
+        MetadataV3::new_with_serializable_configuration(
+            Self::IDENTIFIER.to_string(),
+            &configuration,
+        )
+        .unwrap()
     }
 
     fn dimensionality(&self) -> usize {

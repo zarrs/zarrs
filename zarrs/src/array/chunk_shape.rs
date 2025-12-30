@@ -1,10 +1,6 @@
 use std::num::{NonZeroU64, NonZeroUsize};
 
-/// An array shape. Dimensions may be zero.
-pub type ArrayShape = Vec<u64>;
-
-/// A chunk shape. Dimensions must be non-zero.
-pub type ChunkShape = Vec<NonZeroU64>;
+pub use zarrs_metadata::{ArrayShape, ChunkShape};
 
 /// A trait for chunk shapes.
 pub trait ChunkShapeTraits: AsRef<[NonZeroU64]> {

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Breaking**: Remove `v2_to_v3` module (moved to `zarrs::v2_to_v3`)
+- Dependency on `zarrs_registry`
+
 ## [0.3.0] - 2025-12-26
 
 ### Added
@@ -17,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: bump `zarrs_metadata` to 0.7.0
 - Bump `zarrs_registry` to 0.1.9
 - Bump `monostate` to 1.0.2
+
+### Removed
+- Remove unused `half` and `log` dependencies
 
 ## [0.2.2] - 2025-10-26
 

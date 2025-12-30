@@ -424,8 +424,8 @@ mod tests {
     use crate::{
         array::{
             Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-            ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, DataType,
-            chunk_cache::ChunkCache, codec::CodecOptions,
+            ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, chunk_cache::ChunkCache,
+            codec::CodecOptions, data_type,
         },
         array_subset::ArraySubset,
         storage::{
@@ -444,7 +444,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![12, 8], // array shape
             vec![4, 4],  // regular chunk shape
-            DataType::UInt8,
+            data_type::uint8(),
             0u8,
         )
         .subchunk_shape(vec![2, 2])
@@ -652,7 +652,7 @@ mod tests {
     fn array_chunk_cache_encoded_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, false, true)
+        array_chunk_cache_impl(store, cache, false, false, false, true);
     }
 
     #[test]
@@ -660,7 +660,7 @@ mod tests {
     fn array_chunk_cache_encoded_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, false, true)
+        array_chunk_cache_impl(store, cache, true, false, false, true);
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod tests {
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, false, true)
+        array_chunk_cache_impl(store, cache, false, true, false, true);
     }
 
     #[test]
@@ -680,7 +680,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let cache = ChunkCacheEncodedLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, false, true)
+        array_chunk_cache_impl(store, cache, true, true, false, true);
     }
 
     #[test]
@@ -688,7 +688,7 @@ mod tests {
     fn array_chunk_cache_decoded_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, false, false)
+        array_chunk_cache_impl(store, cache, false, false, false, false);
     }
 
     #[test]
@@ -696,7 +696,7 @@ mod tests {
     fn array_chunk_cache_decoded_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, false, false)
+        array_chunk_cache_impl(store, cache, true, false, false, false);
     }
 
     #[test]
@@ -706,7 +706,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, false, false)
+        array_chunk_cache_impl(store, cache, false, true, false, false);
     }
 
     #[test]
@@ -716,7 +716,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, false, false)
+        array_chunk_cache_impl(store, cache, true, true, false, false);
     }
 
     #[test]
@@ -724,7 +724,7 @@ mod tests {
     fn array_chunk_cache_partial_decoder_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, true, false)
+        array_chunk_cache_impl(store, cache, false, false, true, false);
     }
 
     #[test]
@@ -732,7 +732,7 @@ mod tests {
     fn array_chunk_cache_partial_decoder_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, true, false)
+        array_chunk_cache_impl(store, cache, true, false, true, false);
     }
 
     #[test]
@@ -742,7 +742,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks (indexes)
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, true, false)
+        array_chunk_cache_impl(store, cache, false, true, true, false);
     }
 
     #[test]
@@ -753,7 +753,7 @@ mod tests {
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache =
             ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, true, false)
+        array_chunk_cache_impl(store, cache, true, true, true, false);
     }
 
     fn create_store_array_string() -> (
@@ -766,7 +766,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![12, 8], // array shape
             vec![4, 4],  // regular chunk shape
-            DataType::String,
+            data_type::string(),
             "",
         )
         // Note: Default codec for String is VlenUtf8Codec, no need to set explicitly
@@ -804,9 +804,9 @@ mod tests {
             )
             .unwrap();
         let expected: Vec<String> = vec![
-            "x".repeat((0 % 8) + 1), // i=0: row 0, col 0
-            "x".repeat((1 % 8) + 1), // i=1: row 0, col 1
-            "x".repeat((8 % 8) + 1), // i=8: row 1, col 0
+            "x".to_string(),         // i=0: row 0, col 0
+            "x".repeat(1 + 1),       // i=1: row 0, col 1
+            "x".to_string(),         // i=8: row 1, col 0
             "x".repeat((9 % 8) + 1), // i=9: row 1, col 1
         ];
         assert_eq!(result, expected);
@@ -822,19 +822,19 @@ mod tests {
             .retrieve_chunk::<Vec<String>>(&[0, 0], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
-            "x".repeat((0 % 8) + 1),  // i=0
-            "x".repeat((1 % 8) + 1),  // i=1
-            "x".repeat((2 % 8) + 1),  // i=2
-            "x".repeat((3 % 8) + 1),  // i=3
-            "x".repeat((8 % 8) + 1),  // i=8
+            "x".to_string(),          // i=0
+            "x".repeat(1 + 1),        // i=1
+            "x".repeat(2 + 1),        // i=2
+            "x".repeat(3 + 1),        // i=3
+            "x".to_string(),          // i=8
             "x".repeat((9 % 8) + 1),  // i=9
             "x".repeat((10 % 8) + 1), // i=10
             "x".repeat((11 % 8) + 1), // i=11
-            "x".repeat((16 % 8) + 1), // i=16
+            "x".to_string(),          // i=16
             "x".repeat((17 % 8) + 1), // i=17
             "x".repeat((18 % 8) + 1), // i=18
             "x".repeat((19 % 8) + 1), // i=19
-            "x".repeat((24 % 8) + 1), // i=24
+            "x".to_string(),          // i=24
             "x".repeat((25 % 8) + 1), // i=25
             "x".repeat((26 % 8) + 1), // i=26
             "x".repeat((27 % 8) + 1), // i=27
@@ -884,11 +884,11 @@ mod tests {
         .collect();
         assert_eq!(result, expected);
 
-        if !thread_local {
+        if thread_local {
+            assert_eq!(store.reads(), 3);
+        } else {
             assert_eq!(store.reads(), 2); // Two chunks
             assert_eq!(cache.len(), 2);
-        } else {
-            assert_eq!(store.reads(), 3);
         }
 
         // Retrieve a chunk not in cache
@@ -896,10 +896,10 @@ mod tests {
             .retrieve_chunk::<Vec<String>>(&[0, 1], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
-            "x".repeat((4 % 8) + 1),  // i=4
-            "x".repeat((5 % 8) + 1),  // i=5
-            "x".repeat((6 % 8) + 1),  // i=6
-            "x".repeat((7 % 8) + 1),  // i=7
+            "x".repeat(4 + 1),        // i=4
+            "x".repeat(5 + 1),        // i=5
+            "x".repeat(6 + 1),        // i=6
+            "x".repeat(7 + 1),        // i=7
             "x".repeat((12 % 8) + 1), // i=12
             "x".repeat((13 % 8) + 1), // i=13
             "x".repeat((14 % 8) + 1), // i=14
@@ -915,11 +915,11 @@ mod tests {
         ];
         assert_eq!(result, expected);
 
-        if !thread_local {
+        if thread_local {
+            assert_eq!(store.reads(), 4);
+        } else {
             assert_eq!(store.reads(), 3); // One more chunk
             assert_eq!(cache.len(), 2);
-        } else {
-            assert_eq!(store.reads(), 4);
         }
 
         // Partially retrieve from a cached chunk
@@ -930,11 +930,11 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        if !thread_local {
+        if thread_local {
+            assert_eq!(store.reads(), 4);
+        } else {
             assert_eq!(store.reads(), 3); // Still cached
             assert_eq!(cache.len(), 2);
-        } else {
-            assert_eq!(store.reads(), 4);
         }
 
         // Partially retrieve from an uncached chunk
@@ -962,13 +962,13 @@ mod tests {
                 &CodecOptions::default(),
             )
             .unwrap();
-        if !thread_local {
+        if thread_local {
+            assert_eq!(store.reads(), 6);
+        } else {
             assert_eq!(store.reads(), 5); // One more empty chunk
             if size_limit && encoded {
                 assert_eq!(cache.len(), 2 + 1); // empty chunk is not included in size limit
             }
-        } else {
-            assert_eq!(store.reads(), 6);
         }
     }
 
@@ -977,7 +977,7 @@ mod tests {
     fn array_chunk_cache_string_encoded_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, false, true)
+        array_chunk_cache_string_impl(store, cache, false, false, false, true);
     }
 
     #[test]
@@ -985,7 +985,7 @@ mod tests {
     fn array_chunk_cache_string_encoded_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, false, true)
+        array_chunk_cache_string_impl(store, cache, true, false, false, true);
     }
 
     #[test]
@@ -993,7 +993,7 @@ mod tests {
     fn array_chunk_cache_string_decoded_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, false, false)
+        array_chunk_cache_string_impl(store, cache, false, false, false, false);
     }
 
     #[test]
@@ -1001,7 +1001,7 @@ mod tests {
     fn array_chunk_cache_string_decoded_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, false, false)
+        array_chunk_cache_string_impl(store, cache, true, false, false, false);
     }
 
     #[test]
@@ -1009,7 +1009,7 @@ mod tests {
     fn array_chunk_cache_string_partial_decoder_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, true, false)
+        array_chunk_cache_string_impl(store, cache, false, false, true, false);
     }
 
     #[test]
@@ -1017,6 +1017,6 @@ mod tests {
     fn array_chunk_cache_string_partial_decoder_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, true, false)
+        array_chunk_cache_string_impl(store, cache, true, false, true, false);
     }
 }

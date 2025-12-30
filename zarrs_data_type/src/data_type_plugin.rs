@@ -1,25 +1,28 @@
-use std::sync::Arc;
-
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{Plugin, PluginCreateError};
+use zarrs_plugin::{Plugin, PluginCreateError, ZarrVersions};
 
-use crate::DataTypeExtension;
+use crate::DataType;
 
 /// A data type plugin.
 #[derive(derive_more::Deref)]
-pub struct DataTypePlugin(Plugin<Arc<dyn DataTypeExtension>, MetadataV3>);
+pub struct DataTypePlugin(Plugin<DataType, MetadataV3>);
+
 inventory::collect!(DataTypePlugin);
 
 impl DataTypePlugin {
     /// Create a new [`DataTypePlugin`].
     pub const fn new(
         identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(
-            metadata: &MetadataV3,
-        ) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError>,
+        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
+        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
+        create_fn: fn(metadata: &MetadataV3) -> Result<DataType, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(identifier, match_name_fn, create_fn))
+        Self(Plugin::new(
+            identifier,
+            match_name_fn,
+            default_name_fn,
+            create_fn,
+        ))
     }
 }
 
@@ -28,7 +31,7 @@ mod tests {
     use std::sync::Arc;
 
     use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-    use zarrs_plugin::PluginCreateError;
+    use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
     use super::*;
     use crate::{
@@ -36,7 +39,7 @@ mod tests {
     };
 
     inventory::submit! {
-        DataTypePlugin::new("zarrs.test_void", is_test_void, create_test_void)
+        DataTypePlugin::new("zarrs.test_void", matches_name_test_void, default_name_test_void, create_test_void)
     }
 
     #[derive(Debug)]
@@ -68,15 +71,21 @@ mod tests {
         ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
             Ok(FillValueMetadataV3::Null)
         }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
     }
 
-    fn is_test_void(name: &str) -> bool {
+    fn matches_name_test_void(name: &str, _version: ZarrVersions) -> bool {
         name == "zarrs.test_void"
     }
 
-    fn create_test_void(
-        _metadata: &MetadataV3,
-    ) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
+    fn default_name_test_void(_version: ZarrVersions) -> std::borrow::Cow<'static, str> {
+        "zarrs.test_void".into()
+    }
+
+    fn create_test_void(_metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
         Ok(Arc::new(TestVoidDataType))
     }
 
@@ -84,7 +93,7 @@ mod tests {
     fn data_type_plugin() {
         let mut found = false;
         for plugin in inventory::iter::<DataTypePlugin> {
-            if plugin.match_name("zarrs.test_void") {
+            if plugin.match_name("zarrs.test_void", ZarrVersions::V3) {
                 found = true;
                 let data_type = plugin.create(&MetadataV3::new("zarrs.test_void")).unwrap();
                 assert_eq!(data_type.identifier(), "zarrs.test_void");
@@ -97,8 +106,6 @@ mod tests {
                         .unwrap(),
                     FillValueMetadataV3::Null
                 );
-                assert!(data_type.codec_bytes().is_err());
-                assert!(data_type.codec_packbits().is_err());
             }
         }
         assert!(found);

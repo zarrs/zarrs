@@ -10,7 +10,6 @@ use super::{
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
 use crate::metadata::Configuration;
-use crate::registry::codec::BLOSC;
 use crate::{
     array::{
         ArrayBytesRaw, BytesRepresentation,
@@ -22,6 +21,7 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `blosc` codec implementation.
 #[derive(Clone, Debug)]
@@ -141,8 +141,8 @@ impl BloscCodec {
 }
 
 impl CodecTraits for BloscCodec {
-    fn identifier(&self) -> &str {
-        BLOSC
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

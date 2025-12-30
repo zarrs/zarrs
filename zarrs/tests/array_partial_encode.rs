@@ -6,10 +6,11 @@ use std::sync::Arc;
 
 use zarrs::{
     array::{
-        ArrayBuilder, DataType,
+        ArrayBuilder,
         codec::{
             BytesToBytesCodecTraits, CodecOptions, array_to_bytes::sharding::ShardingCodecBuilder,
         },
+        data_type,
     },
     array_subset::ArraySubset,
     metadata_ext::codec::sharding::ShardingIndexLocation,
@@ -44,12 +45,12 @@ fn array_partial_encode_sharding(
     let mut builder = ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        DataType::UInt16,
+        data_type::uint16(),
         0u16,
     );
     builder
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &DataType::UInt16)
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(1).unwrap(); 2], &data_type::uint16())
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
                 .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
@@ -85,7 +86,7 @@ fn array_partial_encode_sharding(
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),
-            shard_index_size + size_of::<u16>() * 1
+            shard_index_size + size_of::<u16>()
         );
     }
     store_perf.reset();
@@ -96,7 +97,7 @@ fn array_partial_encode_sharding(
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
-        assert_eq!(store_perf.bytes_read(), shard_index_size * 1);
+        assert_eq!(store_perf.bytes_read(), shard_index_size);
     }
     assert!(get_bytes_0_0()?.is_none());
     store_perf.reset();
@@ -130,7 +131,7 @@ fn array_partial_encode_sharding(
     assert_eq!(store_perf.reads(), 1); // index + 1x inner chunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
-        assert_eq!(store_perf.bytes_read(), shard_index_size * 1);
+        assert_eq!(store_perf.bytes_read(), shard_index_size);
     }
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
@@ -260,12 +261,12 @@ fn array_partial_encode_sharding_compact(
     let mut builder = ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 4], // regular chunk shape (shard)
-        DataType::UInt16,
+        data_type::uint16(),
         0u16,
     );
     builder
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &DataType::UInt16) // 2x2 inner chunks
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16()) // 2x2 inner chunks
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
                 .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
@@ -332,9 +333,7 @@ fn array_partial_encode_sharding_compact(
     // Verify that the shard is smaller after compaction
     assert!(
         size_after_compaction < size_after_overwrites,
-        "Compacted shard ({}) should be smaller than pre-compaction size ({})",
-        size_after_compaction,
-        size_after_overwrites
+        "Compacted shard ({size_after_compaction}) should be smaller than pre-compaction size ({size_after_overwrites})"
     );
 
     // Verify data integrity after compaction
@@ -423,11 +422,8 @@ fn array_partial_encode_sharding_compact_index_compressed() {
             ],
         );
         if let Err(e) = result {
-            eprintln!(
-                "Compressed test failed with index_location={:?}: {}",
-                index_location, e
-            );
-            panic!("Test failed: {}", e);
+            eprintln!("Compressed test failed with index_location={index_location:?}: {e}");
+            panic!("Test failed: {e}");
         }
     }
 }

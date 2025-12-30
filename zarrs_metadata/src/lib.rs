@@ -189,7 +189,7 @@ mod tests {
     fn metadata() {
         let metadata = MetadataV3::try_from(r#""bytes""#);
         assert!(metadata.is_ok());
-        assert_eq!(metadata.unwrap().to_string(), r#"bytes"#);
+        assert_eq!(metadata.unwrap().to_string(), r"bytes");
         assert!(MetadataV3::try_from(r#"{ "name": "bytes" }"#).is_ok());
         let metadata =
             MetadataV3::try_from(r#"{ "name": "bytes", "configuration": { "endian": "little" } }"#);

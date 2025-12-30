@@ -6,7 +6,6 @@ use zarrs_filesystem::FilesystemStore;
 
 #[test]
 fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
-    testing_logger::setup();
     let store = Arc::new(FilesystemStore::new(
         "tests/data/zarr_python_compat/v3_bytes.zarr",
     )?);
@@ -17,15 +16,6 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     assert_eq!(cities_out[0], b"New York");
     assert_eq!(cities_out[1], b"Los Angeles");
     assert_eq!(cities_out[2], b"Chicago");
-
-    testing_logger::validate(|captured_logs| {
-        assert_eq!(captured_logs.len(), 1);
-        assert_eq!(captured_logs[0].level, log::Level::Info);
-        assert_eq!(
-            captured_logs[0].body,
-            "Using data type alias `variable_length_bytes` for `bytes`",
-        );
-    });
 
     Ok(())
 }

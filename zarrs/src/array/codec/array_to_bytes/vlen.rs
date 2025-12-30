@@ -104,19 +104,18 @@ use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_data_type::FillValue;
 use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::bytes::reverse_endianness;
 use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, DataType, Endianness,
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness,
     codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice,
+    convert_from_bytes_slice, data_type,
 };
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use crate::registry::codec::VLEN;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -125,22 +124,18 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(VLEN, is_identifier_vlen, create_codec_vlen)
+    CodecPlugin::new(VlenCodec::IDENTIFIER, VlenCodec::matches_name, VlenCodec::default_name, create_codec_vlen)
 }
+zarrs_plugin::impl_extension_aliases!(VlenCodec, "zarrs.vlen",
+    v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
+);
 
-fn is_identifier_vlen(identifier: &str) -> bool {
-    identifier == VLEN
-}
-
-pub(crate) fn create_codec_vlen(
-    metadata: &MetadataV3,
-    aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: VlenCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;
-    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration, aliases)?);
+    let configuration: VlenCodecConfiguration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(VlenCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
+    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
 
@@ -157,8 +152,8 @@ fn get_vlen_bytes_and_offsets(
         NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
     ]);
     let (data_type, fill_value) = match index_data_type {
-        VlenIndexDataType::UInt32 => (DataType::UInt32, FillValue::from(0u32)),
-        VlenIndexDataType::UInt64 => (DataType::UInt64, FillValue::from(0u64)),
+        VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
+        VlenIndexDataType::UInt64 => (data_type::uint64(), FillValue::from(0u64)),
     };
 
     // Get the index length
@@ -196,27 +191,17 @@ fn get_vlen_bytes_and_offsets(
         )?
         .into_fixed()?;
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &DataType::UInt64);
+        reverse_endianness(index.to_mut(), &data_type::uint64());
     }
-    #[allow(clippy::wildcard_enum_match_arm)]
-    let index = match data_type {
-        // DataType::UInt8 => {
-        //     let index = convert_from_bytes_slice::<u8>(&index);
-        //     offsets_u8_to_usize(index)
-        // }
-        // DataType::UInt16 => {
-        //     let index = convert_from_bytes_slice::<u16>(&index);
-        //     offsets_u16_to_usize(index)
-        // }
-        DataType::UInt32 => {
+    let index = match index_data_type {
+        VlenIndexDataType::UInt32 => {
             let index = convert_from_bytes_slice::<u32>(&index);
             offsets_u32_to_usize(index)
         }
-        DataType::UInt64 => {
+        VlenIndexDataType::UInt64 => {
             let index = convert_from_bytes_slice::<u64>(&index);
             offsets_u64_to_usize(index)
         }
-        _ => unreachable!("other data types are not part of VlenIndexDataType"),
     };
 
     // Get the data length
@@ -232,7 +217,7 @@ fn get_vlen_bytes_and_offsets(
             .decode(
                 data_enc.into(),
                 &[data_len_expected],
-                &DataType::UInt8,
+                &data_type::uint8(),
                 &0u8.into(),
                 options,
             )?

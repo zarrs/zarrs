@@ -11,9 +11,8 @@ use zarrs_plugin::PluginCreateError;
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::{
-    DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
-    PackBitsCodecConfigurationV1, pack_bits_components,
-    packbits_partial_decoder::PackBitsPartialDecoder,
+    PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
+    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -26,11 +25,12 @@ use crate::array::{
         RecommendedConcurrency,
         array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
     },
+    data_type::DataTypeExt,
 };
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use crate::registry::codec::PACKBITS;
 use std::num::NonZeroU64;
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]
@@ -63,12 +63,12 @@ impl PackBitsCodec {
         first_bit: Option<u64>,
         last_bit: Option<u64>,
     ) -> Result<Self, PluginCreateError> {
-        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit) {
-            if last_bit < first_bit {
-                return Err(PluginCreateError::from(
-                    "packbits codec `last_bit` is less than `first_bit`",
-                ));
-            }
+        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit)
+            && last_bit < first_bit
+        {
+            return Err(PluginCreateError::from(
+                "packbits codec `last_bit` is less than `first_bit`",
+            ));
         }
 
         Ok(Self {
@@ -99,8 +99,8 @@ impl PackBitsCodec {
 }
 
 impl CodecTraits for PackBitsCodec {
-    fn identifier(&self) -> &str {
-        PACKBITS
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -154,7 +154,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
@@ -238,7 +238,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension,
@@ -347,7 +347,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
@@ -387,7 +387,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
@@ -424,7 +424,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,

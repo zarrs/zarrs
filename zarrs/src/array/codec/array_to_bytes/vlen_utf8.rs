@@ -23,4 +23,4 @@ pub use crate::metadata_ext::codec::vlen_utf8::{
     VlenUtf8CodecConfiguration, VlenUtf8CodecConfigurationV1,
 };
 
-vlen_v2_macros::vlen_v2_module!(vlen_utf8, vlen_utf8_codec, VlenUtf8Codec, VLEN_UTF8);
+vlen_v2_macros::vlen_v2_module!(vlen_utf8, vlen_utf8_codec, VlenUtf8Codec, "vlen-utf8");

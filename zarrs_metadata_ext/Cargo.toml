@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_metadata_ext"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"
@@ -17,8 +17,6 @@ workspace = true
 
 [dependencies]
 derive_more = { version = "2.0.0", features = ["deref", "display", "from", "into"] }
-half.workspace = true
-log = "0.4.28"
 monostate = "1.0.2"
 num.workspace = true
 serde = { version = "1.0.203", features = ["derive"] }
@@ -26,4 +24,3 @@ serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_orde
 serde_repr = "0.1.19"
 thiserror.workspace = true
 zarrs_metadata.workspace = true
-zarrs_registry.workspace = true

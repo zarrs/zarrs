@@ -8,10 +8,10 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
 use crate::array::{
     DataType, FillValue,
     codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
+    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
-use crate::registry::codec::TRANSPOSE;
 use crate::{
     array::{
         ArrayBytes, ChunkShape,
@@ -23,6 +23,7 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A Transpose codec implementation.
 #[derive(Clone, Debug)]
@@ -60,7 +61,7 @@ impl TransposeCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                TRANSPOSE.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
         if self.order.0.len() != shape.len() {
@@ -73,8 +74,8 @@ impl TransposeCodec {
 }
 
 impl CodecTraits for TransposeCodec {
-    fn identifier(&self) -> &str {
-        TRANSPOSE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
@@ -112,7 +113,7 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         if decoded_data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
-                TRANSPOSE.to_string(),
+                Self::IDENTIFIER.to_string(),
             ));
         }
         Ok(decoded_data_type.clone())

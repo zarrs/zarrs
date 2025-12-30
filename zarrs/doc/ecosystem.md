@@ -17,8 +17,6 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
   - Re-exports [`zarrs::metadata_ext`](crate::metadata_ext).
 - [`zarrs_plugin`]: The plugin API.
   - Re-exports [`zarrs::plugin`](crate::plugin).
-- [`zarrs_registry`]: The Zarr extension point registry.
-  - Re-exports [`zarrs::registry`](crate::registry).
 - [`zarrs_storage`]: The storage API.
   - Re-exports [`zarrs::storage`](crate::storage).
 - [`zarrs_chunk_grid`]: The chunk grid extension API.

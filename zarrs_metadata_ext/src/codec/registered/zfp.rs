@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_expert() {
-        const JSON: &'static str = r#"{
+        const JSON: &str = r#"{
         "mode": "expert",
         "minbits": 1,
         "maxbits": 12,
@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_fixed_rate() {
-        const JSON: &'static str = r#"{
+        const JSON: &str = r#"{
         "mode": "fixed_rate",
         "rate": 12
     }"#;
@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_fixed_precision() {
-        const JSON: &'static str = r#"{
+        const JSON: &str = r#"{
         "mode": "fixed_precision",
         "precision": 12
     }"#;
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_fixed_accuracy() {
-        const JSON: &'static str = r#"{
+        const JSON: &str = r#"{
         "mode": "fixed_accuracy",
         "tolerance": 0.001
     }"#;
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_reversible() {
-        const JSON: &'static str = r#"{
+        const JSON: &str = r#"{
         "mode": "reversible"
     }"#;
         serde_json::from_str::<ZfpCodecConfiguration>(JSON).unwrap();
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn codec_zfp_configuration_invalid2() {
-        const JSON_INVALID2: &'static str = r#"{
+        const JSON_INVALID2: &str = r#"{
         "mode": "unknown"
     }"#;
         assert!(serde_json::from_str::<ZfpCodecConfiguration>(JSON_INVALID2).is_err());

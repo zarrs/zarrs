@@ -304,28 +304,28 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_bool_false() {
-        let json = r#"false"#;
+        let json = r"false";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
-        assert_eq!(metadata.as_bool().unwrap(), false);
+        assert!(!metadata.as_bool().unwrap());
     }
 
     #[test]
     fn fill_value_metadata_bool_true() {
-        let json = r#"true"#;
+        let json = r"true";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
-        assert_eq!(metadata.as_bool().unwrap(), true);
+        assert!(metadata.as_bool().unwrap());
     }
 
     #[test]
     fn fill_value_metadata_uint() {
-        let json = r#"7"#;
+        let json = r"7";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.as_u64().unwrap(), 7);
     }
 
     #[test]
     fn fill_value_metadata_int() {
-        let json = r#"-7"#;
+        let json = r"-7";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(json, serde_json::to_string(&metadata).unwrap());
         assert_eq!(metadata.as_i64().unwrap(), -7);
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_float_number() {
-        let json = r#"7.5"#;
+        let json = r"7.5";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(json, serde_json::to_string(&metadata).unwrap());
         assert_eq!(metadata.as_f64().unwrap(), 7.5);
@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_raw_bytes() {
-        let json = r#"[0,1,2,3]"#;
+        let json = r"[0,1,2,3]";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(json, serde_json::to_string(&metadata).unwrap());
         assert_eq!(metadata.as_bytes().unwrap(), [0, 1, 2, 3]);
@@ -427,14 +427,14 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_null() {
-        let json = r#"null"#;
+        let json = r"null";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert!(metadata.is_null());
     }
 
     #[test]
     fn fill_value_metadata_neg_array1() {
-        let json = r#"[-5]"#;
+        let json = r"[-5]";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(json, serde_json::to_string(&metadata).unwrap());
         assert_eq!(
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_neg_array2() {
-        let json = r#"[-5, -5]"#;
+        let json = r"[-5, -5]";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_ne!(json, serde_json::to_string(&metadata).unwrap()); // [-5.0, -5.0]
         assert_eq!(
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn fill_value_metadata_large_array() {
-        let json = r#"[256]"#;
+        let json = r"[256]";
         let metadata: FillValueMetadataV3 = serde_json::from_str(json).unwrap();
         assert_eq!(json, serde_json::to_string(&metadata).unwrap());
         assert_eq!(

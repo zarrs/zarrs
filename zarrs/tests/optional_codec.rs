@@ -2,13 +2,12 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, DataType, FillValue, NamedDataType};
+use zarrs::array::{Array, ArrayBuilder, DataType, DataTypeExt, FillValue, data_type};
 use zarrs::array_subset::ArraySubset;
-use zarrs::registry::ExtensionAliasesDataTypeV3;
 use zarrs::storage::store::MemoryStore;
 
 /// Test helper to create an array with optional codec
-fn create_optional_array(data_type: NamedDataType, fill_value: FillValue) -> Array<MemoryStore> {
+fn create_optional_array(data_type: DataType, fill_value: FillValue) -> Array<MemoryStore> {
     let store = Arc::new(MemoryStore::default());
     let array_path = "/optional_array";
 
@@ -28,12 +27,7 @@ fn create_optional_array(data_type: NamedDataType, fill_value: FillValue) -> Arr
 fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(
-        DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
-        None::<u8>.into(),
-    );
+    let array = create_optional_array(data_type::uint8().to_optional(), None::<u8>.into());
 
     // Store different patterns in different chunks
     // Chunk [0,0]: mostly Some values
@@ -146,10 +140,7 @@ fn optional_array_nested_2_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<u8>>
     let array = create_optional_array(
-        DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional()
-            .into_optional(),
+        data_type::uint8().to_optional().to_optional(),
         None::<Option<u8>>.into(),
     );
 
@@ -185,11 +176,10 @@ fn optional_array_nested_3_level() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Option<Option<Option<u16>>>
     let array = create_optional_array(
-        DataType::UInt16
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional()
-            .into_optional()
-            .into_optional(),
+        data_type::uint16()
+            .to_optional()
+            .to_optional()
+            .to_optional(),
         None::<Option<Option<u16>>>.into(),
     );
 
@@ -234,9 +224,7 @@ fn optional_array_with_non_null_fill_value() -> Result<(), Box<dyn std::error::E
 
     // Create an optional array with a non-null fill value
     let array = create_optional_array(
-        DataType::UInt8
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
+        data_type::uint8().to_optional(),
         FillValue::from(Some(255u8)),
     );
 
@@ -268,12 +256,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
     // The ArrayBuilder automatically handles optional strings with the correct vlen codec
-    let array = create_optional_array(
-        DataType::String
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
-        None::<String>.into(),
-    );
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store chunk with Option<String>
     let data = array![
@@ -324,7 +307,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     // Test with different length strings including empty
     let data2 = array![
         [
-            Some("".to_string()),
+            Some(String::new()),
             None,
             Some("x".to_string()),
             Some("longer string with spaces".to_string())
@@ -350,7 +333,7 @@ fn optional_array_string() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(retrieved2, data2);
 
     // Verify specific complex strings
-    assert_eq!(retrieved2[[0, 0]], Some("".to_string()));
+    assert_eq!(retrieved2[[0, 0]], Some(String::new()));
     assert_eq!(retrieved2[[1, 1]], Some("unicode: 你好🌍".to_string()));
     assert_eq!(retrieved2[[2, 2]], Some("newline\nchar".to_string()));
 
@@ -362,12 +345,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
     use ndarray::{Array2, array};
 
     // 8x8 array with 4x4 chunks = 4 chunks total
-    let array = create_optional_array(
-        DataType::String
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
-        None::<String>.into(),
-    );
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store data in all 4 chunks with varying patterns
     // Chunk [0,0]: mixed Some/None with various string lengths
@@ -380,7 +358,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
         ],
         [None, Some("a".to_string()), Some("bc".to_string()), None],
         [
-            Some("".to_string()),
+            Some(String::new()),
             Some("data".to_string()),
             None,
             Some("xyz".to_string())
@@ -488,7 +466,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(retrieved[[0, 0]], Some("hello".to_string()));
     assert_eq!(retrieved[[0, 1]], None);
     assert_eq!(retrieved[[1, 0]], None);
-    assert_eq!(retrieved[[2, 0]], Some("".to_string())); // Empty string Some("")
+    assert_eq!(retrieved[[2, 0]], Some(String::new())); // Empty string Some("")
 
     // Verify values from chunk [0,1] region (rows 0-3, cols 4-7)
     assert_eq!(retrieved[[0, 4]], None);
@@ -512,12 +490,7 @@ fn optional_array_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>>
 fn optional_array_string_partial_subset() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(
-        DataType::String
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
-        None::<String>.into(),
-    );
+    let array = create_optional_array(data_type::string().to_optional(), None::<String>.into());
 
     // Store chunks
     let data0 = array![
@@ -583,12 +556,7 @@ fn optional_array_string_partial_subset() -> Result<(), Box<dyn std::error::Erro
 fn optional_array_bytes_multi_chunk() -> Result<(), Box<dyn std::error::Error>> {
     use ndarray::{Array2, array};
 
-    let array = create_optional_array(
-        DataType::Bytes
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional(),
-        None::<Vec<u8>>.into(),
-    );
+    let array = create_optional_array(data_type::bytes().to_optional(), None::<Vec<u8>>.into());
 
     // Store with varying byte lengths
     let data0 = array![
@@ -648,10 +616,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
 
     // Option<Option<String>> - testing nested optionals with variable-length inner type
     let array = create_optional_array(
-        DataType::String
-            .into_named(&ExtensionAliasesDataTypeV3::default())
-            .into_optional()
-            .into_optional(),
+        data_type::string().to_optional().to_optional(),
         None::<Option<String>>.into(),
     );
 
@@ -665,7 +630,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
         ],
         [None, Some(Some("test".to_string())), Some(None), None],
         [
-            Some(Some("".to_string())),
+            Some(Some(String::new())),
             None,
             Some(None),
             Some(Some("data".to_string()))
@@ -702,7 +667,7 @@ fn optional_nested_string_multi_chunk() -> Result<(), Box<dyn std::error::Error>
     assert_eq!(retrieved[[0, 0]], Some(Some("hello".to_string())));
     assert_eq!(retrieved[[0, 1]], Some(None)); // Some(None) is distinct from None
     assert_eq!(retrieved[[0, 2]], None);
-    assert_eq!(retrieved[[2, 0]], Some(Some("".to_string()))); // Empty string Some(Some(""))
+    assert_eq!(retrieved[[2, 0]], Some(Some(String::new()))); // Empty string Some(Some(""))
     assert_eq!(retrieved[[3, 0]], Some(None));
 
     // Verify from chunk [0,1]

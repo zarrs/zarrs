@@ -5,6 +5,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::FillValue;
+use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::storage::{
@@ -22,6 +23,7 @@ use crate::{
             AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
             CodecError, CodecOptions,
         },
+        data_type::DataTypeExt,
         ravel_indices,
     },
     array_subset::IncompatibleDimensionalityError,
@@ -130,7 +132,7 @@ pub(crate) async fn partial_decode(
     if data_type.is_optional() {
         return Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            zarrs_registry::codec::SHARDING.to_string(),
+            super::ShardingCodec::IDENTIFIER.to_string(),
         ));
     }
 

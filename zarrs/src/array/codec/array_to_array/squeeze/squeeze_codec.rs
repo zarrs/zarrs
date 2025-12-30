@@ -8,7 +8,6 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
-use crate::registry::codec::SQUEEZE;
 use crate::{
     array::{
         ChunkShape,
@@ -20,6 +19,7 @@ use crate::{
     },
     plugin::PluginCreateError,
 };
+use zarrs_plugin::ExtensionIdentifier;
 
 /// A Squeeze codec implementation.
 #[derive(Clone, Debug)]
@@ -55,8 +55,8 @@ impl Default for SqueezeCodec {
 }
 
 impl CodecTraits for SqueezeCodec {
-    fn identifier(&self) -> &str {
-        SQUEEZE
+    fn identifier(&self) -> &'static str {
+        Self::IDENTIFIER
     }
 
     fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {

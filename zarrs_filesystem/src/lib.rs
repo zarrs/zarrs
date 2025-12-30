@@ -8,7 +8,7 @@
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_filesystem/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
 use bytes::BytesMut;
-use parking_lot::RwLock; // TODO: std::sync::RwLock with Rust 1.78+
+use std::sync::RwLock;
 use thiserror::Error;
 use walkdir::WalkDir;
 use zarrs_storage::{

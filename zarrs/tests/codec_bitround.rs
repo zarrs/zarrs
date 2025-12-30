@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 use zarrs::{
-    array::{ArrayBuilder, ArrayMetadataOptions, DataType, codec::BitroundCodec},
+    array::{ArrayBuilder, ArrayMetadataOptions, codec::BitroundCodec, data_type},
     array_subset::ArraySubset,
 };
 use zarrs_filesystem::FilesystemStore;
@@ -75,7 +75,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![test_data.len() as u64],
         vec![test_data.len() as u64],
-        DataType::Float32,
+        data_type::float32(),
         0.0f32,
     );
 
@@ -154,7 +154,7 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![test_data_u8.len() as u64],
         vec![test_data_u8.len() as u64],
-        DataType::UInt8,
+        data_type::uint8(),
         0u8,
     );
 

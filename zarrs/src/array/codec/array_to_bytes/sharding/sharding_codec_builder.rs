@@ -3,16 +3,13 @@ use std::sync::Arc;
 use codec::CodecChain;
 
 use super::{ShardingCodec, ShardingIndexLocation};
-use crate::{
-    array::{
-        ChunkShape, DataType,
-        codec::{
-            self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-            NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
-            default_array_to_bytes_codec,
-        },
+use crate::array::{
+    ChunkShape, DataType,
+    codec::{
+        self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
+        NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
+        default_array_to_bytes_codec,
     },
-    config::global_config,
 };
 
 /// A [`ShardingCodec`] builder.
@@ -39,20 +36,17 @@ impl ShardingCodecBuilder {
     /// (see [`default_array_to_bytes_codec`]).
     #[must_use]
     pub fn new(subchunk_shape: ChunkShape, data_type: &DataType) -> Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         Self {
             subchunk_shape,
             index_array_to_bytes_codec: NamedCodec::new_default_name(
                 Arc::<codec::BytesCodec>::default(),
-                aliases,
             ),
             index_bytes_to_bytes_codecs: vec![
                 #[cfg(feature = "crc32c")]
-                NamedCodec::new_default_name(Arc::new(codec::Crc32cCodec::new()), aliases),
+                NamedCodec::new_default_name(Arc::new(codec::Crc32cCodec::new())),
             ],
             array_to_array_codecs: Vec::default(),
-            array_to_bytes_codec: default_array_to_bytes_codec(data_type, aliases),
+            array_to_bytes_codec: default_array_to_bytes_codec(data_type),
             bytes_to_bytes_codecs: Vec::default(),
             index_location: ShardingIndexLocation::default(),
         }
@@ -65,10 +59,7 @@ impl ShardingCodecBuilder {
         &mut self,
         index_array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
-        self.index_array_to_bytes_codec =
-            NamedCodec::new_default_name(index_array_to_bytes_codec, aliases);
+        self.index_array_to_bytes_codec = NamedCodec::new_default_name(index_array_to_bytes_codec);
         self
     }
 
@@ -79,11 +70,9 @@ impl ShardingCodecBuilder {
         &mut self,
         index_bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         self.index_bytes_to_bytes_codecs = index_bytes_to_bytes_codecs
             .into_iter()
-            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .map(NamedCodec::new_default_name)
             .collect();
         self
     }
@@ -106,11 +95,9 @@ impl ShardingCodecBuilder {
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         self.array_to_array_codecs = array_to_array_codecs
             .into_iter()
-            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .map(NamedCodec::new_default_name)
             .collect();
         self
     }
@@ -137,9 +124,7 @@ impl ShardingCodecBuilder {
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
-        self.array_to_bytes_codec = NamedCodec::new_default_name(array_to_bytes_codec, aliases);
+        self.array_to_bytes_codec = NamedCodec::new_default_name(array_to_bytes_codec);
         self
     }
 
@@ -173,11 +158,9 @@ impl ShardingCodecBuilder {
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> &mut Self {
-        let config = global_config();
-        let aliases = config.codec_aliases_v3();
         self.bytes_to_bytes_codecs = bytes_to_bytes_codecs
             .into_iter()
-            .map(|codec| NamedCodec::new_default_name(codec, aliases))
+            .map(NamedCodec::new_default_name)
             .collect();
         self
     }

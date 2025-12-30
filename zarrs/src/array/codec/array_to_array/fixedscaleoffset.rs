@@ -37,12 +37,11 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
+use zarrs_plugin::ExtensionIdentifier;
 
 pub use crate::metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use crate::registry::codec::FIXEDSCALEOFFSET;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
@@ -51,26 +50,133 @@ use crate::{
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(FIXEDSCALEOFFSET, is_identifier_fixedscaleoffset, create_codec_fixedscaleoffset)
+    CodecPlugin::new(FixedScaleOffsetCodec::IDENTIFIER, FixedScaleOffsetCodec::matches_name, FixedScaleOffsetCodec::default_name, create_codec_fixedscaleoffset)
 }
-
-fn is_identifier_fixedscaleoffset(identifier: &str) -> bool {
-    identifier == FIXEDSCALEOFFSET
-}
+zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec, "fixedscaleoffset",
+    v3: "numcodecs.fixedscaleoffset", [],
+    v2: "fixedscaleoffset", []
+);
 
 pub(crate) fn create_codec_fixedscaleoffset(
     metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
 ) -> Result<Codec, PluginCreateError> {
     let configuration: FixedScaleOffsetCodecConfiguration =
         metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(FIXEDSCALEOFFSET, "codec", metadata.to_string())
+            PluginMetadataInvalidError::new(
+                FixedScaleOffsetCodec::IDENTIFIER,
+                "codec",
+                metadata.to_string(),
+            )
         })?;
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
         &configuration,
     )?);
     Ok(Codec::ArrayToArray(codec))
 }
+
+/// The numeric element type for fixedscaleoffset operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FixedScaleOffsetElementType {
+    /// 8-bit signed integer
+    I8,
+    /// 16-bit signed integer
+    I16,
+    /// 32-bit signed integer
+    I32,
+    /// 64-bit signed integer
+    I64,
+    /// 8-bit unsigned integer
+    U8,
+    /// 16-bit unsigned integer
+    U16,
+    /// 32-bit unsigned integer
+    U32,
+    /// 64-bit unsigned integer
+    U64,
+    /// 32-bit floating point
+    F32,
+    /// 64-bit floating point
+    F64,
+}
+
+impl FixedScaleOffsetElementType {
+    /// Returns the element size in bytes.
+    #[must_use]
+    pub const fn size(&self) -> usize {
+        match self {
+            Self::I8 | Self::U8 => 1,
+            Self::I16 | Self::U16 => 2,
+            Self::I32 | Self::U32 | Self::F32 => 4,
+            Self::I64 | Self::U64 | Self::F64 => 8,
+        }
+    }
+
+    /// Returns the float type to use for intermediate calculations.
+    #[must_use]
+    pub const fn intermediate_float(&self) -> FixedScaleOffsetFloatType {
+        match self {
+            Self::I8 | Self::U8 | Self::I16 | Self::U16 | Self::F32 => {
+                FixedScaleOffsetFloatType::F32
+            }
+            Self::I32 | Self::U32 | Self::I64 | Self::U64 | Self::F64 => {
+                FixedScaleOffsetFloatType::F64
+            }
+        }
+    }
+}
+
+/// The intermediate float type for fixedscaleoffset calculations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixedScaleOffsetFloatType {
+    /// 32-bit floating point
+    F32,
+    /// 64-bit floating point
+    F64,
+}
+
+/// Traits for a data type supporting the `fixedscaleoffset` codec.
+///
+/// The fixedscaleoffset codec applies a linear transformation to numerical data.
+pub trait FixedScaleOffsetCodecDataTypeTraits {
+    /// Returns the element type for this data type.
+    fn fixedscaleoffset_element_type(&self) -> FixedScaleOffsetElementType;
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(
+    FixedScaleOffset,
+    FixedScaleOffsetCodecDataTypeTraits
+);
+
+/// Macro to implement `FixedScaleOffsetCodecDataTypeTraits` for data types and register support.
+///
+/// # Usage
+/// ```ignore
+/// impl_fixedscaleoffset_codec!(Int32DataType, I32);
+/// impl_fixedscaleoffset_codec!(Float32DataType, F32);
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _impl_fixedscaleoffset_codec {
+    ($marker:ty, $element_type:ident) => {
+        impl $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits for $marker {
+            fn fixedscaleoffset_element_type(
+                &self,
+            ) -> $crate::array::codec::FixedScaleOffsetElementType {
+                $crate::array::codec::FixedScaleOffsetElementType::$element_type
+            }
+        }
+        $crate::array::codec::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::FixedScaleOffsetPlugin,
+            $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits
+        );
+    };
+}
+
+#[doc(inline)]
+pub use _impl_fixedscaleoffset_codec as impl_fixedscaleoffset_codec;
 
 #[cfg(test)]
 mod tests {
@@ -79,21 +185,21 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use crate::array::{
-        ArrayBytes, DataType,
+        ArrayBytes,
         codec::{
             ArrayToArrayCodecTraits, CodecOptions,
             array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
         },
+        data_type,
     };
     use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
     fn codec_fixedscaleoffset() {
         // 1 sign bit, 8 exponent, 3 mantissa
-        const JSON: &'static str =
-            r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
+        const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
         let shape = [NonZeroU64::new(4).unwrap()];
-        let data_type = DataType::Float64;
+        let data_type = data_type::float64();
         let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,

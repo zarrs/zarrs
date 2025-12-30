@@ -10,7 +10,7 @@ use crate::storage::ReadableStorageTraits;
 use crate::storage::{MaybeSend, MaybeSync};
 use crate::{
     array::{
-        Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ElementOwned,
+        Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeExt, ElementOwned,
         array_bytes::{merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth},
         codec::{ArrayPartialDecoderTraits, CodecError},
         concurrency::concurrency_chunks_and_codec,

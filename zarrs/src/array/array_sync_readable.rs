@@ -6,7 +6,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
-    ArrayMetadata, ArrayMetadataV3, DataType, FromArrayBytes,
+    ArrayMetadata, ArrayMetadataV3, DataType, DataTypeExt, FromArrayBytes,
     array_bytes::{
         build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
         merge_chunks_vlen_optional, optional_nesting_depth,
@@ -475,7 +475,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             let bytes = self
                 .codecs()
                 .decode(
-                    Cow::Borrowed(&chunk_encoded),
+                    Cow::Owned(chunk_encoded.into()),
                     &chunk_shape,
                     self.data_type(),
                     self.fill_value(),
@@ -539,7 +539,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         if let Some(chunk_encoded) = chunk_encoded {
             self.codecs()
                 .decode_into(
-                    Cow::Borrowed(&chunk_encoded),
+                    Cow::Owned(chunk_encoded.into()),
                     &self.chunk_shape(chunk_indices)?,
                     self.data_type(),
                     self.fill_value(),

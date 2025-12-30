@@ -39,34 +39,28 @@ mod shuffle_codec;
 use std::sync::Arc;
 
 pub use shuffle_codec::ShuffleCodec;
-use zarrs_registry::ExtensionAliasesCodecV3;
 
 pub use crate::metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
-use crate::registry::codec::SHUFFLE;
 use crate::{
     array::codec::{Codec, CodecPlugin},
     metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
 };
 
 // Register the codec.
 inventory::submit! {
-    CodecPlugin::new(SHUFFLE, is_identifier_shuffle, create_codec_shuffle)
+    CodecPlugin::new(ShuffleCodec::IDENTIFIER, ShuffleCodec::matches_name, ShuffleCodec::default_name, create_codec_shuffle)
 }
+zarrs_plugin::impl_extension_aliases!(ShuffleCodec, "shuffle",
+    v3: "numcodecs.shuffle", []
+);
 
-fn is_identifier_shuffle(identifier: &str) -> bool {
-    identifier == SHUFFLE
-}
-
-pub(crate) fn create_codec_shuffle(
-    metadata: &MetadataV3,
-    _aliases: &ExtensionAliasesCodecV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SHUFFLE, "codec", metadata.to_string()))?;
+pub(crate) fn create_codec_shuffle(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata.to_configuration().map_err(|_| {
+        PluginMetadataInvalidError::new(ShuffleCodec::IDENTIFIER, "codec", metadata.to_string())
+    })?;
     let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
@@ -139,9 +133,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -185,9 +181,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
