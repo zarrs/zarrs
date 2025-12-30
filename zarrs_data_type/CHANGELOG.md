@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `DataType` type alias (`Arc<dyn DataTypeExtension>`)
+- Add `DataTypeExtension::default_name()` method
+- Add `DataTypeExtension::eq()` method with default implementation
+- Add `DataTypeExtension::as_any()` method
+
 ### Changed
 - **Breaking**: `DataTypePlugin::new()` now takes a `default_name_fn` parameter
 - **Breaking**: `DataTypePlugin::match_name()` now takes a `ZarrVersions` parameter
 - Bump the MSRV to 1.88
+
+### Removed
+- **Breaking**: Remove `DataTypeExtensionBytesCodec` trait and `DataTypeExtensionBytesCodecError` enum
+- **Breaking**: Remove `DataTypeExtensionPackBitsCodec` trait
+- **Breaking**: Remove `DataTypeExtension::codec_bytes()` method
+- **Breaking**: Remove `DataTypeExtension::codec_packbits()` method
+- **Breaking**: Remove `DataTypeExtensionError::BytesCodec` variant
 
 ## [0.5.0] - 2025-12-26
 

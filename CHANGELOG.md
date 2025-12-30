@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extensions now implement `ExtensionIdentifier` and `ExtensionAliases<V>` traits for per-extension alias management
   - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
   - Remove `NamedDataType::from_metadata()` (replaced with `TryFrom<&MetadataV3>`)
-  - Remove aliases parameter from `NamedCodec::new_default_name()`, `NamedDataType::new_default_name()`, and `DataType::into_named()`
+  - Remove aliases parameter from `NamedCodec::new_default_name()` and `NamedDataType::new_default_name()`
+  - Rename `DataType::into_named()` to `to_named()` (no longer takes aliases parameter)
 - **Breaking**: Change `CodecTraits::identifier()` return type from `&str` to `&'static str`
 - **Breaking**: Change `StorageTransformerPlugin::new()` to take a `default_name_fn` parameter
 - Bump `zarrs_plugin` to 0.3.0
