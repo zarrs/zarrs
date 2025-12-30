@@ -138,12 +138,12 @@ impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt4 {
 }
 
 // Register codec support
-zarrs::register_data_type_extension_codec!(
+zarrs::array::codec::register_data_type_extension_codec!(
     CustomDataTypeUInt4,
     zarrs::array::codec::BytesPlugin,
     zarrs::array::codec::BytesCodecDataTypeTraits
 );
-zarrs::register_data_type_extension_codec!(
+zarrs::array::codec::register_data_type_extension_codec!(
     CustomDataTypeUInt4,
     zarrs::array::codec::PackBitsPlugin,
     zarrs::array::codec::PackBitsCodecDataTypeTraits

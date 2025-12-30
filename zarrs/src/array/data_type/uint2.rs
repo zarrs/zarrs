@@ -1,7 +1,5 @@
 //! The `uint2` data type.
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// The `uint2` data type.
@@ -63,5 +61,5 @@ impl zarrs_data_type::DataTypeExtension for UInt2DataType {
     }
 }
 
-impl_packbits_codec!(UInt2DataType, 2, unsigned, 1);
-impl_bytes_codec_passthrough!(UInt2DataType);
+crate::array::codec::impl_packbits_codec!(UInt2DataType, 2, unsigned, 1);
+crate::array::codec::impl_bytes_codec_passthrough!(UInt2DataType);

@@ -1,7 +1,5 @@
 //! The `complex_float8_e5m2` data type.
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// The `complex_float8_e5m2` data type.
@@ -179,6 +177,5 @@ mod impl_float8 {
     }
 }
 
-// Codec implementations (same for both feature configurations)
-impl_packbits_codec!(ComplexFloat8E5M2DataType, 8, float, 2);
-impl_bytes_codec_passthrough!(ComplexFloat8E5M2DataType);
+crate::array::codec::impl_packbits_codec!(ComplexFloat8E5M2DataType, 8, float, 2);
+crate::array::codec::impl_bytes_codec_passthrough!(ComplexFloat8E5M2DataType);

@@ -2,8 +2,6 @@
 
 use zarrs_plugin::ExtensionIdentifier;
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// The `bool` data type.
@@ -62,5 +60,5 @@ impl zarrs_data_type::DataTypeExtension for BoolDataType {
     }
 }
 
-impl_bytes_codec_passthrough!(BoolDataType);
-impl_packbits_codec!(BoolDataType, 1, unsigned, 1);
+crate::array::codec::impl_bytes_codec_passthrough!(BoolDataType);
+crate::array::codec::impl_packbits_codec!(BoolDataType, 1, unsigned, 1);

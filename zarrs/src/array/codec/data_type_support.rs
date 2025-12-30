@@ -52,13 +52,14 @@
 /// ```ignore
 /// zarrs::array::codec::define_data_type_support!(MyCodec, MyCodecDataTypeTraits);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! define_data_type_support {
+macro_rules! _define_data_type_support {
     ($name:ident, $trait_name:ident) => {
         ::paste::paste! {
             /// Plugin for registering codec support for a data type.
             ///
-            /// Use [`register_data_type_extension_codec!`](crate::register_data_type_extension_codec) to register.
+            /// Use [`register_data_type_extension_codec!`](crate::array::codec::register_data_type_extension_codec) to register.
             pub struct [<$name Plugin>] {
                 /// The data type identifier.
                 pub data_type_id: &'static str,
@@ -91,7 +92,8 @@ macro_rules! define_data_type_support {
     };
 }
 
-pub use define_data_type_support;
+#[doc(inline)]
+pub use _define_data_type_support as define_data_type_support;
 
 /// Register a data type with a codec's `Plugin`.
 ///
@@ -111,14 +113,15 @@ pub use define_data_type_support;
 ///     // ...
 /// }
 ///
-/// crate::register_data_type_extension_codec!(
+/// crate::array::codec::register_data_type_extension_codec!(
 ///     Float32DataType,
 ///     $crate::array::codec::BitroundPlugin,
 ///     $crate::array::codec::BitroundCodecDataTypeTraits
 /// );
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! register_data_type_extension_codec {
+macro_rules! _register_data_type_extension_codec {
     ($data_type:ty, $plugin:path, $trait:path) => {
         ::inventory::submit! {
             $plugin {
@@ -131,4 +134,5 @@ macro_rules! register_data_type_extension_codec {
     };
 }
 
-pub use register_data_type_extension_codec;
+#[doc(inline)]
+pub use _register_data_type_extension_codec as register_data_type_extension_codec;

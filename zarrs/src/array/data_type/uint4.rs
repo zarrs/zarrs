@@ -1,7 +1,5 @@
 //! The `uint4` data type.
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// The `uint4` data type.
@@ -63,5 +61,5 @@ impl zarrs_data_type::DataTypeExtension for UInt4DataType {
     }
 }
 
-impl_packbits_codec!(UInt4DataType, 4, unsigned, 1);
-impl_bytes_codec_passthrough!(UInt4DataType);
+crate::array::codec::impl_packbits_codec!(UInt4DataType, 4, unsigned, 1);
+crate::array::codec::impl_bytes_codec_passthrough!(UInt4DataType);

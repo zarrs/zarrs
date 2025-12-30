@@ -208,8 +208,9 @@ crate::array::codec::define_data_type_support!(Zfp, ZfpCodecDataTypeTraits);
 /// impl_zfp_codec!(Int8DataType, Int32, I8ToI32);
 /// impl_zfp_codec!(Int16DataType, Int32, I16ToI32);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! impl_zfp_codec {
+macro_rules! _impl_zfp_codec {
     // Unsupported type - still implements the trait but returns None, and registers support
     ($marker:ty, None) => {
         impl $crate::array::codec::ZfpCodecDataTypeTraits for $marker {
@@ -217,7 +218,7 @@ macro_rules! impl_zfp_codec {
                 None
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -233,7 +234,7 @@ macro_rules! impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::None
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -249,7 +250,7 @@ macro_rules! impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::$promotion
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -257,7 +258,8 @@ macro_rules! impl_zfp_codec {
     };
 }
 
-pub use impl_zfp_codec;
+#[doc(inline)]
+pub use _impl_zfp_codec as impl_zfp_codec;
 
 fn zfp_type_to_sys(zfp_type: ZfpType) -> zfp_sys::zfp_type {
     match zfp_type {

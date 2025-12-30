@@ -81,15 +81,16 @@ crate::array::codec::define_data_type_support!(PackBits, PackBitsCodecDataTypeTr
 /// # Usage
 /// ```ignore
 /// // For single-component types:
-/// impl_packbits_codec!(Int32DataType, 32, signed, 1);
-/// impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
-/// impl_packbits_codec!(Float32DataType, 32, float, 1);
+/// crate::array::codec::array_to_bytes::packbits::impl_packbits_codec!(Int32DataType, 32, signed, 1);
+/// crate::array::codec::array_to_bytes::packbits::impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
+/// crate::array::codec::array_to_bytes::packbits::impl_packbits_codec!(Float32DataType, 32, float, 1);
 ///
 /// // For complex types (2 components):
-/// impl_packbits_codec!(Complex64DataType, 32, float, 2);
+/// crate::array::codec::array_to_bytes::packbits::impl_packbits_codec!(Complex64DataType, 32, float, 2);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! impl_packbits_codec {
+macro_rules! _impl_packbits_codec {
     // Multi-component, signed integer
     ($marker:ty, $bits:expr, signed, $components:expr) => {
         impl $crate::array::codec::PackBitsCodecDataTypeTraits for $marker {
@@ -103,7 +104,7 @@ macro_rules! impl_packbits_codec {
                 true
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -122,7 +123,7 @@ macro_rules! impl_packbits_codec {
                 false
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -141,7 +142,7 @@ macro_rules! impl_packbits_codec {
                 false
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -149,7 +150,8 @@ macro_rules! impl_packbits_codec {
     };
 }
 
-pub use impl_packbits_codec;
+#[doc(inline)]
+pub use _impl_packbits_codec as impl_packbits_codec;
 
 struct PackBitsCodecComponents {
     pub component_size_bits: u64,

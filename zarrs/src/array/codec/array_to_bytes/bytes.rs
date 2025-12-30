@@ -110,12 +110,13 @@ crate::array::codec::define_data_type_support!(Bytes, BytesCodecDataTypeTraits);
 ///
 /// # Usage
 /// ```ignore
-/// impl_bytes_codec_passthrough!(BoolDataType);
-/// impl_bytes_codec_passthrough!(UInt4DataType);
-/// impl_bytes_codec_passthrough!(Float8E4M3DataType);
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(BoolDataType);
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(UInt4DataType);
+/// crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough!(Float8E4M3DataType);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! impl_bytes_codec_passthrough {
+macro_rules! _impl_bytes_codec_passthrough {
     ($marker:ty) => {
         impl $crate::array::codec::BytesCodecDataTypeTraits for $marker {
             fn encode<'a>(
@@ -134,7 +135,7 @@ macro_rules! impl_bytes_codec_passthrough {
                 Ok(bytes)
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::BytesPlugin,
             $crate::array::codec::BytesCodecDataTypeTraits
@@ -142,7 +143,8 @@ macro_rules! impl_bytes_codec_passthrough {
     };
 }
 
-pub use impl_bytes_codec_passthrough;
+#[doc(inline)]
+pub use _impl_bytes_codec_passthrough as impl_bytes_codec_passthrough;
 
 /// Reverse the endianness of bytes for a given data type.
 pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {

@@ -128,8 +128,9 @@ crate::array::codec::define_data_type_support!(Pcodec, PcodecCodecDataTypeTraits
 /// impl_pcodec_codec!(Float32DataType, F32, 1);
 /// impl_pcodec_codec!(Complex64DataType, F32, 2);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! impl_pcodec_codec {
+macro_rules! _impl_pcodec_codec {
     ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
         impl $crate::array::codec::PcodecCodecDataTypeTraits for $marker {
             fn pcodec_element_type(&self) -> $crate::array::codec::PcodecElementType {
@@ -139,7 +140,7 @@ macro_rules! impl_pcodec_codec {
                 $elements_per_element
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PcodecPlugin,
             $crate::array::codec::PcodecCodecDataTypeTraits
@@ -147,7 +148,8 @@ macro_rules! impl_pcodec_codec {
     };
 }
 
-pub use impl_pcodec_codec;
+#[doc(inline)]
+pub use _impl_pcodec_codec as impl_pcodec_codec;
 
 #[cfg(test)]
 mod tests {

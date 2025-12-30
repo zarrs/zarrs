@@ -84,7 +84,7 @@ macro_rules! impl_complex_data_type {
             }
         }
 
-        crate::register_data_type_extension_codec!(
+        crate::array::codec::register_data_type_extension_codec!(
             $marker,
             crate::array::codec::BytesPlugin,
             crate::array::codec::BytesCodecDataTypeTraits
@@ -202,34 +202,33 @@ impl_complex_data_type!(Complex128DataType, 16, f64);
 
 // Bitround implementations for standard complex types
 #[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(ComplexBFloat16DataType, 2, float16, 7);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(ComplexFloat16DataType, 2, float16, 10);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(ComplexFloat32DataType, 4, float32, 23);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(ComplexFloat64DataType, 8, float64, 52);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(Complex64DataType, 4, float32, 23);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(Complex128DataType, 8, float64, 52);
+mod bitround_impls {
+    use crate::array::codec::array_to_array::bitround::impl_bitround_codec;
+    impl_bitround_codec!(super::ComplexBFloat16DataType, 2, float16, 7);
+    impl_bitround_codec!(super::ComplexFloat16DataType, 2, float16, 10);
+    impl_bitround_codec!(super::ComplexFloat32DataType, 4, float32, 23);
+    impl_bitround_codec!(super::ComplexFloat64DataType, 8, float64, 52);
+    impl_bitround_codec!(super::Complex64DataType, 4, float32, 23);
+    impl_bitround_codec!(super::Complex128DataType, 8, float64, 52);
+}
 
 // Pcodec implementations for standard complex types
-// crate::impl_pcodec_codec!(ComplexBFloat16DataType, BF16, 2);
 #[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(ComplexFloat16DataType, F16, 2);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(ComplexFloat32DataType, F32, 2);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(ComplexFloat64DataType, F64, 2);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(Complex64DataType, F32, 2);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(Complex128DataType, F64, 2);
+mod pcodec_impls {
+    use crate::array::codec::array_to_bytes::pcodec::impl_pcodec_codec;
+    // crate::array::codec::array_to_bytes::pcodec::impl_pcodec_codec!(ComplexBFloat16DataType, BF16, 2);
+    impl_pcodec_codec!(super::ComplexFloat16DataType, F16, 2);
+    impl_pcodec_codec!(super::ComplexFloat32DataType, F32, 2);
+    impl_pcodec_codec!(super::ComplexFloat64DataType, F64, 2);
+    impl_pcodec_codec!(super::Complex64DataType, F32, 2);
+    impl_pcodec_codec!(super::Complex128DataType, F64, 2);
+}
+
 // PackBits implementations for standard complex types
-crate::impl_packbits_codec!(ComplexBFloat16DataType, 16, float, 2);
-crate::impl_packbits_codec!(ComplexFloat16DataType, 16, float, 2);
-crate::impl_packbits_codec!(ComplexFloat32DataType, 32, float, 2);
-crate::impl_packbits_codec!(ComplexFloat64DataType, 64, float, 2);
-crate::impl_packbits_codec!(Complex64DataType, 32, float, 2);
-crate::impl_packbits_codec!(Complex128DataType, 64, float, 2);
+use crate::array::codec::array_to_bytes::packbits::impl_packbits_codec;
+impl_packbits_codec!(super::ComplexBFloat16DataType, 16, float, 2);
+impl_packbits_codec!(super::ComplexFloat16DataType, 16, float, 2);
+impl_packbits_codec!(super::ComplexFloat32DataType, 32, float, 2);
+impl_packbits_codec!(super::ComplexFloat64DataType, 64, float, 2);
+impl_packbits_codec!(super::Complex64DataType, 32, float, 2);
+impl_packbits_codec!(super::Complex128DataType, 64, float, 2);

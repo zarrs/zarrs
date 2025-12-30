@@ -149,15 +149,15 @@ impl crate::array::codec::BytesCodecDataTypeTraits for NumpyTimeDelta64DataType 
     }
 }
 
-crate::register_data_type_extension_codec!(
+crate::array::codec::register_data_type_extension_codec!(
     NumpyTimeDelta64DataType,
     crate::array::codec::BytesPlugin,
     crate::array::codec::BytesCodecDataTypeTraits
 );
 #[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(NumpyTimeDelta64DataType, I64, 1);
+crate::array::codec::impl_pcodec_codec!(NumpyTimeDelta64DataType, I64, 1);
 #[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(NumpyTimeDelta64DataType, 8, int64);
+crate::array::codec::impl_bitround_codec!(NumpyTimeDelta64DataType, 8, int64);
 #[cfg(feature = "zfp")]
-crate::impl_zfp_codec!(NumpyTimeDelta64DataType, Int64);
-crate::impl_packbits_codec!(NumpyTimeDelta64DataType, 64, signed, 1);
+crate::array::codec::impl_zfp_codec!(NumpyTimeDelta64DataType, Int64);
+crate::array::codec::impl_packbits_codec!(NumpyTimeDelta64DataType, 64, signed, 1);

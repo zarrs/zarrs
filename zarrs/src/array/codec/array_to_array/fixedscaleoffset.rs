@@ -156,8 +156,9 @@ crate::array::codec::define_data_type_support!(
 /// impl_fixedscaleoffset_codec!(Int32DataType, I32);
 /// impl_fixedscaleoffset_codec!(Float32DataType, F32);
 /// ```
+#[doc(hidden)]
 #[macro_export]
-macro_rules! impl_fixedscaleoffset_codec {
+macro_rules! _impl_fixedscaleoffset_codec {
     ($marker:ty, $element_type:ident) => {
         impl $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits for $marker {
             fn fixedscaleoffset_element_type(
@@ -166,7 +167,7 @@ macro_rules! impl_fixedscaleoffset_codec {
                 $crate::array::codec::FixedScaleOffsetElementType::$element_type
             }
         }
-        $crate::register_data_type_extension_codec!(
+        $crate::array::codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::FixedScaleOffsetPlugin,
             $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits
@@ -174,7 +175,8 @@ macro_rules! impl_fixedscaleoffset_codec {
     };
 }
 
-pub use impl_fixedscaleoffset_codec;
+#[doc(inline)]
+pub use _impl_fixedscaleoffset_codec as impl_fixedscaleoffset_codec;
 
 #[cfg(test)]
 mod tests {

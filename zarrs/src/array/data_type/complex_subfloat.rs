@@ -1,7 +1,5 @@
 //! Complex subfloat data types (two subfloats packed together).
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeExtension` for complex subfloat types (two subfloats packed together).
@@ -141,6 +139,7 @@ impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType);
 impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType);
 
 // PackBits codec implementations for complex subfloats
+use crate::array::codec::array_to_bytes::packbits::impl_packbits_codec;
 impl_packbits_codec!(ComplexFloat4E2M1FNDataType, 4, float, 2);
 impl_packbits_codec!(ComplexFloat6E2M3FNDataType, 6, float, 2);
 impl_packbits_codec!(ComplexFloat6E3M2FNDataType, 6, float, 2);
@@ -151,6 +150,7 @@ impl_packbits_codec!(ComplexFloat8E5M2FNUZDataType, 8, float, 2);
 impl_packbits_codec!(ComplexFloat8E8M0FNUDataType, 8, float, 2);
 
 // Bytes codec implementations for complex subfloats (passthrough - two single-byte components)
+use crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough;
 impl_bytes_codec_passthrough!(ComplexFloat4E2M1FNDataType);
 impl_bytes_codec_passthrough!(ComplexFloat6E2M3FNDataType);
 impl_bytes_codec_passthrough!(ComplexFloat6E3M2FNDataType);

@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 
-use crate::impl_bytes_codec_passthrough;
 use zarrs_plugin::{
     ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, Regex, ZarrVersions,
 };
@@ -169,4 +168,4 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
     }
 }
 
-impl_bytes_codec_passthrough!(RawBitsDataType);
+crate::array::codec::impl_bytes_codec_passthrough!(RawBitsDataType);

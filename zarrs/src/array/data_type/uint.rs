@@ -44,40 +44,43 @@ impl_data_type_extension_numeric!(UInt64DataType, 8, u64);
 
 // Bitround codec implementations for standard unsigned integers
 #[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(UInt8DataType, 1, uint8);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(UInt16DataType, 2, uint16);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(UInt32DataType, 4, uint32);
-#[cfg(feature = "bitround")]
-crate::impl_bitround_codec!(UInt64DataType, 8, uint64);
+mod impl_bitround {
+    use crate::array::codec::impl_bitround_codec;
+    impl_bitround_codec!(super::UInt8DataType, 1, uint8);
+    impl_bitround_codec!(super::UInt16DataType, 2, uint16);
+    impl_bitround_codec!(super::UInt32DataType, 4, uint32);
+    impl_bitround_codec!(super::UInt64DataType, 8, uint64);
+}
 
 // Pcodec implementations for standard unsigned integers (uint8 not supported)
 #[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(UInt16DataType, U16, 1);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(UInt32DataType, U32, 1);
-#[cfg(feature = "pcodec")]
-crate::impl_pcodec_codec!(UInt64DataType, U64, 1);
+mod impl_pcodec {
+    use crate::array::codec::impl_pcodec_codec;
+    impl_pcodec_codec!(super::UInt16DataType, U16, 1);
+    impl_pcodec_codec!(super::UInt32DataType, U32, 1);
+    impl_pcodec_codec!(super::UInt64DataType, U64, 1);
+}
 
 // FixedScaleOffset implementations for standard unsigned integers
-crate::impl_fixedscaleoffset_codec!(UInt8DataType, U8);
-crate::impl_fixedscaleoffset_codec!(UInt16DataType, U16);
-crate::impl_fixedscaleoffset_codec!(UInt32DataType, U32);
-crate::impl_fixedscaleoffset_codec!(UInt64DataType, U64);
+use crate::array::codec::impl_fixedscaleoffset_codec;
+impl_fixedscaleoffset_codec!(UInt8DataType, U8);
+impl_fixedscaleoffset_codec!(UInt16DataType, U16);
+impl_fixedscaleoffset_codec!(UInt32DataType, U32);
+impl_fixedscaleoffset_codec!(UInt64DataType, U64);
 
 // ZFP implementations for standard unsigned integers
 #[cfg(feature = "zfp")]
-crate::impl_zfp_codec!(UInt8DataType, Int32, U8ToI32);
-#[cfg(feature = "zfp")]
-crate::impl_zfp_codec!(UInt16DataType, Int32, U16ToI32);
-#[cfg(feature = "zfp")]
-crate::impl_zfp_codec!(UInt32DataType, Int32, U32ToI32);
-#[cfg(feature = "zfp")]
-crate::impl_zfp_codec!(UInt64DataType, Int64, U64ToI64);
+mod impl_zfp {
+    use crate::array::codec::impl_zfp_codec;
+    impl_zfp_codec!(super::UInt8DataType, Int32, U8ToI32);
+    impl_zfp_codec!(super::UInt16DataType, Int32, U16ToI32);
+    impl_zfp_codec!(super::UInt32DataType, Int32, U32ToI32);
+    impl_zfp_codec!(super::UInt64DataType, Int64, U64ToI64);
+}
 
 // PackBits implementations for standard unsigned integers
-crate::impl_packbits_codec!(UInt8DataType, 8, unsigned, 1);
-crate::impl_packbits_codec!(UInt16DataType, 16, unsigned, 1);
-crate::impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
-crate::impl_packbits_codec!(UInt64DataType, 64, unsigned, 1);
+use crate::array::codec::impl_packbits_codec;
+impl_packbits_codec!(UInt8DataType, 8, unsigned, 1);
+impl_packbits_codec!(UInt16DataType, 16, unsigned, 1);
+impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
+impl_packbits_codec!(UInt64DataType, 64, unsigned, 1);

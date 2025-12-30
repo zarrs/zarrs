@@ -119,7 +119,7 @@ impl BytesCodecDataTypeTraits for CustomDataTypeFloat8e3m4 {
 }
 
 // Register codec support
-zarrs::register_data_type_extension_codec!(
+zarrs::array::codec::register_data_type_extension_codec!(
     CustomDataTypeFloat8e3m4,
     zarrs::array::codec::BytesPlugin,
     zarrs::array::codec::BytesCodecDataTypeTraits

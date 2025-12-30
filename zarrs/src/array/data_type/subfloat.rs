@@ -1,7 +1,5 @@
 //! Subfloat data types (sub-byte floating point formats).
 
-use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
-
 use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeExtension` for subfloat types (single-byte floating point formats).
@@ -135,6 +133,7 @@ impl_subfloat_data_type!(Float8E5M2FNUZDataType);
 impl_subfloat_data_type!(Float8E8M0FNUDataType);
 
 // PackBits codec implementations for subfloats
+use crate::array::codec::impl_packbits_codec;
 impl_packbits_codec!(Float4E2M1FNDataType, 4, float, 1);
 impl_packbits_codec!(Float6E2M3FNDataType, 6, float, 1);
 impl_packbits_codec!(Float6E3M2FNDataType, 6, float, 1);
@@ -145,6 +144,7 @@ impl_packbits_codec!(Float8E5M2FNUZDataType, 8, float, 1);
 impl_packbits_codec!(Float8E8M0FNUDataType, 8, float, 1);
 
 // Bytes codec implementations for subfloats (passthrough - single byte, no endianness conversion)
+use crate::array::codec::impl_bytes_codec_passthrough;
 impl_bytes_codec_passthrough!(Float4E2M1FNDataType);
 impl_bytes_codec_passthrough!(Float6E2M3FNDataType);
 impl_bytes_codec_passthrough!(Float6E3M2FNDataType);
