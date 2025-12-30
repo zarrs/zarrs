@@ -56,14 +56,6 @@ impl zarrs_data_type::DataTypeExtension for UInt4DataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(number))
     }
 
-    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
-    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

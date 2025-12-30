@@ -172,8 +172,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        // Use codec_pcodec() from DataTypeExtension trait to get element type
-        let pcodec = data_type.codec_pcodec().ok_or_else(|| {
+        // Use get_pcodec_support() to get element type
+        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -215,8 +215,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Use codec_pcodec() from DataTypeExtension trait to get element type
-        let pcodec = data_type.codec_pcodec().ok_or_else(|| {
+        // Use get_pcodec_support() to get element type
+        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -255,8 +255,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        // Use codec_pcodec() from DataTypeExtension trait to get element type info
-        let pcodec = data_type.codec_pcodec().ok_or_else(|| {
+        // Use get_pcodec_support() to get element type info
+        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();

@@ -116,26 +116,6 @@ impl zarrs_data_type::DataTypeExtension for NumpyDateTime64DataType {
         }
     }
 
-    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
-    fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
-        Some(self)
-    }
-
-    fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
-        Some(self)
-    }
-
-    fn codec_zfp(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionZfpCodec> {
-        Some(self)
-    }
-
-    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -169,6 +149,7 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyDateTime64DataType {
     }
 }
 
+zarrs_data_type::register_bytes_support!(NumpyDateTime64DataType);
 impl_pcodec_codec!(NumpyDateTime64DataType, I64, 1);
 impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
 impl_zfp_codec!(NumpyDateTime64DataType, Int64);

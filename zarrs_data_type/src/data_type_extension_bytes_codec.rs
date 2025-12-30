@@ -38,3 +38,6 @@ pub enum DataTypeExtensionBytesCodecError {
     /// The endianness was not specified, and it is required for this data type extension.
     EndiannessNotSpecified,
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(Bytes, DataTypeExtensionBytesCodec);

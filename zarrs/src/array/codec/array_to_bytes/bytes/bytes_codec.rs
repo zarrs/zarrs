@@ -156,9 +156,8 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         bytes.validate(num_elements, data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        // Use codec_bytes() from DataTypeExtension trait for all types
-        let bytes_encoded = data_type
-            .codec_bytes()
+        // Use get_bytes_support() for all types
+        let bytes_encoded = zarrs_data_type::get_bytes_support(&**data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
@@ -183,9 +182,8 @@ impl ArrayToBytesCodecTraits for BytesCodec {
             ));
         }
 
-        // Use codec_bytes() from DataTypeExtension trait for all types
-        let bytes_decoded: ArrayBytes = data_type
-            .codec_bytes()
+        // Use get_bytes_support() for all types
+        let bytes_decoded: ArrayBytes = zarrs_data_type::get_bytes_support(&**data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?

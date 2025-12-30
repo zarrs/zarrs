@@ -164,10 +164,6 @@ impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::Array(arr))
     }
 
-    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

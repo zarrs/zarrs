@@ -39,10 +39,10 @@ zarrs_plugin::impl_extension_aliases!(Float64DataType, "float64",
 );
 
 // DataTypeExtension implementations for standard floats
-impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16; bitround, zfp, packbits);
-impl_data_type_extension_numeric!(Float16DataType, 2, f16; pcodec, bitround, zfp, packbits);
-impl_data_type_extension_numeric!(Float32DataType, 4, f32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
-impl_data_type_extension_numeric!(Float64DataType, 8, f64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16);
+impl_data_type_extension_numeric!(Float16DataType, 2, f16);
+impl_data_type_extension_numeric!(Float32DataType, 4, f32);
+impl_data_type_extension_numeric!(Float64DataType, 8, f64);
 
 // Bitround codec implementations for standard floats
 impl_bitround_codec!(BFloat16DataType, 2, float16, 7);

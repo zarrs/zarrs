@@ -2,19 +2,13 @@
 
 /// Helper macro to implement `DataTypeExtension` for simple fixed-size numeric types.
 ///
+/// This macro implements the `DataTypeExtension` trait and `DataTypeExtensionBytesCodec` trait,
+/// and also registers the type with the bytes codec registry.
+///
 /// Usage:
 /// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type)` - basic implementation
-/// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type; codec_method1, codec_method2, ...)` - with codec overrides
-///
-/// Available codec methods: `pcodec`, `zfp`, `bitround`, `fixedscaleoffset`, `packbits`
 macro_rules! impl_data_type_extension_numeric {
-    // Base case: no additional codec methods
     ($marker:ty, $size:tt, $rust_type:tt) => {
-        impl_data_type_extension_numeric!($marker, $size, $rust_type;);
-    };
-
-    // With optional codec method overrides
-    ($marker:ty, $size:tt, $rust_type:tt; $($codec:ident),* $(,)?) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <$marker as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -42,17 +36,9 @@ macro_rules! impl_data_type_extension_numeric {
                 impl_data_type_extension_numeric!(@metadata_fill_value self, fill_value, $rust_type, $size)
             }
 
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
-
-            $(
-                impl_data_type_extension_numeric!(@codec_method $codec);
-            )*
         }
 
         #[allow(unused_variables)]
@@ -73,33 +59,8 @@ macro_rules! impl_data_type_extension_numeric {
                 impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
         }
-    };
 
-    // Codec method overrides
-    (@codec_method pcodec) => {
-        fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method zfp) => {
-        fn codec_zfp(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionZfpCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method bitround) => {
-        fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method fixedscaleoffset) => {
-        fn codec_fixedscaleoffset(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionFixedScaleOffsetCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method packbits) => {
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
-        }
+        zarrs_data_type::register_bytes_support!($marker);
     };
 
     // Fill value from metadata for signed integers
@@ -318,7 +279,7 @@ macro_rules! register_data_type_plugin {
 
 pub(crate) use register_data_type_plugin;
 
-/// Macro to implement `DataTypeExtensionPackBitsCodec` for data types.
+/// Macro to implement `DataTypeExtensionPackBitsCodec` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -344,6 +305,7 @@ macro_rules! impl_packbits_codec {
                 true
             }
         }
+        zarrs_data_type::register_packbits_support!($marker);
     };
     // Multi-component, unsigned integer
     ($marker:ty, $bits:expr, unsigned, $components:expr) => {
@@ -358,6 +320,7 @@ macro_rules! impl_packbits_codec {
                 false
             }
         }
+        zarrs_data_type::register_packbits_support!($marker);
     };
     // Multi-component, float (no sign extension)
     ($marker:ty, $bits:expr, float, $components:expr) => {
@@ -372,12 +335,13 @@ macro_rules! impl_packbits_codec {
                 false
             }
         }
+        zarrs_data_type::register_packbits_support!($marker);
     };
 }
 
 pub(crate) use impl_packbits_codec;
 
-/// Macro to implement `DataTypeExtensionPcodecCodec` for data types.
+/// Macro to implement `DataTypeExtensionPcodecCodec` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -395,12 +359,13 @@ macro_rules! impl_pcodec_codec {
                 $elements_per_element
             }
         }
+        zarrs_data_type::register_pcodec_support!($marker);
     };
 }
 
 pub(crate) use impl_pcodec_codec;
 
-/// Macro to implement `DataTypeExtensionFixedScaleOffsetCodec` for data types.
+/// Macro to implement `DataTypeExtensionFixedScaleOffsetCodec` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -416,12 +381,13 @@ macro_rules! impl_fixedscaleoffset_codec {
                 zarrs_data_type::FixedScaleOffsetElementType::$element_type
             }
         }
+        zarrs_data_type::register_fixedscaleoffset_support!($marker);
     };
 }
 
 pub(crate) use impl_fixedscaleoffset_codec;
 
-/// Macro to implement `DataTypeExtensionZfpCodec` for data types.
+/// Macro to implement `DataTypeExtensionZfpCodec` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -437,13 +403,14 @@ pub(crate) use impl_fixedscaleoffset_codec;
 /// impl_zfp_codec!(Int16DataType, Int32, I16ToI32);
 /// ```
 macro_rules! impl_zfp_codec {
-    // Unsupported type
+    // Unsupported type - still implements the trait but returns None, and registers support
     ($marker:ty, None) => {
         impl zarrs_data_type::DataTypeExtensionZfpCodec for $marker {
             fn zfp_type(&self) -> Option<zarrs_data_type::ZfpType> {
                 None
             }
         }
+        zarrs_data_type::register_zfp_support!($marker);
     };
     // Native type (no promotion needed)
     ($marker:ty, $zfp_type:ident) => {
@@ -455,6 +422,7 @@ macro_rules! impl_zfp_codec {
                 zarrs_data_type::ZfpPromotion::None
             }
         }
+        zarrs_data_type::register_zfp_support!($marker);
     };
     // Promoted type
     ($marker:ty, $zfp_type:ident, $promotion:ident) => {
@@ -466,12 +434,13 @@ macro_rules! impl_zfp_codec {
                 zarrs_data_type::ZfpPromotion::$promotion
             }
         }
+        zarrs_data_type::register_zfp_support!($marker);
     };
 }
 
 pub(crate) use impl_zfp_codec;
 
-/// Macro to implement `DataTypeExtensionBitroundCodec` for data types.
+/// Macro to implement `DataTypeExtensionBitroundCodec` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -496,6 +465,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_float16(bytes, keepbits, $mantissa_bits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Float32 types
     ($marker:ty, 4, float32, $mantissa_bits:expr) => {
@@ -507,6 +477,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_float32(bytes, keepbits, $mantissa_bits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Float64 types
     ($marker:ty, 8, float64, $mantissa_bits:expr) => {
@@ -518,6 +489,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_float64(bytes, keepbits, $mantissa_bits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Int8 types (no mantissa, round from MSB)
     ($marker:ty, 1, int8) => {
@@ -529,6 +501,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int8(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Int16 types
     ($marker:ty, 2, int16) => {
@@ -540,6 +513,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int16(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Int32 types
     ($marker:ty, 4, int32) => {
@@ -551,6 +525,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int32(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // Int64 types
     ($marker:ty, 8, int64) => {
@@ -562,6 +537,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int64(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // UInt8 types (use int8 rounding function)
     ($marker:ty, 1, uint8) => {
@@ -573,6 +549,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int8(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // UInt16 types (use int16 rounding function)
     ($marker:ty, 2, uint16) => {
@@ -584,6 +561,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int16(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // UInt32 types (use int32 rounding function)
     ($marker:ty, 4, uint32) => {
@@ -595,6 +573,7 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int32(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
     // UInt64 types (use int64 rounding function)
     ($marker:ty, 8, uint64) => {
@@ -606,12 +585,13 @@ macro_rules! impl_bitround_codec {
                 zarrs_data_type::round_bytes_int64(bytes, keepbits);
             }
         }
+        zarrs_data_type::register_bitround_support!($marker);
     };
 }
 
 pub(crate) use impl_bitround_codec;
 
-/// Macro to implement a passthrough `DataTypeExtensionBytesCodec` for data types.
+/// Macro to implement a passthrough `DataTypeExtensionBytesCodec` for data types and register support.
 ///
 /// This is useful for single-byte types and other types where no byte-swapping
 /// or transformation is needed during encoding/decoding.
@@ -647,6 +627,7 @@ macro_rules! impl_bytes_codec_passthrough {
                 Ok(bytes)
             }
         }
+        zarrs_data_type::register_bytes_support!($marker);
     };
 }
 

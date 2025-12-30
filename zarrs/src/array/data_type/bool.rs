@@ -55,14 +55,6 @@ impl zarrs_data_type::DataTypeExtension for BoolDataType {
         Ok(zarrs_metadata::v3::FillValueMetadataV3::from(bytes[0] != 0))
     }
 
-    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
-    fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

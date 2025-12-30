@@ -140,7 +140,7 @@ impl ArrayCodecTraits for FixedScaleOffsetCodec {
 }
 
 fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType, CodecError> {
-    let fso = data_type.codec_fixedscaleoffset().ok_or_else(|| {
+    let fso = zarrs_data_type::get_fixedscaleoffset_support(&**data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(
             data_type.clone(),
             FixedScaleOffsetCodec::IDENTIFIER.to_string(),

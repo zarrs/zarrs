@@ -11,3 +11,6 @@ pub trait DataTypeExtensionPackBitsCodec {
     /// This should be set to `true` for signed integer types.
     fn sign_extension(&self) -> bool;
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(PackBits, DataTypeExtensionPackBitsCodec);

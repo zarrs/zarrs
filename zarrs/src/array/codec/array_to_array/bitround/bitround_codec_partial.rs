@@ -26,8 +26,8 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         data_type: &DataType,
         keepbits: u32,
     ) -> Result<Self, CodecError> {
-        // Use codec_bitround() from DataTypeExtension trait to check support
-        if data_type.codec_bitround().is_some() {
+        // Use get_bitround_support() to check support
+        if zarrs_data_type::get_bitround_support(&**data_type).is_some() {
             Ok(Self {
                 input_output_handle,
                 data_type: data_type.clone(),

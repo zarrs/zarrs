@@ -66,3 +66,6 @@ pub trait DataTypeExtensionFixedScaleOffsetCodec {
     /// Returns the element type for this data type.
     fn fixedscaleoffset_element_type(&self) -> FixedScaleOffsetElementType;
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(FixedScaleOffset, DataTypeExtensionFixedScaleOffsetCodec);

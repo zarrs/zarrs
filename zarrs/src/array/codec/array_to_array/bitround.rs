@@ -70,8 +70,8 @@ pub(crate) fn create_codec_bitround(metadata: &MetadataV3) -> Result<Codec, Plug
 }
 
 fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
-    // Use codec_bitround() from DataTypeExtension trait for all types
-    let bitround = data_type.codec_bitround().ok_or_else(|| {
+    // Use get_bitround_support() for all types
+    let bitround = zarrs_data_type::get_bitround_support(&**data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), BitroundCodec::IDENTIFIER.to_string())
     })?;
     bitround.round(bytes, keepbits);

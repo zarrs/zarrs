@@ -67,7 +67,7 @@ struct DataTypeExtensionPackBitsCodecComponents {
 fn pack_bits_components(
     data_type: &DataType,
 ) -> Result<DataTypeExtensionPackBitsCodecComponents, CodecError> {
-    let packbits = data_type.codec_packbits().ok_or_else(|| {
+    let packbits = zarrs_data_type::get_packbits_support(&**data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), PackBitsCodec::IDENTIFIER.to_string())
     })?;
     Ok(DataTypeExtensionPackBitsCodecComponents {

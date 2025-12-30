@@ -48,3 +48,6 @@ pub trait DataTypeExtensionZfpCodec {
         ZfpPromotion::None
     }
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(Zfp, DataTypeExtensionZfpCodec);

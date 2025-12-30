@@ -13,7 +13,7 @@ zarrs_plugin::impl_extension_aliases!(UInt8DataType, "uint8",
     v3: "uint8", [],
     v2: "|u1", ["|u1"]
 );
-impl_data_type_extension_numeric!(UInt8DataType, 1, u8; bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt8DataType, 1, u8);
 
 /// The `uint16` data type.
 #[derive(Debug, Clone, Copy)]
@@ -23,7 +23,7 @@ zarrs_plugin::impl_extension_aliases!(UInt16DataType, "uint16",
     v3: "uint16", [],
     v2: "<u2", ["<u2", ">u2"]
 );
-impl_data_type_extension_numeric!(UInt16DataType, 2, u16; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt16DataType, 2, u16);
 
 /// The `uint32` data type.
 #[derive(Debug, Clone, Copy)]
@@ -33,7 +33,7 @@ zarrs_plugin::impl_extension_aliases!(UInt32DataType, "uint32",
     v3: "uint32", [],
     v2: "<u4", ["<u4", ">u4"]
 );
-impl_data_type_extension_numeric!(UInt32DataType, 4, u32; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt32DataType, 4, u32);
 
 /// The `uint64` data type.
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +43,7 @@ zarrs_plugin::impl_extension_aliases!(UInt64DataType, "uint64",
     v3: "uint64", [],
     v2: "<u8", ["<u8", ">u8"]
 );
-impl_data_type_extension_numeric!(UInt64DataType, 8, u64; pcodec, bitround, fixedscaleoffset, zfp, packbits);
+impl_data_type_extension_numeric!(UInt64DataType, 8, u64);
 
 // Bitround codec implementations for standard unsigned integers
 impl_bitround_codec!(UInt8DataType, 1, uint8);

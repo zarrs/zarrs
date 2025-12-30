@@ -70,16 +70,6 @@ macro_rules! impl_complex_subfloat_data_type {
                 ]))
             }
 
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
-            fn codec_packbits(
-                &self,
-            ) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-                Some(self)
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }

@@ -5,18 +5,8 @@ use super::macros::{
 };
 
 /// Macro to implement `DataTypeExtension` for complex types.
-///
-/// Usage:
-/// - `impl_complex_data_type!(MarkerType, size, component_type)` - basic implementation
-/// - `impl_complex_data_type!(MarkerType, size, component_type; codec_method1, codec_method2, ...)` - with codec overrides
 macro_rules! impl_complex_data_type {
-    // Base case: no additional codec methods
     ($marker:ty, $size:tt, $component_type:tt) => {
-        impl_complex_data_type!($marker, $size, $component_type;);
-    };
-
-    // With optional codec method overrides
-    ($marker:ty, $size:tt, $component_type:tt; $($codec:ident),* $(,)?) => {
         impl zarrs_data_type::DataTypeExtension for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
@@ -57,17 +47,9 @@ macro_rules! impl_complex_data_type {
                 impl_complex_data_type!(@to_metadata self, fill_value, $component_type, $size, error)
             }
 
-            fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-                Some(self)
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
-
-            $(
-                impl_complex_data_type!(@codec_method $codec);
-            )*
         }
 
         impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
@@ -101,6 +83,8 @@ macro_rules! impl_complex_data_type {
                 self.encode(bytes, endianness)
             }
         }
+
+        zarrs_data_type::register_bytes_support!($marker);
     };
 
     (@parse_components $self:ident, $re:ident, $im:ident, f32, $err:ident) => {{
@@ -160,23 +144,6 @@ macro_rules! impl_complex_data_type {
             zarrs_metadata::v3::FillValueMetadataV3::from(im),
         ]))
     }};
-
-    // Codec method overrides for complex types
-    (@codec_method pcodec) => {
-        fn codec_pcodec(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPcodecCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method bitround) => {
-        fn codec_bitround(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBitroundCodec> {
-            Some(self)
-        }
-    };
-    (@codec_method packbits) => {
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
-        }
-    };
 }
 
 /// The `complex_bfloat16` data type.
@@ -222,12 +189,12 @@ zarrs_plugin::impl_extension_aliases!(Complex128DataType, "complex128",
 );
 
 // DataTypeExtension implementations for standard complex types
-impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16; bitround, packbits);
-impl_complex_data_type!(ComplexFloat16DataType, 4, f16; pcodec, bitround, packbits);
-impl_complex_data_type!(ComplexFloat32DataType, 8, f32; pcodec, bitround, packbits);
-impl_complex_data_type!(ComplexFloat64DataType, 16, f64; pcodec, bitround, packbits);
-impl_complex_data_type!(Complex64DataType, 8, f32; pcodec, bitround, packbits);
-impl_complex_data_type!(Complex128DataType, 16, f64; pcodec, bitround, packbits);
+impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16);
+impl_complex_data_type!(ComplexFloat16DataType, 4, f16);
+impl_complex_data_type!(ComplexFloat32DataType, 8, f32);
+impl_complex_data_type!(ComplexFloat64DataType, 16, f64);
+impl_complex_data_type!(Complex64DataType, 8, f32);
+impl_complex_data_type!(Complex128DataType, 16, f64);
 
 // Bitround implementations for standard complex types
 impl_bitround_codec!(ComplexBFloat16DataType, 2, float16, 7);

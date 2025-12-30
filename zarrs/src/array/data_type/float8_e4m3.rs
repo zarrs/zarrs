@@ -69,14 +69,6 @@ mod impl_default {
             Ok(FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])))
         }
 
-        fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-            Some(self)
-        }
-
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
-        }
-
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
@@ -165,14 +157,6 @@ mod impl_float8 {
             } else {
                 Ok(FillValueMetadataV3::from(f8.to_f64()))
             }
-        }
-
-        fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-            Some(self)
-        }
-
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
         }
 
         fn as_any(&self) -> &dyn std::any::Any {

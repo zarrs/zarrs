@@ -19,11 +19,13 @@ use zarrs_data_type::{
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// A unique identifier for  the custom data type.
-const FLOAT8_E3M4: &'static str = "zarrs.test.float8_e3m4";
+const FLOAT8_E3M4: &str = "zarrs.test.float8_e3m4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeFloat8e3m4;
+
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeFloat8e3m4, FLOAT8_E3M4);
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -91,10 +93,6 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -118,6 +116,9 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFloat8e3m4 {
         Ok(bytes)
     }
 }
+
+// Register codec support
+zarrs_data_type::register_bytes_support!(CustomDataTypeFloat8e3m4);
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float32_to_float8_e3m4(val: f32) -> u8 {

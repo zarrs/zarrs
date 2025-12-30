@@ -75,14 +75,6 @@ mod impl_default {
             ]))
         }
 
-        fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-            Some(self)
-        }
-
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
-        }
-
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
@@ -177,14 +169,6 @@ mod impl_float8 {
                 component_to_metadata(bytes[0]),
                 component_to_metadata(bytes[1]),
             ]))
-        }
-
-        fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-            Some(self)
-        }
-
-        fn codec_packbits(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionPackBitsCodec> {
-            Some(self)
         }
 
         fn as_any(&self) -> &dyn std::any::Any {

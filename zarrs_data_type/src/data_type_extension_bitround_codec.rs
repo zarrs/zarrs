@@ -138,3 +138,6 @@ pub fn round_bytes_float64(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) 
         chunk.copy_from_slice(&u64::to_ne_bytes(rounded));
     }
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(Bitround, DataTypeExtensionBitroundCodec);

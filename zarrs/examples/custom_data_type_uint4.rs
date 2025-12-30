@@ -22,11 +22,13 @@ use zarrs_data_type::{
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
 /// A unique identifier for  the custom data type.
-const UINT4: &'static str = "zarrs.test.uint4";
+const UINT4: &str = "zarrs.test.uint4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeUInt4;
+
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, UINT4);
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -96,14 +98,6 @@ impl DataTypeExtension for CustomDataTypeUInt4 {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
-        Some(self)
-    }
-
-    fn codec_packbits(&self) -> Option<&dyn DataTypeExtensionPackBitsCodec> {
-        Some(self)
-    }
-
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -142,6 +136,10 @@ impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
         false
     }
 }
+
+// Register codec support
+zarrs_data_type::register_bytes_support!(CustomDataTypeUInt4);
+zarrs_data_type::register_packbits_support!(CustomDataTypeUInt4);
 
 impl TryFrom<u64> for CustomDataTypeUInt4Element {
     type Error = u64;

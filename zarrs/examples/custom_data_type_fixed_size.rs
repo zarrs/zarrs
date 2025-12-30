@@ -151,7 +151,9 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
 struct CustomDataTypeFixedSize;
 
 /// A custom unique identifier
-const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeFixedSize";
+const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeFixedSize";
+
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeFixedSize, CUSTOM_NAME);
 
 fn matches_name_dtype(name: &str, _version: ZarrVersions) -> bool {
     name == CUSTOM_NAME
@@ -213,10 +215,6 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
 
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Fixed(size_of::<CustomDataTypeFixedSizeBytes>())
-    }
-
-    fn codec_bytes(&self) -> Option<&dyn DataTypeExtensionBytesCodec> {
-        Some(self)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -282,6 +280,9 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
         }
     }
 }
+
+// Register codec support
+zarrs_data_type::register_bytes_support!(CustomDataTypeFixedSize);
 
 fn main() {
     let store = std::sync::Arc::new(MemoryStore::default());

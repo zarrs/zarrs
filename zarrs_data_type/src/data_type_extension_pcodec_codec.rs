@@ -44,3 +44,6 @@ pub trait DataTypeExtensionPcodecCodec {
     /// Returns the number of elements per data type element.
     fn pcodec_elements_per_element(&self) -> usize;
 }
+
+// Generate the codec support infrastructure using the generic macro
+crate::define_codec_support!(Pcodec, DataTypeExtensionPcodecCodec);

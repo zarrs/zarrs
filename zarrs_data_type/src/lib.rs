@@ -7,6 +7,7 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
+mod codec_support;
 mod data_type_extension;
 mod data_type_extension_bitround_codec;
 mod data_type_extension_bytes_codec;
@@ -19,17 +20,26 @@ mod fill_value;
 
 pub use data_type_extension::{DataType, DataTypeExtension, DataTypeExtensionError};
 pub use data_type_extension_bitround_codec::{
-    round_bytes_float16, round_bytes_float32, round_bytes_float64, round_bytes_int16,
-    round_bytes_int32, round_bytes_int64, round_bytes_int8, DataTypeExtensionBitroundCodec,
+    get_bitround_support, round_bytes_float16, round_bytes_float32, round_bytes_float64,
+    round_bytes_int16, round_bytes_int32, round_bytes_int64, round_bytes_int8,
+    BitroundCasterPlugin, DataTypeExtensionBitroundCodec,
 };
 pub use data_type_extension_bytes_codec::{
-    DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
+    get_bytes_support, BytesCasterPlugin, DataTypeExtensionBytesCodec,
+    DataTypeExtensionBytesCodecError,
 };
 pub use data_type_extension_fixedscaleoffset_codec::{
-    DataTypeExtensionFixedScaleOffsetCodec, FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
+    get_fixedscaleoffset_support, DataTypeExtensionFixedScaleOffsetCodec,
+    FixedScaleOffsetCasterPlugin, FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
 };
-pub use data_type_extension_packbits_codec::DataTypeExtensionPackBitsCodec;
-pub use data_type_extension_pcodec_codec::{DataTypeExtensionPcodecCodec, PcodecElementType};
-pub use data_type_extension_zfp_codec::{DataTypeExtensionZfpCodec, ZfpPromotion, ZfpType};
+pub use data_type_extension_packbits_codec::{
+    get_packbits_support, DataTypeExtensionPackBitsCodec, PackBitsCasterPlugin,
+};
+pub use data_type_extension_pcodec_codec::{
+    get_pcodec_support, DataTypeExtensionPcodecCodec, PcodecCasterPlugin, PcodecElementType,
+};
+pub use data_type_extension_zfp_codec::{
+    get_zfp_support, DataTypeExtensionZfpCodec, ZfpCasterPlugin, ZfpPromotion, ZfpType,
+};
 pub use data_type_plugin::DataTypePlugin;
 pub use fill_value::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};

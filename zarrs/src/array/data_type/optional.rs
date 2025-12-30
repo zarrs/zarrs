@@ -205,13 +205,6 @@ impl zarrs_data_type::DataTypeExtension for OptionalDataType {
         }
     }
 
-    fn codec_bytes(&self) -> Option<&dyn zarrs_data_type::DataTypeExtensionBytesCodec> {
-        // Optional delegates to inner type for bytes codec, but handles the suffix byte specially
-        // For now, return None to indicate no direct bytes codec support
-        // (the bytes codec needs to handle the optional suffix byte)
-        None
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
