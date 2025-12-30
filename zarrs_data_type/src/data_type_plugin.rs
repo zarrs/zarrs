@@ -1,5 +1,7 @@
+use std::sync::LazyLock;
+
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{Plugin, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{Plugin, PluginCreateError, RuntimePlugin, RuntimeRegistry, ZarrVersions};
 
 use crate::DataType;
 
@@ -24,6 +26,48 @@ impl DataTypePlugin {
             create_fn,
         ))
     }
+}
+
+/// A runtime data type plugin for dynamic registration.
+pub type DataTypeRuntimePlugin = RuntimePlugin<DataType, MetadataV3>;
+
+/// Global runtime registry for data type plugins.
+pub static DATA_TYPE_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry<DataTypeRuntimePlugin>> =
+    LazyLock::new(RuntimeRegistry::new);
+
+/// A handle to a registered data type plugin.
+pub type DataTypeRuntimeRegistryHandle = std::sync::Arc<DataTypeRuntimePlugin>;
+
+/// Register a data type plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+///
+/// A handle that can be used to unregister the plugin later.
+///
+/// # Example
+///
+/// ```ignore
+/// use zarrs_data_type::{register_data_type, DataTypeRuntimePlugin};
+///
+/// let handle = register_data_type(DataTypeRuntimePlugin::new(
+///     "my.custom.dtype",
+///     |name, zarr_version| name == "my.custom.dtype",
+///     |zarr_version| "my.custom.dtype".into(),
+///     |metadata| Ok(Arc::new(MyCustomDataType::from_metadata(metadata)?)),
+/// ));
+/// ```
+pub fn register_data_type(plugin: DataTypeRuntimePlugin) -> DataTypeRuntimeRegistryHandle {
+    DATA_TYPE_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime data type plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_data_type(handle: &DataTypeRuntimeRegistryHandle) -> bool {
+    DATA_TYPE_RUNTIME_REGISTRY.unregister(handle)
 }
 
 #[cfg(test)]

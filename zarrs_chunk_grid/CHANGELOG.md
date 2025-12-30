@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add runtime chunk grid registration: `[un]register_chunk_grid` and `ChunkGridRuntime{Plugin,RegistryHandle}`, 
+
 ### Changed
 - **Breaking**: `ChunkGridPlugin::new()` now takes a `default_name_fn` parameter
 - **Breaking**: `ChunkGridPlugin::match_name()` now takes a `ZarrVersions` parameter (use `Plugin2::match_name()`)

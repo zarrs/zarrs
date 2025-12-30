@@ -12,5 +12,8 @@ mod data_type_plugin;
 mod fill_value;
 
 pub use data_type_extension::{DataType, DataTypeExtension, DataTypeExtensionError};
-pub use data_type_plugin::DataTypePlugin;
+pub use data_type_plugin::{
+    register_data_type, unregister_data_type, DataTypePlugin, DataTypeRuntimePlugin,
+    DataTypeRuntimeRegistryHandle, DATA_TYPE_RUNTIME_REGISTRY,
+};
 pub use fill_value::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};

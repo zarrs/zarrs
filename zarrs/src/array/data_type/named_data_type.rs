@@ -1,7 +1,9 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use zarrs_data_type::{DataTypeFillValueMetadataError, DataTypePlugin, FillValue};
+use zarrs_data_type::{
+    DATA_TYPE_RUNTIME_REGISTRY, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+};
 use zarrs_metadata::{
     ConfigurationSerialize,
     v3::{FillValueMetadataV3, MetadataV3},
@@ -515,7 +517,26 @@ impl TryFrom<&MetadataV3> for NamedDataType {
             }
         }
 
-        // Try an extension plugin
+        // Try runtime-registered extension plugins first (higher priority)
+        {
+            let result = DATA_TYPE_RUNTIME_REGISTRY.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name, ZarrVersions::V3) {
+                        return Some(
+                            plugin
+                                .create(metadata)
+                                .map(|dt| NamedDataType::new(metadata.name().to_string(), dt)),
+                        );
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Try compile-time registered extension plugins
         for plugin in inventory::iter::<DataTypePlugin> {
             if plugin.match_name(name, ZarrVersions::V3) {
                 return plugin

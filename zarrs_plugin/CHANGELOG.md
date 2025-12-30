@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ZarrVersions` enum with `V2` and `V3` variants
 - Implement `From<ZarrVersion2>` and `From<ZarrVersion3>` for `ZarrVersions`
 - Add `ExtensionType*` and `ZarrVersion{2,3}` types (moved from `zarrs_registry`)
+- Add `RuntimePlugin[2]`, `RuntimeRegistry`, and `RegistrationHandle` for runtime plugin registration
 
 ### Changed
 - **Breaking**: `Plugin[2]::new()` now takes a `default_name_fn` parameter

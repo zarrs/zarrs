@@ -21,6 +21,12 @@ use thiserror::Error;
 mod maybe;
 pub use maybe::{MaybeSend, MaybeSync};
 
+mod runtime_plugin;
+pub use runtime_plugin::{RuntimePlugin, RuntimePlugin2};
+
+mod runtime_registry;
+pub use runtime_registry::{RuntimeRegistry, RuntimeRegistryHandle};
+
 mod extension_type;
 pub use extension_type::{
     ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ExtensionType,

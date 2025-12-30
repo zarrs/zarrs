@@ -85,6 +85,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 
 pub use codec_partial_default::CodecPartialDefault;
@@ -93,7 +94,9 @@ use codec_partial_default::{
     BytesToBytesCodecPartialDefault,
 };
 use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
-use zarrs_plugin::{ExtensionIdentifier, PluginUnsupportedError, ZarrVersions};
+use zarrs_plugin::{
+    ExtensionIdentifier, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersions,
+};
 
 use super::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayShape, BytesRepresentation,
@@ -202,6 +205,48 @@ impl CodecPlugin {
     }
 }
 
+/// A runtime codec plugin for dynamic registration.
+pub type CodecRuntimePlugin = RuntimePlugin<Codec, MetadataV3>;
+
+/// Global runtime registry for codec plugins.
+pub static CODEC_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry<CodecRuntimePlugin>> =
+    LazyLock::new(RuntimeRegistry::new);
+
+/// A handle to a registered codec plugin.
+pub type CodecRuntimeRegistryHandle = Arc<CodecRuntimePlugin>;
+
+/// Register a codec plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+///
+/// A handle that can be used to unregister the plugin later.
+///
+/// # Example
+///
+/// ```ignore
+/// use zarrs::array::codec::{register_codec, CodecRuntimePlugin, Codec};
+///
+/// let handle = register_codec(CodecRuntimePlugin::new(
+///     "my.custom.codec",
+///     |name, zarr_version| name == "my.custom.codec",
+///     |zarr_version| "my.custom.codec".into(),
+///     |metadata| Ok(Codec::BytesToBytes(Arc::new(MyCodec::from_metadata(metadata)?))),
+/// ));
+/// ```
+pub fn register_codec(plugin: CodecRuntimePlugin) -> CodecRuntimeRegistryHandle {
+    CODEC_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime codec plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_codec(handle: &CodecRuntimeRegistryHandle) -> bool {
+    CODEC_RUNTIME_REGISTRY.unregister(handle)
+}
+
 /// A generic array to array, array to bytes, or bytes to bytes codec.
 #[derive(Debug)]
 pub enum Codec {
@@ -220,6 +265,23 @@ impl Codec {
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
     pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
         let name = metadata.name();
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = CODEC_RUNTIME_REGISTRY.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name, ZarrVersions::V3) {
+                        return Some(plugin.create(metadata));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
         for plugin in inventory::iter::<CodecPlugin> {
             if plugin.match_name(name, ZarrVersions::V3) {
                 return plugin.create(metadata);
