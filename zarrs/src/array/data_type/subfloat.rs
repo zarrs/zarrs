@@ -1,6 +1,8 @@
 //! Subfloat data types (sub-byte floating point formats).
 
-use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_data_type_plugin};
+use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
+
+use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeExtension` for subfloat types (single-byte floating point formats).
 macro_rules! impl_subfloat_data_type {

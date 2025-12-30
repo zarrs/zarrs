@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use zarrs_data_type::DataTypeExtensionError;
 use zarrs_plugin::PluginCreateError;
 
 use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
@@ -157,12 +156,11 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         let bytes = bytes.into_fixed()?;
 
         // Use get_bytes_support() for all types
-        let bytes_encoded = zarrs_data_type::get_bytes_support(&**data_type)
+        let bytes_encoded = super::get_bytes_support(&**data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
-            .encode(bytes, self.endian)
-            .map_err(DataTypeExtensionError::from)?;
+            .encode(bytes, self.endian)?;
         Ok(bytes_encoded)
     }
 
@@ -183,12 +181,11 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         }
 
         // Use get_bytes_support() for all types
-        let bytes_decoded: ArrayBytes = zarrs_data_type::get_bytes_support(&**data_type)
+        let bytes_decoded: ArrayBytes = super::get_bytes_support(&**data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
-            .decode(bytes, self.endian)
-            .map_err(DataTypeExtensionError::from)?
+            .decode(bytes, self.endian)?
             .into();
 
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();

@@ -106,8 +106,6 @@ mod tests {
                         .unwrap(),
                     FillValueMetadataV3::Null
                 );
-                assert!(crate::get_bytes_support(&*data_type).is_none());
-                assert!(crate::get_packbits_support(&*data_type).is_none());
             }
         }
         assert!(found);

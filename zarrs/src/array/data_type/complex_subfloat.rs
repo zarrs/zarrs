@@ -1,6 +1,8 @@
 //! Complex subfloat data types (two subfloats packed together).
 
-use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_data_type_plugin};
+use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
+
+use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeExtension` for complex subfloat types (two subfloats packed together).
 macro_rules! impl_complex_subfloat_data_type {

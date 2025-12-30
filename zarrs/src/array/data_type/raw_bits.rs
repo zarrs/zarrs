@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use super::macros::impl_bytes_codec_passthrough;
+use crate::impl_bytes_codec_passthrough;
 use zarrs_plugin::{
     ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, Regex, ZarrVersions,
 };

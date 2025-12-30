@@ -18,6 +18,10 @@ pub mod bytes_to_bytes;
 mod options;
 
 mod named_codec;
+
+mod data_type_support;
+pub use data_type_support::{define_data_type_support, register_data_type_extension_codec};
+
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;

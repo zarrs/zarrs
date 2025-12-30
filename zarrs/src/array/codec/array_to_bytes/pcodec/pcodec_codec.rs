@@ -7,6 +7,7 @@ use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
+use super::{PcodecElementType, get_pcodec_support};
 use crate::array::{
     BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
     codec::{
@@ -21,7 +22,6 @@ use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use std::num::NonZeroU64;
-use zarrs_data_type::PcodecElementType;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `pcodec` codec implementation.
@@ -173,7 +173,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
-        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -200,10 +200,6 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             PcodecElementType::F16 => pcodec_encode!(half::f16),
             PcodecElementType::F32 => pcodec_encode!(f32),
             PcodecElementType::F64 => pcodec_encode!(f64),
-            _ => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::IDENTIFIER.to_string(),
-            )),
         }
     }
 
@@ -216,7 +212,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
-        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -239,12 +235,6 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             PcodecElementType::F16 => pcodec_decode!(half::f16),
             PcodecElementType::F32 => pcodec_decode!(f32),
             PcodecElementType::F64 => pcodec_decode!(f64),
-            _ => {
-                return Err(CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::IDENTIFIER.to_string(),
-                ));
-            }
         }?;
         Ok(ArrayBytes::from(bytes))
     }
@@ -256,7 +246,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Use get_pcodec_support() to get element type info
-        let pcodec = zarrs_data_type::get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -275,12 +265,6 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             PcodecElementType::U64 | PcodecElementType::I64 | PcodecElementType::F64 => {
                 file_size::<u64>(num_elements, &self.chunk_config.paging_spec)
                     .map_err(|err| CodecError::from(err.to_string()))?
-            }
-            _ => {
-                return Err(CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::IDENTIFIER.to_string(),
-                ));
             }
         };
         Ok(BytesRepresentation::BoundedSize(

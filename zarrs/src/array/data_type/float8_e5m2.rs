@@ -1,6 +1,8 @@
 //! The `float8_e5m2` data type.
 
-use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_data_type_plugin};
+use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
+
+use super::macros::register_data_type_plugin;
 
 /// The `float8_e5m2` data type.
 #[derive(Debug, Clone, Copy)]

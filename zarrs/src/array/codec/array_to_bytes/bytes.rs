@@ -10,7 +10,7 @@
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/bytes>
 //!
 //! ### Specification Deviations
-//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`DataTypeExtensionBytesCodec`](zarrs_data_type::DataTypeExtensionBytesCodec) trait.
+//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`BytesCodecDataTypeTraits`] trait.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `bytes`
@@ -38,8 +38,8 @@ pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_plugin::ExtensionIdentifier;
 
-use crate::metadata::Endianness;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
+use crate::{array::codec::CodecError, metadata::Endianness};
 use crate::{
     array::{
         DataType,
@@ -68,6 +68,81 @@ pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginC
     let codec = Arc::new(BytesCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
+
+use std::borrow::Cow;
+
+/// Traits for a data type supporting the `bytes` codec.
+pub trait BytesCodecDataTypeTraits {
+    /// Encode the bytes of a fixed-size data type to a specified endianness for the `bytes` codec.
+    ///
+    /// Returns the input bytes unmodified for fixed-size data where endianness is not applicable (i.e. the bytes are serialised directly from the in-memory representation).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `endianness` is [`None`] but must be specified or the `bytes` do not have the correct length.
+    #[allow(unused_variables)]
+    fn encode<'a>(
+        &self,
+        bytes: Cow<'a, [u8]>,
+        endianness: Option<Endianness>,
+    ) -> Result<Cow<'a, [u8]>, CodecError>;
+
+    /// Decode the bytes of a fixed-size data type from a specified endianness for the `bytes` codec.
+    ///
+    /// This performs the inverse operation of [`encode`](BytesCodecDataTypeTraits::encode).
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if `endianness` is [`None`] but must be specified or the `bytes` do not have the correct length.
+    #[allow(unused_variables)]
+    fn decode<'a>(
+        &self,
+        bytes: Cow<'a, [u8]>,
+        endianness: Option<Endianness>,
+    ) -> Result<Cow<'a, [u8]>, CodecError>;
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(Bytes, BytesCodecDataTypeTraits);
+
+/// Macro to implement a passthrough `BytesCodecDataTypeTraits` for data types and register support.
+///
+/// This is useful for single-byte types and other types where no byte-swapping
+/// or transformation is needed during encoding/decoding.
+///
+/// # Usage
+/// ```ignore
+/// impl_bytes_codec_passthrough!(BoolDataType);
+/// impl_bytes_codec_passthrough!(UInt4DataType);
+/// impl_bytes_codec_passthrough!(Float8E4M3DataType);
+/// ```
+#[macro_export]
+macro_rules! impl_bytes_codec_passthrough {
+    ($marker:ty) => {
+        impl $crate::array::codec::BytesCodecDataTypeTraits for $marker {
+            fn encode<'a>(
+                &self,
+                bytes: ::std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+                Ok(bytes)
+            }
+
+            fn decode<'a>(
+                &self,
+                bytes: ::std::borrow::Cow<'a, [u8]>,
+                _endianness: Option<::zarrs_metadata::Endianness>,
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+                Ok(bytes)
+            }
+        }
+        $crate::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::BytesPlugin,
+            $crate::array::codec::BytesCodecDataTypeTraits
+        );
+    };
+}
+
+pub use impl_bytes_codec_passthrough;
 
 /// Reverse the endianness of bytes for a given data type.
 pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {

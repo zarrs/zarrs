@@ -6,6 +6,7 @@ use core::f32;
 use std::{borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
+use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
@@ -13,8 +14,8 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -99,12 +100,12 @@ impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeFloat8e3m4 {
+impl BytesCodecDataTypeTraits for CustomDataTypeFloat8e3m4 {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 
@@ -112,13 +113,17 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFloat8e3m4 {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 }
 
 // Register codec support
-zarrs_data_type::register_bytes_support!(CustomDataTypeFloat8e3m4);
+zarrs::register_data_type_extension_codec!(
+    CustomDataTypeFloat8e3m4,
+    zarrs::array::codec::BytesPlugin,
+    zarrs::array::codec::BytesCodecDataTypeTraits
+);
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float32_to_float8_e3m4(val: f32) -> u8 {

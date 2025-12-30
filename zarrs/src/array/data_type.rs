@@ -45,10 +45,7 @@ use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 use crate::metadata_ext::data_type::NumpyTimeUnit;
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
-    DataType, DataTypeExtension, DataTypeExtensionBitroundCodec, DataTypeExtensionBytesCodec,
-    DataTypeExtensionBytesCodecError, DataTypeExtensionError,
-    DataTypeExtensionFixedScaleOffsetCodec, DataTypeExtensionPackBitsCodec,
-    DataTypeExtensionPcodecCodec, DataTypeExtensionZfpCodec, DataTypeFillValueError,
+    DataType, DataTypeExtension, DataTypeExtensionError, DataTypeFillValueError,
     DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
 };
 

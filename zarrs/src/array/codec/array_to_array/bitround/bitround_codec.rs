@@ -191,7 +191,7 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
         // Use get_bitround_support() to check support
-        if zarrs_data_type::get_bitround_support(&**decoded_data_type).is_some() {
+        if super::get_bitround_support(&**decoded_data_type).is_some() {
             Ok(decoded_data_type.clone())
         } else {
             Err(CodecError::UnsupportedDataType(

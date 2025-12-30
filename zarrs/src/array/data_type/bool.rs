@@ -2,7 +2,9 @@
 
 use zarrs_plugin::ExtensionIdentifier;
 
-use super::macros::{impl_bytes_codec_passthrough, impl_packbits_codec, register_data_type_plugin};
+use crate::{impl_bytes_codec_passthrough, impl_packbits_codec};
+
+use super::macros::register_data_type_plugin;
 
 /// The `bool` data type.
 #[derive(Debug, Clone, Copy)]

@@ -1,9 +1,11 @@
 //! Standard float data types (`bfloat16`, `float16`, `float32`, `float64`).
 
-use super::macros::{
-    impl_bitround_codec, impl_data_type_extension_numeric, impl_fixedscaleoffset_codec,
-    impl_packbits_codec, impl_pcodec_codec, impl_zfp_codec, register_data_type_plugin,
+use crate::{
+    impl_bitround_codec, impl_fixedscaleoffset_codec, impl_packbits_codec, impl_pcodec_codec,
+    impl_zfp_codec,
 };
+
+use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin};
 
 /// The `bfloat16` data type.
 #[derive(Debug, Clone, Copy)]

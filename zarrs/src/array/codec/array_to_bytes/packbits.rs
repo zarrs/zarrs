@@ -24,6 +24,7 @@
 //! # serde_json::from_str::<PackBitsCodecConfiguration>(JSON).unwrap();
 //! ```
 
+mod data_type_extension_packbits_codec;
 mod packbits_codec;
 mod packbits_partial_decoder;
 
@@ -58,19 +59,109 @@ pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, Plug
     Ok(Codec::ArrayToBytes(codec))
 }
 
-struct DataTypeExtensionPackBitsCodecComponents {
+/// Traits for a data type supporting the `packbits` codec.
+pub trait PackBitsCodecDataTypeTraits {
+    /// The component size in bits.
+    fn component_size_bits(&self) -> u64;
+
+    /// The number of components.
+    fn num_components(&self) -> u64;
+
+    /// True if the components need sign extension.
+    ///
+    /// This should be set to `true` for signed integer types.
+    fn sign_extension(&self) -> bool;
+}
+
+// Generate the codec support infrastructure using the generic macro
+crate::array::codec::define_data_type_support!(PackBits, PackBitsCodecDataTypeTraits);
+
+/// Macro to implement `PackBitsCodecDataTypeTraits` for data types and register support.
+///
+/// # Usage
+/// ```ignore
+/// // For single-component types:
+/// impl_packbits_codec!(Int32DataType, 32, signed, 1);
+/// impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
+/// impl_packbits_codec!(Float32DataType, 32, float, 1);
+///
+/// // For complex types (2 components):
+/// impl_packbits_codec!(Complex64DataType, 32, float, 2);
+/// ```
+#[macro_export]
+macro_rules! impl_packbits_codec {
+    // Multi-component, signed integer
+    ($marker:ty, $bits:expr, signed, $components:expr) => {
+        impl $crate::array::codec::PackBitsCodecDataTypeTraits for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                true
+            }
+        }
+        $crate::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::PackBitsPlugin,
+            $crate::array::codec::PackBitsCodecDataTypeTraits
+        );
+    };
+    // Multi-component, unsigned integer
+    ($marker:ty, $bits:expr, unsigned, $components:expr) => {
+        impl $crate::array::codec::PackBitsCodecDataTypeTraits for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                false
+            }
+        }
+        $crate::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::PackBitsPlugin,
+            $crate::array::codec::PackBitsCodecDataTypeTraits
+        );
+    };
+    // Multi-component, float (no sign extension)
+    ($marker:ty, $bits:expr, float, $components:expr) => {
+        impl $crate::array::codec::PackBitsCodecDataTypeTraits for $marker {
+            fn component_size_bits(&self) -> u64 {
+                $bits
+            }
+            fn num_components(&self) -> u64 {
+                $components
+            }
+            fn sign_extension(&self) -> bool {
+                false
+            }
+        }
+        $crate::register_data_type_extension_codec!(
+            $marker,
+            $crate::array::codec::PackBitsPlugin,
+            $crate::array::codec::PackBitsCodecDataTypeTraits
+        );
+    };
+}
+
+pub use impl_packbits_codec;
+
+struct PackBitsCodecComponents {
     pub component_size_bits: u64,
     pub num_components: u64,
     pub sign_extension: bool,
 }
 
-fn pack_bits_components(
-    data_type: &DataType,
-) -> Result<DataTypeExtensionPackBitsCodecComponents, CodecError> {
-    let packbits = zarrs_data_type::get_packbits_support(&**data_type).ok_or_else(|| {
+fn pack_bits_components(data_type: &DataType) -> Result<PackBitsCodecComponents, CodecError> {
+    let packbits = get_packbits_support(&**data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), PackBitsCodec::IDENTIFIER.to_string())
     })?;
-    Ok(DataTypeExtensionPackBitsCodecComponents {
+    Ok(PackBitsCodecComponents {
         component_size_bits: packbits.component_size_bits(),
         num_components: packbits.num_components(),
         sign_extension: packbits.sign_extension(),

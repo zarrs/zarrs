@@ -3,10 +3,7 @@ use std::{any::Any, borrow::Cow, fmt::Debug, sync::Arc};
 use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
 use zarrs_plugin::{MaybeSend, MaybeSync, ZarrVersions};
 
-use crate::{
-    DataTypeExtensionBytesCodecError, DataTypeFillValueError, DataTypeFillValueMetadataError,
-    FillValue,
-};
+use crate::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};
 
 /// A data type.
 ///
@@ -23,9 +20,6 @@ pub type DataType = Arc<dyn DataTypeExtension>;
 /// These traits have `into_array_bytes` and `from_array_bytes` methods for this purpose that enable custom data types to be used with the [`Array::{store,retrieve}_*_elements`](https://docs.rs/zarrs/latest/zarrs/array/struct.Array.html) variants.
 /// These methods should encode data to and from native endianness if endianness is applicable, unless the endianness should be explicitly fixed.
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
-///
-/// The [`DataTypeExtensionBytesCodec`] traits methods allow a fixed-size custom data type to be encoded with the `bytes` codec with a requested endianness.
-/// These methods are not invoked for variable-size data types, and can be pass-through for a fixed-size data types that use an explicitly fixed endianness or where endianness is not applicable.
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
@@ -94,6 +88,4 @@ pub enum DataTypeExtensionError {
         /// The codec name.
         codec: String,
     },
-    /// A `bytes` codec error.
-    BytesCodec(#[from] DataTypeExtensionBytesCodecError),
 }

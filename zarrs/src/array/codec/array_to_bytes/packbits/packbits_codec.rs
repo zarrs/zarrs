@@ -11,9 +11,8 @@ use zarrs_plugin::PluginCreateError;
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
 use super::{
-    DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
-    PackBitsCodecConfigurationV1, pack_bits_components,
-    packbits_partial_decoder::PackBitsPartialDecoder,
+    PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
+    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -155,7 +154,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
@@ -239,7 +238,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension,
@@ -348,7 +347,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
@@ -388,7 +387,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
@@ -425,7 +424,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,

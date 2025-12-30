@@ -16,6 +16,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
+use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
@@ -23,8 +24,8 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -223,12 +224,12 @@ impl DataTypeExtension for CustomDataTypeFixedSize {
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
+impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
@@ -248,7 +249,9 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
                 Ok(bytes)
             }
         } else {
-            Err(DataTypeExtensionBytesCodecError::EndiannessNotSpecified)
+            Err(CodecError::from(
+                "endianness must be specified for multi-byte data types",
+            ))
         }
     }
 
@@ -256,7 +259,7 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
@@ -276,13 +279,19 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeFixedSize {
                 Ok(bytes)
             }
         } else {
-            Err(DataTypeExtensionBytesCodecError::EndiannessNotSpecified)
+            Err(CodecError::from(
+                "endianness must be specified for multi-byte data types",
+            ))
         }
     }
 }
 
 // Register codec support
-zarrs_data_type::register_bytes_support!(CustomDataTypeFixedSize);
+zarrs::register_data_type_extension_codec!(
+    CustomDataTypeFixedSize,
+    zarrs::array::codec::BytesPlugin,
+    zarrs::array::codec::BytesCodecDataTypeTraits
+);
 
 fn main() {
     let store = std::sync::Arc::new(MemoryStore::default());

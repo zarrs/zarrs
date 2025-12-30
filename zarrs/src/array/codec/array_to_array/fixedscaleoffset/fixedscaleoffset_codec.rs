@@ -3,6 +3,7 @@ use std::sync::Arc;
 use zarrs_plugin::PluginCreateError;
 
 use super::{FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs};
+use super::{FixedScaleOffsetElementType, FixedScaleOffsetFloatType};
 use crate::array::NamedDataType;
 use crate::array::{
     DataType, FillValue,
@@ -15,7 +16,6 @@ use crate::array::{
 use crate::convert::data_type_metadata_v2_to_v3;
 use crate::metadata::{Configuration, v2::DataTypeMetadataV2};
 use std::num::NonZeroU64;
-use zarrs_data_type::{FixedScaleOffsetElementType, FixedScaleOffsetFloatType};
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `fixedscaleoffset` codec implementation.
@@ -140,7 +140,7 @@ impl ArrayCodecTraits for FixedScaleOffsetCodec {
 }
 
 fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType, CodecError> {
-    let fso = zarrs_data_type::get_fixedscaleoffset_support(&**data_type).ok_or_else(|| {
+    let fso = super::get_fixedscaleoffset_support(&**data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(
             data_type.clone(),
             FixedScaleOffsetCodec::IDENTIFIER.to_string(),
@@ -335,12 +335,6 @@ fn cast_array(
             .iter()
             .map(|c| f64::from_ne_bytes(*c) as f32)
             .collect(),
-        _ => {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            ));
-        }
     };
 
     // Then cast from f32 to target type
@@ -384,12 +378,6 @@ fn cast_array(
             .into_iter()
             .flat_map(|e| (e as f64).to_ne_bytes())
             .collect(),
-        _ => {
-            return Err(CodecError::UnsupportedDataType(
-                as_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
-            ));
-        }
     };
 
     Ok(result)

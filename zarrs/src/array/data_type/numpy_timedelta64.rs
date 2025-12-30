@@ -5,10 +5,10 @@ use std::num::NonZeroU32;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 
-use super::macros::{impl_bitround_codec, impl_packbits_codec, impl_pcodec_codec, impl_zfp_codec};
 use crate::metadata_ext::data_type::{
     NumpyTimeUnit, numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1,
 };
+use crate::{impl_bitround_codec, impl_packbits_codec, impl_pcodec_codec, impl_zfp_codec};
 
 /// The `numpy.timedelta64` data type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,14 +121,15 @@ impl zarrs_data_type::DataTypeExtension for NumpyTimeDelta64DataType {
     }
 }
 
-impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyTimeDelta64DataType {
+impl crate::array::codec::BytesCodecDataTypeTraits for NumpyTimeDelta64DataType {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
-        let endianness = endianness
-            .ok_or(zarrs_data_type::DataTypeExtensionBytesCodecError::EndiannessNotSpecified)?;
+    ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
+        let endianness = endianness.ok_or(crate::array::codec::CodecError::from(
+            "endianness must be specified for multi-byte data types",
+        ))?;
         if endianness == zarrs_metadata::Endianness::native() {
             Ok(bytes)
         } else {
@@ -144,12 +145,16 @@ impl zarrs_data_type::DataTypeExtensionBytesCodec for NumpyTimeDelta64DataType {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
         self.encode(bytes, endianness)
     }
 }
 
-zarrs_data_type::register_bytes_support!(NumpyTimeDelta64DataType);
+crate::register_data_type_extension_codec!(
+    NumpyTimeDelta64DataType,
+    crate::array::codec::BytesPlugin,
+    crate::array::codec::BytesCodecDataTypeTraits
+);
 impl_pcodec_codec!(NumpyTimeDelta64DataType, I64, 1);
 impl_bitround_codec!(NumpyTimeDelta64DataType, 8, int64);
 impl_zfp_codec!(NumpyTimeDelta64DataType, Int64);

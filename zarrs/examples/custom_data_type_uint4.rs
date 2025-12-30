@@ -5,6 +5,7 @@
 use std::{any::Any, borrow::Cow, sync::Arc};
 
 use serde::Deserialize;
+use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs::{
@@ -15,9 +16,8 @@ use zarrs::{
     array_subset::ArraySubset,
 };
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionPackBitsCodec, DataTypeFillValueError, DataTypeFillValueMetadataError,
-    DataTypePlugin, FillValue,
+    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
 
@@ -104,12 +104,12 @@ impl DataTypeExtension for CustomDataTypeUInt4 {
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeUInt4 {
+impl BytesCodecDataTypeTraits for CustomDataTypeUInt4 {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 
@@ -117,13 +117,13 @@ impl DataTypeExtensionBytesCodec for CustomDataTypeUInt4 {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         Ok(bytes)
     }
 }
 
 /// Add support for the `packbits` codec.
-impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
+impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt4 {
     fn component_size_bits(&self) -> u64 {
         4
     }
@@ -138,8 +138,16 @@ impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
 }
 
 // Register codec support
-zarrs_data_type::register_bytes_support!(CustomDataTypeUInt4);
-zarrs_data_type::register_packbits_support!(CustomDataTypeUInt4);
+zarrs::register_data_type_extension_codec!(
+    CustomDataTypeUInt4,
+    zarrs::array::codec::BytesPlugin,
+    zarrs::array::codec::BytesCodecDataTypeTraits
+);
+zarrs::register_data_type_extension_codec!(
+    CustomDataTypeUInt4,
+    zarrs::array::codec::PackBitsPlugin,
+    zarrs::array::codec::PackBitsCodecDataTypeTraits
+);
 
 impl TryFrom<u64> for CustomDataTypeUInt4Element {
     type Error = u64;

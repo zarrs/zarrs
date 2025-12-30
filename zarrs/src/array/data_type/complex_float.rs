@@ -1,8 +1,10 @@
 //! Standard complex float data types.
 
-use super::macros::{
-    impl_bitround_codec, impl_packbits_codec, impl_pcodec_codec, register_data_type_plugin,
+use crate::{
+    impl_bitround_codec, impl_packbits_codec, impl_pcodec_codec, register_data_type_extension_codec,
 };
+
+use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeExtension` for complex types.
 macro_rules! impl_complex_data_type {
@@ -52,17 +54,19 @@ macro_rules! impl_complex_data_type {
             }
         }
 
-        impl zarrs_data_type::DataTypeExtensionBytesCodec for $marker {
+        impl crate::array::codec::BytesCodecDataTypeTraits for $marker {
             fn encode<'a>(
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
                 let component_size = $size / 2;
                 if component_size == 1 {
                     Ok(bytes)
                 } else {
-                    let endianness = endianness.ok_or(zarrs_data_type::DataTypeExtensionBytesCodecError::EndiannessNotSpecified)?;
+                    let endianness = endianness.ok_or(crate::array::codec::CodecError::from(
+                        "`bytes` codec `endianness` not specified for a multi-byte data type".to_string()
+                    ))?;
                     if endianness == zarrs_metadata::Endianness::native() {
                         Ok(bytes)
                     } else {
@@ -79,12 +83,16 @@ macro_rules! impl_complex_data_type {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_data_type::DataTypeExtensionBytesCodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
                 self.encode(bytes, endianness)
             }
         }
 
-        zarrs_data_type::register_bytes_support!($marker);
+        register_data_type_extension_codec!(
+            $marker,
+            crate::array::codec::BytesPlugin,
+            crate::array::codec::BytesCodecDataTypeTraits
+        );
     };
 
     (@parse_components $self:ident, $re:ident, $im:ident, f32, $err:ident) => {{
