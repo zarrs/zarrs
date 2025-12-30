@@ -646,7 +646,7 @@ mod tests {
         println!("{:?}", builder.build(storage.clone(), "/"));
         let array = builder.build(storage, "/").unwrap();
         assert_eq!(array.shape(), &[8, 8]);
-        assert!(array.data_type().data_type_eq(data_type::int8().as_ref()));
+        assert!(array.data_type().eq(data_type::int8().as_ref()));
         assert_eq!(array.chunk_grid_shape(), &vec![4, 4]);
         assert_eq!(array.fill_value(), &FillValue::from(0i8));
         assert_eq!(

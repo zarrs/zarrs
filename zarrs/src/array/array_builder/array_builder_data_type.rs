@@ -23,7 +23,7 @@ impl PartialEq for ArrayBuilderDataTypeImpl {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::NamedDataType(a), Self::NamedDataType(b)) => a == b,
-            (Self::DataType(a), Self::DataType(b)) => a.data_type_eq(b.as_ref()),
+            (Self::DataType(a), Self::DataType(b)) => a.eq(b.as_ref()),
             (Self::Metadata(a), Self::Metadata(b)) => a == b,
             (Self::MetadataString(a), Self::MetadataString(b)) => a == b,
             _ => false,

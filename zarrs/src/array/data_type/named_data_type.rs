@@ -22,7 +22,7 @@ pub struct NamedDataType {
 
 impl PartialEq for NamedDataType {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name && self.data_type.data_type_eq(other.data_type.as_ref())
+        self.name == other.name && self.data_type.eq(other.data_type.as_ref())
     }
 }
 

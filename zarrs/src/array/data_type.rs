@@ -1748,11 +1748,7 @@ mod tests {
             json,
             serde_json::to_string(&named_data_type.metadata()).unwrap()
         );
-        assert!(
-            named_data_type
-                .data_type()
-                .data_type_eq(raw_bits(2).as_ref())
-        );
+        assert!(named_data_type.data_type().eq(raw_bits(2).as_ref()));
 
         let metadata = serde_json::from_str::<FillValueMetadataV3>("[123]").unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), "[123]");
@@ -2118,27 +2114,27 @@ mod tests {
         // Single level optional
         let opt_u8 = uint8().to_optional();
         let expected = optional(uint8().to_named());
-        assert!(opt_u8.data_type_eq(expected.as_ref()));
+        assert!(opt_u8.eq(expected.as_ref()));
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
         let nested_2 = uint8().to_optional().to_optional();
         let expected_2 = optional(optional(uint8().to_named()).to_named());
-        assert!(nested_2.data_type_eq(expected_2.as_ref()));
+        assert!(nested_2.eq(expected_2.as_ref()));
 
         // Nested optional (3 levels)
         let nested_3 = uint16().to_optional().to_optional().to_optional();
         let expected_3 = optional(optional(optional(uint16().to_named()).to_named()).to_named());
-        assert!(nested_3.data_type_eq(expected_3.as_ref()));
+        assert!(nested_3.eq(expected_3.as_ref()));
 
         // Works with various inner types
         let opt_string = string().to_optional();
         let expected_string = optional(string().to_named());
-        assert!(opt_string.data_type_eq(expected_string.as_ref()));
+        assert!(opt_string.eq(expected_string.as_ref()));
 
         let opt_f64 = float64().to_optional();
         let expected_f64 = optional(float64().to_named());
-        assert!(opt_f64.data_type_eq(expected_f64.as_ref()));
+        assert!(opt_f64.eq(expected_f64.as_ref()));
     }
 
     #[test]

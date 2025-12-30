@@ -417,7 +417,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.data_type().data_type_eq(data_type.as_ref()) {
+        if !self.dtype.data_type().eq(data_type.as_ref()) {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
                 data_type,
@@ -442,7 +442,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.data_type().data_type_eq(data_type.as_ref()) {
+        if !self.dtype.data_type().eq(data_type.as_ref()) {
             return Err(CodecError::Other(format!(
                 "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
                 data_type,

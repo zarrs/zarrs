@@ -66,7 +66,7 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     ///
     /// The default implementation compares identifier and configuration.
     /// Custom data types may override this for more efficient comparison.
-    fn data_type_eq(&self, other: &dyn DataTypeExtension) -> bool {
+    fn eq(&self, other: &dyn DataTypeExtension) -> bool {
         self.identifier() == other.identifier() && self.configuration() == other.configuration()
     }
 
