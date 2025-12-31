@@ -374,6 +374,18 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Parallelism over chunks can be achieved by spawning tasks outside of `zarrs`.
 /// A crate like [`async-scoped`](https://crates.io/crates/async-scoped) can enable spawning non-`'static` futures.
 /// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](crate::array::codec::CodecOptions::set_concurrent_target).
+///
+/// ## Extension Point Registration and Aliases
+/// `zarrs` uses a plugin system to create extension point implementations (e.g. data types, codecs, chunk grids, chunk key encodings, and storage transformers) from metadata.
+/// Plugins are registered at compile time using the [`inventory`] crate.
+/// Runtime plugins are also supported, which take precedence over compile-time plugins.
+/// Each plugin has a name matching function that identifies whether it should handle given metadata.
+///
+/// Extensions support name aliases, which can be tied to specific Zarr versions.
+/// This allows experimental codecs (e.g. `zarrs.zfp`) to be later promoted to registered Zarr codecs (e.g. `zfp`) without breaking support for older arrays.
+/// The aliasing system allows matching against string aliases or regex patterns.
+///
+/// See the [`zarrs_plugin`] crate documentation for details on implementing custom extensions.
 #[derive(Debug)]
 pub struct Array<TStorage: ?Sized> {
     /// The storage (including storage transformers).
