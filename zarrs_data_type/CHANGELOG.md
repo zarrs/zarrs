@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-12-31
+
 ### Changed
 - **Breaking**: Change `DataType` from an alias of `Arc<dyn DataTypeTraits>` to a newtype
 - **Breaking**: Rename `DataTypeExtension` to `DataTypeTraits`
@@ -114,7 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.6.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.7.0...HEAD
+[0.7.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.7.0
 [0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.6.0
 [0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.5.0
 [0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.2
