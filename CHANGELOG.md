@@ -153,6 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remove `CodecTraits::default_name()`
 - **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `identifier()` (`String` -> `&'static str`)
 - **Breaking**: Replace `DataType::metadata()` with `configuration()` (`MetadataV3` -> `Configuration`)
+- **Breaking**: Deprecate the `array::ArrayCodecTraits` re-export in favour of using `zarrs::array::codec::ArrayCodecTraits` directly
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency

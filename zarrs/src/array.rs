@@ -95,7 +95,12 @@ pub use self::{
     tensor::{Tensor, TensorError},
 };
 use crate::array::chunk_grid::RegularChunkGrid;
-use crate::array::codec::ArrayCodecTraits;
+// use crate::array::codec::ArrayCodecTraits;
+#[deprecated(
+    since = "0.23.0",
+    note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
+)]
+pub use codec::ArrayCodecTraits;
 use crate::convert::array_metadata_v2_to_v3;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
