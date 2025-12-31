@@ -78,7 +78,7 @@ fn filesystem_chunk_round_trip_impl(
 #[cfg_attr(miri, ignore)]
 fn chunk_round_trip_filesystem_key_encoding_default_slash() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let chunk_key_encoding = ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default());
+    let chunk_key_encoding = DefaultChunkKeyEncoding::default().into();
     filesystem_chunk_round_trip_impl(path.path(), &chunk_key_encoding)?;
     let mut path_expect = path.path().to_owned();
     path_expect.push("group/array/c/0/0/0");
@@ -90,7 +90,7 @@ fn chunk_round_trip_filesystem_key_encoding_default_slash() -> Result<(), Box<dy
 #[cfg_attr(miri, ignore)]
 fn chunk_round_trip_filesystem_key_encoding_default_dot() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let chunk_key_encoding = ChunkKeyEncoding::new(DefaultChunkKeyEncoding::new_dot());
+    let chunk_key_encoding = DefaultChunkKeyEncoding::new_dot().into();
     filesystem_chunk_round_trip_impl(path.path(), &chunk_key_encoding)?;
     let mut path_expect = path.path().to_owned();
     path_expect.push("group/array/c.0.0.0");
@@ -102,7 +102,7 @@ fn chunk_round_trip_filesystem_key_encoding_default_dot() -> Result<(), Box<dyn 
 #[cfg_attr(miri, ignore)]
 fn chunk_round_trip_filesystem_key_encoding_v2_dot() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let chunk_key_encoding = ChunkKeyEncoding::new(V2ChunkKeyEncoding::default());
+    let chunk_key_encoding = V2ChunkKeyEncoding::default().into();
     filesystem_chunk_round_trip_impl(path.path(), &chunk_key_encoding)?;
     let mut path_expect = path.path().to_owned();
     path_expect.push("group/array/0.0.0");
@@ -114,7 +114,7 @@ fn chunk_round_trip_filesystem_key_encoding_v2_dot() -> Result<(), Box<dyn Error
 #[cfg_attr(miri, ignore)]
 fn chunk_round_trip_filesystem_key_encoding_v2_slash() -> Result<(), Box<dyn Error>> {
     let path = tempfile::TempDir::new()?;
-    let chunk_key_encoding = ChunkKeyEncoding::new(V2ChunkKeyEncoding::new_slash());
+    let chunk_key_encoding = V2ChunkKeyEncoding::new_slash().into();
     filesystem_chunk_round_trip_impl(path.path(), &chunk_key_encoding)?;
     let mut path_expect = path.path().to_owned();
     path_expect.push("group/array/0/0/0");

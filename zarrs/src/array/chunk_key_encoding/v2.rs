@@ -30,7 +30,7 @@ pub(crate) fn create_chunk_key_encoding_v2(
             )
         })?;
     let v2 = V2ChunkKeyEncoding::new(configuration.separator);
-    Ok(ChunkKeyEncoding::new(v2))
+    Ok(v2.into())
 }
 
 /// A `v2` chunk key encoding.

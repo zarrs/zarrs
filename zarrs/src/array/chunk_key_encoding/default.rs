@@ -30,7 +30,7 @@ pub(crate) fn create_chunk_key_encoding_default(
             )
         })?;
     let default = DefaultChunkKeyEncoding::new(configuration.separator);
-    Ok(ChunkKeyEncoding::new(default))
+    Ok(default.into())
 }
 
 /// A `default` chunk key encoding.

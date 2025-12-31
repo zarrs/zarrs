@@ -52,7 +52,7 @@ pub(crate) fn create_chunk_key_encoding_default_suffix(
             )
         })?;
     let default = DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
-    Ok(ChunkKeyEncoding::new(default))
+    Ok(default.into())
 }
 
 /// A `default_suffix` chunk key encoding.

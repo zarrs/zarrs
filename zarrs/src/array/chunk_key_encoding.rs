@@ -31,6 +31,12 @@ use crate::{
 #[derive(Debug, Clone, From, Deref)]
 pub struct ChunkKeyEncoding(Arc<dyn ChunkKeyEncodingTraits>);
 
+impl<T: ChunkKeyEncodingTraits + 'static> From<Arc<T>> for ChunkKeyEncoding {
+    fn from(chunk_key_encoding: Arc<T>) -> Self {
+        Self(chunk_key_encoding)
+    }
+}
+
 /// A chunk key encoding plugin.
 #[derive(derive_more::Deref)]
 pub struct ChunkKeyEncodingPlugin(Plugin<ChunkKeyEncoding, MetadataV3>);
