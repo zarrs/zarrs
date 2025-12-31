@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + array.store_array_subset(&subset, &data)?;
   ```
 
-- `DataType` is now a trait object (`Arc<dyn DataTypeExtension>`) rather than an enum
+- `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
   - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
 
   ```diff
