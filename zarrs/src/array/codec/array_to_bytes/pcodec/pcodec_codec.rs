@@ -173,7 +173,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
-        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -212,7 +212,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
-        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();
@@ -246,7 +246,7 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Use get_pcodec_support() to get element type info
-        let pcodec = get_pcodec_support(&**data_type).ok_or_else(|| {
+        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
             CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
         })?;
         let element_type = pcodec.pcodec_element_type();

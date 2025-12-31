@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: Change `DataType` from an alias of `Arc<dyn DataTypeTraits>` to a newtype
+- **Breaking**: Rename `DataTypeExtension` to `DataTypeTraits`
+
+### Removed
+- **Breaking**: Remove `DataTypeExtensionError` type
+
 ## [0.6.0] - 2025-12-31
 
 ### Added

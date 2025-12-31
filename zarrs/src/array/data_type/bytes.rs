@@ -13,7 +13,7 @@ zarrs_plugin::impl_extension_aliases!(BytesDataType, "bytes",
     v2: "|VX", ["|VX"]
 );
 
-impl zarrs_data_type::DataTypeExtension for BytesDataType {
+impl zarrs_data_type::DataTypeTraits for BytesDataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

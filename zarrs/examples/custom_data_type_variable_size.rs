@@ -13,7 +13,7 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
     FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
@@ -105,7 +105,7 @@ fn default_name_custom(_version: zarrs_plugin::ZarrVersions) -> Cow<'static, str
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeVariableSize))
+        Ok(Arc::new(CustomDataTypeVariableSize).into())
     } else {
         Err(PluginMetadataInvalidError::new(CUSTOM_NAME, "codec", metadata.to_string()).into())
     }
@@ -115,7 +115,7 @@ inventory::submit! {
     DataTypePlugin::new(CUSTOM_NAME, matches_name_custom, default_name_custom, create_custom_dtype)
 }
 
-impl DataTypeExtension for CustomDataTypeVariableSize {
+impl DataTypeTraits for CustomDataTypeVariableSize {
     fn identifier(&self) -> &'static str {
         CUSTOM_NAME
     }
@@ -175,7 +175,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![3, 1], // regular chunk shape
-        Arc::new(CustomDataTypeVariableSize) as DataType,
+        Arc::new(CustomDataTypeVariableSize),
         [],
     )
     .array_to_array_codecs(vec![

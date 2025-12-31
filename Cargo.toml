@@ -34,7 +34,7 @@ version = "0.2.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_data_type]
-version = "0.6.0"
+version = "0.7.0"
 path = "zarrs_data_type"
 
 [workspace.dependencies.zarrs_metadata]

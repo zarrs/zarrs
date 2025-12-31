@@ -79,7 +79,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue,
+        DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
 
     inventory::submit! {
@@ -89,7 +89,7 @@ mod tests {
     #[derive(Debug)]
     struct TestVoidDataType;
 
-    impl DataTypeExtension for TestVoidDataType {
+    impl DataTypeTraits for TestVoidDataType {
         fn identifier(&self) -> &'static str {
             "zarrs.test_void"
         }
@@ -130,7 +130,7 @@ mod tests {
     }
 
     fn create_test_void(_metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        Ok(Arc::new(TestVoidDataType))
+        Ok(Arc::new(TestVoidDataType).into())
     }
 
     #[test]

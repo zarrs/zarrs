@@ -413,7 +413,7 @@ pub use _impl_bitround_codec as impl_bitround_codec;
 
 fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
     // Use get_bitround_support() for all types
-    let bitround = get_bitround_support(&**data_type).ok_or_else(|| {
+    let bitround = get_bitround_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), BitroundCodec::IDENTIFIER.to_string())
     })?;
     bitround.round(bytes, keepbits);

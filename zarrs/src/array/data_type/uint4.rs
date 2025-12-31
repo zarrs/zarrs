@@ -8,7 +8,7 @@ pub struct UInt4DataType;
 register_data_type_plugin!(UInt4DataType);
 zarrs_plugin::impl_extension_aliases!(UInt4DataType, "uint4");
 
-impl zarrs_data_type::DataTypeExtension for UInt4DataType {
+impl zarrs_data_type::DataTypeTraits for UInt4DataType {
     fn identifier(&self) -> &'static str {
         <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
     }

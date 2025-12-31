@@ -2,10 +2,10 @@
 
 use super::macros::register_data_type_plugin;
 
-/// Macro to implement `DataTypeExtension` for subfloat types (single-byte floating point formats).
+/// Macro to implement `DataTypeTraits` for subfloat types (single-byte floating point formats).
 macro_rules! impl_subfloat_data_type {
     ($marker:ty) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
+        impl zarrs_data_type::DataTypeTraits for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
             }
@@ -122,7 +122,7 @@ pub struct Float8E8M0FNUDataType;
 register_data_type_plugin!(Float8E8M0FNUDataType);
 zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, "float8_e8m0fnu");
 
-// DataTypeExtension implementations for subfloats
+// DataTypeTraits implementations for subfloats
 impl_subfloat_data_type!(Float4E2M1FNDataType);
 impl_subfloat_data_type!(Float6E2M3FNDataType);
 impl_subfloat_data_type!(Float6E3M2FNDataType);

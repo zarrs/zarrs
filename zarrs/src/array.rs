@@ -96,11 +96,6 @@ pub use self::{
 };
 use crate::array::chunk_grid::RegularChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
-#[deprecated(
-    since = "0.23.0",
-    note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
-)]
-pub use codec::ArrayCodecTraits;
 use crate::convert::array_metadata_v2_to_v3;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
@@ -118,6 +113,11 @@ use crate::{
 };
 use crate::{config::MetadataEraseVersion, convert::ArrayMetadataV2ToV3Error};
 pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
+#[deprecated(
+    since = "0.23.0",
+    note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
+)]
+pub use codec::ArrayCodecTraits;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].

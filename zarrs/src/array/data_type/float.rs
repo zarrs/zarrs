@@ -35,7 +35,7 @@ zarrs_plugin::impl_extension_aliases!(Float64DataType, "float64",
     v2: "<f8", ["<f8", ">f8"]
 );
 
-// DataTypeExtension implementations for standard floats
+// DataTypeTraits implementations for standard floats
 impl_data_type_extension_numeric!(BFloat16DataType, 2, bf16);
 impl_data_type_extension_numeric!(Float16DataType, 2, f16);
 impl_data_type_extension_numeric!(Float32DataType, 4, f32);

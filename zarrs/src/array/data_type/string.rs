@@ -13,7 +13,7 @@ zarrs_plugin::impl_extension_aliases!(StringDataType, "string",
     v2: "|O", ["|O"]
 );
 
-impl zarrs_data_type::DataTypeExtension for StringDataType {
+impl zarrs_data_type::DataTypeTraits for StringDataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

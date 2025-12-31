@@ -93,7 +93,7 @@ use codec_partial_default::{
     ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
     BytesToBytesCodecPartialDefault,
 };
-use zarrs_data_type::{DataTypeExtensionError, DataTypeFillValueError, FillValue};
+use zarrs_data_type::{DataTypeFillValueError, FillValue};
 use zarrs_plugin::{
     ExtensionIdentifier, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersions,
 };
@@ -1892,9 +1892,6 @@ pub enum CodecError {
     /// Variable length array bytes offsets are out of bounds.
     #[error(transparent)]
     RawBytesOffsetsOutOfBounds(#[from] RawBytesOffsetsOutOfBoundsError),
-    /// A data type extension error.
-    #[error(transparent)]
-    DataTypeExtension(#[from] DataTypeExtensionError),
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),

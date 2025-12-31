@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU32;
 
+use zarrs_data_type::DataType;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 
@@ -23,7 +24,7 @@ inventory::submit! {
         <NumpyTimeDelta64DataType as ExtensionIdentifier>::IDENTIFIER,
         <NumpyTimeDelta64DataType as ExtensionIdentifier>::matches_name,
         <NumpyTimeDelta64DataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<DataType, PluginCreateError> {
             let configuration = metadata.configuration().ok_or_else(|| {
                 PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
                     NumpyTimeDelta64DataType::IDENTIFIER,
@@ -39,7 +40,7 @@ inventory::submit! {
                         metadata.to_string(),
                     ))
                 })?;
-            Ok(std::sync::Arc::new(NumpyTimeDelta64DataType::new(config.unit, config.scale_factor)))
+            Ok(std::sync::Arc::new(NumpyTimeDelta64DataType::new(config.unit, config.scale_factor)).into())
         },
     )
 }
@@ -60,7 +61,7 @@ impl NumpyTimeDelta64DataType {
     }
 }
 
-impl zarrs_data_type::DataTypeExtension for NumpyTimeDelta64DataType {
+impl zarrs_data_type::DataTypeTraits for NumpyTimeDelta64DataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

@@ -166,6 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError`, `AsyncArrayDlPackExt`, and `ArrayError::DlPackError`
 - **Breaking**: Remove `array::ArrayRepresentationBase`
 - **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
+- **Breaking**: Remove `CodecError::DataTypeExtension` variant
 
 ### Fixed
 - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout

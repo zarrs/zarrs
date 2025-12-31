@@ -24,7 +24,7 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
     FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
@@ -54,7 +54,7 @@ type CustomDataTypeFixedSizeMetadata = CustomDataTypeFixedSizeElement;
 type CustomDataTypeFixedSizeBytes = [u8; size_of::<u64>() + size_of::<f32>()];
 
 /// These defines how the CustomDataTypeFixedSizeBytes are converted TO little/big endian
-/// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeExtensionBytesCodec/Element/ElementOwned
+/// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeTraitsBytesCodec/Element/ElementOwned
 impl ToBytes for CustomDataTypeFixedSizeElement {
     type Bytes = CustomDataTypeFixedSizeBytes;
 
@@ -76,7 +76,7 @@ impl ToBytes for CustomDataTypeFixedSizeElement {
 }
 
 /// These defines how the CustomDataTypeFixedSizeBytes are converted FROM little/big endian
-/// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeExtensionBytesCodec/Element/ElementOwned
+/// Implementing this particular trait (from num-traits) is not necessary, but it is used in DataTypeTraitsBytesCodec/Element/ElementOwned
 impl FromBytes for CustomDataTypeFixedSizeElement {
     type Bytes = CustomDataTypeFixedSizeBytes;
 
@@ -166,7 +166,7 @@ fn default_name_dtype(_version: ZarrVersions) -> Cow<'static, str> {
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeFixedSize))
+        Ok(Arc::new(CustomDataTypeFixedSize).into())
     } else {
         Err(PluginMetadataInvalidError::new(CUSTOM_NAME, "codec", metadata.to_string()).into())
     }
@@ -178,7 +178,7 @@ inventory::submit! {
 }
 
 /// Implement the core data type extension methods
-impl DataTypeExtension for CustomDataTypeFixedSize {
+impl DataTypeTraits for CustomDataTypeFixedSize {
     fn identifier(&self) -> &'static str {
         CUSTOM_NAME
     }
@@ -300,7 +300,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![2, 1], // regular chunk shape
-        Arc::new(CustomDataTypeFixedSize) as DataType,
+        Arc::new(CustomDataTypeFixedSize),
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

@@ -2,10 +2,10 @@
 
 use super::macros::register_data_type_plugin;
 
-/// Macro to implement `DataTypeExtension` for complex types.
+/// Macro to implement `DataTypeTraits` for complex types.
 macro_rules! impl_complex_data_type {
     ($marker:ty, $size:tt, $component_type:tt) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
+        impl zarrs_data_type::DataTypeTraits for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
             }
@@ -192,7 +192,7 @@ zarrs_plugin::impl_extension_aliases!(Complex128DataType, "complex128",
     v2: "<c16", ["<c16", ">c16"]
 );
 
-// DataTypeExtension implementations for standard complex types
+// DataTypeTraits implementations for standard complex types
 impl_complex_data_type!(ComplexBFloat16DataType, 4, bf16);
 impl_complex_data_type!(ComplexFloat16DataType, 4, f16);
 impl_complex_data_type!(ComplexFloat32DataType, 8, f32);

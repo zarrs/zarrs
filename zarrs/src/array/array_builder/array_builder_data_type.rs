@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use zarrs_data_type::DataTypeTraits;
+
 use crate::array::{ArrayCreateError, DataType, NamedDataType};
 use crate::metadata::v3::MetadataV3;
 
@@ -61,6 +65,12 @@ impl From<NamedDataType> for ArrayBuilderDataType {
 impl From<DataType> for ArrayBuilderDataType {
     fn from(value: DataType) -> Self {
         Self(ArrayBuilderDataTypeImpl::DataType(value))
+    }
+}
+
+impl<T: DataTypeTraits + 'static> From<Arc<T>> for ArrayBuilderDataType {
+    fn from(value: Arc<T>) -> Self {
+        Self(ArrayBuilderDataTypeImpl::DataType(value.clone().into()))
     }
 }
 

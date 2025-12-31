@@ -83,7 +83,7 @@ macro_rules! _define_data_type_support {
             ///
             /// Returns `Some(&dyn Trait)` if the data type supports the codec.
             pub fn [<get_ $name:lower _support>](
-                data_type: &dyn zarrs_data_type::DataTypeExtension,
+                data_type: &zarrs_data_type::DataType,
             ) -> ::core::option::Option<&dyn $trait_name> {
                 let caster = [<$name:upper _CASTERS>].get(data_type.identifier())?;
                 caster(data_type.as_any())

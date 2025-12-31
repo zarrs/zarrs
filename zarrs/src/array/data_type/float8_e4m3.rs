@@ -13,12 +13,12 @@ zarrs_plugin::impl_extension_aliases!(Float8E4M3DataType, "float8_e4m3");
 mod impl_default {
     use super::Float8E4M3DataType;
     use zarrs_data_type::{
-        DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue,
+        DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
     use zarrs_plugin::ExtensionIdentifier;
 
-    impl DataTypeExtension for Float8E4M3DataType {
+    impl DataTypeTraits for Float8E4M3DataType {
         fn identifier(&self) -> &'static str {
             <Self as ExtensionIdentifier>::IDENTIFIER
         }
@@ -80,12 +80,12 @@ mod impl_default {
 mod impl_float8 {
     use super::Float8E4M3DataType;
     use zarrs_data_type::{
-        DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue,
+        DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
     use zarrs_plugin::ExtensionIdentifier;
 
-    impl DataTypeExtension for Float8E4M3DataType {
+    impl DataTypeTraits for Float8E4M3DataType {
         fn identifier(&self) -> &'static str {
             <Self as ExtensionIdentifier>::IDENTIFIER
         }

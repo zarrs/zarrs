@@ -156,7 +156,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         let bytes = bytes.into_fixed()?;
 
         // Use get_bytes_support() for all types
-        let bytes_encoded = super::get_bytes_support(&**data_type)
+        let bytes_encoded = super::get_bytes_support(data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
@@ -181,7 +181,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         }
 
         // Use get_bytes_support() for all types
-        let bytes_decoded: ArrayBytes = super::get_bytes_support(&**data_type)
+        let bytes_decoded: ArrayBytes = super::get_bytes_support(data_type)
             .ok_or_else(|| {
                 CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
             })?
