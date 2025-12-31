@@ -159,7 +159,7 @@ impl ArrayBuilder {
         Self {
             data_type,
             chunk_grid,
-            chunk_key_encoding: ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default()),
+            chunk_key_encoding: DefaultChunkKeyEncoding::default().into(),
             fill_value,
             array_to_array_codecs: Vec::default(),
             array_to_bytes_codec: None,
@@ -189,7 +189,7 @@ impl ArrayBuilder {
         Self {
             data_type,
             chunk_grid,
-            chunk_key_encoding: ChunkKeyEncoding::new(DefaultChunkKeyEncoding::default()),
+            chunk_key_encoding: DefaultChunkKeyEncoding::default().into(),
             fill_value,
             array_to_array_codecs: Vec::default(),
             array_to_bytes_codec: None,
@@ -284,8 +284,11 @@ impl ArrayBuilder {
     /// Set the chunk key encoding.
     ///
     /// If left unmodified, the array will use `default` chunk key encoding with the `/` chunk key separator.
-    pub fn chunk_key_encoding(&mut self, chunk_key_encoding: ChunkKeyEncoding) -> &mut Self {
-        self.chunk_key_encoding = chunk_key_encoding;
+    pub fn chunk_key_encoding(
+        &mut self,
+        chunk_key_encoding: impl Into<ChunkKeyEncoding>,
+    ) -> &mut Self {
+        self.chunk_key_encoding = chunk_key_encoding.into();
         self
     }
 
@@ -296,7 +299,7 @@ impl ArrayBuilder {
         &mut self,
         separator: ChunkKeySeparator,
     ) -> &mut Self {
-        self.chunk_key_encoding = ChunkKeyEncoding::new(DefaultChunkKeyEncoding::new(separator));
+        self.chunk_key_encoding = DefaultChunkKeyEncoding::new(separator).into();
         self
     }
 
@@ -635,7 +638,7 @@ mod tests {
         additional_fields.insert("key".to_string(), additional_field.into());
         builder.additional_fields(additional_fields.clone());
 
-        builder.chunk_key_encoding(V2ChunkKeyEncoding::new_dot().into());
+        builder.chunk_key_encoding(V2ChunkKeyEncoding::new_dot());
         builder.chunk_key_encoding_default_separator(ChunkKeySeparator::Dot); // overrides previous
         let log_writer = Arc::new(std::sync::Mutex::new(std::io::stdout()));
 
