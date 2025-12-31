@@ -8,10 +8,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Highlights
-- Generic array store and retrieve methods
-- Support for the `optional` data type and codec (aliased as `zarrs.optional`)
-- Revised extension alias handling for codecs, chunk grids, chunk key encodings, and data types
+- Generic `Array` `store_*` and `retrieve_*` methods
+
+  ```diff
+  - let data = array.retrieve_array_subset(&subset)?;
+  - let data: Vec<f32> = array.retrieve_array_subset_elements(&subset)?;
+  - let data: ndarray::ArrayD<f32> = array.retrieve_array_subset_ndarray(&subset)?;
+  + let data: ArrayBytes = array.retrieve_array_subset(&subset)?;
+  + let data: Vec<f32> = array.retrieve_array_subset(&subset)?;
+  + let data: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset)?;
+  ```
+
+  ```diff
+  - array.store_array_subset_elements(&subset, &data)?;
+  - array.store_array_subset_ndarray(&subset, &data)?;
+  + array.store_array_subset(&subset, &data)?;
+  ```
+
 - `DataType` is now a trait object (`Arc<dyn DataTypeExtension>`) rather than an enum
+  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
+
+  ```diff
+  - let data_type = DataType::Float32;
+  + let data_type: DataType = data_type::float32();
+  ```
+
+- Add `ArrayBuilder::subchunk_shape()`. Recommended over `ShardingCodecBuilder` for most use cases
+
+  ```diff
+  - array_builder.array_to_bytes_codec(
+  -    ShardingCodecBuilder::new(
+  -        vec![4, 4].try_into()?, // subchunk shape
+  -        &DataType::Float32,
+  -    )
+  -    .build_arc(),
+  -)
+  +.subchunk_shape(vec![4, 4])
+  ```
+
+- Add the `zarrs.optional` data type and codec (spec proposal https://github.com/zarr-developers/zarr-extensions/pull/33)
+- Revised extension point alias handling for codecs, chunk grids, chunk key encodings, and data types
+- Add runtime extension registration
 - Improved performance
 
 ### Added
@@ -39,19 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implement `ArrayToBytesCodecTraits` for `ShardingCodec` and `CodecChain`
 - Add `zarrs::array::codec::default_array_to_bytes_codec()`
 - Add `ArrayBuilder::subchunk_shape()`
-  - This is recommended over `ShardingCodecBuilder` for most use cases
-
-  ```diff
-  - array_builder.array_to_bytes_codec(
-  -    ShardingCodecBuilder::new(
-  -        vec![4, 4].try_into()?, // subchunk shape
-  -        &DataType::Float32,
-  -    )
-  -    .build_arc(),
-  -)
-  +.subchunk_shape(vec![4, 4])
-  ```
-
 - Add `InvalidSubchunkShape` variant to `ArrayCreateError`
 - Add `Tensor` type representing raw bytes with a data type and shape intended for interop with tensor libraries
   - Implements `dlpack::traits::TensorLike`
@@ -67,21 +91,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition
-- **Breaking**: Bump `zarrs_metadata` to 0.7.0
-  - Fixes handling of Zarr V2 arrays with bool fill values
-- **Breaking**: Bump `zarrs_data_type` to 0.6.0
+- **Breaking**: Bump `zarrs_metadata` (public) to 0.7.0
+- **Breaking**: Bump `zarrs_data_type` (public) to 0.7.0
 - **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.4.0
-- **Breaking**: Bump `zarrs_plugin` to 0.3.0
-- **Breaking**: Bump `zarrs_chunk_grid` to 0.2.0
+- **Breaking**: Bump `zarrs_plugin` (public) to 0.3.0
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
-- **Breaking**: Bump `ndarray` to 0.17.1
-- Bump `zarrs_filesystem` to 0.3.6
+- **Breaking**: Bump `ndarray` (public) to 0.17.1
+- Bump `zarrs_filesystem` to 0.3.7
 - Bump `zfp-sys` to 0.4.2
 - Bump `pco` to 0.4.7
 - Bump `criterion` (dev) to 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
-  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
   - Extensions now implement `ExtensionIdentifier` and `ExtensionAliases<V>` traits for per-extension alias management
   - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
@@ -105,37 +126,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 - **Breaking**: `{Array,Chunk}Representation::shape_u64()` now returns `&[u64]` instead of `Vec<u64>`
 - Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
-- **Breaking**: Switch to `&ndarray::ArrayRef` from `impl Into<ndarray::Array<T, D>>` in `Array::store_*_ndarray` methods
-- **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()`
-  - This is necessary to choose an appropriate default array-to-bytes codec
+- **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()` so that it can choose an appropriate default array-to-bytes codec
 - **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` to avoid unnecessary copies with some element types
   - Added `Element::to_array_bytes()` matching the old signature
 - **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
   - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
     - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
     - This is a breaking change for existing code relying on type inference for `ArrayBytes`
-
   - `Array::store_*` methods are now generic over the input type
     - Store any array type implementing `IntoArrayBytes`, e.g. `ArrayBytes`, `&[T]`, `Vec<T>`, or `&ndarray::Array<T>` where `T: Element`
   - **Breaking**: Deprecate `Array::retrieve_*_{ndarray,elements}` in favour of the generic methods
-
-    ```diff
-    - let data = array.retrieve_array_subset(&subset)?;
-    - let data: Vec<f32> = array.retrieve_array_subset_elements(&subset)?;
-    - let data: ndarray::ArrayD<f32> = array.retrieve_array_subset_ndarray(&subset)?;
-    + let data: ArrayBytes = array.retrieve_array_subset(&subset)?;
-    + let data: Vec<f32> = array.retrieve_array_subset(&subset)?;
-    + let data: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset)?;
-    ```
-
   - **Breaking**: Deprecate `Array::{store,retrieve}*_{ndarray,elements}` in favour of the generic methods
-
-    ```diff
-    - array.store_array_subset_elements(&subset, &data)?;
-    - array.store_array_subset_ndarray(&subset, &data)?;
-    + array.store_array_subset(&subset, &data)?;
-    ```
-
   - **Breaking**: Remove `Array::store_*_dlpark` and `Array::retrieve_*_dlpark` methods
     - Use the generic `Array::store_*` and `Array::retrieve_*` methods with the `Tensor` type instead, which implements `dlpark::traits::TensorLike`
   - Added `ChunkCache::retrieve_*_bytes` methods that return `ChunkCacheTypeDecoded` (`Arc<ArrayBytes<'static>>`) directly
@@ -154,6 +155,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `identifier()` (`String` -> `&'static str`)
 - **Breaking**: Replace `DataType::metadata()` with `configuration()` (`MetadataV3` -> `Configuration`)
 - **Breaking**: Deprecate the `array::ArrayCodecTraits` re-export in favour of using `zarrs::array::codec::ArrayCodecTraits` directly
+- Performance improvements:
+  - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
+  - Avoid unnecessary allocations in `Array` methods and some codecs
+  - Improve index iterator performance
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency
@@ -169,12 +174,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `CodecError::DataTypeExtension` variant
 
 ### Fixed
-- Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
-- Add missing complex subfloats to `NamedDataType::from_metadata()`
 - Fix `transpose` codec decoding with variable-size data types
-- Fix various unnecessary allocations in `Array` methods and some codecs
-- Improve index iterator performance
 - Various fixes to aliased data type handling
+- Fixes handling of Zarr V2 arrays with bool fill values
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
