@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition
 - **Breaking**: Bump `zarrs_metadata` to 0.7.0
+  - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: Bump `zarrs_data_type` to 0.6.0
 - **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.4.0
 - **Breaking**: Bump `zarrs_plugin` to 0.3.0
@@ -90,7 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change `CodecTraits::identifier()` return type from `&str` to `&'static str`
 - **Breaking**: Change `StorageTransformerPlugin::new()` to take a `default_name_fn` parameter
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
-  - Fixes handling of Zarr V2 arrays with bool fill values
 - **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
 - **Breaking**: The `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets
 - **Breaking**: Change various methods to take a `ArrayBytesDecodeIntoTarget` instead of a `ArrayBytesFixedDisjointView`
