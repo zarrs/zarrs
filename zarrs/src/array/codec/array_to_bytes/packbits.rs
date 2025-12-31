@@ -160,7 +160,7 @@ struct PackBitsCodecComponents {
 }
 
 fn pack_bits_components(data_type: &DataType) -> Result<PackBitsCodecComponents, CodecError> {
-    let packbits = get_packbits_support(&**data_type).ok_or_else(|| {
+    let packbits = get_packbits_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), PackBitsCodec::IDENTIFIER.to_string())
     })?;
     Ok(PackBitsCodecComponents {

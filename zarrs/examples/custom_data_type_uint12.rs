@@ -16,7 +16,7 @@ use zarrs::{
     array_subset::ArraySubset,
 };
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
     FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
@@ -49,14 +49,14 @@ fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeUInt12))
+        Ok(Arc::new(CustomDataTypeUInt12).into())
     } else {
         Err(PluginMetadataInvalidError::new(UINT12, "codec", metadata.to_string()).into())
     }
 }
 
 /// Implement the core data type extension methods
-impl DataTypeExtension for CustomDataTypeUInt12 {
+impl DataTypeTraits for CustomDataTypeUInt12 {
     fn identifier(&self) -> &'static str {
         UINT12
     }
@@ -229,7 +229,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4096, 1], // array shape
         vec![5, 1],    // regular chunk shape
-        Arc::new(CustomDataTypeUInt12) as DataType,
+        Arc::new(CustomDataTypeUInt12),
         FillValue::new(fill_value.to_le_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

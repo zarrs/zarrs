@@ -1,15 +1,15 @@
-//! Macros for implementing [`DataTypeExtension`](zarrs_data_type::DataTypeExtension) for data type markers.
+//! Macros for implementing [`DataTypeTraits`](zarrs_data_type::DataTypeTraits) for data type markers.
 
-/// Helper macro to implement `DataTypeExtension` for simple fixed-size numeric types.
+/// Helper macro to implement `DataTypeTraits` for simple fixed-size numeric types.
 ///
-/// This macro implements the `DataTypeExtension` trait and `BytesCodecDataTypeTraits` trait,
+/// This macro implements the `DataTypeTraits` trait and `BytesCodecDataTypeTraits` trait,
 /// and also registers the type with the bytes codec registry.
 ///
 /// Usage:
 /// - `impl_data_type_extension_numeric!(MarkerType, size, rust_type)` - basic implementation
 macro_rules! impl_data_type_extension_numeric {
     ($marker:ty, $size:tt, $rust_type:tt) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
+        impl zarrs_data_type::DataTypeTraits for $marker {
             fn identifier(&self) -> &'static str {
                 <$marker as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
             }
@@ -273,8 +273,8 @@ macro_rules! register_data_type_plugin {
                 <$marker as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER,
                 <$marker as zarrs_plugin::ExtensionIdentifier>::matches_name,
                 <$marker as zarrs_plugin::ExtensionIdentifier>::default_name,
-                |_metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, zarrs_plugin::PluginCreateError> {
-                    Ok(std::sync::Arc::new($marker))
+                |_metadata: &zarrs_metadata::v3::MetadataV3| -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
+                    Ok(std::sync::Arc::new($marker).into())
                 },
             )
         }

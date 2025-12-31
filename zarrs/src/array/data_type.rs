@@ -45,8 +45,8 @@ use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 use crate::metadata_ext::data_type::NumpyTimeUnit;
 pub use named_data_type::NamedDataType;
 pub use zarrs_data_type::{
-    DataType, DataTypeExtension, DataTypeExtensionError, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataType, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeTraits, FillValue,
 };
 
 pub use self::bool::BoolDataType;
@@ -86,266 +86,266 @@ pub use uint4::UInt4DataType;
 /// Create a `bool` data type.
 #[must_use]
 pub fn bool() -> DataType {
-    Arc::new(BoolDataType)
+    Arc::new(BoolDataType).into()
 }
 /// Create an `int2` data type.
 #[must_use]
 pub fn int2() -> DataType {
-    Arc::new(Int2DataType)
+    Arc::new(Int2DataType).into()
 }
 /// Create an `int4` data type.
 #[must_use]
 pub fn int4() -> DataType {
-    Arc::new(Int4DataType)
+    Arc::new(Int4DataType).into()
 }
 /// Create an `int8` data type.
 #[must_use]
 pub fn int8() -> DataType {
-    Arc::new(Int8DataType)
+    Arc::new(Int8DataType).into()
 }
 /// Create an `int16` data type.
 #[must_use]
 pub fn int16() -> DataType {
-    Arc::new(Int16DataType)
+    Arc::new(Int16DataType).into()
 }
 /// Create an `int32` data type.
 #[must_use]
 pub fn int32() -> DataType {
-    Arc::new(Int32DataType)
+    Arc::new(Int32DataType).into()
 }
 /// Create an `int64` data type.
 #[must_use]
 pub fn int64() -> DataType {
-    Arc::new(Int64DataType)
+    Arc::new(Int64DataType).into()
 }
 /// Create a `uint2` data type.
 #[must_use]
 pub fn uint2() -> DataType {
-    Arc::new(UInt2DataType)
+    Arc::new(UInt2DataType).into()
 }
 /// Create a `uint4` data type.
 #[must_use]
 pub fn uint4() -> DataType {
-    Arc::new(UInt4DataType)
+    Arc::new(UInt4DataType).into()
 }
 /// Create a `uint8` data type.
 #[must_use]
 pub fn uint8() -> DataType {
-    Arc::new(UInt8DataType)
+    Arc::new(UInt8DataType).into()
 }
 /// Create a `uint16` data type.
 #[must_use]
 pub fn uint16() -> DataType {
-    Arc::new(UInt16DataType)
+    Arc::new(UInt16DataType).into()
 }
 /// Create a `uint32` data type.
 #[must_use]
 pub fn uint32() -> DataType {
-    Arc::new(UInt32DataType)
+    Arc::new(UInt32DataType).into()
 }
 /// Create a `uint64` data type.
 #[must_use]
 pub fn uint64() -> DataType {
-    Arc::new(UInt64DataType)
+    Arc::new(UInt64DataType).into()
 }
 
 // Standard floats
 /// Create a `bfloat16` data type.
 #[must_use]
 pub fn bfloat16() -> DataType {
-    Arc::new(BFloat16DataType)
+    Arc::new(BFloat16DataType).into()
 }
 /// Create a `float16` data type.
 #[must_use]
 pub fn float16() -> DataType {
-    Arc::new(Float16DataType)
+    Arc::new(Float16DataType).into()
 }
 /// Create a `float32` data type.
 #[must_use]
 pub fn float32() -> DataType {
-    Arc::new(Float32DataType)
+    Arc::new(Float32DataType).into()
 }
 /// Create a `float64` data type.
 #[must_use]
 pub fn float64() -> DataType {
-    Arc::new(Float64DataType)
+    Arc::new(Float64DataType).into()
 }
 
 // Subfloats
 /// Create a `float4_e2m1fn` data type.
 #[must_use]
 pub fn float4_e2m1fn() -> DataType {
-    Arc::new(Float4E2M1FNDataType)
+    Arc::new(Float4E2M1FNDataType).into()
 }
 /// Create a `float6_e2m3fn` data type.
 #[must_use]
 pub fn float6_e2m3fn() -> DataType {
-    Arc::new(Float6E2M3FNDataType)
+    Arc::new(Float6E2M3FNDataType).into()
 }
 /// Create a `float6_e3m2fn` data type.
 #[must_use]
 pub fn float6_e3m2fn() -> DataType {
-    Arc::new(Float6E3M2FNDataType)
+    Arc::new(Float6E3M2FNDataType).into()
 }
 /// Create a `float8_e3m4` data type.
 #[must_use]
 pub fn float8_e3m4() -> DataType {
-    Arc::new(Float8E3M4DataType)
+    Arc::new(Float8E3M4DataType).into()
 }
 /// Create a `float8_e4m3` data type.
 #[must_use]
 pub fn float8_e4m3() -> DataType {
-    Arc::new(Float8E4M3DataType)
+    Arc::new(Float8E4M3DataType).into()
 }
 /// Create a `float8_e4m3b11fnuz` data type.
 #[must_use]
 pub fn float8_e4m3b11fnuz() -> DataType {
-    Arc::new(Float8E4M3B11FNUZDataType)
+    Arc::new(Float8E4M3B11FNUZDataType).into()
 }
 /// Create a `float8_e4m3fnuz` data type.
 #[must_use]
 pub fn float8_e4m3fnuz() -> DataType {
-    Arc::new(Float8E4M3FNUZDataType)
+    Arc::new(Float8E4M3FNUZDataType).into()
 }
 /// Create a `float8_e5m2` data type.
 #[must_use]
 pub fn float8_e5m2() -> DataType {
-    Arc::new(Float8E5M2DataType)
+    Arc::new(Float8E5M2DataType).into()
 }
 /// Create a `float8_e5m2fnuz` data type.
 #[must_use]
 pub fn float8_e5m2fnuz() -> DataType {
-    Arc::new(Float8E5M2FNUZDataType)
+    Arc::new(Float8E5M2FNUZDataType).into()
 }
 /// Create a `float8_e8m0fnu` data type.
 #[must_use]
 pub fn float8_e8m0fnu() -> DataType {
-    Arc::new(Float8E8M0FNUDataType)
+    Arc::new(Float8E8M0FNUDataType).into()
 }
 
 // Standard complex
 /// Create a `complex64` data type.
 #[must_use]
 pub fn complex64() -> DataType {
-    Arc::new(Complex64DataType)
+    Arc::new(Complex64DataType).into()
 }
 /// Create a `complex128` data type.
 #[must_use]
 pub fn complex128() -> DataType {
-    Arc::new(Complex128DataType)
+    Arc::new(Complex128DataType).into()
 }
 /// Create a `complex_bfloat16` data type.
 #[must_use]
 pub fn complex_bfloat16() -> DataType {
-    Arc::new(ComplexBFloat16DataType)
+    Arc::new(ComplexBFloat16DataType).into()
 }
 /// Create a `complex_float16` data type.
 #[must_use]
 pub fn complex_float16() -> DataType {
-    Arc::new(ComplexFloat16DataType)
+    Arc::new(ComplexFloat16DataType).into()
 }
 /// Create a `complex_float32` data type.
 #[must_use]
 pub fn complex_float32() -> DataType {
-    Arc::new(ComplexFloat32DataType)
+    Arc::new(ComplexFloat32DataType).into()
 }
 /// Create a `complex_float64` data type.
 #[must_use]
 pub fn complex_float64() -> DataType {
-    Arc::new(ComplexFloat64DataType)
+    Arc::new(ComplexFloat64DataType).into()
 }
 
 // Complex subfloats
 /// Create a `complex_float4_e2m1fn` data type.
 #[must_use]
 pub fn complex_float4_e2m1fn() -> DataType {
-    Arc::new(ComplexFloat4E2M1FNDataType)
+    Arc::new(ComplexFloat4E2M1FNDataType).into()
 }
 /// Create a `complex_float6_e2m3fn` data type.
 #[must_use]
 pub fn complex_float6_e2m3fn() -> DataType {
-    Arc::new(ComplexFloat6E2M3FNDataType)
+    Arc::new(ComplexFloat6E2M3FNDataType).into()
 }
 /// Create a `complex_float6_e3m2fn` data type.
 #[must_use]
 pub fn complex_float6_e3m2fn() -> DataType {
-    Arc::new(ComplexFloat6E3M2FNDataType)
+    Arc::new(ComplexFloat6E3M2FNDataType).into()
 }
 /// Create a `complex_float8_e3m4` data type.
 #[must_use]
 pub fn complex_float8_e3m4() -> DataType {
-    Arc::new(ComplexFloat8E3M4DataType)
+    Arc::new(ComplexFloat8E3M4DataType).into()
 }
 /// Create a `complex_float8_e4m3` data type.
 #[must_use]
 pub fn complex_float8_e4m3() -> DataType {
-    Arc::new(ComplexFloat8E4M3DataType)
+    Arc::new(ComplexFloat8E4M3DataType).into()
 }
 /// Create a `complex_float8_e4m3b11fnuz` data type.
 #[must_use]
 pub fn complex_float8_e4m3b11fnuz() -> DataType {
-    Arc::new(ComplexFloat8E4M3B11FNUZDataType)
+    Arc::new(ComplexFloat8E4M3B11FNUZDataType).into()
 }
 /// Create a `complex_float8_e4m3fnuz` data type.
 #[must_use]
 pub fn complex_float8_e4m3fnuz() -> DataType {
-    Arc::new(ComplexFloat8E4M3FNUZDataType)
+    Arc::new(ComplexFloat8E4M3FNUZDataType).into()
 }
 /// Create a `complex_float8_e5m2` data type.
 #[must_use]
 pub fn complex_float8_e5m2() -> DataType {
-    Arc::new(ComplexFloat8E5M2DataType)
+    Arc::new(ComplexFloat8E5M2DataType).into()
 }
 /// Create a `complex_float8_e5m2fnuz` data type.
 #[must_use]
 pub fn complex_float8_e5m2fnuz() -> DataType {
-    Arc::new(ComplexFloat8E5M2FNUZDataType)
+    Arc::new(ComplexFloat8E5M2FNUZDataType).into()
 }
 /// Create a `complex_float8_e8m0fnu` data type.
 #[must_use]
 pub fn complex_float8_e8m0fnu() -> DataType {
-    Arc::new(ComplexFloat8E8M0FNUDataType)
+    Arc::new(ComplexFloat8E8M0FNUDataType).into()
 }
 
 // Special types
 /// Create a `string` data type.
 #[must_use]
 pub fn string() -> DataType {
-    Arc::new(StringDataType)
+    Arc::new(StringDataType).into()
 }
 /// Create a `bytes` data type.
 #[must_use]
 pub fn bytes() -> DataType {
-    Arc::new(BytesDataType)
+    Arc::new(BytesDataType).into()
 }
 /// Create an `r*` (raw bits) data type with the given size in bytes.
 #[must_use]
 pub fn raw_bits(size_bytes: usize) -> DataType {
-    Arc::new(RawBitsDataType::new(size_bytes))
+    Arc::new(RawBitsDataType::new(size_bytes)).into()
 }
 
 // NumPy time types
 /// Create a `numpy.datetime64` data type.
 #[must_use]
 pub fn numpy_datetime64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
-    Arc::new(NumpyDateTime64DataType::new(unit, scale_factor))
+    Arc::new(NumpyDateTime64DataType::new(unit, scale_factor)).into()
 }
 /// Create a `numpy.timedelta64` data type.
 #[must_use]
 pub fn numpy_timedelta64(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> DataType {
-    Arc::new(NumpyTimeDelta64DataType::new(unit, scale_factor))
+    Arc::new(NumpyTimeDelta64DataType::new(unit, scale_factor)).into()
 }
 
 // Optional
 /// Create an optional data type wrapping the given inner type.
 #[must_use]
 pub fn optional(inner: NamedDataType) -> DataType {
-    Arc::new(OptionalDataType::new(inner))
+    Arc::new(OptionalDataType::new(inner)).into()
 }
 
 /// Extension trait providing convenience methods for [`DataType`].
 ///
-/// This trait adds methods that are not part of [`DataTypeExtension`] but are
+/// This trait adds methods that are not part of [`DataTypeTraits`] but are
 /// useful when working with data types in the context of zarrs.
 pub trait DataTypeExt {
     /// Returns true if this is an optional data type.
@@ -408,7 +408,7 @@ impl DataTypeExt for DataType {
     }
 
     fn to_optional(&self) -> DataType {
-        Arc::new(OptionalDataType::new(self.to_named()))
+        Arc::new(OptionalDataType::new(self.to_named())).into()
     }
 }
 

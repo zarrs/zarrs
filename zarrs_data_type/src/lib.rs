@@ -7,11 +7,11 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-mod data_type_extension;
+mod data_type;
 mod data_type_plugin;
 mod fill_value;
 
-pub use data_type_extension::{DataType, DataTypeExtension, DataTypeExtensionError};
+pub use data_type::{DataType, DataTypeTraits};
 pub use data_type_plugin::{
     register_data_type, unregister_data_type, DataTypePlugin, DataTypeRuntimePlugin,
     DataTypeRuntimeRegistryHandle, DATA_TYPE_RUNTIME_REGISTRY,

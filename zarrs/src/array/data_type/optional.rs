@@ -1,4 +1,4 @@
-use zarrs_data_type::{DataTypeFillValueMetadataError, FillValue};
+use zarrs_data_type::{DataType, DataTypeFillValueMetadataError, FillValue};
 use zarrs_metadata::{Configuration, ConfigurationSerialize, v3::MetadataV3};
 use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
@@ -20,7 +20,7 @@ inventory::submit! {
         <OptionalDataType as ExtensionIdentifier>::IDENTIFIER,
         <OptionalDataType as ExtensionIdentifier>::matches_name,
         <OptionalDataType as ExtensionIdentifier>::default_name,
-        |metadata: &MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+        |metadata: &MetadataV3| -> Result<DataType, PluginCreateError> {
             let configuration = metadata.configuration().ok_or_else(|| {
                 PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
                     OptionalDataType::IDENTIFIER,
@@ -46,7 +46,7 @@ inventory::submit! {
 
             // Recursively parse the inner data type
             let inner_data_type = NamedDataType::try_from(&inner_metadata)?;
-            Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)))
+            Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)).into())
         },
     )
 }
@@ -147,8 +147,8 @@ impl OptionalDataType {
     }
 }
 
-// DataTypeExtension implementation for OptionalDataType
-impl zarrs_data_type::DataTypeExtension for OptionalDataType {
+// DataTypeTraits implementation for OptionalDataType
+impl zarrs_data_type::DataTypeTraits for OptionalDataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

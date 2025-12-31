@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 
+use zarrs_data_type::DataType;
 use zarrs_plugin::{
     ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError, Regex, ZarrVersions,
 };
@@ -20,7 +21,7 @@ inventory::submit! {
         <RawBitsDataType as ExtensionIdentifier>::IDENTIFIER,
         <RawBitsDataType as ExtensionIdentifier>::matches_name,
         <RawBitsDataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<DataType, PluginCreateError> {
             let name = metadata.name();
             // Parse size from name (e.g., "r8" -> 1 byte, "r16" -> 2 bytes)
             // Also handle V2 format like "|V2"
@@ -57,7 +58,7 @@ inventory::submit! {
                 )));
             }
             let size_bytes = size_bits / 8;
-            Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)))
+            Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)).into())
         },
     )
 }
@@ -83,7 +84,7 @@ impl RawBitsDataType {
     }
 }
 
-impl zarrs_data_type::DataTypeExtension for RawBitsDataType {
+impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

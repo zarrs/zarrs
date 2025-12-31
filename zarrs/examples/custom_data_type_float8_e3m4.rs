@@ -14,7 +14,7 @@ use zarrs::array::{
 use zarrs::metadata::{Configuration, v3::MetadataV3};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
     FillValue,
 };
 use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
@@ -47,14 +47,14 @@ fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeFloat8e3m4))
+        Ok(Arc::new(CustomDataTypeFloat8e3m4).into())
     } else {
         Err(PluginMetadataInvalidError::new(FLOAT8_E3M4, "codec", metadata.to_string()).into())
     }
 }
 
 /// Implement the core data type extension methods
-impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
+impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
     fn identifier(&self) -> &'static str {
         FLOAT8_E3M4
     }
@@ -243,7 +243,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        Arc::new(CustomDataTypeFloat8e3m4) as DataType,
+        Arc::new(CustomDataTypeFloat8e3m4),
         FillValue::new(fill_value.to_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![

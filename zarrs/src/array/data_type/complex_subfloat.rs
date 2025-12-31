@@ -2,10 +2,10 @@
 
 use super::macros::register_data_type_plugin;
 
-/// Macro to implement `DataTypeExtension` for complex subfloat types (two subfloats packed together).
+/// Macro to implement `DataTypeTraits` for complex subfloat types (two subfloats packed together).
 macro_rules! impl_complex_subfloat_data_type {
     ($marker:ty) => {
-        impl zarrs_data_type::DataTypeExtension for $marker {
+        impl zarrs_data_type::DataTypeTraits for $marker {
             fn identifier(&self) -> &'static str {
                 <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
             }
@@ -128,7 +128,7 @@ pub struct ComplexFloat8E8M0FNUDataType;
 register_data_type_plugin!(ComplexFloat8E8M0FNUDataType);
 zarrs_plugin::impl_extension_aliases!(ComplexFloat8E8M0FNUDataType, "complex_float8_e8m0fnu");
 
-// DataTypeExtension implementations for complex subfloats
+// DataTypeTraits implementations for complex subfloats
 impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType);
 impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType);
 impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType);

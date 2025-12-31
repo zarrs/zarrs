@@ -1,15 +1,75 @@
 use std::{any::Any, borrow::Cow, fmt::Debug, sync::Arc};
 
-use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
-use zarrs_plugin::{MaybeSend, MaybeSync, ZarrVersions};
+use derive_more::{Deref, From};
+use zarrs_metadata::{
+    v3::{FillValueMetadataV3, MetadataV3},
+    Configuration, DataTypeSize,
+};
+use zarrs_plugin::{MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersions};
 
-use crate::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};
+use crate::{
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DATA_TYPE_RUNTIME_REGISTRY,
+};
 
-/// A data type.
-///
-/// This is a type alias for `Arc<dyn DataTypeExtension>`, providing a unified
-/// interface for all data types (both built-in and custom extensions).
-pub type DataType = Arc<dyn DataTypeExtension>;
+/// A data type implementing [`DataTypeTraits`].
+#[derive(Debug, Clone, Deref, From)]
+pub struct DataType(Arc<dyn DataTypeTraits>);
+
+impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
+    fn from(data_type: Arc<T>) -> Self {
+        Self(data_type)
+    }
+}
+
+impl DataType {
+    /// Create a data type.
+    pub fn new<T: DataTypeTraits + 'static>(data_type: T) -> Self {
+        let data_type: Arc<dyn DataTypeTraits> = Arc::new(data_type);
+        data_type.into()
+    }
+
+    /// Create a data type from metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
+    pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+        if !metadata.must_understand() {
+            return Err(PluginCreateError::Other(
+                r#"data type must not have `"must_understand": false`"#.to_string(),
+            ));
+        }
+
+        let name = metadata.name();
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = DATA_TYPE_RUNTIME_REGISTRY.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name, ZarrVersions::V3) {
+                        return Some(plugin.create(metadata));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
+        for plugin in inventory::iter::<DataTypePlugin> {
+            if plugin.match_name(name, ZarrVersions::V3) {
+                return plugin.create(metadata);
+            }
+        }
+        Err(
+            PluginUnsupportedError::new(metadata.name().to_string(), "data type".to_string())
+                .into(),
+        )
+    }
+}
 
 /// Traits for a data type extension.
 ///
@@ -22,7 +82,7 @@ pub type DataType = Arc<dyn DataTypeExtension>;
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
-pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
+pub trait DataTypeTraits: Debug + MaybeSend + MaybeSync {
     /// The identifier of the data type.
     fn identifier(&self) -> &'static str;
 
@@ -66,7 +126,7 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     ///
     /// The default implementation compares identifier and configuration.
     /// Custom data types may override this for more efficient comparison.
-    fn eq(&self, other: &dyn DataTypeExtension) -> bool {
+    fn eq(&self, other: &dyn DataTypeTraits) -> bool {
         self.identifier() == other.identifier() && self.configuration() == other.configuration()
     }
 
@@ -74,18 +134,4 @@ pub trait DataTypeExtension: Debug + MaybeSend + MaybeSync {
     ///
     /// This enables accessing concrete type-specific methods (like `OptionalDataType::data_type()`).
     fn as_any(&self) -> &dyn Any;
-}
-
-/// A data type extension error.
-#[derive(Debug, Clone, thiserror::Error, derive_more::Display)]
-#[non_exhaustive]
-pub enum DataTypeExtensionError {
-    /// Codec not supported
-    #[display("The {codec} codec is not supported by the {data_type} extension data type")]
-    CodecUnsupported {
-        /// The data type name.
-        data_type: String,
-        /// The codec name.
-        codec: String,
-    },
 }

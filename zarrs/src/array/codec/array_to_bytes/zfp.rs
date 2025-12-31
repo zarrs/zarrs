@@ -271,7 +271,7 @@ fn zfp_type_to_sys(zfp_type: ZfpType) -> zfp_sys::zfp_type {
 }
 
 fn zarr_to_zfp_data_type(data_type: &DataType) -> Option<zfp_sys::zfp_type> {
-    let zfp = get_zfp_support(&**data_type)?;
+    let zfp = get_zfp_support(data_type)?;
     zfp.zfp_type().map(zfp_type_to_sys)
 }
 
@@ -280,7 +280,7 @@ fn promote_before_zfp_encoding(
     decoded_value: &[u8],
     data_type: &DataType,
 ) -> Result<ZfpArray, CodecError> {
-    let zfp = get_zfp_support(&**data_type).ok_or_else(|| {
+    let zfp = get_zfp_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), ZfpCodec::IDENTIFIER.to_string())
     })?;
     let zfp_type = zfp.zfp_type().ok_or_else(|| {
@@ -362,7 +362,7 @@ fn init_zfp_decoding_output(
     shape: &[NonZeroU64],
     data_type: &DataType,
 ) -> Result<ZfpArray, CodecError> {
-    let zfp = get_zfp_support(&**data_type).ok_or_else(|| {
+    let zfp = get_zfp_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), ZfpCodec::IDENTIFIER.to_string())
     })?;
     let zfp_type = zfp.zfp_type().ok_or_else(|| {
@@ -380,7 +380,7 @@ fn init_zfp_decoding_output(
 
 #[allow(clippy::cast_sign_loss)]
 fn demote_after_zfp_decoding(array: ZfpArray, data_type: &DataType) -> Result<Vec<u8>, CodecError> {
-    let zfp = get_zfp_support(&**data_type).ok_or_else(|| {
+    let zfp = get_zfp_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(data_type.clone(), ZfpCodec::IDENTIFIER.to_string())
     })?;
     let promotion = zfp.zfp_promotion();

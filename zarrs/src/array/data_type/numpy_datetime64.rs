@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU32;
 
+use zarrs_data_type::DataType;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 
@@ -23,7 +24,7 @@ inventory::submit! {
         <NumpyDateTime64DataType as ExtensionIdentifier>::IDENTIFIER,
         <NumpyDateTime64DataType as ExtensionIdentifier>::matches_name,
         <NumpyDateTime64DataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<std::sync::Arc<dyn zarrs_data_type::DataTypeExtension>, PluginCreateError> {
+        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<DataType, PluginCreateError> {
             let configuration = metadata.configuration().ok_or_else(|| {
                 PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
                     NumpyDateTime64DataType::IDENTIFIER,
@@ -39,7 +40,7 @@ inventory::submit! {
                         metadata.to_string(),
                     ))
                 })?;
-            Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)))
+            Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)).into())
         },
     )
 }
@@ -60,7 +61,7 @@ impl NumpyDateTime64DataType {
     }
 }
 
-impl zarrs_data_type::DataTypeExtension for NumpyDateTime64DataType {
+impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

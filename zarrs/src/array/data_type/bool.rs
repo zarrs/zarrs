@@ -13,7 +13,7 @@ zarrs_plugin::impl_extension_aliases!(BoolDataType, "bool",
     v2: "|b1", ["|b1"]
 );
 
-impl zarrs_data_type::DataTypeExtension for BoolDataType {
+impl zarrs_data_type::DataTypeTraits for BoolDataType {
     fn identifier(&self) -> &'static str {
         <Self as ExtensionIdentifier>::IDENTIFIER
     }

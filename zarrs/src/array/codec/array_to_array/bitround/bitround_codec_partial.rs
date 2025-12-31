@@ -27,7 +27,7 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         keepbits: u32,
     ) -> Result<Self, CodecError> {
         // Use get_bitround_support() to check support
-        if super::get_bitround_support(&**data_type).is_some() {
+        if super::get_bitround_support(data_type).is_some() {
             Ok(Self {
                 input_output_handle,
                 data_type: data_type.clone(),
