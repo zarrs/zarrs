@@ -37,6 +37,12 @@ use zarrs_plugin::{
 #[derive(Debug, Clone, Deref, From)]
 pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
 
+impl<T: ChunkGridTraits + 'static> From<Arc<T>> for ChunkGrid {
+    fn from(chunk_grid: Arc<T>) -> Self {
+        Self(chunk_grid)
+    }
+}
+
 /// A chunk grid plugin.
 #[derive(derive_more::Deref)]
 pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape>);
