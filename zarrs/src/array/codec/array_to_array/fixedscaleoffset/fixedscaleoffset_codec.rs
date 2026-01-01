@@ -418,11 +418,10 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if !self.dtype.data_type().eq(data_type.as_ref()) {
-            return Err(CodecError::Other(format!(
-                "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
-                data_type,
-                self.dtype.data_type()
-            )));
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
         }
 
         do_encode(
@@ -443,11 +442,10 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if !self.dtype.data_type().eq(data_type.as_ref()) {
-            return Err(CodecError::Other(format!(
-                "fixedscaleoffset got {:?} as input, but metadata expects {:?}",
-                data_type,
-                self.dtype.data_type()
-            )));
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            ));
         }
 
         let bytes = bytes.into_fixed()?.into_owned();
