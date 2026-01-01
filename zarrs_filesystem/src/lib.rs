@@ -29,7 +29,7 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-use direct_io::{AsRawFd, MetadataExt, OpenOptionsExt, O_DIRECT};
+use direct_io::{MetadataExt, OpenOptionsExt, O_DIRECT};
 
 // // Register the store.
 // inventory::submit! {
@@ -241,6 +241,7 @@ impl FilesystemStore {
         byte_ranges: ByteRangeIterator<'a>,
     ) -> Result<MaybeBytesIterator<'a>, StorageError> {
         use std::collections::BTreeMap;
+        use std::os::unix::fs::FileExt;
 
         // Lock and open the file
         let file = self.get_file_mutex(key);
@@ -260,7 +261,6 @@ impl FilesystemStore {
 
         let file_size: u64 = file.metadata()?.size();
         let ps = page_size::get() as u64;
-        let fd = file.as_raw_fd();
 
         // Find intersected pages
         let byte_ranges = byte_ranges.collect::<Vec<ByteRange>>();
@@ -274,19 +274,15 @@ impl FilesystemStore {
             let offset = pages.0.start * ps;
             let length = usize::try_from(num_pages * ps).unwrap();
             let mut buf = bytes_aligned(length);
-            let ret = unsafe {
-                libc::pread(
-                    fd,
-                    buf.as_mut_ptr().cast::<libc::c_void>(),
-                    length,
-                    libc::off_t::try_from(offset).unwrap(),
-                )
+            let bytes_read = {
+                let buf = buf.spare_capacity_mut();
+                let buf = unsafe {
+                    std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), length)
+                };
+                file.read_at(buf, offset as u64)?
             };
-            if ret < 0 {
-                return Err(std::io::Error::last_os_error().into());
-            }
             unsafe {
-                buf.set_len(length);
+                buf.set_len(bytes_read);
             }
             page_bytes.insert(offset, buf.freeze());
         }
