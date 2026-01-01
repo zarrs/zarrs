@@ -50,7 +50,10 @@ inventory::submit! {
         },
     )
 }
-zarrs_plugin::impl_extension_aliases!(OptionalDataType, "zarrs.optional");
+zarrs_plugin::impl_extension_aliases!(OptionalDataType, "optional",
+  v3: "zarrs.optional", [],
+  v2: "zarrs.optional", []
+);
 
 impl OptionalDataType {
     /// Create a new optional data type wrapper.

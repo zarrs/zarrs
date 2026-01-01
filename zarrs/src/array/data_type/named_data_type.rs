@@ -68,7 +68,7 @@ impl NamedDataType {
     /// # use zarrs::array::{data_type, DataTypeExt};
     /// // Single level optional
     /// let opt_u8 = data_type::uint8().to_named().into_optional();
-    /// assert_eq!(opt_u8.identifier(), "zarrs.optional");
+    /// # assert_eq!(opt_u8.identifier(), "optional");
     ///
     /// // Nested optional
     /// let opt_opt_u8 = opt_u8.into_optional();

@@ -48,7 +48,9 @@ use crate::{
 inventory::submit! {
     ChunkGridPlugin::new(RegularBoundedChunkGrid::IDENTIFIER, RegularBoundedChunkGrid::matches_name, RegularBoundedChunkGrid::default_name, create_chunk_grid_regular_bounded)
 }
-zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "zarrs.regular_bounded");
+zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "regular_bounded",
+  v3: "zarrs.regular_bounded", []
+);
 
 /// Create a `regular_bounded` chunk grid from metadata.
 ///
@@ -324,7 +326,7 @@ mod tests {
             create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"chunk grid zarrs.regular_bounded is unsupported with metadata: zarrs.regular_bounded {"invalid":[1,2,3]}"#
+            r#"chunk grid regular_bounded is unsupported with metadata: zarrs.regular_bounded {"invalid":[1,2,3]}"#
         );
     }
 
