@@ -37,7 +37,9 @@ const fn default_separator() -> ChunkKeySeparator {
 inventory::submit! {
     ChunkKeyEncodingPlugin::new(DefaultSuffixChunkKeyEncoding::IDENTIFIER, DefaultSuffixChunkKeyEncoding::matches_name, DefaultSuffixChunkKeyEncoding::default_name, create_chunk_key_encoding_default_suffix)
 }
-zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding, "zarrs.default_suffix");
+zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding, "default_suffix",
+ v3: "zarrs.default_suffix", []
+);
 
 pub(crate) fn create_chunk_key_encoding_default_suffix(
     metadata: &MetadataV3,

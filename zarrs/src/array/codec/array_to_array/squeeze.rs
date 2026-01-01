@@ -54,7 +54,10 @@ use crate::{
 inventory::submit! {
     CodecPlugin::new(SqueezeCodec::IDENTIFIER, SqueezeCodec::matches_name, SqueezeCodec::default_name, create_codec_squeeze)
 }
-zarrs_plugin::impl_extension_aliases!(SqueezeCodec, "zarrs.squeeze");
+zarrs_plugin::impl_extension_aliases!(SqueezeCodec, "squeeze",
+  v3: "zarrs.squeeze", [],
+  v2: "zarrs.squeeze", []
+);
 
 pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");

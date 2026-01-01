@@ -1900,12 +1900,12 @@ pub enum CodecError {
 fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {
     if data_type.is_optional() {
         format!(
-            "Unsupported data type {:?} for codec {codec}. Use the optional codec to handle optional data types.",
+            "Unsupported data type {} for codec {codec}. Use the optional codec to handle optional data types.",
             data_type.identifier()
         )
     } else {
         format!(
-            "Unsupported data type {:?} for codec {codec}",
+            "Unsupported data type {} for codec {codec}",
             data_type.identifier()
         )
     }
