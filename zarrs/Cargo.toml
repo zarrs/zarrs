@@ -66,7 +66,7 @@ moka = { version = "0.12.8", features = ["sync"] }
 ndarray = { version = "0.17.1", optional = true }
 num.workspace = true
 paste = "1.0.15"
-pco = { version = "0.4.8", optional = true }
+pco = { version = "=0.4.7", optional = true }
 rayon = "1.10.0"
 rayon_iter_concurrent_limit = "0.2.0"
 serde = { version = "1.0.203", features = ["derive"] }
