@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `ndarray` (public) to 0.17.1
 - Bump `zarrs_filesystem` to 0.3.7
 - Bump `zfp-sys` to 0.4.2
-- Bump `pco` to 0.4.8
+- Bump `pco` to 0.4.9
 - Bump `criterion` (dev) to 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
