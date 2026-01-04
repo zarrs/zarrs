@@ -37,6 +37,10 @@ pub use extension_type::{
 /// Re-export of [`regex::Regex`] for use in extension alias configurations.
 pub use regex::Regex;
 
+/// Re-export of [`paste`] for use in the [`impl_extension_aliases`] macro.
+#[doc(hidden)]
+pub use paste;
+
 mod zarr_version;
 pub use zarr_version::{ZarrVersion, ZarrVersion2, ZarrVersion3, ZarrVersions};
 

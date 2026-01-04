@@ -238,7 +238,7 @@ macro_rules! impl_extension_aliases {
      v3: $v3_default:expr, [$($v3_alias:expr),* $(,)?], [$($v3_regex:expr),* $(,)?],
      v2: $v2_default:expr, [$($v2_alias:expr),* $(,)?], [$($v2_regex:expr),* $(,)?]
     ) => {
-        ::paste::paste! {
+        $crate::paste::paste! {
             static [<$type:upper _ALIASES_V3>]: ::std::sync::LazyLock<::std::sync::RwLock<$crate::ExtensionAliasesConfig>> =
                 ::std::sync::LazyLock::new(|| {
                     ::std::sync::RwLock::new($crate::ExtensionAliasesConfig::new(
