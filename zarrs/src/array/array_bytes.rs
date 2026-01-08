@@ -496,7 +496,7 @@ fn update_bytes_vlen_array_subset<'a>(
     input_shape: &[u64],
     update_bytes: &ArrayBytesRaw,
     update_offsets: &ArrayBytesOffsets,
-    update_subset: &ArraySubset,
+    update_subset: &dyn ArraySubsetTraits,
 ) -> Result<ArrayBytes<'a>, IndexerError> {
     if !update_subset.inbounds_shape(input_shape) {
         return Err(IndexerError::new_oob(
@@ -529,16 +529,18 @@ fn update_bytes_vlen_array_subset<'a>(
         .unwrap();
     let mut bytes_new = Vec::with_capacity(bytes_new_len);
     let indices = ArraySubset::new_with_shape(input_shape.to_vec()).indices();
+    let update_subset_start = update_subset.start();
+    let update_subset_shape = update_subset.shape();
     for (chunk_index, indices) in indices.iter().enumerate() {
         offsets_new.push(bytes_new.len());
         if update_subset.contains(&indices) {
             let subset_indices = indices
                 .iter()
-                .zip(update_subset.start())
+                .zip(update_subset_start.iter())
                 .map(|(i, s)| i - s)
                 .collect::<Vec<_>>();
             let subset_index =
-                ravel_indices(&subset_indices, update_subset.shape()).expect("inbounds indices");
+                ravel_indices(&subset_indices, &update_subset_shape).expect("inbounds indices");
             let subset_index = usize::try_from(subset_index).unwrap();
             let start = update_offsets[subset_index];
             let end = update_offsets[subset_index + 1];
@@ -631,7 +633,7 @@ fn update_bytes_vlen_indexer<'a>(
 fn update_array_bytes_array_subset<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
-    update_subset: &ArraySubset,
+    update_subset: &dyn ArraySubsetTraits,
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -663,7 +665,7 @@ fn update_array_bytes_array_subset<'a>(
                     UnsafeCellSlice::new(&mut bytes),
                     data_type_size,
                     shape,
-                    update_subset.clone(),
+                    update_subset.to_array_subset(),
                 )
             }
             .map_err(CodecError::from)?;
@@ -693,7 +695,7 @@ fn update_array_bytes_array_subset<'a>(
                     UnsafeCellSlice::new(&mut mask),
                     1, // bool is 1 byte per element
                     shape,
-                    update_subset.clone(),
+                    update_subset.to_array_subset(),
                 )
             }
             .map_err(CodecError::from)?;

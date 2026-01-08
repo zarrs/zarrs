@@ -184,11 +184,11 @@ impl RegularChunkGrid {
     /// Determinate version of [`ChunkGridTraits::chunks_in_array_subset`].
     pub(crate) fn chunks_in_array_subset(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         match array_subset.end_inc() {
             Some(end) => {
-                let chunks_start = self.chunk_indices(array_subset.start())?;
+                let chunks_start = self.chunk_indices(&array_subset.start())?;
                 let chunks_end = self.chunk_indices(&end)?;
                 // .unwrap_or_else(|| self.grid_shape());
 

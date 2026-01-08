@@ -263,7 +263,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousIndices, IndexerError> {
-        ContiguousIndices::new(self, array_shape)
+        ContiguousIndices::new(self.clone(), array_shape)
     }
 
     /// Returns an iterator over the linearised indices of contiguous elements within the subset.
@@ -275,7 +275,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IndexerError> {
-        ContiguousLinearisedIndices::new(self, array_shape.to_vec())
+        ContiguousLinearisedIndices::new(self.clone(), array_shape.to_vec())
     }
 }
 

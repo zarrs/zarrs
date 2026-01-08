@@ -38,7 +38,7 @@ pub use squeeze_codec::SqueezeCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::array::{ArrayIndices, ArraySubset, Indexer, IndexerError};
+use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
@@ -64,7 +64,7 @@ pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, Plugi
 }
 
 fn get_squeezed_array_subset(
-    decoded_region: &ArraySubset,
+    decoded_region: &dyn ArraySubsetTraits,
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {

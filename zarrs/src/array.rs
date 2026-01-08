@@ -937,10 +937,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Errors
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if a chunk in `chunks` is incompatible with the chunk grid.
     #[allow(clippy::similar_names)]
-    pub fn chunks_subset(&self, chunks: &ArraySubset) -> Result<ArraySubset, ArrayError> {
+    pub fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
         match chunks.end_inc() {
             Some(end) => {
-                let chunk0 = self.chunk_subset(chunks.start())?;
+                let chunk0 = self.chunk_subset(&chunks.start())?;
                 let chunk1 = self.chunk_subset(&end)?;
                 let start = chunk0.start().to_vec();
                 let end = chunk1.end_exc();
@@ -954,7 +954,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
     ///
     /// # Errors
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
-    pub fn chunks_subset_bounded(&self, chunks: &ArraySubset) -> Result<ArraySubset, ArrayError> {
+    pub fn chunks_subset_bounded(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<ArraySubset, ArrayError> {
         let chunks_subset = self.chunks_subset(chunks)?;
         Ok(chunks_subset.bound(self.shape())?)
     }

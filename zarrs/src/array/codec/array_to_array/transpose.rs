@@ -36,7 +36,9 @@ use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength};
 use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::array::{ArrayBytes, ArrayBytesRaw, ArraySubset, DataType, Indexer, IndexerError};
+use crate::array::{
+    ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
+};
 use crate::metadata::DataTypeSize;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::transpose::{
@@ -144,7 +146,7 @@ fn transpose_vlen<'a>(
 
 fn get_transposed_array_subset(
     order: &[usize],
-    decoded_region: &ArraySubset,
+    decoded_region: &dyn ArraySubsetTraits,
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != order.len() {
         return Err(IndexerError::new_incompatible_dimensionality(
@@ -154,8 +156,8 @@ fn get_transposed_array_subset(
         .into());
     }
 
-    let start = permute(decoded_region.start(), order).expect("matching dimensionality");
-    let size = permute(decoded_region.shape(), order).expect("matching dimensionality");
+    let start = permute(&decoded_region.start(), order).expect("matching dimensionality");
+    let size = permute(&decoded_region.shape(), order).expect("matching dimensionality");
     let ranges = start.iter().zip(size).map(|(&st, si)| st..(st + si));
     Ok(ArraySubset::from(ranges))
 }

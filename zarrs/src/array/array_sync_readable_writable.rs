@@ -36,7 +36,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_chunk_subset<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: impl IntoArrayBytes<'a>,
     ) -> Result<(), ArrayError> {
         self.store_chunk_subset_opt(
@@ -61,7 +61,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_chunk_subset_elements<T: Element>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.store_chunk_subset_opt(
@@ -117,7 +117,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_array_subset<'a>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_data: impl IntoArrayBytes<'a>,
     ) -> Result<(), ArrayError> {
         self.store_array_subset_opt(array_subset, subset_data, &CodecOptions::default())
@@ -136,7 +136,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_array_subset_elements<T: Element>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.store_array_subset_opt(array_subset, subset_elements, &CodecOptions::default())
@@ -215,7 +215,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_chunk_subset_opt<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: impl IntoArrayBytes<'a>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -227,7 +227,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             .any(|(end_exc, shape)| end_exc > *shape)
         {
             return Err(ArrayError::InvalidChunkSubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 chunk_indices.to_vec(),
                 chunk_shape,
             ));
@@ -282,7 +282,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     pub fn store_chunk_subset_elements_opt<T: Element>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -322,14 +322,14 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     #[allow(clippy::too_many_lines)]
     pub fn store_array_subset_opt<'a>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_data: impl IntoArrayBytes<'a>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -338,7 +338,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         };
@@ -346,7 +346,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
         if num_chunks == 1 {
             let chunk_indices = chunks.start();
             let chunk_subset = self.chunk_subset(chunk_indices)?;
-            if array_subset == &chunk_subset {
+            if array_subset == chunk_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_chunk_subset
                 self.store_chunk_opt(chunk_indices, subset_data, options)?;
@@ -376,10 +376,10 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| -> Result<(), ArrayError> {
                 let chunk_subset_in_array = self.chunk_subset(&chunk_indices)?;
                 let overlap = array_subset.overlap(&chunk_subset_in_array)?;
-                let chunk_subset_in_array_subset = overlap.relative_to(array_subset.start())?;
+                let chunk_subset_in_array_subset = overlap.relative_to(&array_subset.start())?;
                 let chunk_subset_bytes = subset_bytes.extract_array_subset(
                     &chunk_subset_in_array_subset,
-                    array_subset.shape(),
+                    &array_subset.shape(),
                     self.data_type(),
                 )?;
                 let array_subset_in_chunk_subset =
@@ -408,7 +408,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage>
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_array_subset_elements_opt<T: Element>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {

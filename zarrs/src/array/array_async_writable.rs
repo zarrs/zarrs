@@ -8,7 +8,7 @@ use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
     Element, IntoArrayBytes,
 };
-use crate::array::{ArraySubset, ArraySubsetTraits};
+use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{
@@ -119,7 +119,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::similar_names)]
     pub async fn async_store_chunks<'a>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
         self.async_store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
@@ -131,7 +131,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_elements<T: Element + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.async_store_chunks_opt(chunks, chunks_elements, &CodecOptions::default())
@@ -147,7 +147,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         D: ndarray::Dimension,
     >(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.async_store_chunks_opt(
@@ -220,7 +220,10 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`erase_chunks`](Array::erase_chunks).
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_erase_chunks(&self, chunks: &ArraySubset) -> Result<(), StorageError> {
+    pub async fn async_erase_chunks(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -345,7 +348,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::similar_names)]
     pub async fn async_store_chunks_opt<'a>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_data: impl IntoArrayBytes<'a> + MaybeSend,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -357,7 +360,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.async_store_chunk_opt(chunk_indices, chunks_data, options)
+                self.async_store_chunk_opt(&chunk_indices, chunks_data, options)
                     .await?;
             }
             _ => {
@@ -405,7 +408,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_chunks_elements_opt<T: Element + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -423,7 +426,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
         D: ndarray::Dimension,
     >(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {

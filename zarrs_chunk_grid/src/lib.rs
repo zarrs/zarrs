@@ -265,7 +265,7 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
     /// Returns [`IncompatibleDimensionalityError`] if `chunks` do not match the dimensionality of the chunk grid.
     fn chunks_subset(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
         if chunks.dimensionality() != self.dimensionality() {
             Err(IncompatibleDimensionalityError::new(
@@ -273,7 +273,7 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
                 self.dimensionality(),
             ))
         } else if let Some(end) = chunks.end_inc() {
-            let chunk0 = self.subset(chunks.start())?;
+            let chunk0 = self.subset(&chunks.start())?;
             let chunk1 = self.subset(&end)?;
             if let (Some(chunk0), Some(chunk1)) = (chunk0, chunk1) {
                 let ranges = std::iter::zip(chunk0.start(), chunk1.end_exc())

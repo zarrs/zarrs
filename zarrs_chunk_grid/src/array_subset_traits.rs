@@ -12,7 +12,10 @@ use std::ops::Range;
 
 use itertools::izip;
 
-use crate::{ArrayIndices, ArraySubset, ArraySubsetError};
+use crate::iterators::{
+    ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices,
+};
+use crate::{ArrayIndices, ArraySubset, ArraySubsetError, Indexer, IndexerError};
 
 mod private {
     pub trait Sealed {}
@@ -27,17 +30,12 @@ impl private::Sealed for Vec<Range<u64>> {}
 ///
 /// This trait enables ergonomic APIs that accept various region representations,
 /// including `ArraySubset`, arrays of ranges like `[0..5, 0..10]`, and slices of ranges.
-pub trait ArraySubsetTraits: private::Sealed {
+pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// Returns the start indices of the subset.
     fn start(&self) -> Cow<'_, [u64]>;
 
     /// Returns the shape (size along each dimension) of the subset.
     fn shape(&self) -> Cow<'_, [u64]>;
-
-    // /// Returns the number of dimensions.
-    // fn dimensionality(&self) -> usize {
-    //     self.start().len()
-    // }
 
     /// Returns the total number of elements.
     fn num_elements(&self) -> u64 {
@@ -181,6 +179,53 @@ pub trait ArraySubsetTraits: private::Sealed {
     fn to_array_subset(&self) -> ArraySubset {
         ArraySubset::new_with_start_shape(self.start().into_owned(), self.shape().into_owned())
             .expect("start and shape have the same dimensionality") // true for all sealed impls
+    }
+
+    /// Returns an iterator over the indices of elements within the subset.
+    #[must_use]
+    fn indices(&self) -> Indices {
+        Indices::new(self.to_array_subset())
+    }
+
+    /// Returns an iterator over the linearised indices of elements within the subset.
+    ///
+    /// # Errors
+    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    fn linearised_indices(&self, array_shape: &[u64]) -> Result<LinearisedIndices, IndexerError> {
+        LinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+    }
+
+    /// Returns an iterator over the indices of contiguous elements within the subset.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    fn contiguous_indices(&self, array_shape: &[u64]) -> Result<ContiguousIndices, IndexerError> {
+        ContiguousIndices::new(self.to_array_subset(), array_shape)
+    }
+
+    /// Returns an iterator over the linearised indices of contiguous elements within the subset.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IndexerError`] if the `array_shape` does not encapsulate this array subset.
+    fn contiguous_linearised_indices(
+        &self,
+        array_shape: &[u64],
+    ) -> Result<ContiguousLinearisedIndices, IndexerError> {
+        ContiguousLinearisedIndices::new(self.to_array_subset(), array_shape.to_vec())
+    }
+}
+
+impl PartialEq<ArraySubset> for &dyn ArraySubsetTraits {
+    fn eq(&self, other: &ArraySubset) -> bool {
+        self.start() == other.start() && self.shape() == other.shape()
+    }
+}
+
+impl PartialEq<&dyn ArraySubsetTraits> for ArraySubset {
+    fn eq(&self, other: &&dyn ArraySubsetTraits) -> bool {
+        self.start() == other.start().as_ref() && self.shape() == other.shape().as_ref()
     }
 }
 

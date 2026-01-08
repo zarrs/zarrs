@@ -9,7 +9,7 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{ArrayBytes, ArraySubset, DataType, FillValue};
+use crate::array::{ArrayBytes, ArraySubsetTraits, DataType, FillValue};
 use crate::storage::StorageError;
 use std::num::NonZeroU64;
 
@@ -46,19 +46,19 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     fn encode_subset<'a>(
         &self,
         bytes: &ArrayBytes<'a>,
-        subset: &ArraySubset,
+        subset: &dyn ArraySubsetTraits,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        apply_permutation(bytes, subset.shape(), &self.order, &self.data_type)
+        apply_permutation(bytes, &subset.shape(), &self.order, &self.data_type)
     }
 
     /// Decode: apply inverse permutation to bytes in encoded (transposed) shape.
     fn decode_subset<'a>(
         &self,
         bytes: &ArrayBytes<'a>,
-        subset: &ArraySubset,
+        subset: &dyn ArraySubsetTraits,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let transposed_shape: Vec<u64> =
-            permute(subset.shape(), &self.order).expect("matching dimensionality");
+            permute(&subset.shape(), &self.order).expect("matching dimensionality");
         apply_permutation(
             bytes,
             &transposed_shape,

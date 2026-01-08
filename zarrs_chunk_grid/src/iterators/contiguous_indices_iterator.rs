@@ -37,7 +37,7 @@ impl ContiguousIndices {
     ///
     /// # Errors
     /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
-    pub fn new(subset: &ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
+    pub fn new(subset: ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
             return Err(IndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
@@ -64,7 +64,7 @@ impl ContiguousIndices {
 
             // The empty subset is in-bounds, not an error.
             return Ok(Self {
-                subset_contiguous_start: subset.clone(),
+                subset_contiguous_start: subset,
                 contiguous_elements: 0,
             });
         }

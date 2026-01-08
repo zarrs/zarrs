@@ -279,7 +279,7 @@ async fn partial_decode_fixed_array_subset(
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChain>,
     shard_index: Option<&[u64]>,
-    array_subset: &ArraySubset,
+    array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let data_type_size = data_type.fixed_size().expect("called on fixed data type");
@@ -379,6 +379,9 @@ async fn partial_decode_fixed_array_subset(
     .await;
     // FIXME: Concurrency limit for futures
 
+    let array_subset_start = array_subset.start();
+    let array_subset_shape = array_subset.shape();
+
     if !results.is_empty() {
         crate::iter_concurrent_limit!(
             options.concurrent_target(),
@@ -392,9 +395,9 @@ async fn partial_decode_fixed_array_subset(
                     ArrayBytesFixedDisjointView::new(
                         shard_slice,
                         data_type_size,
-                        array_subset.shape(),
+                        &array_subset_shape,
                         chunk_subset_overlap
-                            .relative_to(array_subset.start())
+                            .relative_to(&array_subset_start)
                             .unwrap(),
                     )?
                 };
@@ -430,9 +433,9 @@ async fn partial_decode_fixed_array_subset(
                     ArrayBytesFixedDisjointView::new(
                         shard_slice,
                         data_type_size,
-                        array_subset.shape(),
+                        &array_subset_shape,
                         chunk_subset_overlap
-                            .relative_to(array_subset.start())
+                            .relative_to(&array_subset_start)
                             .unwrap(),
                     )?
                 };
@@ -455,7 +458,7 @@ async fn partial_decode_variable_array_subset(
     subchunk_shape: &[NonZeroU64],
     inner_codecs: &Arc<CodecChain>,
     shard_index: Option<&[u64]>,
-    array_subset: &ArraySubset,
+    array_subset: &dyn ArraySubsetTraits,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'static>, CodecError> {
     let Some(shard_index) = shard_index else {
@@ -470,11 +473,13 @@ async fn partial_decode_variable_array_subset(
     )
     .expect("matching dimensionality");
 
+    let array_subset_start = array_subset.start();
     let decode_inner_chunk_subset =
         |chunk_indices: ArrayIndicesTinyVec, chunk_subset: ArraySubset| {
             let shard_index_idx =
                 ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
             let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
+            let array_subset_start = &array_subset_start;
             async move {
                 let offset = shard_index[shard_index_idx * 2];
                 let size = shard_index[shard_index_idx * 2 + 1];
@@ -514,7 +519,7 @@ async fn partial_decode_variable_array_subset(
                 Ok::<_, CodecError>((
                     chunk_subset_bytes,
                     chunk_subset_overlap
-                        .relative_to(array_subset.start())
+                        .relative_to(array_subset_start)
                         .unwrap(),
                 ))
             }
@@ -527,12 +532,13 @@ async fn partial_decode_variable_array_subset(
             let chunk_subset = shard_chunk_grid
                 .subset(&chunk_indices)
                 .expect("matching dimensionality");
-            decode_inner_chunk_subset(chunk_indices, chunk_subset)
+            let decode = &decode_inner_chunk_subset;
+            decode(chunk_indices, chunk_subset)
         }))
         .await?;
 
     // Convert into an array
-    let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?;
+    let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape())?;
     Ok(out_array_subset)
 }
 

@@ -279,7 +279,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     async fn async_retrieve_inner_chunks_opt<T: FromArrayBytes + MaybeSend>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
@@ -294,7 +294,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     async fn async_retrieve_inner_chunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError>;
 
@@ -310,7 +310,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     async fn async_retrieve_inner_chunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError>;
 
@@ -321,7 +321,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     async fn async_retrieve_array_subset_sharded_opt<T: FromArrayBytes + MaybeSend>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
@@ -338,7 +338,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     >(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError>;
 
@@ -356,7 +356,7 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     >(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError>;
 }
@@ -513,7 +513,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     async fn async_retrieve_inner_chunks_opt<T: FromArrayBytes + MaybeSend>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
@@ -522,7 +522,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                 .chunks_subset(inner_chunks)?
                 .ok_or_else(|| {
                     ArrayError::InvalidArraySubset(
-                        inner_chunks.clone(),
+                        inner_chunks.to_array_subset(),
                         inner_chunk_grid.grid_shape().to_vec(),
                     )
                 })?;
@@ -536,7 +536,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     async fn async_retrieve_inner_chunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
         self.async_retrieve_inner_chunks_opt(cache, inner_chunks, options)
@@ -547,7 +547,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     async fn async_retrieve_inner_chunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        inner_chunks: &ArraySubset,
+        inner_chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.async_retrieve_inner_chunks_opt(cache, inner_chunks, options)
@@ -558,7 +558,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     async fn async_retrieve_array_subset_sharded_opt<T: FromArrayBytes + MaybeSend>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
@@ -566,13 +566,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
             let shards = self.chunks_in_array_subset(array_subset)?;
             let Some(shards) = shards else {
                 return Err(ArrayError::InvalidArraySubset(
-                    array_subset.clone(),
+                    array_subset.to_array_subset(),
                     self.shape().to_vec(),
                 ));
             };
 
             // Retrieve chunk bytes
             let num_shards = shards.num_elements_usize();
+            let array_subset_start = array_subset.start();
+            let array_subset_shape = array_subset.shape();
             let bytes = if num_shards == 0 {
                 ArrayBytes::new_fill_value(
                     self.data_type(),
@@ -598,6 +600,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                     DataTypeSize::Variable => {
                         let retrieve_inner_chunk = |shard_indices: ArrayIndicesTinyVec| {
                             let options = options.clone();
+                            let array_subset_start = &array_subset_start;
                             async move {
                                 let shard_subset = self.chunk_subset(&shard_indices)?;
                                 let shard_subset_overlap = shard_subset.overlap(array_subset)?;
@@ -612,7 +615,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                     .into_owned();
                                 Ok::<_, ArrayError>((
                                     bytes,
-                                    shard_subset_overlap.relative_to(array_subset.start())?,
+                                    shard_subset_overlap.relative_to(array_subset_start)?,
                                 ))
                             }
                         };
@@ -623,7 +626,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                             .buffered(chunk_concurrent_limit)
                             .try_collect()
                             .await?;
-                        merge_chunks_vlen(chunk_bytes_and_subsets, array_subset.shape())?
+                        merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset_shape)?
                     }
                     DataTypeSize::Fixed(data_type_size) => {
                         let size_output = array_subset.num_elements_usize() * data_type_size;
@@ -637,6 +640,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                 let retrieve_shard_into_slice =
                                     |shard_indices: ArrayIndicesTinyVec| {
                                         let options = options.clone();
+                                        let array_subset_start = &array_subset_start;
+                                        let array_subset_shape = &array_subset_shape;
                                         async move {
                                             let shard_subset = self.chunk_subset(&shard_indices)?;
                                             let shard_subset_overlap =
@@ -646,9 +651,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                                                 ArrayBytesFixedDisjointView::new(
                                                     output,
                                                     data_type_size,
-                                                    array_subset.shape(),
+                                                    array_subset_shape.as_ref(),
                                                     shard_subset_overlap
-                                                        .relative_to(array_subset.start())?,
+                                                        .relative_to(array_subset_start)?,
                                                 )?
                                             };
                                             cache
@@ -679,7 +684,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                     }
                 }
             };
-            T::from_array_bytes(bytes, array_subset.shape(), self.data_type())
+            T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
         } else {
             self.async_retrieve_array_subset_opt(array_subset, options)
                 .await
@@ -691,7 +696,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     >(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
         self.async_retrieve_array_subset_sharded_opt(cache, array_subset, options)
@@ -704,7 +709,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     >(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.async_retrieve_array_subset_sharded_opt(cache, array_subset, options)

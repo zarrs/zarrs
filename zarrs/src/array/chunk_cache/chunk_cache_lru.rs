@@ -4,8 +4,8 @@ use std::sync::{Arc, atomic};
 use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ChunkCache, ChunkCacheTypeDecoded,
-    ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkCache,
+    ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
 use crate::storage::{ReadableStorageTraits, StorageError};
 
@@ -165,7 +165,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded: ChunkCacheTypeEncoded = self
@@ -238,7 +238,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk = self
@@ -297,7 +297,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
