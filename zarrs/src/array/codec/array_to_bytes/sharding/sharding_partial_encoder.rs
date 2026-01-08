@@ -19,8 +19,8 @@ use crate::array::codec::{
     BytesPartialEncoderTraits, CodecError, CodecOptions,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape,
-    ChunkShapeTraits, CodecChain, DataType, IndexerError, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
+    DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;

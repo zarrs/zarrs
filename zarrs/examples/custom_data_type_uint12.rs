@@ -8,8 +8,8 @@ use std::sync::Arc;
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, ArraySubset, DataType, DataTypeSize, Element,
-    ElementOwned, FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
+    FillValueMetadataV3,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;

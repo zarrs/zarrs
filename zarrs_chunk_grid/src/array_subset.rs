@@ -56,7 +56,6 @@ pub struct ArraySubset {
 
 impl Display for ArraySubset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::ArraySubsetTraits;
         self.to_ranges().fmt(f)
     }
 }
@@ -162,6 +161,12 @@ impl ArraySubset {
         }
     }
 
+    /// Return the array subset as a vec of ranges.
+    #[must_use]
+    pub fn to_ranges(&self) -> Vec<Range<u64>> {
+        ArraySubsetTraits::to_ranges(self)
+    }
+
     /// Bound the array subset to the domain within `end` (exclusive).
     ///
     /// # Errors
@@ -229,18 +234,48 @@ impl ArraySubset {
         self.start.len()
     }
 
+    /// Return the end (inclusive) of the array subset.
+    ///
+    /// Returns [`None`] if the array subset is empty.
+    #[must_use]
+    pub fn end_inc(&self) -> Option<ArrayIndices> {
+        ArraySubsetTraits::end_inc(self)
+    }
+
+    /// Return the end (exclusive) of the array subset.
+    #[must_use]
+    pub fn end_exc(&self) -> ArrayIndices {
+        ArraySubsetTraits::end_exc(self)
+    }
+
     /// Return the number of elements of the array subset.
     ///
     /// Equal to the product of the components of its shape.
     #[must_use]
     pub fn num_elements(&self) -> u64 {
-        self.shape.iter().product()
+        ArraySubsetTraits::num_elements(self)
+    }
+
+    /// Return the number of elements of the array subset as a `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`num_elements()`](Self::num_elements()) is greater than [`usize::MAX`].
+    #[must_use]
+    pub fn num_elements_usize(&self) -> usize {
+        ArraySubsetTraits::num_elements_usize(self)
+    }
+
+    /// Returns [`true`] if the array subset contains `indices`.
+    #[must_use]
+    pub fn contains(&self, indices: &[u64]) -> bool {
+        ArraySubsetTraits::contains(self, indices)
     }
 
     /// Returns an iterator over the indices of elements within the subset.
     #[must_use]
     pub fn indices(&self) -> Indices {
-        Indices::new(self.clone())
+        ArraySubsetTraits::indices(self)
     }
 
     /// Returns an iterator over the linearised indices of elements within the subset.
@@ -251,7 +286,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<LinearisedIndices, IndexerError> {
-        LinearisedIndices::new(self.clone(), array_shape.to_vec())
+        ArraySubsetTraits::linearised_indices(self, array_shape)
     }
 
     /// Returns an iterator over the indices of contiguous elements within the subset.
@@ -263,7 +298,7 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousIndices, IndexerError> {
-        ContiguousIndices::new(self.clone(), array_shape)
+        ArraySubsetTraits::contiguous_indices(self, array_shape)
     }
 
     /// Returns an iterator over the linearised indices of contiguous elements within the subset.
@@ -275,7 +310,37 @@ impl ArraySubset {
         &self,
         array_shape: &[u64],
     ) -> Result<ContiguousLinearisedIndices, IndexerError> {
-        ContiguousLinearisedIndices::new(self.clone(), array_shape.to_vec())
+        ArraySubsetTraits::contiguous_linearised_indices(self, array_shape)
+    }
+
+    /// Return the overlapping subset between this array subset and `subset_other`.
+    ///
+    /// # Errors
+    /// Returns [`ArraySubsetError`] if the dimensionality of `subset_other` does not match the dimensionality of this array subset.
+    pub fn overlap(&self, subset_other: &dyn ArraySubsetTraits) -> Result<Self, ArraySubsetError> {
+        ArraySubsetTraits::overlap(self, subset_other)
+    }
+
+    /// Return the subset relative to `offset`.
+    ///
+    /// Creates an array subset starting at [`ArraySubset::start()`] - `offset`.
+    ///
+    /// # Errors
+    /// Returns [`ArraySubsetError`] if the length of `start` does not match the dimensionality of this array subset.
+    pub fn relative_to(&self, offset: &[u64]) -> Result<Self, ArraySubsetError> {
+        ArraySubsetTraits::relative_to(self, offset)
+    }
+
+    /// Returns true if this array subset is within the bounds of `subset`.
+    #[must_use]
+    pub fn inbounds(&self, subset: &dyn ArraySubsetTraits) -> bool {
+        ArraySubsetTraits::inbounds(self, subset)
+    }
+
+    /// Returns true if the array subset is within the bounds of an `ArraySubset` with zero origin and a shape of `array_shape`.
+    #[must_use]
+    pub fn inbounds_shape(&self, array_shape: &[u64]) -> bool {
+        ArraySubsetTraits::inbounds_shape(self, array_shape)
     }
 }
 
@@ -323,8 +388,6 @@ mod tests {
 
     #[test]
     fn array_subset() {
-        use crate::ArraySubsetTraits;
-
         assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10]).is_ok());
         assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10]).is_err());
         assert!(ArraySubset::new_with_start_end_inc(vec![0, 0], vec![10, 10]).is_ok());

@@ -4,7 +4,7 @@ use itertools::izip;
 
 use super::IndicesIterator;
 use crate::iterators::indices_iterator::IndicesIntoIterator;
-use crate::{ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, IndexerError};
+use crate::{ArrayIndicesTinyVec, ArraySubset, IndexerError};
 
 /// Iterates over contiguous element indices in an array subset.
 ///

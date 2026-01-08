@@ -5,7 +5,7 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{unravel_index, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits};
+use crate::{unravel_index, ArrayIndicesTinyVec, ArraySubset};
 
 /// An iterator over the indices in an array subset.
 ///

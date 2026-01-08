@@ -4,7 +4,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 use crate::array::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
-use crate::array::{ArraySubset, ArraySubsetTraits, IndexerError};
+use crate::array::{ArraySubset, IndexerError};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///

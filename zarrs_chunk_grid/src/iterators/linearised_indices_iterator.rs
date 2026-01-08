@@ -2,7 +2,7 @@ use std::iter::FusedIterator;
 
 use super::IndicesIterator;
 use crate::iterators::indices_iterator::IndicesIntoIterator;
-use crate::{ravel_indices, ArrayShape, ArraySubset, ArraySubsetTraits, IndexerError};
+use crate::{ravel_indices, ArrayShape, ArraySubset, IndexerError};
 
 /// An iterator over the linearised indices in an array subset.
 ///
