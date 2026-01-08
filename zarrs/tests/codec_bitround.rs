@@ -5,8 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use zarrs::array::codec::BitroundCodec;
-use zarrs::array::{ArrayBuilder, ArrayMetadataOptions, data_type};
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{ArrayBuilder, ArrayMetadataOptions, ArraySubset, data_type};
 use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 use zarrs_filesystem::FilesystemStore;
 

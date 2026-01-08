@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add runtime extension registration
   - Add `[un]register_{codec,chunk_key_encoding,storage_transformer}`
   - Add `{Codec,ChunkKeyEncoding,StorageTransformer}Runtime{Plugin,RegistryHandle}`
+- Add `ArrayError::ArrayRegionError` variant
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition
@@ -159,6 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
   - Avoid unnecessary allocations in `Array` methods and some codecs
   - Improve index iterator performance
+- **Breaking**: Move `ArraySubset` from the `array_subset` to `array` module
+- **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `ArrayBytesFixedDisjointViewCreateError::IndexerError`
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency
@@ -172,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `array::ArrayRepresentationBase`
 - **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
 - **Breaking**: Remove `CodecError::DataTypeExtension` variant
+- **Breaking**: Remove `ArrayError::IncompatibleStartEndIndicesError` and `IncompatibleStartEndIndicesError` variants
 
 ### Fixed
 - Fix `transpose` codec decoding with variable-size data types

@@ -3,9 +3,8 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
-use crate::array_subset::ArraySubset;
-use crate::array_subset::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
-use crate::indexer::IncompatibleIndexerError;
+use crate::array::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
+use crate::array::{ArraySubset, ArraySubsetTraits, IndexerError};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///
@@ -28,7 +27,7 @@ pub enum ArrayBytesFixedDisjointViewCreateError {
     /// The length of the bytes is not the correct length.
     InvalidBytesLength(#[from] InvalidBytesLengthError),
     /// The indexer and shape are incompatible.
-    IncompatibleIndexerError(#[from] IncompatibleIndexerError),
+    IndexerError(#[from] IndexerError),
 }
 
 impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
@@ -36,7 +35,7 @@ impl From<ArrayBytesFixedDisjointViewCreateError> for CodecError {
         match value {
             ArrayBytesFixedDisjointViewCreateError::SubsetOutOfBounds(e) => e.into(),
             ArrayBytesFixedDisjointViewCreateError::InvalidBytesLength(e) => e.into(),
-            ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError(e) => e.into(),
+            ArrayBytesFixedDisjointViewCreateError::IndexerError(e) => e.into(),
         }
     }
 }

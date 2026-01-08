@@ -168,10 +168,7 @@ fn codec_runtime_registration_array_roundtrip() {
 
     // Retrieve the entire array and verify consistency (row-major order)
     let full_data: Vec<u8> = reopened_array
-        .retrieve_array_subset(&zarrs::array_subset::ArraySubset::new_with_ranges(&[
-            0..4,
-            0..4,
-        ]))
+        .retrieve_array_subset(&zarrs::array::ArraySubset::new_with_ranges(&[0..4, 0..4]))
         .expect("Failed to retrieve full array");
     assert_eq!(full_data, expected_full_data);
 

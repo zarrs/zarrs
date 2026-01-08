@@ -13,9 +13,9 @@ use crate::array::codec::{ArrayPartialDecoderTraits, CodecError};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::from_array_bytes::FromArrayBytes;
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeExt, ElementOwned,
+    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits,
+    DataTypeExt, ElementOwned, IncompatibleDimensionalityError,
 };
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
 use crate::iter_concurrent_limit;
 use crate::storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 

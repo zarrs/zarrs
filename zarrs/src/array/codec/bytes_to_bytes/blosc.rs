@@ -262,9 +262,7 @@ mod tests {
     use super::*;
     use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
     use crate::array::data_type::DataTypeExt;
-    use crate::array::{BytesRepresentation, ChunkShapeTraits, data_type};
-    use crate::array_subset::ArraySubset;
-    use crate::indexer::Indexer;
+    use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
     use crate::storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
@@ -411,7 +409,7 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_blosc_async_partial_decode() {
-        use crate::indexer::Indexer;
+        use crate::array::Indexer;
 
         let shape = vec![NonZeroU64::new(2).unwrap(); 3];
         let data_type = data_type::uint16();

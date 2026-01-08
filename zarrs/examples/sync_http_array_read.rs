@@ -3,8 +3,7 @@
 use ndarray::ArrayD;
 use std::sync::Arc;
 
-use zarrs::array::Array;
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArraySubset};
 use zarrs::storage::ReadableStorage;
 use zarrs::storage::storage_adapter::async_to_sync::{
     AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,

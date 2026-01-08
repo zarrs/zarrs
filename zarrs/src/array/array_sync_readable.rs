@@ -19,8 +19,7 @@ use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
     ArrayMetadata, ArrayMetadataV3, DataType, DataTypeExt, FromArrayBytes,
 };
-use crate::array::{ArrayBytes, ArrayMetadataV2};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArrayBytes, ArrayMetadataV2, ArraySubset, ArraySubsetTraits};
 use crate::config::MetadataRetrieveVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};

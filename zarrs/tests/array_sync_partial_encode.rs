@@ -6,8 +6,7 @@ use std::sync::Arc;
 use zarrs::array::codec::{
     ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim,
 };
-use zarrs::array::{ArrayBuilder, ChunkShapeTraits, DataTypeExt, data_type};
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, DataTypeExt, data_type};
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;

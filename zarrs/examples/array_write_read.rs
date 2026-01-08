@@ -8,8 +8,7 @@ use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::array::{ZARR_NAN_F32, data_type};
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
     use zarrs::node::Node;
     use zarrs::storage::store;
 

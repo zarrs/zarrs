@@ -8,9 +8,8 @@ use super::codec::{
 };
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes, update_array_bytes};
-use crate::array::ArrayBytes;
 use crate::array::codec::CodecTraits;
-use crate::array_subset::ArraySubset;
+use crate::array::{ArrayBytes, ArraySubset, ArraySubsetTraits};
 use crate::storage::{ReadableStorageTraits, ReadableWritableStorageTraits, StorageHandle};
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {

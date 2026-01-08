@@ -78,7 +78,7 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let array_shape = bytemuck::must_cast_slice(&self.shape);
@@ -109,7 +109,7 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         ArrayPartialDecoderTraits::partial_decode(self, indexer, options)

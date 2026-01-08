@@ -205,7 +205,7 @@ fn inner_chunk_byte_range(
 fn partial_decode_empty_shard<'a>(
     data_type: &DataType,
     fill_value: &FillValue,
-    indexer: &dyn crate::indexer::Indexer,
+    indexer: &dyn crate::array::Indexer,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
 }
@@ -290,8 +290,7 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesToBytesCodecTraits;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
-    use crate::array::{ArrayBytes, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBytes, ArraySubset, data_type};
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {

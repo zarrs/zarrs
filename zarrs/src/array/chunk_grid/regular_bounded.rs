@@ -35,8 +35,9 @@ use zarrs_plugin::ExtensionIdentifier;
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
 
 use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::array::{
+    ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
+};
 use crate::metadata::v3::MetadataV3;
 use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
@@ -299,8 +300,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::ArrayIndicesTinyVec;
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
 
     #[test]
     fn chunk_grid_regular_bounded_metadata() {

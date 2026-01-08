@@ -7,8 +7,19 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-pub mod array_subset;
-pub mod indexer;
+mod array_subset_traits;
+pub use array_subset_traits::ArraySubsetTraits;
+
+mod array_subset;
+pub use array_subset::{ArraySubset, ArraySubsetError};
+
+mod indexer;
+pub use indexer::{Indexer, IndexerError, IndexerIterator};
+
+mod chunk_shape_traits;
+pub use chunk_shape_traits::ChunkShapeTraits;
+
+pub mod iterators;
 
 use std::sync::{Arc, LazyLock};
 
@@ -23,13 +34,26 @@ pub type ArrayIndices = Vec<u64>;
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
 pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 
-use array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
-use array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
+
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
     MaybeSend, MaybeSync, Plugin2, PluginCreateError, PluginUnsupportedError, RuntimePlugin2,
     RuntimeRegistry, ZarrVersions,
 };
+
+/// An incompatible dimensionality error.
+#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[error("incompatible dimensionality {0}, expected {1}")]
+pub struct IncompatibleDimensionalityError(usize, usize);
+
+impl IncompatibleDimensionalityError {
+    /// Create a new incompatible dimensionality error.
+    #[must_use]
+    pub const fn new(got: usize, expected: usize) -> Self {
+        Self(got, expected)
+    }
+}
 
 /// A chunk grid implementing [`ChunkGridTraits`].
 #[derive(Debug, Clone, Deref, From)]
@@ -249,15 +273,13 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
                 self.dimensionality(),
             ))
         } else if let Some(end) = chunks.end_inc() {
-            let start = chunks.start();
-            let chunk0 = self.subset(start)?;
+            let chunk0 = self.subset(chunks.start())?;
             let chunk1 = self.subset(&end)?;
             if let (Some(chunk0), Some(chunk1)) = (chunk0, chunk1) {
-                let start = chunk0.start().to_vec();
-                let shape = std::iter::zip(&start, chunk1.end_exc())
-                    .map(|(&s, e)| e.saturating_sub(s))
-                    .collect();
-                Ok(Some(ArraySubset::new_with_start_shape(start, shape)?))
+                let ranges = std::iter::zip(chunk0.start(), chunk1.end_exc())
+                    .map(|(&s, e)| s..e)
+                    .collect::<Vec<_>>();
+                Ok(Some(ArraySubset::new_with_ranges(&ranges)))
             } else {
                 Ok(None)
             }
@@ -310,28 +332,28 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
                 .all(|(&index, &shape)| shape == 0 || index < shape)
     }
 
-    /// Return an array subset indicating the chunks intersecting `array_subset`.
+    /// Return an array subset indicating the chunks intersecting the given `region`.
     ///
     /// Returns [`None`] if the intersecting chunks cannot be determined.
     ///
     /// # Errors
-    /// Returns [`IncompatibleDimensionalityError`] if the array subset has an incorrect dimensionality.
+    /// Returns [`IncompatibleDimensionalityError`] if the region has an incorrect dimensionality.
     fn chunks_in_array_subset(
         &self,
-        array_subset: &ArraySubset,
+        region: &dyn ArraySubsetTraits,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        match array_subset.end_inc() {
+        match region.end_inc() {
             Some(end) => {
-                let chunks_start = self.chunk_indices(array_subset.start())?;
+                let chunks_start = self.chunk_indices(&region.start())?;
                 let chunks_end = self.chunk_indices(&end)?;
                 // .unwrap_or_else(|| self.grid_shape());
 
                 Ok(
                     if let (Some(chunks_start), Some(chunks_end)) = (chunks_start, chunks_end) {
-                        let shape = std::iter::zip(&chunks_start, chunks_end)
-                            .map(|(&s, e)| e.saturating_sub(s) + 1)
-                            .collect();
-                        Some(ArraySubset::new_with_start_shape(chunks_start, shape)?)
+                        let ranges = std::iter::zip(&chunks_start, chunks_end)
+                            .map(|(&s, e)| s..e + 1)
+                            .collect::<Vec<_>>();
+                        Some(ArraySubset::new_with_ranges(&ranges))
                     } else {
                         None
                     },

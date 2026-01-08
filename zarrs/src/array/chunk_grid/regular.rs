@@ -25,8 +25,10 @@ use std::num::NonZeroU64;
 use thiserror::Error;
 
 use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::array::{
+    ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
+    IncompatibleDimensionalityError,
+};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
@@ -193,7 +195,8 @@ impl RegularChunkGrid {
                 let shape = std::iter::zip(&chunks_start, chunks_end)
                     .map(|(&s, e)| e.saturating_sub(s) + 1)
                     .collect();
-                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)?)
+                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)
+                    .expect("start and shape have same length"))
             }
             None => Ok(ArraySubset::new_empty(self.dimensionality())),
         }
@@ -290,13 +293,6 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             ))
         }
     }
-
-    fn chunks_in_array_subset(
-        &self,
-        array_subset: &ArraySubset,
-    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        self.chunks_in_array_subset(array_subset).map(Option::Some)
-    }
 }
 
 #[cfg(test)]
@@ -304,9 +300,8 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::ArrayIndicesTinyVec;
     use crate::array::chunk_grid::ChunkGridTraitsIterators;
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
 
     #[test]
     fn chunk_grid_regular_configuration() {

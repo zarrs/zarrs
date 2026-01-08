@@ -498,9 +498,8 @@ mod tests {
     use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
     use crate::array::element::ElementOwned;
     use crate::array::{
-        ArrayBytes, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
-    use crate::array_subset::ArraySubset;
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"

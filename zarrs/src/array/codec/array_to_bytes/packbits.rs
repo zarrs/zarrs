@@ -187,8 +187,7 @@ mod tests {
         ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions,
     };
     use crate::array::element::{Element, ElementOwned};
-    use crate::array::{ArrayBytes, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBytes, ArraySubset, data_type};
     use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
     #[test]

@@ -7,7 +7,7 @@ use super::codec::{
 };
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
 };

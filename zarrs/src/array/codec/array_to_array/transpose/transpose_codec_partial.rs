@@ -9,8 +9,7 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{ArrayBytes, DataType, FillValue};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArrayBytes, ArraySubset, DataType, FillValue};
 use crate::storage::StorageError;
 use std::num::NonZeroU64;
 
@@ -87,7 +86,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
@@ -122,7 +121,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -167,7 +166,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
@@ -207,7 +206,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {

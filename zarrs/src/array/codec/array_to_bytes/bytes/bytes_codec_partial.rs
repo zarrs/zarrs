@@ -13,8 +13,7 @@ use crate::array::codec::{
     AsyncBytesPartialEncoderTraits,
 };
 use crate::array::data_type::DataTypeExt;
-use crate::array::{ArrayBytes, DataType, FillValue, update_array_bytes};
-use crate::indexer::IncompatibleIndexerError;
+use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;
 use zarrs_plugin::ExtensionIdentifier;
@@ -65,7 +64,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
@@ -76,7 +75,7 @@ where
         };
 
         if indexer.dimensionality() != self.shape.len() {
-            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.shape.len(),
             )
@@ -135,7 +134,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let Some(data_type_size) = self.data_type.fixed_size() else {
@@ -146,7 +145,7 @@ where
         };
 
         if indexer.dimensionality() != self.shape.len() {
-            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.shape.len(),
             )
@@ -200,7 +199,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -212,7 +211,7 @@ where
         };
 
         if indexer.dimensionality() != self.shape.len() {
-            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.shape.len(),
             )
@@ -296,7 +295,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -308,7 +307,7 @@ where
         };
 
         if indexer.dimensionality() != self.shape.len() {
-            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            return Err(IndexerError::new_incompatible_dimensionality(
                 indexer.dimensionality(),
                 self.shape.len(),
             )

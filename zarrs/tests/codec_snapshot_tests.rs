@@ -704,7 +704,7 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     let test_data = generate_test_data(&config.data_type, num_elements);
 
     // Store data using ArrayBytes API (handles fixed, variable, and optional types)
-    let subset = zarrs::array_subset::ArraySubset::new_with_shape(config.array_shape.clone());
+    let subset = zarrs::array::ArraySubset::new_with_shape(config.array_shape.clone());
     if let Err(e) = array.store_array_subset(&subset, test_data.clone()) {
         return CodecTestResult::Unsupported {
             reason: format!("Data storage failed: {e}"),

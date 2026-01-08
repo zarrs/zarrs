@@ -7,8 +7,7 @@ use std::sync::Arc;
 use object_store::memory::InMemory;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::{CodecOptions, TransposeCodec};
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
 

@@ -8,7 +8,7 @@ use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
     Element, IntoArrayBytes,
 };
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::config::MetadataEraseVersion;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{

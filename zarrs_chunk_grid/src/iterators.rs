@@ -1,15 +1,15 @@
 //! Array subset iterators.
 //!
 //! The iterators are:
-//!  - [`Indices`]: iterate over the multidimensional indices of the elements in the subset.
-//!  - [`LinearisedIndices`]: iterate over linearised indices of the elements in the subset.
-//!  - [`ContiguousIndices`]: iterate over contiguous sets of elements in the subset with the start a multidimensional index.
-//!  - [`ContiguousLinearisedIndices`]: iterate over contiguous sets of elements in the subset with the start a linearised index.
+//!  - [`Indices`]: iterate over the multidimensional indices of the elements in a region.
+//!  - [`LinearisedIndices`]: iterate over linearised indices of the elements in a region.
+//!  - [`ContiguousIndices`]: iterate over contiguous sets of elements in the region with the start a multidimensional index.
+//!  - [`ContiguousLinearisedIndices`]: iterate over contiguous sets of elements in the region with the start a linearised index.
 //!
-//! These can be created with the following concrete [`ArraySubset`](crate::array_subset::ArraySubset) methods or [`Indexer`](crate::indexer::Indexer) trait methods:
-//! [`indices`](crate::array_subset::ArraySubset::indices) or [`iter_indices`](crate::indexer::Indexer::iter_indices) ,
-//! [`linearised_indices`](crate::array_subset::ArraySubset::linearised_indices) or [`iter_linearised_indices`](crate::indexer::Indexer::iter_linearised_indices),
-//! [`contiguous_linearised_indices`](crate::array_subset::ArraySubset::contiguous_linearised_indices) or [`contiguous_linearised_indices`](crate::indexer::Indexer::iter_contiguous_linearised_indices).
+//! These can be created with the following concrete [`ArraySubset`](crate::ArraySubset) methods or [`Indexer`](crate::Indexer) trait methods:
+//! [`indices`](crate::ArraySubset::indices) or [`iter_indices`](crate::Indexer::iter_indices) ,
+//! [`linearised_indices`](crate::ArraySubset::linearised_indices) or [`iter_linearised_indices`](crate::Indexer::iter_linearised_indices),
+//! [`contiguous_linearised_indices`](crate::ArraySubset::contiguous_linearised_indices) or [`contiguous_linearised_indices`](crate::Indexer::iter_contiguous_linearised_indices).
 //!
 //! All iterators support [`into_iter()`](IntoIterator::into_iter) ([`IntoIterator`]).
 //! The [`Indices`] iterator also supports [`rayon`]'s [`into_par_iter()`](rayon::iter::IntoParallelIterator::into_par_iter) ([`IntoParallelIterator`](rayon::iter::IntoParallelIterator)).
@@ -38,12 +38,12 @@ mod tests {
     use crate::ArrayIndicesTinyVec;
     use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
-    use crate::array_subset::ArraySubset;
+    use crate::ArraySubset;
 
     #[test]
     fn array_subset_iter_indices() {
-        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
-        let indices = subset.indices();
+        let region = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        let indices = region.indices();
 
         let mut iter = indices.iter();
         assert_eq!(iter.size_hint(), (4, Some(4)));
@@ -73,9 +73,9 @@ mod tests {
 
     #[test]
     fn array_subset_iter_linearised_indices() {
-        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
-        assert!(subset.linearised_indices(&[4, 4, 4]).is_err());
-        let indices = subset.linearised_indices(&[4, 4]).unwrap();
+        let region = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        assert!(region.linearised_indices(&[4, 4, 4]).is_err());
+        let indices = region.linearised_indices(&[4, 4]).unwrap();
         //  0  1  2  3
         //  4  5  6  7
         //  8  9 10 11
@@ -98,8 +98,8 @@ mod tests {
 
     #[test]
     fn array_subset_iter_contiguous_indices1() {
-        let subset = ArraySubset::new_with_shape(vec![2, 2]);
-        let indices = subset.contiguous_indices(&[2, 2]).unwrap();
+        let region = ArraySubset::new_with_shape(vec![2, 2]);
+        let indices = region.contiguous_indices(&[2, 2]).unwrap();
         let mut iter = indices.into_iter();
         assert_eq!(iter.size_hint(), (1, Some(1)));
         assert_eq!(iter.contiguous_elements(), 4);
@@ -112,8 +112,8 @@ mod tests {
 
     #[test]
     fn array_subset_iter_contiguous_indices2() {
-        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
-        let indices = subset.contiguous_indices(&[4, 4]).unwrap();
+        let region = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        let indices = region.contiguous_indices(&[4, 4]).unwrap();
         assert_eq!(indices.len(), 2);
         assert!(!indices.is_empty());
         assert_eq!(indices.contiguous_elements_usize(), 2);
@@ -143,8 +143,8 @@ mod tests {
 
     #[test]
     fn array_subset_iter_contiguous_indices3() {
-        let subset = ArraySubset::new_with_ranges(&[1..3, 0..1, 0..2, 0..2]);
-        let indices = subset.contiguous_indices(&[3, 1, 2, 2]).unwrap();
+        let region = ArraySubset::new_with_ranges(&[1..3, 0..1, 0..2, 0..2]);
+        let indices = region.contiguous_indices(&[3, 1, 2, 2]).unwrap();
 
         let expected = vec![(ArrayIndicesTinyVec::Heap(vec![1, 0, 0, 0]), 8)];
         assert_eq!(indices.iter().collect::<Vec<_>>(), expected);
@@ -155,8 +155,8 @@ mod tests {
 
     #[test]
     fn array_subset_iter_continuous_linearised_indices() {
-        let subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
-        let indices = subset.contiguous_linearised_indices(&[4, 4]).unwrap();
+        let region = ArraySubset::new_with_ranges(&[1..3, 1..3]);
+        let indices = region.contiguous_linearised_indices(&[4, 4]).unwrap();
         assert_eq!(indices.len(), 2);
         assert!(!indices.is_empty());
         assert_eq!(indices.contiguous_elements_usize(), 2);

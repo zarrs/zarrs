@@ -19,7 +19,7 @@ use super::{
     ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataV2, ArrayMetadataV3, ChunkShapeTraits,
     DataType, DataTypeExt, FromArrayBytes,
 };
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::config::MetadataRetrieveVersion;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{

@@ -19,10 +19,9 @@ use crate::array::codec::{
     BytesPartialEncoderTraits, CodecError, CodecOptions,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-    DataType, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape,
+    ChunkShapeTraits, CodecChain, DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
-use crate::indexer::IncompatibleIndexerError;
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;
 
@@ -108,7 +107,7 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         super::sharding_partial_decoder_sync::partial_decode(
@@ -142,7 +141,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     #[allow(clippy::similar_names)]
     fn partial_encode(
         &self,
-        chunk_subset_indexer: &dyn crate::indexer::Indexer,
+        chunk_subset_indexer: &dyn crate::array::Indexer,
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -194,7 +193,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .zip(&self.shard_shape)
             .any(|(a, b)| *a > b.get())
         {
-            Err(IncompatibleIndexerError::new_oob(
+            Err(IndexerError::new_oob(
                 chunk_subset_indexer.end_exc(),
                 bytemuck::cast_slice(&self.shard_shape).to_vec(),
             ))?;

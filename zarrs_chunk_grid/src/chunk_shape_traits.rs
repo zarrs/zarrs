@@ -1,9 +1,14 @@
 use std::num::{NonZeroU64, NonZeroUsize};
 
-pub use zarrs_metadata::{ArrayShape, ChunkShape};
+use zarrs_metadata::ArrayShape;
+
+mod sealed {
+    pub trait Sealed {}
+}
+impl<T> sealed::Sealed for T where T: AsRef<[NonZeroU64]> {}
 
 /// A trait for chunk shapes.
-pub trait ChunkShapeTraits: AsRef<[NonZeroU64]> {
+pub trait ChunkShapeTraits: AsRef<[NonZeroU64]> + sealed::Sealed {
     /// Convert a chunk shape to an array shape.
     #[must_use]
     fn to_array_shape(&self) -> ArrayShape {

@@ -37,10 +37,8 @@ use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
-use crate::array::ArrayIndices;
 use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::array_subset::ArraySubset;
-use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::array::{ArrayIndices, ArraySubset, Indexer, IndexerError};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
@@ -70,16 +68,18 @@ fn get_squeezed_array_subset(
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
-        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+        return Err(IndexerError::new_incompatible_dimensionality(
             decoded_region.dimensionality(),
             shape.len(),
         )
         .into());
     }
 
+    let decoded_region_start = decoded_region.start();
+    let decoded_region_shape = decoded_region.shape();
     let ranges = izip!(
-        decoded_region.start().iter(),
-        decoded_region.shape().iter(),
+        decoded_region_start.iter(),
+        decoded_region_shape.iter(),
         shape.iter()
     )
     .filter(|&(_, _, shape)| shape.get() > 1)
@@ -105,7 +105,7 @@ fn get_squeezed_indexer(
                     )
                     .collect_vec())
             } else {
-                Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                Err(IndexerError::new_incompatible_dimensionality(
                     indices.len(),
                     shape.len(),
                 ))
@@ -126,8 +126,7 @@ mod tests {
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
     use crate::array::data_type::DataTypeExt;
-    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_squeeze_round_trip_impl(
         json: &str,

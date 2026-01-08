@@ -4,10 +4,9 @@ use std::sync::{Arc, atomic};
 use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ChunkCache, ChunkCacheTypeDecoded,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ChunkCache, ChunkCacheTypeDecoded,
     ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
-use crate::array_subset::ArraySubset;
 use crate::storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;
@@ -421,10 +420,10 @@ mod tests {
     use crate::array::chunk_cache::ChunkCache;
     use crate::array::codec::CodecOptions;
     use crate::array::{
-        Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, data_type,
+        Array, ArrayBuilder, ArraySubset, ChunkCacheDecodedLruChunkLimit,
+        ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCacheEncodedLruSizeLimit, data_type,
     };
-    use crate::array_subset::ArraySubset;
     use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
     use crate::storage::store::MemoryStore;
     use crate::storage::{

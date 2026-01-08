@@ -9,8 +9,7 @@ use zarrs_data_type::DataTypeFillValueError;
 
 use super::codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError};
 use super::{ArrayBytesFixedDisjointView, DataType, DataTypeExt, FillValue, ravel_indices};
-use crate::array_subset::ArraySubset;
-use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::array::{ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
 use crate::metadata::DataTypeSize;
 use crate::storage::byte_range::extract_byte_ranges_concat;
 
@@ -339,7 +338,7 @@ impl<'a> ArrayBytes<'a> {
     /// Panics if indices in the subset exceed [`usize::MAX`].
     pub fn extract_array_subset(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         array_shape: &[u64],
         data_type: &DataType,
     ) -> Result<ArrayBytes<'_>, CodecError> {
@@ -498,9 +497,9 @@ fn update_bytes_vlen_array_subset<'a>(
     update_bytes: &ArrayBytesRaw,
     update_offsets: &ArrayBytesOffsets,
     update_subset: &ArraySubset,
-) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
+) -> Result<ArrayBytes<'a>, IndexerError> {
     if !update_subset.inbounds_shape(input_shape) {
-        return Err(IncompatibleIndexerError::new_oob(
+        return Err(IndexerError::new_oob(
             update_subset.end_exc(),
             input_shape.to_vec(),
         ));
@@ -569,7 +568,7 @@ fn update_bytes_vlen_indexer<'a>(
     update_bytes: &ArrayBytesRaw,
     update_offsets: &ArrayBytesOffsets,
     update_indexer: &dyn Indexer,
-) -> Result<ArrayBytes<'a>, IncompatibleIndexerError> {
+) -> Result<ArrayBytes<'a>, IndexerError> {
     // Get the size of the new bytes
     let updated_size_new = update_bytes.len();
     debug_assert_eq!(
@@ -720,7 +719,7 @@ fn update_array_bytes_array_subset<'a>(
 fn update_array_bytes_indexer<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
-    update_indexer: &dyn crate::indexer::Indexer,
+    update_indexer: &dyn crate::array::Indexer,
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -813,7 +812,7 @@ fn update_array_bytes_indexer<'a>(
 pub fn update_array_bytes<'a>(
     bytes: ArrayBytes,
     shape: &[u64],
-    update_indexer: &dyn crate::indexer::Indexer,
+    update_indexer: &dyn crate::array::Indexer,
     update_bytes: &ArrayBytes,
     data_type_size: DataTypeSize,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -974,7 +973,7 @@ pub(crate) fn merge_chunks_vlen_optional<'a>(
 pub(crate) fn extract_decoded_regions_vlen<'a>(
     bytes: &[u8],
     offsets: &[usize],
-    indexer: &dyn crate::indexer::Indexer,
+    indexer: &dyn crate::array::Indexer,
     array_shape: &[NonZeroU64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let indices = indexer.iter_linearised_indices(bytemuck::must_cast_slice(array_shape))?;

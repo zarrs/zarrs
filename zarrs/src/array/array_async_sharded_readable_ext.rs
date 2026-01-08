@@ -17,7 +17,7 @@ use super::{
 use crate::array::codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
 };
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::byte_range::ByteRange;
@@ -33,7 +33,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         match self {
@@ -46,7 +46,7 @@ impl MaybeShardingPartialDecoder {
 
     async fn partial_decode_into(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -728,8 +728,7 @@ mod tests {
     use super::*;
     use crate::array::codec::TransposeCodec;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-    use crate::array::{ArrayBuilder, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 

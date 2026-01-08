@@ -36,9 +36,7 @@ use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength};
 use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::array::{ArrayBytes, ArrayBytesRaw, DataType};
-use crate::array_subset::ArraySubset;
-use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::array::{ArrayBytes, ArrayBytesRaw, ArraySubset, DataType, Indexer, IndexerError};
 use crate::metadata::DataTypeSize;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::transpose::{
@@ -149,7 +147,7 @@ fn get_transposed_array_subset(
     decoded_region: &ArraySubset,
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != order.len() {
-        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+        return Err(IndexerError::new_incompatible_dimensionality(
             decoded_region.dimensionality(),
             order.len(),
         )
@@ -171,11 +169,8 @@ fn get_transposed_indexer(
         .map(|indices| permute(&indices, order))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| {
-            IncompatibleIndexerError::new_incompatible_dimensionality(
-                indexer.dimensionality(),
-                order.len(),
-            )
-            .into()
+            IndexerError::new_incompatible_dimensionality(indexer.dimensionality(), order.len())
+                .into()
         })
 }
 
@@ -195,7 +190,7 @@ pub(crate) fn apply_permutation<'a>(
     data_type: &DataType,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if input_shape.len() != permutation.len() {
-        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+        return Err(IndexerError::new_incompatible_dimensionality(
             input_shape.len(),
             permutation.len(),
         )
@@ -244,8 +239,7 @@ mod tests {
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
     use crate::array::data_type::DataTypeExt;
-    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_transpose_round_trip_impl(
         json: &str,

@@ -16,7 +16,7 @@ use super::{
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
 use crate::array::codec::{ArrayPartialDecoderTraits, StoragePartialDecoder};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::iter_concurrent_limit;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
@@ -33,7 +33,7 @@ enum MaybeShardingPartialDecoder {
 impl MaybeShardingPartialDecoder {
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         match self {
@@ -682,8 +682,7 @@ mod tests {
     use super::*;
     use crate::array::codec::TransposeCodec;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-    use crate::array::{ArrayBuilder, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use crate::metadata_ext::codec::transpose::TransposeOrder;
     use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
     use crate::storage::store::MemoryStore;

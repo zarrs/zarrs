@@ -12,8 +12,7 @@ use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::array::{ZARR_NAN_F32, codec, data_type};
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, ZARR_NAN_F32, codec, data_type};
     use zarrs::node::Node;
     use zarrs::storage::store;
 

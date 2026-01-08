@@ -5,8 +5,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::{ArrayCodecTraits, CodecOptions};
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
 use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]

@@ -880,8 +880,7 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::{ChunkShapeTraits, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArraySubset, ChunkShapeTraits, data_type};
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{

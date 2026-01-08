@@ -3,9 +3,8 @@ use std::iter::FusedIterator;
 use itertools::izip;
 
 use super::IndicesIterator;
-use crate::array_subset::iterators::indices_iterator::IndicesIntoIterator;
-use crate::array_subset::{ArraySubset, IncompatibleIndexerError};
-use crate::ArrayIndicesTinyVec;
+use crate::iterators::indices_iterator::IndicesIntoIterator;
+use crate::{ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, IndexerError};
 
 /// Iterates over contiguous element indices in an array subset.
 ///
@@ -37,28 +36,27 @@ impl ContiguousIndices {
     /// Create a new contiguous indices iterator.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
-    pub fn new(
-        subset: &ArraySubset,
-        array_shape: &[u64],
-    ) -> Result<Self, IncompatibleIndexerError> {
+    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    pub fn new(subset: &ArraySubset, array_shape: &[u64]) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
-            return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            return Err(IndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
                 array_shape.len(),
             ));
         }
         if std::iter::zip(subset.end_exc(), array_shape).any(|(end, shape)| end > *shape) {
-            return Err(IncompatibleIndexerError::new_oob(
+            return Err(IndexerError::new_oob(
                 subset.end_exc(),
                 array_shape.to_vec(),
             ));
         }
 
         if subset.is_empty() {
-            if std::iter::zip(subset.start(), array_shape).any(|(start, shape)| start >= shape) {
+            if std::iter::zip(subset.start().iter(), array_shape)
+                .any(|(start, shape)| start >= shape)
+            {
                 // The empty subset is out-of-bounds.
-                return Err(IncompatibleIndexerError::new_oob(
+                return Err(IndexerError::new_oob(
                     subset.start().to_vec(),
                     array_shape.to_vec(),
                 ));
@@ -74,9 +72,11 @@ impl ContiguousIndices {
         let mut contiguous = true;
         let mut contiguous_elements = 1;
         let mut shape_out: Vec<u64> = Vec::with_capacity(array_shape.len());
+        let subset_start = subset.start();
+        let subset_shape = subset.shape();
         for (&subset_start, &subset_size, &array_size, shape_out_i) in izip!(
-            subset.start().iter().rev(),
-            subset.shape().iter().rev(),
+            subset_start.iter().rev(),
+            subset_shape.iter().rev(),
             array_shape.iter().rev(),
             shape_out.spare_capacity_mut().iter_mut().rev(),
         ) {
@@ -90,8 +90,7 @@ impl ContiguousIndices {
         }
         // SAFETY: each element is initialised
         unsafe { shape_out.set_len(array_shape.len()) };
-        let ranges = subset
-            .start()
+        let ranges = subset_start
             .iter()
             .zip(shape_out)
             .map(|(&st, sh)| st..(st + sh));

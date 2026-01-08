@@ -9,8 +9,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
     use futures::StreamExt;
-    use zarrs::array::{ZARR_NAN_F32, data_type};
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
     use zarrs::node::Node;
 
     // Create a store

@@ -232,7 +232,6 @@ pub mod hierarchy;
 pub mod node;
 pub mod version;
 
-pub use zarrs_chunk_grid::{array_subset, indexer};
 #[cfg(feature = "filesystem")]
 pub use zarrs_filesystem as filesystem;
 pub use {

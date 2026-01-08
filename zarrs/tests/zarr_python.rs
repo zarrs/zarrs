@@ -4,8 +4,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use zarrs::array::Array;
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArraySubset};
 use zarrs_filesystem::FilesystemStore;
 
 #[cfg(feature = "fletcher32")]
