@@ -8,11 +8,12 @@ use criterion::{
     criterion_main,
 };
 use zarrs::array::{
-    BytesRepresentation, DataType, Element, Endianness,
+    BytesRepresentation, Element, Endianness,
     codec::{
         ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
         bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
     },
+    data_type,
 };
 use zarrs_data_type::FillValue;
 
@@ -33,7 +34,7 @@ fn codec_bytes(c: &mut Criterion) {
         let num_elements = size3 / 2;
         let shape = [num_elements.try_into().unwrap(); 1];
         let data = vec![0u8; size3.try_into().unwrap()];
-        let bytes = Element::into_array_bytes(&DataType::UInt8, data).unwrap();
+        let bytes = Element::into_array_bytes(&data_type::uint16(), data).unwrap();
         group.throughput(Throughput::Bytes(size3));
         // encode and decode have the same implementation
         group.bench_function(BenchmarkId::new("encode_decode", size3), |b| {
@@ -42,7 +43,7 @@ fn codec_bytes(c: &mut Criterion) {
                     .encode(
                         bytes.clone(),
                         &shape,
-                        &DataType::UInt16,
+                        &data_type::uint16(),
                         &fill_value,
                         &CodecOptions::default(),
                     )

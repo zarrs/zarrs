@@ -14,7 +14,7 @@ fn array_write_all(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![32; 3],
-                    zarrs::array::DataType::UInt8,
+                    zarrs::array::data_type::uint8(),
                     0u8,
                 )
                 .build(store.into(), "/")
@@ -39,7 +39,7 @@ fn array_write_all_sharded(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![size; 3],
-                    zarrs::array::DataType::UInt16,
+                    zarrs::array::data_type::uint16(),
                     0u16,
                 )
                 .subchunk_shape(vec![32; 3])
@@ -65,7 +65,7 @@ fn array_read_all(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![32; 3],
-                zarrs::array::DataType::UInt16,
+                zarrs::array::data_type::uint16(),
                 0u16,
             )
             .build(store.into(), "/")
@@ -95,7 +95,7 @@ fn array_read_all_sharded(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![size; 3],
-                zarrs::array::DataType::UInt8,
+                zarrs::array::data_type::uint8(),
                 1u8,
             )
             .subchunk_shape(vec![32; 3])
