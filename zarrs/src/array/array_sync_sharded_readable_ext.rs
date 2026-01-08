@@ -723,8 +723,7 @@ mod tests {
             );
             assert_eq!(inner_chunk_grid.grid_shape(), &[4, 4]);
 
-            let compare = array
-                .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_ranges(&[4..6, 6..8]))?;
+            let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?;
             let test = array.retrieve_inner_chunk_opt::<Vec<u16>>(
                 &cache,
                 &[2, 3],
@@ -735,9 +734,7 @@ mod tests {
 
             #[cfg(feature = "ndarray")]
             {
-                let compare = array.retrieve_array_subset::<ndarray::ArrayD<u16>>(
-                    &ArraySubset::new_with_ranges(&[4..6, 6..8]),
-                )?;
+                let compare = array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[4..6, 6..8])?;
                 let test = array.retrieve_inner_chunk_opt::<ndarray::ArrayD<u16>>(
                     &cache,
                     &[2, 3],
@@ -814,8 +811,7 @@ mod tests {
             assert_eq!(array.inner_chunk_shape(), None);
             assert_eq!(inner_chunk_grid.grid_shape(), &[2, 2]);
 
-            let compare = array
-                .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_ranges(&[4..8, 4..8]))?;
+            let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?;
             let test = array.retrieve_inner_chunk_opt::<Vec<u16>>(
                 &cache,
                 &[1, 1],

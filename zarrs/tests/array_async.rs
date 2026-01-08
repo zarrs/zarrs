@@ -48,7 +48,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     // 0  0 | 0  0
     array.async_store_chunk(&[0, 0], &[1u8, 2, 0, 0]).await?;
     array.async_store_chunk(&[0, 1], &[3u8, 4, 7, 8]).await?;
-    array.async_store_array_subset(&ArraySubset::new_with_ranges(&[1..3, 0..2]), &[5u8, 6, 9, 10]).await?;
+    array.async_store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10]).await?;
 
     assert!(array.async_retrieve_chunk::<ArrayBytes>(&[0, 0, 0]).await.is_err());
     assert_eq!(array.async_retrieve_chunk::<ArrayBytes>(&[0, 0]).await?, vec![1, 2, 5, 6].into());
@@ -73,52 +73,52 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(array.async_retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0]).await?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
     assert_eq!(array.async_retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1]).await?, None);
 
-    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2])).await.is_err());
-    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..3, 0..3])).await.is_err());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2])).await?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 0..2])).await?, vec![1, 2].into());
-    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 1..2])).await?, vec![2, 6].into());
+    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2]).await.is_err());
+    assert!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).await.is_err());
+    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 0..2]).await?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..1, 0..2]).await?, vec![1, 2].into());
+    assert_eq!(array.async_retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 1..2]).await?, vec![2, 6].into());
 
-    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..3, 0..3])).await.is_err());
-    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2])).await.is_err());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2])).await?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 0..2])).await?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 1..2])).await?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).await.is_err());
+    assert!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).await.is_err());
+    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2]).await?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2]).await?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.async_retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2]).await?, ndarray::array![[2], [6]].into_dyn());
 
-    assert!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2])).await.is_err());
-    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..0, 0..0])).await?, vec![].into());
-    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..1, 0..1])).await?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 0..2])).await?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 1..2])).await?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
-    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..1, 1..3])).await?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
+    assert!(array.async_retrieve_chunks::<ArrayBytes>(&[0..2]).await.is_err());
+    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..0, 0..0]).await?, vec![].into());
+    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..1, 0..1]).await?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..2, 0..2]).await?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..2, 1..2]).await?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
+    assert_eq!(array.async_retrieve_chunks::<ArrayBytes>(&[0..1, 1..3]).await?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
 
-    assert!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2])).await.is_err());
-    assert!(array.async_retrieve_chunks::<ndarray::ArrayD<u16>>(&ArraySubset::new_with_ranges(&[0..2, 0..2])).await.is_err());
-    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2, 0..2])).await?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2, 1..2])).await?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
-    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..1, 1..3])).await?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
+    assert!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2]).await.is_err());
+    assert!(array.async_retrieve_chunks::<ndarray::ArrayD<u16>>(&[0..2, 0..2]).await.is_err());
+    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 0..2]).await?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 1..2]).await?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
+    assert_eq!(array.async_retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..1, 1..3]).await?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
 
-    assert!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..4])).await.is_err());
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..0, 0..0])).await?, vec![].into());
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 0..2])).await?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..4, 0..4])).await?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[1..3, 1..3])).await?, vec![6, 7, 10 ,0].into());
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[5..7, 5..6])).await?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..5, 0..5])).await?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
+    assert!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..4]).await.is_err());
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0]).await?, vec![].into());
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..2, 0..2]).await?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4]).await?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[1..3, 1..3]).await?, vec![6, 7, 10 ,0].into());
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[5..7, 5..6]).await?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..5, 0..5]).await?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
 
-    assert!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..4])).await.is_err());
-    assert!(array.async_retrieve_array_subset::<ndarray::ArrayD<u16>>(&ArraySubset::new_with_ranges(&[0..4, 0..4])).await.is_err());
-    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..0, 0..0])).await?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
-    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..4, 0..4])).await?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[1..3, 1..3])).await?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
-    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[5..7, 5..6])).await?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
-    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..5, 0..5])).await?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
+    assert!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4]).await.is_err());
+    assert!(array.async_retrieve_array_subset::<ndarray::ArrayD<u16>>(&[0..4, 0..4]).await.is_err());
+    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..0, 0..0]).await?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
+    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4, 0..4]).await?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[1..3, 1..3]).await?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
+    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[5..7, 5..6]).await?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
+    assert_eq!(array.async_retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..5, 0..5]).await?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
     assert!(array.async_partial_decoder(&[0]).await.is_err());
-    assert!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1]), &options).await.is_err());
-    assert_eq!(array.async_partial_decoder(&[5, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &options).await?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &options).await?, vec![1, 2].into());
-    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&ArraySubset::new_with_ranges(&[0..2, 1..2]), &options).await?, vec![2, 6].into());
+    assert!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[0..1], &options).await.is_err());
+    assert_eq!(array.async_partial_decoder(&[5, 0]).await?.partial_decode(&[0..1, 0..2], &options).await?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[0..1, 0..2], &options).await?, vec![1, 2].into());
+    assert_eq!(array.async_partial_decoder(&[0, 0]).await?.partial_decode(&[0..2, 1..2], &options).await?, vec![2, 6].into());
 
     Ok(())
 }
@@ -150,7 +150,7 @@ async fn array_str_impl(
     // Write array subset with full chunks
     array
         .async_store_array_subset(
-            &ArraySubset::new_with_ranges(&[2..4, 0..4]),
+            &[2..4, 0..4],
             &[
                 "1", "22", "333", "4444", "55555", "666666", "7777777", "88888888",
             ],
@@ -167,10 +167,7 @@ async fn array_str_impl(
 
     // Write array subset with partial chunks
     array
-        .async_store_array_subset(
-            &ArraySubset::new_with_ranges(&[1..3, 1..3]),
-            &["S1", "S22", "S333", "S4444"],
-        )
+        .async_store_array_subset(&[1..3, 1..3], &["S1", "S22", "S333", "S4444"])
         .await?;
     assert_eq!(
         array.async_retrieve_chunk::<Vec<String>>(&[0, 0]).await?,
@@ -192,7 +189,7 @@ async fn array_str_impl(
     // Write multiple chunks
     array
         .async_store_chunks(
-            &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+            &[0..1, 0..2],
             &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"],
         )
         .await?;
@@ -206,7 +203,7 @@ async fn array_str_impl(
     );
     assert_eq!(
         array
-            .async_retrieve_chunks::<Vec<String>>(&ArraySubset::new_with_ranges(&[0..1, 0..2]))
+            .async_retrieve_chunks::<Vec<String>>(&[0..1, 0..2])
             .await?,
         &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"]
     );
@@ -214,10 +211,7 @@ async fn array_str_impl(
     // Full chunk requests
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[
-                0..4,
-                0..4
-            ]))
+            .async_retrieve_array_subset::<Vec<String>>(&[0..4, 0..4])
             .await?,
         &[
             "a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333", //
@@ -228,10 +222,7 @@ async fn array_str_impl(
     // Partial chunk requests
     assert_eq!(
         array
-            .async_retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[
-                1..3,
-                1..3
-            ]))
+            .async_retrieve_array_subset::<Vec<String>>(&[1..3, 1..3])
             .await?,
         &["C11", "C222", "S333", "S4444"]
     );
@@ -239,13 +230,13 @@ async fn array_str_impl(
     // Incompatible chunks / bytes
     assert!(
         array
-            .async_store_chunks(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
+            .async_store_chunks(&[0..0, 0..2], &["a", "bb"])
             .await
             .is_err()
     );
     assert!(
         array
-            .async_store_chunks(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
+            .async_store_chunks(&[0..1, 0..2], &["a", "bb"])
             .await
             .is_err()
     );

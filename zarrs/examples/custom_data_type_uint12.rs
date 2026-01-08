@@ -265,10 +265,7 @@ fn main() {
         let element = CustomDataTypeUInt12Element::try_from(i as u64).unwrap();
         assert_eq!(data[i], element);
         let element_pd: Vec<CustomDataTypeUInt12Element> = array
-            .retrieve_array_subset(&ArraySubset::new_with_ranges(&[
-                (i as u64)..i as u64 + 1,
-                0..1,
-            ]))
+            .retrieve_array_subset(&[(i as u64)..i as u64 + 1, 0..1])
             .unwrap();
         assert_eq!(element_pd[0], element);
     }

@@ -394,9 +394,7 @@ mod tests {
         );
 
         assert_eq!(
-            chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..5, 2..6]))
-                .unwrap(),
+            chunk_grid.chunks_subset(&[1..5, 2..6]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[5..45, 20..60]))
         );
 

@@ -370,21 +370,15 @@ mod tests {
             );
 
             assert_eq!(
-                chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3, 1..2, 5..8]),)
-                    .unwrap(),
+                chunk_grid.chunks_subset(&[1..3, 1..2, 5..8],).unwrap(),
                 Some(ArraySubset::new_with_ranges(&[1..3, 2..4, 15..24]))
             );
 
-            assert!(
-                chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
-                    .is_err()
-            );
+            assert!(chunk_grid.chunks_subset(&[1..3]).is_err());
 
             assert!(
                 chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
+                    .chunks_subset(&[0..0, 0..0, 0..0],)
                     .unwrap()
                     .unwrap()
                     .is_empty()

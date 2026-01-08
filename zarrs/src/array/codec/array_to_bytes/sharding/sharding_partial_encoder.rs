@@ -211,6 +211,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         ));
 
         // Get all the inner chunks that need to be updated
+        let chunk_subset_start = chunk_subset_indexer.start();
+        let chunk_subset_end_exc = chunk_subset_indexer.end_exc();
         inner_chunks_indices.extend(inner_chunks.iter().filter_map(
             |inner_chunk_indices: ArrayIndicesTinyVec| {
                 let inner_chunk_subset = self
@@ -222,13 +224,13 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 if inner_chunk_subset
                     .start()
                     .iter()
-                    .zip(chunk_subset_indexer.start())
+                    .zip(chunk_subset_start.iter())
                     .any(|(a, b)| a < b)
                     || inner_chunk_subset
                         .end_exc()
                         .iter()
-                        .zip(chunk_subset_indexer.end_exc())
-                        .any(|(a, b)| *a > b)
+                        .zip(chunk_subset_end_exc.iter())
+                        .any(|(a, b)| *a > *b)
                 {
                     let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard)
                         .expect("inbounds chunk");
@@ -304,6 +306,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         #[cfg(target_arch = "wasm32")]
         let mut iterator = inner_chunks.indices().into_iter();
 
+        let chunk_subset_start = chunk_subset_indexer.start();
+        let chunk_subset_shape = chunk_subset_indexer.shape();
         iterator.try_for_each(|inner_chunk_indices: ArrayIndicesTinyVec| {
             // Extract the inner chunk bytes that overlap with the chunk subset
             let inner_chunk_index =
@@ -316,9 +320,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
             let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
                 &inner_chunk_subset_overlap
-                    .relative_to(chunk_subset_indexer.start())
+                    .relative_to(&chunk_subset_start)
                     .unwrap(),
-                chunk_subset_indexer.shape(),
+                &chunk_subset_shape,
                 &self.data_type,
             )?;
 

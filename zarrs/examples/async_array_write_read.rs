@@ -97,7 +97,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Store multiple chunks
     array
         .async_store_chunks(
-            &ArraySubset::new_with_ranges(&[1..2, 0..2]),
+            &[1..2, 0..2],
             &[
                 //
                 1.0f32, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1,
@@ -112,7 +112,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Write a subset spanning multiple chunks, including updating chunks already written
     array
         .async_store_array_subset(
-            &ArraySubset::new_with_ranges(&[3..6, 3..6]),
+            &[3..6, 3..6],
             &[-3.3, -3.4, -3.5, -4.3, -4.4, -4.5, -5.3, -5.4, -5.5],
         )
         .await?;
@@ -122,7 +122,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Store array subset
     array
         .async_store_array_subset(
-            &ArraySubset::new_with_ranges(&[0..8, 6..7]),
+            &[0..8, 6..7],
             &[-0.6f32, -1.6, -2.6, -3.6, -4.6, -5.6, -6.6, -7.6],
         )
         .await?;
@@ -135,7 +135,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             // chunk indices
             &[1, 1],
             // subset within chunk
-            &ArraySubset::new_with_ranges(&[3..4, 0..4]),
+            &[3..4, 0..4],
             &[-7.4f32, -7.5, -7.6, -7.7],
         )
         .await?;

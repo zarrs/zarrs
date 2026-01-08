@@ -4,7 +4,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::{
-    ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetTraits,
+    ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits,
     IncompatibleDimensionalityError, MaybeSend, MaybeSync,
 };
 
@@ -111,10 +111,10 @@ pub trait Indexer: MaybeSend + MaybeSync {
         Ok(Box::new(byte_ranges))
     }
 
-    /// Return the indexer as an [`ArraySubset`].
+    /// Return the indexer as an [`ArraySubsetTraits`].
     ///
-    /// Returns [`None`] if the indexer is not an [`ArraySubset`].
-    fn as_array_subset(&self) -> Option<&ArraySubset> {
+    /// Returns [`None`] if the indexer does not represent a contiguous array subset.
+    fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         None
     }
 }
@@ -148,6 +148,10 @@ impl<T: Indexer> Indexer for &T {
         array_shape: &[u64],
     ) -> Result<Box<dyn IndexerIterator<Item = (u64, u64)>>, IndexerError> {
         (**self).iter_contiguous_linearised_indices(array_shape)
+    }
+
+    fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
+        (**self).as_array_subset()
     }
 }
 
@@ -511,5 +515,44 @@ impl<const N: usize> Indexer for [Range<u64>; N] {
                 .contiguous_linearised_indices(array_shape)?
                 .into_iter(),
         ))
+    }
+
+    fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
+        Some(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ArraySubset;
+
+    /// Test `as_array_subset` is Some for types implementing ArraySubsetTraits.
+    #[test]
+    fn test_as_array_subset() {
+        let subset = ArraySubset::new_with_shape(vec![10, 10]);
+
+        // Direct call on concrete type
+        assert!(subset.as_array_subset().is_some());
+
+        // Call through &ArraySubset (via impl<T: Indexer> Indexer for &T)
+        let ref_subset: &ArraySubset = &subset;
+        assert!(ref_subset.as_array_subset().is_some());
+
+        // Call through &dyn ArraySubsetTraits
+        let dyn_ref: &dyn ArraySubsetTraits = &subset;
+        assert!(dyn_ref.as_array_subset().is_some());
+
+        // Call through &dyn Indexer from ArraySubset
+        let indexer_ref: &dyn Indexer = &subset;
+        assert!(indexer_ref.as_array_subset().is_some());
+
+        // Range array also supports as_array_subset
+        let ranges: [Range<u64>; 2] = [0..10, 0..10];
+        assert!(ranges.as_array_subset().is_some());
+
+        // Reference to range array
+        let ranges_ref: &[Range<u64>; 2] = &ranges;
+        assert!(ranges_ref.as_array_subset().is_some());
     }
 }

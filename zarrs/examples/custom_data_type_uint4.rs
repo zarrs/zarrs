@@ -9,8 +9,8 @@ use std::sync::Arc;
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, ArraySubset, DataType, DataTypeSize, Element,
-    ElementOwned, FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
+    FillValueMetadataV3,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
@@ -273,9 +273,7 @@ fn main() {
     assert_eq!(data[4], CustomDataTypeUInt4Element::try_from(5).unwrap());
     assert_eq!(data[5], CustomDataTypeUInt4Element::try_from(15).unwrap());
 
-    let data: Vec<CustomDataTypeUInt4Element> = array
-        .retrieve_array_subset(&ArraySubset::new_with_ranges(&[1..3, 0..1]))
-        .unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> = array.retrieve_array_subset(&[1..3, 0..1]).unwrap();
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(2).unwrap());
     assert_eq!(data[1], CustomDataTypeUInt4Element::try_from(3).unwrap());
 }

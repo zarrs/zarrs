@@ -1383,7 +1383,7 @@ mod tests {
 
         array
             .store_array_subset(
-                &ArraySubset::new_with_ranges(&[3..6, 3..6]),
+                &[3..6, 3..6],
                 &[1.0f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
             )
             .unwrap();

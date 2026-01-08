@@ -17,7 +17,7 @@ use crate::iterators::{
 use thiserror::Error;
 
 use crate::indexer::{Indexer, IndexerError, IndexerIterator};
-use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ChunkShape};
+use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits, ChunkShape};
 
 /// An incompatible start/end indices error.
 #[derive(Clone, Debug, Error)]
@@ -312,7 +312,7 @@ impl Indexer for ArraySubset {
         ))
     }
 
-    fn as_array_subset(&self) -> Option<&ArraySubset> {
+    fn as_array_subset(&self) -> Option<&dyn ArraySubsetTraits> {
         Some(self)
     }
 }
@@ -357,11 +357,11 @@ mod tests {
         assert!(array_subset0.inbounds_shape(&[10, 10]));
         assert!(!array_subset0.inbounds_shape(&[2, 2]));
         assert!(!array_subset0.inbounds_shape(&[10, 10, 10]));
-        assert!(array_subset0.inbounds(&ArraySubset::new_with_ranges(&[0..6, 1..7])));
-        assert!(array_subset0.inbounds(&ArraySubset::new_with_ranges(&[1..5, 2..6])));
-        assert!(!array_subset0.inbounds(&ArraySubset::new_with_ranges(&[2..5, 2..6])));
-        assert!(!array_subset0.inbounds(&ArraySubset::new_with_ranges(&[1..5, 2..5])));
-        assert!(!array_subset0.inbounds(&ArraySubset::new_with_ranges(&[2..5])));
+        assert!(array_subset0.inbounds(&[0..6, 1..7]));
+        assert!(array_subset0.inbounds(&[1..5, 2..6]));
+        assert!(!array_subset0.inbounds(&[2..5, 2..6]));
+        assert!(!array_subset0.inbounds(&[1..5, 2..5]));
+        assert!(!array_subset0.inbounds(&[2..5]));
         assert_eq!(array_subset0.to_ranges(), vec![1..5, 2..6]);
 
         let array_subset2 = ArraySubset::new_with_ranges(&[3..6, 4..7, 0..1]);
