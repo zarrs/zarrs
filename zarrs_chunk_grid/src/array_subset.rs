@@ -8,22 +8,18 @@
 //!  - computing the byte ranges of array subsets within an array with a fixed element size.
 
 pub mod iterators;
-use std::{
-    fmt::{Debug, Display},
-    mem::size_of,
-    num::NonZeroU64,
-    ops::Range,
-};
+use std::fmt::{Debug, Display};
+use std::mem::size_of;
+use std::num::NonZeroU64;
+use std::ops::Range;
 
 use derive_more::From;
 use iterators::{ContiguousIndices, ContiguousLinearisedIndices, Indices, LinearisedIndices};
 use itertools::izip;
 use thiserror::Error;
 
-use crate::{
-    indexer::{IncompatibleIndexerError, Indexer, IndexerIterator},
-    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ChunkShape,
-};
+use crate::indexer::{IncompatibleIndexerError, Indexer, IndexerIterator};
+use crate::{ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ChunkShape};
 
 /// An array subset.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]

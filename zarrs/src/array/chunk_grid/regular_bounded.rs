@@ -34,15 +34,11 @@ use zarrs_plugin::ExtensionIdentifier;
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
 
-use crate::{
-    array::{
-        ArrayIndices, ArrayShape, ChunkShape,
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-    },
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::metadata::v3::MetadataV3;
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the chunk grid.
 inventory::submit! {

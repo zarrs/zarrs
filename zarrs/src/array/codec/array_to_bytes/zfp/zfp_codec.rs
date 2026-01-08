@@ -1,4 +1,5 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use zarrs_plugin::PluginCreateError;
 use zfp_sys::{
@@ -10,19 +11,19 @@ use zfp_sys::{
     // zfp_exec_policy_zfp_exec_omp, zfp_stream_set_execution
 };
 
+use super::zfp_bitstream::ZfpBitstream;
+use super::zfp_field::ZfpField;
+use super::zfp_stream::ZfpStream;
 use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, promote_before_zfp_encoding,
-    zarr_to_zfp_data_type, zfp_bitstream::ZfpBitstream, zfp_decode, zfp_field::ZfpField,
-    zfp_stream::ZfpStream,
+    zarr_to_zfp_data_type, zfp_decode,
 };
-use crate::array::{
-    BytesRepresentation, DataType, FillValue,
-    codec::{
-        ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-        CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-        PartialEncoderCapability, RecommendedConcurrency,
-    },
+use crate::array::codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{BytesRepresentation, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::zfp::ZfpMode;
 use std::num::NonZeroU64;

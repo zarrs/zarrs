@@ -1,27 +1,22 @@
 //! Tests for generic indexers.
 #![cfg(feature = "async")]
 
-use std::{
-    num::NonZeroU64,
-    sync::{Arc, Mutex},
-};
+use std::num::NonZeroU64;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
+use zarrs::array::codec::{
+    ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
+};
 #[cfg(feature = "transpose")]
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
-use zarrs::{
-    array::{
-        ArrayIndices, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
-        ElementOwned,
-        codec::{
-            ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits,
-            BytesPartialEncoderTraits, CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
-        },
-        data_type,
-    },
-    array_subset::ArraySubset,
-    indexer::{IncompatibleIndexerError, Indexer},
+use zarrs::array::{
+    ArrayIndices, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
+    ElementOwned, data_type,
 };
+use zarrs::array_subset::ArraySubset;
+use zarrs::indexer::{IncompatibleIndexerError, Indexer};
 use zarrs_data_type::FillValue;
 
 fn indexer_basic<T: Indexer>(

@@ -44,15 +44,13 @@ use std::sync::Arc;
 pub use pcodec_codec::PcodecCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -153,19 +151,17 @@ pub use _impl_pcodec_codec as impl_pcodec_codec;
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue,
-            codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions},
-            data_type,
-            data_type::DataTypeExt,
-            transmute_to_bytes_vec,
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{
+        ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
+        transmute_to_bytes_vec,
     };
+    use crate::array_subset::ArraySubset;
 
     const JSON_VALID: &str = r#"{
         "level": 8,

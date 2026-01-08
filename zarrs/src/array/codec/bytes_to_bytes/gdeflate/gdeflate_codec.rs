@@ -1,4 +1,5 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use zarrs_plugin::PluginCreateError;
 
@@ -6,13 +7,11 @@ use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency,
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability,
-    },
+use crate::array::codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
 use crate::metadata::Configuration;
 use zarrs_plugin::ExtensionIdentifier;
 

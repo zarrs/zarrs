@@ -1,4 +1,5 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use num::Integer;
 
@@ -7,15 +8,13 @@ use super::{CHECKSUM_SIZE, Fletcher32CodecConfiguration, Fletcher32CodecConfigur
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation,
-    codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-        bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder,
-    },
+use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
+use crate::array::codec::{
+    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use zarrs_plugin::ExtensionIdentifier;
 

@@ -1603,8 +1603,7 @@ mod compatibility_matrix {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use zarrs::array::codec;
-    use zarrs::array::data_type;
+    use zarrs::array::{codec, data_type};
     use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
     /// Get codecs for a specific category from `registered_codecs`

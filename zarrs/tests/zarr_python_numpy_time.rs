@@ -1,7 +1,8 @@
 #![allow(missing_docs)]
 #![allow(unused)]
 
-use std::{error::Error, sync::Arc};
+use std::error::Error;
+use std::sync::Arc;
 
 use zarrs::array::data_type;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;

@@ -98,7 +98,8 @@
 mod vlen_codec;
 mod vlen_partial_decoder;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
@@ -107,20 +108,19 @@ use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
 use zarrs_plugin::ExtensionIdentifier;
 
 use super::bytes::reverse_endianness;
-use crate::array::{
-    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness,
-    codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice, data_type,
+use crate::array::codec::{
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPlugin, InvalidBytesLengthError,
 };
+use crate::array::{
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
+    data_type,
+};
+use crate::metadata::v3::MetadataV3;
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {

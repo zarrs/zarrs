@@ -3,14 +3,12 @@ use std::sync::Arc;
 use codec::CodecChain;
 
 use super::{ShardingCodec, ShardingIndexLocation};
-use crate::array::{
-    ChunkShape, DataType,
-    codec::{
-        self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-        NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
-        default_array_to_bytes_codec,
-    },
+use crate::array::codec::{
+    self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
+    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
+    default_array_to_bytes_codec,
 };
+use crate::array::{ChunkShape, DataType};
 
 /// A [`ShardingCodec`] builder.
 ///

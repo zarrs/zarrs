@@ -6,11 +6,9 @@ macro_rules! vlen_v2_module {
 
         pub use $module_codec::$struct;
 
-        use crate::{
-            array::codec::{Codec, CodecPlugin},
-            metadata::v3::MetadataV3,
-            plugin::{PluginCreateError, PluginMetadataInvalidError},
-        };
+        use crate::array::codec::{Codec, CodecPlugin};
+        use crate::metadata::v3::MetadataV3;
+        use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
         use zarrs_plugin::ExtensionIdentifier;
 
         // Register the codec.
@@ -248,5 +246,4 @@ macro_rules! vlen_v2_codec {
     };
 }
 
-pub(crate) use vlen_v2_codec;
-pub(crate) use vlen_v2_module;
+pub(crate) use {vlen_v2_codec, vlen_v2_module};

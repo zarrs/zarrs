@@ -37,7 +37,9 @@ mod uint;
 mod uint2;
 mod uint4;
 
-use std::{borrow::Cow, num::NonZeroU32, sync::Arc};
+use std::borrow::Cow;
+use std::num::NonZeroU32;
+use std::sync::Arc;
 
 use zarrs_metadata::DataTypeSize;
 use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};

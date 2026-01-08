@@ -1,4 +1,6 @@
-use std::{borrow::Cow, ffi::c_char, sync::Arc};
+use std::borrow::Cow;
+use std::ffi::c_char;
+use std::sync::Arc;
 
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
 
@@ -9,18 +11,14 @@ use super::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
-use crate::metadata::Configuration;
-use crate::{
-    array::{
-        ArrayBytesRaw, BytesRepresentation,
-        codec::{
-            BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-            CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-            RecommendedConcurrency,
-        },
-    },
-    plugin::PluginCreateError,
+use crate::array::codec::{
+    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::metadata::Configuration;
+use crate::plugin::PluginCreateError;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `blosc` codec implementation.

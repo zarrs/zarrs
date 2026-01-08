@@ -1,31 +1,30 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::array_bytes::{
+    build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
+    merge_chunks_vlen_optional, optional_nesting_depth,
+};
+use super::codec::{
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecOptions, StoragePartialDecoder,
+};
+use super::concurrency::concurrency_chunks_and_codec;
+use super::element::ElementOwned;
 use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
     ArrayMetadata, ArrayMetadataV3, DataType, DataTypeExt, FromArrayBytes,
-    array_bytes::{
-        build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
-        merge_chunks_vlen_optional, optional_nesting_depth,
-    },
-    codec::{
-        ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
-        CodecOptions, StoragePartialDecoder,
-    },
-    concurrency::concurrency_chunks_and_codec,
-    element::ElementOwned,
 };
+use crate::array::{ArrayBytes, ArrayMetadataV2};
+use crate::array_subset::ArraySubset;
+use crate::config::MetadataRetrieveVersion;
 use crate::iter_concurrent_limit;
-use crate::{
-    array::{ArrayBytes, ArrayMetadataV2},
-    array_subset::ArraySubset,
-    config::MetadataRetrieveVersion,
-    node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3},
-    storage::{ReadableStorageTraits, StorageError, StorageHandle},
-};
+use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
+use crate::storage::{ReadableStorageTraits, StorageError, StorageHandle};
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Open an existing array in `storage` at `path` with default [`MetadataRetrieveVersion`].

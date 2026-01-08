@@ -1,30 +1,21 @@
 // TODO: reshape partial decoder
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncArrayPartialDecoderTraits;
-use crate::array::{
-    DataType, FillValue,
-    codec::{
-        ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, PartialDecoderCapability,
-        PartialEncoderCapability,
-    },
+use crate::array::codec::{
+    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
-use crate::{
-    array::{
-        ChunkShape,
-        codec::{
-            ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError,
-            CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency,
-        },
-    },
-    plugin::PluginCreateError,
-};
+use crate::plugin::PluginCreateError;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A `reshape` codec implementation.

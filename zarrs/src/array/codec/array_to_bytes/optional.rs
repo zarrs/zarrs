@@ -91,14 +91,12 @@ use std::sync::Arc;
 pub use optional_codec::OptionalCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {

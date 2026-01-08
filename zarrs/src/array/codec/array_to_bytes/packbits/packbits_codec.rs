@@ -3,29 +3,32 @@
 // FIXME: This codec was really hacked together.
 // It can probably be written much cleaner and with simpler logic.
 
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use num::Integer;
 use zarrs_plugin::PluginCreateError;
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
+use super::packbits_partial_decoder::PackBitsPartialDecoder;
 use super::{
     PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
-    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
+    pack_bits_components,
+};
+use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
+use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::array::data_type::DataTypeExt;
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
-    codec::{
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
-    },
-    data_type::DataTypeExt,
 };
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;

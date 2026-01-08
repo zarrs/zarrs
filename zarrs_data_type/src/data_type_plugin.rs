@@ -74,7 +74,8 @@ pub fn unregister_data_type(handle: &DataTypeRuntimeRegistryHandle) -> bool {
 mod tests {
     use std::sync::Arc;
 
-    use zarrs_metadata::{v3::FillValueMetadataV3, Configuration, DataTypeSize};
+    use zarrs_metadata::v3::FillValueMetadataV3;
+    use zarrs_metadata::{Configuration, DataTypeSize};
     use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
     use super::*;

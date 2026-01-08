@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use super::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StorePrefix, WritableStorageTraits,
-};
+use super::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use super::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
+};
+use super::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
+    StorageError, StoreKey, StorePrefix, WritableStorageTraits,
 };
 use crate::OffsetBytesIterator;
 
@@ -204,7 +205,8 @@ mod tests {
     use std::error::Error;
 
     use super::*;
-    use crate::{store::MemoryStore, StorageHandle};
+    use crate::store::MemoryStore;
+    use crate::StorageHandle;
 
     #[test]
     fn memory_storage_handle() -> Result<(), Box<dyn Error>> {

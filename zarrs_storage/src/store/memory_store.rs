@@ -5,8 +5,8 @@ use std::sync::Mutex;
 
 use bytes::BytesMut;
 
+use crate::byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
-    byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
     Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
@@ -191,7 +191,8 @@ impl ListableStorageTraits for MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    use std::{error::Error, sync::Arc};
+    use std::error::Error;
+    use std::sync::Arc;
 
     use super::*;
     use crate::ReadableWritableListableStorageTraits;

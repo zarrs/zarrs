@@ -1,8 +1,6 @@
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-    sync::Arc,
-};
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 use flate2::bufread::{GzDecoder, GzEncoder};
 
@@ -10,13 +8,11 @@ use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation,
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
+use crate::array::codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 

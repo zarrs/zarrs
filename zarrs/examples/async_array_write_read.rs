@@ -2,19 +2,16 @@
 
 use futures::TryStreamExt;
 use ndarray::ArrayD;
-use zarrs::storage::{
-    AsyncReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
-};
+use zarrs::storage::AsyncReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
     use futures::StreamExt;
-    use zarrs::{
-        array::{ZARR_NAN_F32, data_type},
-        array_subset::ArraySubset,
-        node::Node,
-    };
+    use zarrs::array::{ZARR_NAN_F32, data_type};
+    use zarrs::array_subset::ArraySubset;
+    use zarrs::node::Node;
 
     // Create a store
     let mut store: AsyncReadableWritableListableStorage = Arc::new(

@@ -14,16 +14,16 @@ use std::sync::{Arc, LazyLock};
 pub use storage_transformer_chain::StorageTransformerChain;
 use zarrs_plugin::{Plugin2, PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry};
 
+use crate::metadata::v3::MetadataV3;
+use crate::node::NodePath;
+use crate::plugin::{PluginCreateError, ZarrVersions};
 #[cfg(feature = "async")]
 use crate::storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
-use crate::storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
-use crate::{
-    metadata::v3::MetadataV3,
-    node::NodePath,
-    plugin::{PluginCreateError, ZarrVersions},
-    storage::{ListableStorage, ReadableStorage, StorageError, WritableStorage},
+use crate::storage::{
+    ListableStorage, MaybeSend, MaybeSync, ReadableStorage, ReadableWritableStorage, StorageError,
+    WritableStorage,
 };
 
 /// An [`Arc`] wrapped storage transformer.

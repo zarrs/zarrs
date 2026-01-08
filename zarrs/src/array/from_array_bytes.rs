@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use super::{ArrayBytes, ArrayError, DataType, element::ElementOwned};
+use super::element::ElementOwned;
+use super::{ArrayBytes, ArrayError, DataType};
 
 /// A trait for types that can be constructed from [`ArrayBytes`], an array shape and a [`DataType`].
 pub trait FromArrayBytes: Sized {

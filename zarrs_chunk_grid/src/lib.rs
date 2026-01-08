@@ -23,10 +23,8 @@ pub type ArrayIndices = Vec<u64>;
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
 pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 
-use array_subset::{
-    iterators::{IndicesIntoIterator, ParIndicesIntoIterator},
-    ArraySubset, IncompatibleDimensionalityError,
-};
+use array_subset::iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
+use array_subset::{ArraySubset, IncompatibleDimensionalityError};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
     MaybeSend, MaybeSync, Plugin2, PluginCreateError, PluginUnsupportedError, RuntimePlugin2,

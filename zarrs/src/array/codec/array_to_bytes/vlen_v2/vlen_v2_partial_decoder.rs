@@ -1,14 +1,15 @@
 // TODO: Support actual partial decoding, coalescing required
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
+use crate::array::array_bytes::extract_decoded_regions_vlen;
+use crate::array::codec::{
+    ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use crate::array::{
-    ArrayBytes, ArrayBytesRaw, DataType, FillValue,
-    array_bytes::extract_decoded_regions_vlen,
-    codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-};
+use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
 use crate::storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.

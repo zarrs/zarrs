@@ -1,30 +1,29 @@
 //! An array to bytes codec formed by joining an array to array sequence, array to bytes, and bytes to bytes sequence of codecs.
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
+use crate::array::codec::{
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderCache, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, NamedArrayToArrayCodec, NamedArrayToBytesCodec,
+    NamedBytesToBytesCodec, PartialDecoderCapability, PartialEncoderCapability,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::{
-    array::{
-        ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShape, DataType, FillValue,
-        codec::{
-            ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
-            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-            ArrayToBytesCodecTraits, BytesPartialDecoderCache, BytesPartialDecoderTraits,
-            BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError,
-            CodecMetadataOptions, CodecOptions, CodecTraits, NamedArrayToArrayCodec,
-            NamedArrayToBytesCodec, NamedBytesToBytesCodec, PartialDecoderCapability,
-            PartialEncoderCapability,
-        },
-        concurrency::RecommendedConcurrency,
-        data_type::DataTypeExt,
-    },
-    metadata::{Configuration, v3::MetadataV3},
-    plugin::PluginCreateError,
+use crate::array::concurrency::RecommendedConcurrency;
+use crate::array::data_type::DataTypeExt;
+use crate::array::{
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShape, DataType, FillValue,
 };
+use crate::metadata::Configuration;
+use crate::metadata::v3::MetadataV3;
+use crate::plugin::PluginCreateError;
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
@@ -881,10 +880,8 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::{
-        array::{ChunkShapeTraits, data_type},
-        array_subset::ArraySubset,
-    };
+    use crate::array::{ChunkShapeTraits, data_type};
+    use crate::array_subset::ArraySubset;
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{

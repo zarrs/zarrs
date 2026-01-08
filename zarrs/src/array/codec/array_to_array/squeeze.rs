@@ -30,25 +30,22 @@
 mod squeeze_codec;
 mod squeeze_codec_partial;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::ArrayIndices;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::array_subset::ArraySubset;
+use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use crate::{
-    array::{
-        ArrayIndices,
-        codec::{Codec, CodecError, CodecPlugin},
-    },
-    array_subset::ArraySubset,
-    indexer::{IncompatibleIndexerError, Indexer},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -121,18 +118,16 @@ fn get_squeezed_indexer(
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            ArrayBytes, ChunkShapeTraits, DataType, FillValue,
-            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
-            data_type,
-            data_type::DataTypeExt,
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::{
+        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
+    use crate::array_subset::ArraySubset;
 
     fn codec_squeeze_round_trip_impl(
         json: &str,

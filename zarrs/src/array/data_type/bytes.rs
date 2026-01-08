@@ -30,7 +30,8 @@ impl zarrs_data_type::DataTypeTraits for BytesDataType {
         &self,
         fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        use base64::{Engine, prelude::BASE64_STANDARD};
+        use base64::Engine;
+        use base64::prelude::BASE64_STANDARD;
         let err = || {
             zarrs_data_type::DataTypeFillValueMetadataError::new(
                 self.identifier().to_string(),

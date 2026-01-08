@@ -48,18 +48,14 @@ use std::sync::Arc;
 pub use gdeflate_codec::GDeflateCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::ArrayBytesRaw;
+use crate::array::codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use crate::{
-    array::{
-        ArrayBytesRaw,
-        codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError},
-    },
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -267,16 +263,13 @@ impl Drop for GDeflateDecompressor {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            BytesRepresentation,
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-        },
-        storage::byte_range::ByteRange,
-    };
+    use crate::array::BytesRepresentation;
+    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
         "level": 1

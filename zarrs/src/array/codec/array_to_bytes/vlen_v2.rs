@@ -39,16 +39,11 @@ use zarrs_plugin::ExtensionIdentifier;
 use super::vlen_array::VlenArrayCodec;
 use super::vlen_bytes::VlenBytesCodec;
 use super::vlen_utf8::VlenUtf8Codec;
-use crate::array::{
-    ArrayBytesRaw,
-    codec::{CodecError, InvalidBytesLengthError},
-};
+use crate::array::ArrayBytesRaw;
+use crate::array::codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError};
+use crate::metadata::v3::MetadataV3;
 use crate::metadata_ext::codec::vlen_v2::{self};
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {

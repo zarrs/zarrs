@@ -3,26 +3,21 @@ use std::sync::Arc;
 
 use derive_more::From;
 
+use super::chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding};
+use super::codec::{
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
+    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
+};
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
-    chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding},
-    codec::{
-        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-        NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
-    },
 };
-use crate::{
-    array::{
-        ArrayMetadataOptions, ChunkGrid,
-        codec::{CodecOptions, NamedCodec},
-    },
-    node::NodePath,
-};
-use crate::{
-    config::global_config,
-    metadata::{ChunkKeySeparator, IntoDimensionName, v3::AdditionalFieldsV3},
-};
+use crate::array::codec::{CodecOptions, NamedCodec};
+use crate::array::{ArrayMetadataOptions, ChunkGrid};
+use crate::config::global_config;
+use crate::metadata::v3::AdditionalFieldsV3;
+use crate::metadata::{ChunkKeySeparator, IntoDimensionName};
+use crate::node::NodePath;
 
 mod array_builder_chunk_grid;
 pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
@@ -604,17 +599,13 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
+    use crate::array::chunk_grid::{ChunkGridTraits, RegularChunkGrid};
+    use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
+    use crate::array::{ChunkGrid, data_type};
     use crate::metadata::v3::{FillValueMetadataV3, MetadataV3};
     use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-    use crate::{
-        array::{
-            ChunkGrid,
-            chunk_grid::{ChunkGridTraits, RegularChunkGrid},
-            chunk_key_encoding::V2ChunkKeyEncoding,
-            data_type,
-        },
-        storage::{storage_adapter::usage_log::UsageLogStorageAdapter, store::MemoryStore},
-    };
+    use crate::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
+    use crate::storage::store::MemoryStore;
 
     #[test]
     fn array_builder() {

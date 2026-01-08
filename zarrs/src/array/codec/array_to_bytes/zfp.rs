@@ -107,21 +107,17 @@ use zfp_sys::{
     zfp_stream_set_bit_stream, zfp_stream_set_execution,
 };
 
-use self::{
-    zfp_array::ZfpArray, zfp_bitstream::ZfpBitstream, zfp_field::ZfpField, zfp_stream::ZfpStream,
-};
+use self::zfp_array::ZfpArray;
+use self::zfp_bitstream::ZfpBitstream;
+use self::zfp_field::ZfpField;
+use self::zfp_stream::ZfpStream;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::zfp::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode,
 };
-use crate::{
-    array::{
-        ChunkShapeTraits, DataType,
-        codec::{Codec, CodecError, CodecPlugin},
-        convert_from_bytes_slice, transmute_to_bytes_vec,
-    },
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -492,23 +488,19 @@ fn zfp_decode(
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use num::traits::AsPrimitive;
 
     use super::*;
-    use crate::{
-        array::{
-            ArrayBytes, ChunkShape, ChunkShapeTraits, CodecChain, FillValue,
-            codec::{
-                ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
-                array_to_array::squeeze::SqueezeCodec,
-            },
-            data_type,
-            element::ElementOwned,
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
+    use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
+    use crate::array::element::ElementOwned;
+    use crate::array::{
+        ArrayBytes, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
+    use crate::array_subset::ArraySubset;
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"

@@ -1,4 +1,5 @@
-use std::{borrow::Cow, ops::Deref};
+use std::borrow::Cow;
+use std::ops::Deref;
 
 use derive_more::derive::Display;
 use thiserror::Error;

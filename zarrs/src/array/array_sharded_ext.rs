@@ -1,4 +1,5 @@
-use super::{Array, ArrayShape, ChunkGrid, ChunkShape, codec::ShardingCodecConfiguration};
+use super::codec::ShardingCodecConfiguration;
+use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
 use crate::metadata::ConfigurationSerialize;
 use zarrs_plugin::ExtensionIdentifier;

@@ -3,10 +3,12 @@
 
 use std::sync::Arc;
 
+use zarrs::filesystem::FilesystemStore;
+use zarrs::group::Group;
 use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
+use zarrs::node::Node;
 #[cfg(feature = "async")]
 use zarrs::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
-use zarrs::{filesystem::FilesystemStore, group::Group, node::Node};
 
 fn sync_store() -> Arc<FilesystemStore> {
     Arc::new(

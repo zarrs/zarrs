@@ -1,34 +1,26 @@
 //! Zarr V2 to V3 conversion.
 
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use thiserror::Error;
 #[cfg(feature = "blosc")]
 use zarrs_metadata::DataTypeSize;
-use zarrs_metadata::{
-    Endianness,
-    v2::{
-        ArrayMetadataV2, ArrayMetadataV2Order, DataTypeMetadataV2,
-        DataTypeMetadataV2EndiannessError, FillValueMetadataV2, GroupMetadataV2, MetadataV2,
-        data_type_metadata_v2_to_endianness,
-    },
-    v3::{ArrayMetadataV3, FillValueMetadataV3, GroupMetadataV3, MetadataV3},
+use zarrs_metadata::Endianness;
+use zarrs_metadata::v2::{
+    ArrayMetadataV2, ArrayMetadataV2Order, DataTypeMetadataV2, DataTypeMetadataV2EndiannessError,
+    FillValueMetadataV2, GroupMetadataV2, MetadataV2, data_type_metadata_v2_to_endianness,
 };
+use zarrs_metadata::v3::{ArrayMetadataV3, FillValueMetadataV3, GroupMetadataV3, MetadataV3};
 use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
-use crate::{
-    array::{
-        chunk_grid::RegularChunkGrid,
-        chunk_key_encoding::V2ChunkKeyEncoding,
-        codec::{BytesCodec, CodecPlugin, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec},
-        data_type,
-    },
-    metadata_ext::{
-        chunk_grid::regular::RegularChunkGridConfiguration,
-        chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration,
-        codec::bytes::BytesCodecConfigurationV1,
-    },
-};
+use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
+use crate::array::codec::{BytesCodec, CodecPlugin, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec};
+use crate::array::data_type;
+use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
+use crate::metadata_ext::codec::bytes::BytesCodecConfigurationV1;
 
 #[cfg(feature = "blosc")]
 use crate::{

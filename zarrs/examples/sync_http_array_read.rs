@@ -3,17 +3,13 @@
 use ndarray::ArrayD;
 use std::sync::Arc;
 
-use zarrs::{
-    array::Array,
-    array_subset::ArraySubset,
-    storage::{
-        ReadableStorage,
-        storage_adapter::{
-            async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-            usage_log::UsageLogStorageAdapter,
-        },
-    },
+use zarrs::array::Array;
+use zarrs::array_subset::ArraySubset;
+use zarrs::storage::ReadableStorage;
+use zarrs::storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 struct TokioBlockOn(tokio::runtime::Runtime);
 

@@ -1,8 +1,10 @@
-use derive_more::{derive::From, Display};
+use derive_more::derive::From;
+use derive_more::Display;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
-use crate::{v2::MetadataV2, ArrayShape, ChunkKeySeparator, ChunkShape, Endianness};
+use crate::v2::MetadataV2;
+use crate::{ArrayShape, ChunkKeySeparator, ChunkShape, Endianness};
 
 /// Zarr V2 array metadata.
 ///

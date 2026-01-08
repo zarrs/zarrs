@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 #![cfg(feature = "bitround")]
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
+use zarrs::array::codec::BitroundCodec;
+use zarrs::array::{ArrayBuilder, ArrayMetadataOptions, data_type};
+use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
-use zarrs::{
-    array::{ArrayBuilder, ArrayMetadataOptions, codec::BitroundCodec, data_type},
-    array_subset::ArraySubset,
-};
 use zarrs_filesystem::FilesystemStore;
 
 /// Helper function to print binary representation table

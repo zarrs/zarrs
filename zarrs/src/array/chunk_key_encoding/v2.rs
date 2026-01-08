@@ -4,13 +4,11 @@ use itertools::Itertools;
 use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
+use crate::array::chunk_key_encoding::ChunkKeyEncodingPlugin;
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
-use crate::{
-    array::chunk_key_encoding::ChunkKeyEncodingPlugin,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-    storage::StoreKey,
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::storage::StoreKey;
 
 // Register the chunk key encoding.
 inventory::submit! {

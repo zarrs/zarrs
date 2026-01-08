@@ -1,24 +1,22 @@
-use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+use std::borrow::Cow;
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use super::{BytesCodec, Endianness, reverse_endianness};
+use crate::array::codec::{
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::storage::{StorageError, byte_range::ByteRange};
-use crate::{
-    array::{
-        ArrayBytes, DataType, FillValue,
-        codec::{
-            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
-            BytesPartialEncoderTraits, CodecError, CodecOptions,
-        },
-        data_type::DataTypeExt,
-        update_array_bytes,
-    },
-    indexer::IncompatibleIndexerError,
-};
+use crate::array::data_type::DataTypeExt;
+use crate::array::{ArrayBytes, DataType, FillValue, update_array_bytes};
+use crate::indexer::IncompatibleIndexerError;
+use crate::storage::StorageError;
+use crate::storage::byte_range::ByteRange;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// Partial decoder for the `bytes` codec.

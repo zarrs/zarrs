@@ -1,19 +1,20 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::array::data_type::DataTypeExt;
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
     FillValue,
-    codec::{
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    data_type::DataTypeExt,
 };
 use crate::metadata::Configuration;
 

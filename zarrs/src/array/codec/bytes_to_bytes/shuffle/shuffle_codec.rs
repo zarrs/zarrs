@@ -1,15 +1,14 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use zarrs_plugin::PluginCreateError;
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation,
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
+use crate::array::codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use zarrs_plugin::ExtensionIdentifier;
 

@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 
+use crate::array::data_type::NumpyDateTime64DataType;
 use crate::array::{
     ArrayBytes, ArrayError, DataType, Element, ElementOwned, convert_from_bytes_slice,
-    data_type::NumpyDateTime64DataType,
 };
 use zarrs_plugin::ExtensionIdentifier;
 

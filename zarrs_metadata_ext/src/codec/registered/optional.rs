@@ -2,7 +2,8 @@
 
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::{v3::MetadataV3, ConfigurationSerialize};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `optional` codec configuration parameters.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, Display, From)]

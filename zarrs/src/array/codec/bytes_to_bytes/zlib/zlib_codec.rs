@@ -1,19 +1,15 @@
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-    sync::Arc,
-};
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 use zarrs_plugin::PluginCreateError;
 
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation,
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
+use crate::array::codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use zarrs_plugin::ExtensionIdentifier;
 

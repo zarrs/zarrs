@@ -1,14 +1,15 @@
 #![allow(missing_docs)]
 
-use std::{error::Error, sync::Arc};
+use std::error::Error;
+use std::sync::Arc;
 
-use zarrs_storage::{
-    storage_adapter::{
-        async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-        sync_to_async::{SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter},
-    },
-    store::MemoryStore,
+use zarrs_storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
+use zarrs_storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+};
+use zarrs_storage::store::MemoryStore;
 
 struct TokioSpawnBlocking;
 

@@ -4,11 +4,9 @@ use super::{
     Node, NodeCreateError, NodeMetadata, NodePath, NodePathError, meta_key_v2_array,
     meta_key_v2_group, meta_key_v3,
 };
-use crate::{
-    config::MetadataRetrieveVersion,
-    storage::{
-        ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix, discover_children,
-    },
+use crate::config::MetadataRetrieveVersion;
+use crate::storage::{
+    ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix, discover_children,
 };
 
 /// Get the child nodes.
@@ -117,7 +115,8 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{StoreKey, WritableStorageTraits, store::MemoryStore};
+    use crate::storage::store::MemoryStore;
+    use crate::storage::{StoreKey, WritableStorageTraits};
 
     #[test]
     fn warning_get_child_nodes() {

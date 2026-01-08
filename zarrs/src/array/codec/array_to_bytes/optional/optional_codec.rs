@@ -1,22 +1,22 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::cast_possible_truncation)]
 
-use std::{mem::size_of, num::NonZeroU64, sync::Arc};
+use std::mem::size_of;
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use zarrs_data_type::FillValue;
 use zarrs_plugin::PluginCreateError;
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
-use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType,
-    array_bytes::ArrayBytesVariableLength,
-    codec::{
-        ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-        PartialEncoderCapability, RecommendedConcurrency,
-    },
-    data_type::DataTypeExt,
+use crate::array::array_bytes::ArrayBytesVariableLength;
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::data_type::DataTypeExt;
+use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use crate::metadata::{Configuration, DataTypeSize};
 use zarrs_plugin::ExtensionIdentifier;
 
@@ -503,12 +503,9 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{
-        ArrayBytes, ChunkShapeTraits, DataType,
-        codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits},
-        data_type,
-        data_type::DataTypeExt,
-    };
+    use crate::array::codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits};
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
 
     #[test]
     fn codec_optional_configuration() {

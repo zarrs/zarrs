@@ -6,13 +6,9 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    array::{
-        ArrayMetadataOptions,
-        codec::{CodecMetadataOptions, CodecOptions},
-    },
-    group::GroupMetadataOptions,
-};
+use crate::array::ArrayMetadataOptions;
+use crate::array::codec::{CodecMetadataOptions, CodecOptions};
+use crate::group::GroupMetadataOptions;
 
 /// Global configuration options for the `zarrs` crate.
 ///

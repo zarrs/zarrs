@@ -1,11 +1,9 @@
 use std::error::Error;
 
-use crate::{
-    byte_range::ByteRange, ListableStorageTraits, ReadableStorageTraits, StorePrefix,
-    WritableStorageTraits,
-};
+use crate::byte_range::ByteRange;
 #[cfg(feature = "async")]
 use crate::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits};
+use crate::{ListableStorageTraits, ReadableStorageTraits, StorePrefix, WritableStorageTraits};
 
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// Create a store with the following data

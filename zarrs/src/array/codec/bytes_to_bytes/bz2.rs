@@ -38,14 +38,12 @@ use std::sync::Arc;
 use zarrs_plugin::ExtensionIdentifier;
 
 pub use self::bz2_codec::Bz2Codec;
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -65,20 +63,17 @@ pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCre
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+    use std::borrow::Cow;
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{BytesRepresentation, ChunkShapeTraits, data_type};
+    use crate::array_subset::ArraySubset;
+    use crate::indexer::Indexer;
     use crate::storage::byte_range::ByteRange;
-    use crate::{
-        array::{
-            BytesRepresentation, ChunkShapeTraits,
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            data_type,
-            data_type::DataTypeExt,
-        },
-        array_subset::ArraySubset,
-        indexer::Indexer,
-    };
 
     const JSON_VALID1: &str = r#"
 {

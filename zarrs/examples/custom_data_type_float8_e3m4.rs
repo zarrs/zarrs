@@ -3,7 +3,8 @@
 //! It accepts float compatible fill values.
 
 use core::f32;
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
@@ -11,7 +12,8 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
 };
-use zarrs::metadata::{Configuration, v3::MetadataV3};
+use zarrs::metadata::Configuration;
+use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,

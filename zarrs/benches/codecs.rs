@@ -7,14 +7,11 @@ use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
     criterion_main,
 };
-use zarrs::array::{
-    BytesRepresentation, Element, Endianness,
-    codec::{
-        ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
-        bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
-    },
-    data_type,
+use zarrs::array::codec::bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode};
+use zarrs::array::codec::{
+    ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
 };
+use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
 use zarrs_data_type::FillValue;
 
 fn codec_bytes(c: &mut Criterion) {

@@ -4,21 +4,14 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::{
-    array::{
-        ArrayBuilder,
-        codec::{
-            BytesToBytesCodecTraits, CodecOptions, array_to_bytes::sharding::ShardingCodecBuilder,
-        },
-        data_type,
-    },
-    array_subset::ArraySubset,
-    metadata_ext::codec::sharding::ShardingIndexLocation,
-    storage::{
-        ReadableStorageTraits,
-        storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter, store::MemoryStore,
-    },
-};
+use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+use zarrs::array::codec::{BytesToBytesCodecTraits, CodecOptions};
+use zarrs::array::{ArrayBuilder, data_type};
+use zarrs::array_subset::ArraySubset;
+use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
+use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+use zarrs::storage::store::MemoryStore;
 
 fn array_partial_encode_sharding(
     sharding_index_location: ShardingIndexLocation,

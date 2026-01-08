@@ -4,13 +4,11 @@
 use std::sync::Arc;
 
 use serde_json::json;
-use zarrs::storage::{
-    ReadableWritableStorage,
-    storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-};
-use zarrs::{
-    array::{ZARR_NAN_F32, data_type},
-    array_subset::ArraySubset,
+use zarrs::array::{ZARR_NAN_F32, data_type};
+use zarrs::array_subset::ArraySubset;
+use zarrs::storage::ReadableWritableStorage;
+use zarrs::storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
 
 pub struct TokioBlockOn(pub tokio::runtime::Runtime);

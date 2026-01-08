@@ -4,12 +4,10 @@ use super::{
     Node, NodeCreateError, NodeMetadata, NodePath, NodePathError, meta_key_v2_array,
     meta_key_v2_group, meta_key_v3,
 };
-use crate::{
-    config::MetadataRetrieveVersion,
-    storage::{
-        AsyncListableStorageTraits, AsyncReadableStorageTraits, StorageError, StorePrefix,
-        async_discover_children,
-    },
+use crate::config::MetadataRetrieveVersion;
+use crate::storage::{
+    AsyncListableStorageTraits, AsyncReadableStorageTraits, StorageError, StorePrefix,
+    async_discover_children,
 };
 
 /// Asynchronously get the child nodes.

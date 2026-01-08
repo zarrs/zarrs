@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
 use super::{get_squeezed_array_subset, get_squeezed_indexer};
+use crate::array::codec::{
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{
-    DataType, FillValue,
-    codec::{
-        ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
-    },
-};
+use crate::array::{DataType, FillValue};
 use crate::storage::StorageError;
 use std::num::NonZeroU64;
 

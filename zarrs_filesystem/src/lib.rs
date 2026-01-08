@@ -11,8 +11,8 @@ use bytes::BytesMut;
 use std::sync::RwLock;
 use thiserror::Error;
 use walkdir::WalkDir;
+use zarrs_storage::byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError};
 use zarrs_storage::{
-    byte_range::{ByteOffset, ByteRange, ByteRangeIterator, InvalidByteRangeError},
     store_set_partial_many, Bytes, ListableStorageTraits, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeyError, StoreKeys, StoreKeysPrefixes,
     StorePrefix, StorePrefixes, WritableStorageTraits,
@@ -20,13 +20,11 @@ use zarrs_storage::{
 
 #[cfg(target_os = "linux")]
 mod direct_io;
-use std::{
-    collections::HashMap,
-    fs::OpenOptions,
-    io::{Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use direct_io::{MetadataExt, OpenOptionsExt, O_DIRECT};

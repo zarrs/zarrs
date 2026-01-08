@@ -1,19 +1,18 @@
 //! A storage transformer which records performance metrics.
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
-use crate::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
-};
+use crate::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
+};
+use crate::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
 /// The performance metrics storage transformer. Accumulates metrics, such as bytes read and written.

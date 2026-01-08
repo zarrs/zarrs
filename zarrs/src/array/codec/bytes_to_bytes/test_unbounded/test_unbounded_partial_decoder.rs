@@ -1,15 +1,12 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
+use crate::array::ArrayBytesRaw;
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use crate::array::codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use crate::storage::StorageError;
-use crate::{
-    array::{
-        ArrayBytesRaw,
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-    },
-    storage::byte_range::{ByteRangeIterator, extract_byte_ranges},
-};
+use crate::storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 
 /// Partial decoder for the `test_unbounded` codec.
 pub(crate) struct TestUnboundedPartialDecoder {

@@ -2,9 +2,9 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 use super::AdditionalFieldsV3;
-use crate::{
-    array::IntoDimensionName, v3::MetadataV3, ArrayShape, ChunkKeySeparator, DimensionName,
-};
+use crate::array::IntoDimensionName;
+use crate::v3::MetadataV3;
+use crate::{ArrayShape, ChunkKeySeparator, DimensionName};
 
 mod fill_value;
 mod nan_representations;

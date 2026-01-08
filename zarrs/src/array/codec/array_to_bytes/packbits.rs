@@ -35,15 +35,12 @@ pub use packbits_codec::PackBitsCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::DataType;
-use crate::array::codec::CodecError;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -180,21 +177,19 @@ fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use num::Integer;
     use zarrs_data_type::FillValue;
 
-    use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-    use crate::{
-        array::{
-            ArrayBytes,
-            codec::{ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions},
-            data_type,
-            element::{Element, ElementOwned},
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::{
+        ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions,
     };
+    use crate::array::element::{Element, ElementOwned};
+    use crate::array::{ArrayBytes, data_type};
+    use crate::array_subset::ArraySubset;
+    use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
     #[test]
     fn div_rem_8bit() {

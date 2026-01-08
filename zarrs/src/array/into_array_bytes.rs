@@ -1,6 +1,7 @@
 //! The [`IntoArrayBytes`] trait for converting input types into [`ArrayBytes`] for storage.
 
-use super::{ArrayBytes, ArrayError, DataType, element::Element};
+use super::element::Element;
+use super::{ArrayBytes, ArrayError, DataType};
 
 /// A trait for types that can be converted into [`ArrayBytes`] for storage.
 pub trait IntoArrayBytes<'a> {

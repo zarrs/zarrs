@@ -3,16 +3,15 @@
 use derive_more::From;
 
 use super::{StorageTransformer, try_create_storage_transformer};
-use crate::storage::StorageError;
+use crate::metadata::v3::MetadataV3;
+use crate::node::NodePath;
+use crate::plugin::PluginCreateError;
 #[cfg(feature = "async")]
 use crate::storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
-use crate::{
-    metadata::v3::MetadataV3,
-    node::NodePath,
-    plugin::PluginCreateError,
-    storage::{ListableStorage, ReadableStorage, ReadableWritableStorage, WritableStorage},
+use crate::storage::{
+    ListableStorage, ReadableStorage, ReadableWritableStorage, StorageError, WritableStorage,
 };
 
 /// Configuration for a storage transformer chain.

@@ -1,8 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::ExtensionIdentifier;
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 
 use super::super::zfp::ZfpCodec;
 use crate::array::codec::{

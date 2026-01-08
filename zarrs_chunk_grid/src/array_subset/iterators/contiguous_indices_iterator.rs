@@ -3,12 +3,9 @@ use std::iter::FusedIterator;
 use itertools::izip;
 
 use super::IndicesIterator;
-use crate::{
-    array_subset::{
-        iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
-    },
-    ArrayIndicesTinyVec,
-};
+use crate::array_subset::iterators::indices_iterator::IndicesIntoIterator;
+use crate::array_subset::{ArraySubset, IncompatibleIndexerError};
+use crate::ArrayIndicesTinyVec;
 
 /// Iterates over contiguous element indices in an array subset.
 ///

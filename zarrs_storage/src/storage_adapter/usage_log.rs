@@ -1,22 +1,20 @@
 //! A storage transformer which prints function calls.
 
-use std::{
-    io::Write,
-    sync::{Arc, Mutex},
-};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 
-use crate::{
-    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
-};
+use crate::byte_range::{ByteOffset, ByteRange, ByteRangeIterator};
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
+};
+use crate::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -497,7 +495,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use crate::{store::MemoryStore, store_test};
+    use crate::store::MemoryStore;
+    use crate::store_test;
 
     #[test]
     fn usage_log() {

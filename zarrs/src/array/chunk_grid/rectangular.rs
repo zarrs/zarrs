@@ -31,18 +31,14 @@ use derive_more::From;
 use itertools::Itertools;
 use thiserror::Error;
 
+use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
+use crate::array_subset::IncompatibleDimensionalityError;
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use crate::{
-    array::{
-        ArrayIndices, ArrayShape, ChunkShape,
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-    },
-    array_subset::IncompatibleDimensionalityError,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.

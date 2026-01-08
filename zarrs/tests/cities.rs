@@ -1,24 +1,17 @@
 #![allow(missing_docs)]
 #![cfg(all(feature = "sharding", feature = "zstd"))]
 
-use std::{
-    error::Error,
-    fs::File,
-    io::{BufRead, BufReader},
-    sync::Arc,
-};
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 
-use zarrs::{
-    array::{
-        ArrayBuilder, ArrayBytes, ArrayMetadataOptions,
-        codec::{
-            ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
-            array_to_bytes::{vlen::VlenCodec, vlen_utf8::VlenUtf8Codec},
-        },
-        data_type,
-    },
-    storage::{ReadableWritableListableStorage, store::MemoryStore},
-};
+use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
+use zarrs::array::codec::array_to_bytes::vlen_utf8::VlenUtf8Codec;
+use zarrs::array::codec::{ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::store::MemoryStore;
 use zarrs_filesystem::FilesystemStore;
 
 fn read_cities() -> std::io::Result<Vec<String>> {

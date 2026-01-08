@@ -35,14 +35,12 @@ mod zlib_codec;
 use std::sync::Arc;
 
 pub use self::zlib_codec::ZlibCodec;
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -62,21 +60,17 @@ pub(crate) fn create_codec_zlib(metadata: &MetadataV3) -> Result<Codec, PluginCr
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::num::NonZeroU64;
-    use std::{borrow::Cow, sync::Arc};
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{BytesRepresentation, ChunkShapeTraits, data_type};
+    use crate::array_subset::ArraySubset;
+    use crate::indexer::Indexer;
     use crate::storage::byte_range::ByteRange;
-    use crate::{
-        array::{
-            BytesRepresentation, ChunkShapeTraits,
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            data_type,
-            data_type::DataTypeExt,
-        },
-        array_subset::ArraySubset,
-        indexer::Indexer,
-    };
 
     const JSON_VALID1: &str = r#"
 {

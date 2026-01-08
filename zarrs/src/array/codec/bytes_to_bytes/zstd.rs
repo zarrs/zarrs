@@ -36,14 +36,12 @@ use std::sync::Arc;
 
 pub use zstd_codec::ZstdCodec;
 
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -61,16 +59,13 @@ pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCr
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            BytesRepresentation,
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-        },
-        storage::byte_range::ByteRange,
-    };
+    use crate::array::BytesRepresentation;
+    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
     "level": 22,

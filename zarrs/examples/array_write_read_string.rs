@@ -2,15 +2,15 @@
 
 use itertools::Itertools;
 use ndarray::{Array2, ArrayD, array};
-use zarrs::{
-    storage::ReadableWritableListableStorage,
-    storage::storage_adapter::usage_log::UsageLogStorageAdapter,
-};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::{array::ArrayBytes, array::data_type, array_subset::ArraySubset, storage::store};
+    use zarrs::array::{ArrayBytes, data_type};
+    use zarrs::array_subset::ArraySubset;
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;

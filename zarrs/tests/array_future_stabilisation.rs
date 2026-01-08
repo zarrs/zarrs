@@ -6,8 +6,7 @@ use std::sync::Arc;
 use zarrs::array::codec::Bz2Codec;
 use zarrs::array::{Array, ArrayMetadataOptions};
 use zarrs_filesystem::FilesystemStore;
-use zarrs_plugin::ExtensionIdentifier;
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
 
 /// bz2 could stabilise as is, so test supporting that via the codec map
 #[test]

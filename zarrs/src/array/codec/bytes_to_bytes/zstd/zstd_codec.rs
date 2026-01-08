@@ -1,16 +1,15 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
-use crate::array::{
-    ArrayBytesRaw, BytesRepresentation,
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
+use crate::array::codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 
 /// A `zstd` codec implementation.

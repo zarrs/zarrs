@@ -1,5 +1,6 @@
 use zarrs_data_type::{DataType, DataTypeFillValueMetadataError, FillValue};
-use zarrs_metadata::{Configuration, ConfigurationSerialize, v3::MetadataV3};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{Configuration, ConfigurationSerialize};
 use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
 use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
 

@@ -1,4 +1,5 @@
-use std::{num::NonZeroU64, ops::IndexMut};
+use std::num::NonZeroU64;
+use std::ops::IndexMut;
 
 use derive_more::derive::Display;
 use itertools::Itertools;
@@ -6,17 +7,12 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::DataTypeFillValueError;
 
-use super::{
-    ArrayBytesFixedDisjointView, DataType, DataTypeExt, FillValue,
-    codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError},
-    ravel_indices,
-};
-use crate::{
-    array_subset::ArraySubset,
-    indexer::{IncompatibleIndexerError, Indexer},
-    metadata::DataTypeSize,
-    storage::byte_range::extract_byte_ranges_concat,
-};
+use super::codec::{ArrayBytesDecodeIntoTarget, CodecError, InvalidBytesLengthError};
+use super::{ArrayBytesFixedDisjointView, DataType, DataTypeExt, FillValue, ravel_indices};
+use crate::array_subset::ArraySubset;
+use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::metadata::DataTypeSize;
+use crate::storage::byte_range::extract_byte_ranges_concat;
 
 /// Count the nesting depth of optional types.
 /// Returns 0 for non-optional types, 1 for `Option<T>`, 2 for `Option<Option<T>>`, etc.

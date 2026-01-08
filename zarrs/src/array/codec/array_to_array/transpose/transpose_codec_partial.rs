@@ -4,13 +4,12 @@ use super::{
     apply_permutation, get_transposed_array_subset, get_transposed_indexer, inverse_permutation,
     permute,
 };
-use crate::array::codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits};
+use crate::array::codec::{
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{
-    ArrayBytes, DataType, FillValue,
-    codec::{CodecError, CodecOptions},
-};
+use crate::array::{ArrayBytes, DataType, FillValue};
 use crate::array_subset::ArraySubset;
 use crate::storage::StorageError;
 use std::num::NonZeroU64;

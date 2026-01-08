@@ -1,26 +1,27 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
-use super::codec::{CodecError, ShardingCodec};
+use super::codec::{CodecError, CodecOptions, ShardingCodec};
+use super::concurrency::concurrency_chunks_and_codec;
 use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
-    Array, ArrayError, ArrayShardedExt, ChunkGrid, codec::CodecOptions,
-    concurrency::concurrency_chunks_and_codec,
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
+    ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
-use super::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeSize};
-use crate::array::codec::{ArrayBytesDecodeIntoTarget, AsyncStoragePartialDecoder};
+use crate::array::codec::{
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
+};
+use crate::array_subset::ArraySubset;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use crate::storage::AsyncReadableStorageTraits;
-use crate::storage::StorageHandle;
 use crate::storage::byte_range::ByteRange;
-use crate::storage::{MaybeSend, MaybeSync};
-use crate::{array::codec::AsyncArrayPartialDecoderTraits, array_subset::ArraySubset};
+use crate::storage::{AsyncReadableStorageTraits, MaybeSend, MaybeSync, StorageHandle};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]
@@ -725,16 +726,12 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::array::codec::TransposeCodec;
+    use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+    use crate::array::{ArrayBuilder, data_type};
+    use crate::array_subset::ArraySubset;
     use crate::metadata_ext::codec::transpose::TransposeOrder;
-    use crate::{
-        array::{
-            ArrayBuilder,
-            codec::{TransposeCodec, array_to_bytes::sharding::ShardingCodecBuilder},
-            data_type,
-        },
-        array_subset::ArraySubset,
-        storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
-    };
+    use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 
     async fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
         let store = object_store::memory::InMemory::new();

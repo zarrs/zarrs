@@ -2,26 +2,20 @@
 
 use itertools::Itertools;
 use ndarray::ArrayD;
-use zarrs::{
-    array::{bytes_to_ndarray, codec::CodecOptions},
-    storage::{
-        ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
-    },
-};
+use zarrs::array::bytes_to_ndarray;
+use zarrs::array::codec::CodecOptions;
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::{
-        array::{
-            codec::{self},
-            data_type,
-        },
-        array_subset::ArraySubset,
-        node::Node,
-        storage::store,
-    };
+    use zarrs::array::codec::{self};
+    use zarrs::array::data_type;
+    use zarrs::array_subset::ArraySubset;
+    use zarrs::node::Node;
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;

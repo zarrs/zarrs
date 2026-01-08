@@ -1,8 +1,6 @@
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
@@ -11,23 +9,22 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, sharding_index_shape};
-use crate::storage::StorageError;
-use crate::{
-    array::{
-        ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-        DataType,
-        array_bytes::update_array_bytes,
-        chunk_grid::RegularChunkGrid,
-        codec::{
-            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
-            BytesPartialEncoderTraits, CodecError, CodecOptions,
-            array_to_bytes::sharding::{calculate_chunks_per_shard, compute_index_encoded_size},
-        },
-        ravel_indices, transmute_to_bytes,
-    },
-    indexer::IncompatibleIndexerError,
-    storage::byte_range::ByteRange,
+use crate::array::array_bytes::update_array_bytes;
+use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::codec::array_to_bytes::sharding::{
+    calculate_chunks_per_shard, compute_index_encoded_size,
 };
+use crate::array::codec::{
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialEncoderTraits, CodecError, CodecOptions,
+};
+use crate::array::{
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
+    DataType, ravel_indices, transmute_to_bytes,
+};
+use crate::indexer::IncompatibleIndexerError;
+use crate::storage::StorageError;
+use crate::storage::byte_range::ByteRange;
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,

@@ -3,13 +3,9 @@ use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
-use crate::{
-    array_subset::{
-        ArraySubset,
-        iterators::{ContiguousIndices, ContiguousLinearisedIndices},
-    },
-    indexer::IncompatibleIndexerError,
-};
+use crate::array_subset::ArraySubset;
+use crate::array_subset::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
+use crate::indexer::IncompatibleIndexerError;
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///

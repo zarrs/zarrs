@@ -2,19 +2,20 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::{any::Any, borrow::Cow, sync::Arc};
+use std::any::Any;
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
-use zarrs::metadata::{Configuration, v3::MetadataV3};
-use zarrs::storage::store::MemoryStore;
-use zarrs::{
-    array::{
-        ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-        FillValueMetadataV3,
-    },
-    array_subset::ArraySubset,
+use zarrs::array::{
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
+    FillValueMetadataV3,
 };
+use zarrs::array_subset::ArraySubset;
+use zarrs::metadata::Configuration;
+use zarrs::metadata::v3::MetadataV3;
+use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
     FillValue,

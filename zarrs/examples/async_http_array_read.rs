@@ -3,11 +3,10 @@
 use std::sync::Arc;
 
 use ndarray::ArrayD;
-use zarrs::{
-    array::Array,
-    array_subset::ArraySubset,
-    storage::{AsyncReadableStorage, storage_adapter::usage_log::UsageLogStorageAdapter},
-};
+use zarrs::array::Array;
+use zarrs::array_subset::ArraySubset;
+use zarrs::storage::AsyncReadableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 enum Backend {
     // OpenDAL,

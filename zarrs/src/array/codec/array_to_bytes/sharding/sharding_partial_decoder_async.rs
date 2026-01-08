@@ -8,27 +8,22 @@ use zarrs_data_type::FillValue;
 use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
-use crate::storage::{
-    StorageError,
-    byte_range::{ByteLength, ByteOffset, ByteRange},
+use crate::array::array_bytes::merge_chunks_vlen;
+use crate::array::chunk_grid::RegularChunkGrid;
+use crate::array::codec::{
+    ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+    AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain, CodecError,
+    CodecOptions,
 };
-use crate::{
-    array::{
-        ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-        ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
-        array_bytes::merge_chunks_vlen,
-        chunk_grid::RegularChunkGrid,
-        codec::{
-            ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-            AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain,
-            CodecError, CodecOptions,
-        },
-        data_type::DataTypeExt,
-        ravel_indices,
-    },
-    array_subset::IncompatibleDimensionalityError,
-    indexer::{IncompatibleIndexerError, Indexer},
+use crate::array::data_type::DataTypeExt;
+use crate::array::{
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
+    ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, ravel_indices,
 };
+use crate::array_subset::IncompatibleDimensionalityError;
+use crate::indexer::{IncompatibleIndexerError, Indexer};
+use crate::storage::StorageError;
+use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Asynchronous partial decoder for the sharding codec.
 pub(crate) struct AsyncShardingPartialDecoder {

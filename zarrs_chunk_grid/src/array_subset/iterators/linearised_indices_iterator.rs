@@ -1,12 +1,9 @@
 use std::iter::FusedIterator;
 
 use super::IndicesIterator;
-use crate::{
-    array_subset::{
-        iterators::indices_iterator::IndicesIntoIterator, ArraySubset, IncompatibleIndexerError,
-    },
-    ravel_indices, ArrayShape,
-};
+use crate::array_subset::iterators::indices_iterator::IndicesIntoIterator;
+use crate::array_subset::{ArraySubset, IncompatibleIndexerError};
+use crate::{ravel_indices, ArrayShape};
 
 /// An iterator over the linearised indices in an array subset.
 ///

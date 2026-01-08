@@ -5,11 +5,9 @@
 //!
 //! [`extract_byte_ranges`] is a convenience function for extracting byte ranges from a slice of bytes.
 
-use std::{
-    io::{Read, Seek, SeekFrom},
-    ops::{
-        Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
-    },
+use std::io::{Read, Seek, SeekFrom};
+use std::ops::{
+    Bound, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 
 use thiserror::Error;

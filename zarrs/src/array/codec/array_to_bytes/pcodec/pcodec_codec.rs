@@ -1,21 +1,22 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec, standalone::guarantee::file_size};
+use pco::standalone::guarantee::file_size;
+use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
 use zarrs_plugin::PluginCreateError;
 
 use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
-    PcodecDeltaEncodingOrder,
+    PcodecDeltaEncodingOrder, PcodecElementType, get_pcodec_support,
 };
-use super::{PcodecElementType, get_pcodec_support};
+use crate::array::codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
+};
 use crate::array::{
-    BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
-    codec::{
-        ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-        CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-        PartialEncoderCapability, RecommendedConcurrency,
-    },
-    convert_from_bytes_slice, transmute_to_bytes_vec,
+    BytesRepresentation, ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice,
+    transmute_to_bytes_vec,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::pcodec::{

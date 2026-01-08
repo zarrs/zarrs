@@ -15,7 +15,8 @@ mod impl_default {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
+    use zarrs_metadata::v3::FillValueMetadataV3;
+    use zarrs_metadata::{Configuration, DataTypeSize};
     use zarrs_plugin::ExtensionIdentifier;
 
     impl DataTypeTraits for ComplexFloat8E4M3DataType {
@@ -88,7 +89,8 @@ mod impl_float8 {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::{Configuration, DataTypeSize, v3::FillValueMetadataV3};
+    use zarrs_metadata::v3::FillValueMetadataV3;
+    use zarrs_metadata::{Configuration, DataTypeSize};
     use zarrs_plugin::ExtensionIdentifier;
 
     impl DataTypeTraits for ComplexFloat8E4M3DataType {

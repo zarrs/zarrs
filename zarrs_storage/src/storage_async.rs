@@ -4,13 +4,13 @@ use auto_impl::auto_impl;
 use bytes::BytesMut;
 use futures::StreamExt;
 
+use super::byte_range::ByteRangeIterator;
 use super::{
-    byte_range::ByteRangeIterator, MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, StorePrefixes,
+    MaybeSend, MaybeSync, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    StorePrefixes,
 };
-use crate::{
-    byte_range::ByteRange, AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator,
-};
+use crate::byte_range::ByteRange;
+use crate::{AsyncMaybeBytesIterator, Bytes, MaybeBytes, OffsetBytesIterator};
 
 /// Async readable storage traits.
 #[cfg_attr(

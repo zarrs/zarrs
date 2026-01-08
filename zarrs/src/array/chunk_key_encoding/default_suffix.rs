@@ -6,13 +6,11 @@ use serde::{Deserialize, Serialize};
 use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
+use crate::array::chunk_key_encoding::ChunkKeyEncodingPlugin;
 use crate::metadata::ConfigurationSerialize;
-use crate::{
-    array::chunk_key_encoding::ChunkKeyEncodingPlugin,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-    storage::StoreKey,
-};
+use crate::metadata::v3::MetadataV3;
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::storage::StoreKey;
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
 // TODO: move to zarrs_metadata_ex on stabilisation

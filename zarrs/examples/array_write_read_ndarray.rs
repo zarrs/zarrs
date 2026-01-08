@@ -2,19 +2,16 @@
 
 use ndarray::{Array2, ArrayD, array};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use zarrs::storage::{
-    ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
-};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::{
-        array::{ZARR_NAN_F32, data_type},
-        array_subset::ArraySubset,
-        node::Node,
-        storage::store,
-    };
+    use zarrs::array::{ZARR_NAN_F32, data_type};
+    use zarrs::array_subset::ArraySubset;
+    use zarrs::node::Node;
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;

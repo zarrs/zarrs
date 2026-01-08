@@ -31,22 +31,21 @@
 
 mod reshape_codec;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use num::Integer;
 pub use reshape_codec::ReshapeCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
 // use itertools::Itertools;
+use crate::array::ChunkShape;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use crate::{
-    array::ChunkShape,
-    array::codec::{Codec, CodecError, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -117,12 +116,9 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::{
-        ArrayBytes, ChunkShapeTraits, DataType, FillValue,
-        codec::{ArrayToArrayCodecTraits, CodecOptions},
-        data_type,
-        data_type::DataTypeExt,
-    };
+    use crate::array::codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_reshape_round_trip_impl(
         json: &str,

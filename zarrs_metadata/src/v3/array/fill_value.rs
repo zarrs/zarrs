@@ -10,7 +10,8 @@ use std::collections::HashMap;
 
 use derive_more::From;
 use half::{bf16, f16};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
 use super::nan_representations::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};

@@ -39,14 +39,12 @@ use std::sync::Arc;
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -184,14 +182,9 @@ mod tests {
 
     use zarrs_data_type::FillValue;
 
-    use crate::array::{
-        ArrayBytes,
-        codec::{
-            ArrayToArrayCodecTraits, CodecOptions,
-            array_to_array::fixedscaleoffset::FixedScaleOffsetCodec,
-        },
-        data_type,
-    };
+    use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
+    use crate::array::codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use crate::array::{ArrayBytes, data_type};
     use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]

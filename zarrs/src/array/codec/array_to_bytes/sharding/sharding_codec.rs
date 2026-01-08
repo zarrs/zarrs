@@ -1,8 +1,7 @@
-use std::{
-    borrow::Cow,
-    num::NonZeroU64,
-    sync::{Arc, atomic::AtomicUsize},
-};
+use std::borrow::Cow;
+use std::num::NonZeroU64;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -11,35 +10,31 @@ use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_shape, sharding_partial_decoder_sync::ShardingPartialDecoder,
-    sharding_partial_encoder,
+    sharding_index_shape, sharding_partial_encoder,
+};
+use crate::array::array_bytes::merge_chunks_vlen;
+use crate::array::codec::{
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecChain, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use crate::metadata::Configuration;
-use crate::{
-    array::{
-        ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkShape,
-        ChunkShapeTraits, DataType, DataTypeSize, FillValue,
-        array_bytes::merge_chunks_vlen,
-        chunk_shape_to_array_shape,
-        codec::{
-            ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-            ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-            BytesPartialEncoderTraits, CodecChain, CodecError, CodecMetadataOptions, CodecOptions,
-            CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-            RecommendedConcurrency,
-        },
-        concurrency::calc_concurrency_outer_inner,
-        data_type::DataTypeExt,
-        transmute_to_bytes_vec, unravel_index,
-    },
-    array_subset::ArraySubset,
-    plugin::PluginCreateError,
+use crate::array::concurrency::calc_concurrency_outer_inner;
+use crate::array::data_type::DataTypeExt;
+use crate::array::{
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkShape,
+    ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
+    transmute_to_bytes_vec, unravel_index,
 };
+use crate::array_subset::ArraySubset;
+use crate::metadata::Configuration;
+use crate::plugin::PluginCreateError;
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]

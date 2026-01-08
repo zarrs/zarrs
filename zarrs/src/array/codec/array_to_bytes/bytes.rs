@@ -38,17 +38,13 @@ pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::DataType;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::array::data_type::DataTypeExt;
+use crate::metadata::Endianness;
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
-use crate::{array::codec::CodecError, metadata::Endianness};
-use crate::{
-    array::{
-        DataType,
-        codec::{Codec, CodecPlugin},
-        data_type::DataTypeExt,
-    },
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -186,21 +182,19 @@ pub(crate) fn reverse_endianness(v: &mut [u8], data_type: &DataType) {
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            ArrayBytes, ChunkShape, ChunkShapeTraits, Endianness, FillValue,
-            codec::{
-                ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions,
-                CodecOptions, CodecTraits,
-            },
-            data_type,
-            data_type::DataTypeExt,
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::{
+        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions,
+        CodecTraits,
     };
+    use crate::array::data_type::DataTypeExt;
+    use crate::array::{
+        ArrayBytes, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
+    };
+    use crate::array_subset::ArraySubset;
 
     #[test]
     fn codec_bytes_configuration_big() {

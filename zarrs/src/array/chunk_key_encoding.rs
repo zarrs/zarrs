@@ -20,12 +20,9 @@ pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
 use zarrs_plugin::{PluginUnsupportedError, RuntimePlugin, RuntimeRegistry};
 
 pub use crate::metadata::ChunkKeySeparator;
-use crate::storage::{MaybeSend, MaybeSync};
-use crate::{
-    metadata::v3::MetadataV3,
-    plugin::{Plugin, PluginCreateError, ZarrVersions},
-    storage::StoreKey,
-};
+use crate::metadata::v3::MetadataV3;
+use crate::plugin::{Plugin, PluginCreateError, ZarrVersions};
+use crate::storage::{MaybeSend, MaybeSync, StoreKey};
 
 /// A chunk key encoding.
 #[derive(Debug, Clone, From, Deref)]

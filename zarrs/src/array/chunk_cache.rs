@@ -4,20 +4,20 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::{ArrayBytes, ArrayBytesRaw, ArrayError, codec::CodecOptions};
-use crate::iter_concurrent_limit;
-use crate::storage::ReadableStorageTraits;
-use crate::storage::{MaybeSend, MaybeSync};
-use crate::{
-    array::{
-        Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeExt, ElementOwned,
-        array_bytes::{merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth},
-        codec::{ArrayPartialDecoderTraits, CodecError},
-        concurrency::concurrency_chunks_and_codec,
-        from_array_bytes::FromArrayBytes,
-    },
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
+use super::codec::CodecOptions;
+use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
+use crate::array::array_bytes::{
+    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
+use crate::array::codec::{ArrayPartialDecoderTraits, CodecError};
+use crate::array::concurrency::concurrency_chunks_and_codec;
+use crate::array::from_array_bytes::FromArrayBytes;
+use crate::array::{
+    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, DataTypeExt, ElementOwned,
+};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::iter_concurrent_limit;
+use crate::storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;

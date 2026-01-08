@@ -1,28 +1,21 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{
-    DataType, FillValue,
-    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
-    data_type::DataTypeExt,
-};
+use crate::array::data_type::DataTypeExt;
+use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
-use crate::{
-    array::{
-        ArrayBytes, ChunkShape,
-        codec::{
-            ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, CodecError,
-            CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-            RecommendedConcurrency,
-        },
-    },
-    plugin::PluginCreateError,
-};
+use crate::plugin::PluginCreateError;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A Transpose codec implementation.

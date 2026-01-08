@@ -8,17 +8,16 @@
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use crate::array::{Array, ArrayMetadata};
+use crate::config::MetadataRetrieveVersion;
+use crate::group::Group;
 pub use crate::metadata::NodeMetadata;
 use crate::node::get_all_nodes_of;
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
-use crate::{
-    array::{Array, ArrayMetadata},
-    config::MetadataRetrieveVersion,
-    group::Group,
-    storage::{ListableStorageTraits, ReadableStorageTraits},
-};
+use crate::storage::{ListableStorageTraits, ReadableStorageTraits};
 #[cfg(feature = "async")]
 use crate::{
     node::async_get_all_nodes_of,
@@ -266,18 +265,15 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::metadata::{
-        GroupMetadata,
-        v2::{ArrayMetadataV2, GroupMetadataV2},
-        v3::GroupMetadataV3,
-    };
+    use crate::array::ArrayBuilder;
+    use crate::group::GroupBuilder;
+    use crate::metadata::GroupMetadata;
+    use crate::metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
+    use crate::metadata::v3::GroupMetadataV3;
     #[cfg(feature = "async")]
     use crate::storage::AsyncReadableWritableListableStorageTraits;
-    use crate::{
-        array::ArrayBuilder,
-        group::GroupBuilder,
-        storage::{StoreKey, WritableStorageTraits, store::MemoryStore},
-    };
+    use crate::storage::store::MemoryStore;
+    use crate::storage::{StoreKey, WritableStorageTraits};
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
 

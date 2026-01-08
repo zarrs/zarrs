@@ -12,7 +12,9 @@
 //! }
 //! ```
 
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
@@ -21,7 +23,8 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadataV3,
 };
-use zarrs::metadata::{Configuration, Endianness, v3::MetadataV3};
+use zarrs::metadata::v3::MetadataV3;
+use zarrs::metadata::{Configuration, Endianness};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,

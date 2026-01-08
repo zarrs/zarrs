@@ -1,10 +1,11 @@
-use std::{any::Any, borrow::Cow, fmt::Debug, sync::Arc};
+use std::any::Any;
+use std::borrow::Cow;
+use std::fmt::Debug;
+use std::sync::Arc;
 
 use derive_more::{Deref, From};
-use zarrs_metadata::{
-    v3::{FillValueMetadataV3, MetadataV3},
-    Configuration, DataTypeSize,
-};
+use zarrs_metadata::v3::{FillValueMetadataV3, MetadataV3};
+use zarrs_metadata::{Configuration, DataTypeSize};
 use zarrs_plugin::{MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersions};
 
 use crate::{

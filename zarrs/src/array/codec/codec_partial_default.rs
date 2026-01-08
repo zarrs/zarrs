@@ -1,4 +1,6 @@
-use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+use std::borrow::Cow;
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use zarrs_data_type::FillValue;
 
@@ -7,23 +9,17 @@ use super::{
     ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
     BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
 };
+use crate::array::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
+use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation};
+use crate::array_subset::ArraySubset;
 use crate::metadata::DataTypeSize;
-use crate::storage::{
-    OffsetBytesIterator, StorageError,
-    byte_range::{ByteRangeIterator, extract_byte_ranges},
-};
-use crate::{
-    array::{
-        ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation,
-        array_bytes::update_array_bytes,
-    },
-    array_subset::ArraySubset,
-};
+use crate::storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
+use crate::storage::{OffsetBytesIterator, StorageError};
 
 /// Decoded representation for array codecs shape, data type, and fill value.
 pub(super) struct ArrayDecodedRepresentation {

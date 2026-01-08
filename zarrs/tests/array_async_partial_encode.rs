@@ -1,25 +1,20 @@
 #![allow(missing_docs)]
 #![cfg(feature = "async")]
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
-use zarrs::storage::storage_adapter::sync_to_async::SyncToAsyncSpawnBlocking;
-use zarrs::storage::{
-    AsyncReadableStorageTraits,
-    storage_adapter::{
-        performance_metrics::PerformanceMetricsStorageAdapter,
-        sync_to_async::SyncToAsyncStorageAdapter,
-    },
-    store::MemoryStore,
+use zarrs::array::codec::{
+    ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim,
 };
-use zarrs::{
-    array::{
-        ArrayBuilder, ChunkShapeTraits, DataTypeExt,
-        codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim},
-        data_type,
-    },
-    array_subset::ArraySubset,
+use zarrs::array::{ArrayBuilder, ChunkShapeTraits, DataTypeExt, data_type};
+use zarrs::array_subset::ArraySubset;
+use zarrs::storage::AsyncReadableStorageTraits;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+use zarrs::storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
 };
+use zarrs::storage::store::MemoryStore;
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {

@@ -9,16 +9,13 @@ pub use test_unbounded_codec::TestUnboundedCodec;
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            BytesRepresentation,
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-        },
-        storage::byte_range::ByteRange,
-    };
+    use crate::array::BytesRepresentation;
+    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use crate::storage::byte_range::ByteRange;
 
     #[test]
     fn codec_test_unbounded_round_trip1() {

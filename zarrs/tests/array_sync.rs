@@ -4,8 +4,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, codec::ArrayCodecTraits, data_type};
+use zarrs::array::codec::{ArrayCodecTraits, CodecOptions};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
 use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
@@ -288,7 +288,8 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(feature = "sharding")]
 #[test]
 fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::array::codec::{TransposeCodec, TransposeOrder, array_to_bytes::vlen::VlenCodec};
+    use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
+    use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 
     let store = std::sync::Arc::new(MemoryStore::default());
     let array_path = "/array";

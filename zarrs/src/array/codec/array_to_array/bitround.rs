@@ -41,17 +41,13 @@ use std::sync::Arc;
 pub use bitround_codec::BitroundCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::DataType;
+use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use crate::{
-    array::{
-        DataType,
-        codec::{Codec, CodecError, CodecPlugin},
-    },
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -422,19 +418,17 @@ fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use zarrs_data_type::FillValue;
 
     use super::*;
-    use crate::array::data_type;
-    use crate::{
-        array::{
-            ArrayBytes,
-            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
-        },
-        array_subset::ArraySubset,
+    use crate::array::codec::{
+        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
+    use crate::array::{ArrayBytes, data_type};
+    use crate::array_subset::ArraySubset;
 
     #[test]
     fn codec_bitround_float() {

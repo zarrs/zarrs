@@ -25,23 +25,29 @@ pub use data_type_support::{define_data_type_support, register_data_type_extensi
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
+pub use array_to_array::fixedscaleoffset::*;
+pub use array_to_array::reshape::*;
+pub use array_to_array::squeeze::*;
 #[cfg(feature = "transpose")]
 pub use array_to_array::transpose::*;
-pub use array_to_array::{fixedscaleoffset::*, reshape::*, squeeze::*};
 // Array to bytes
+pub use array_to_bytes::bytes::*;
+pub use array_to_bytes::codec_chain::CodecChain;
 pub use array_to_bytes::optional::*;
+pub use array_to_bytes::packbits::*;
 #[cfg(feature = "pcodec")]
 pub use array_to_bytes::pcodec::*;
 #[cfg(feature = "sharding")]
 pub use array_to_bytes::sharding::*;
+pub use array_to_bytes::vlen::*;
+pub use array_to_bytes::vlen_array::*;
+pub use array_to_bytes::vlen_bytes::*;
+pub use array_to_bytes::vlen_utf8::*;
+pub use array_to_bytes::vlen_v2::*;
 #[cfg(feature = "zfp")]
 pub use array_to_bytes::zfp::*;
 #[cfg(feature = "zfp")]
 pub use array_to_bytes::zfpy::*;
-pub use array_to_bytes::{
-    bytes::*, codec_chain::CodecChain, packbits::*, vlen::*, vlen_array::*, vlen_bytes::*,
-    vlen_utf8::*, vlen_v2::*,
-};
 
 // Bytes to bytes
 #[cfg(feature = "adler32")]
@@ -84,9 +90,7 @@ mod codec_partial_default;
 use std::any::Any;
 use std::borrow::Cow;
 use std::num::NonZeroU64;
-use std::sync::Arc;
-use std::sync::LazyLock;
-use std::sync::Mutex;
+use std::sync::{Arc, LazyLock, Mutex};
 
 pub use codec_partial_default::CodecPartialDefault;
 use codec_partial_default::{
@@ -98,26 +102,27 @@ use zarrs_plugin::{
     ExtensionIdentifier, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersions,
 };
 
+use super::array_bytes::RawBytesOffsetsCreateError;
+use super::concurrency::RecommendedConcurrency;
+use super::data_type::DataTypeExt;
 use super::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArrayShape, BytesRepresentation,
-    ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError, array_bytes::RawBytesOffsetsCreateError,
-    concurrency::RecommendedConcurrency, data_type::DataTypeExt,
+    ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError,
 };
-use crate::array::data_type::BytesDataType;
-use crate::array::data_type::StringDataType;
+use crate::array::data_type::{BytesDataType, StringDataType};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::indexer::IncompatibleIndexerError;
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
-use crate::storage::OffsetBytesIterator;
-use crate::storage::byte_range::extract_byte_ranges;
+use crate::plugin::{Plugin, PluginCreateError};
+use crate::storage::byte_range::{
+    ByteRange, ByteRangeIterator, InvalidByteRangeError, extract_byte_ranges,
+};
 #[cfg(feature = "async")]
 use crate::storage::{AsyncReadableStorage, AsyncReadableWritableStorage};
-use crate::storage::{MaybeSend, MaybeSync};
-use crate::{
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    indexer::IncompatibleIndexerError,
-    plugin::{Plugin, PluginCreateError},
-    storage::byte_range::{ByteRange, ByteRangeIterator, InvalidByteRangeError},
-    storage::{ReadableStorage, ReadableWritableStorage, StorageError, StoreKey},
+use crate::storage::{
+    MaybeSend, MaybeSync, OffsetBytesIterator, ReadableStorage, ReadableWritableStorage,
+    StorageError, StoreKey,
 };
 
 /// A target for decoding array bytes into a preallocated output view.

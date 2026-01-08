@@ -48,7 +48,9 @@ mod array_sharded_ext;
 #[cfg(feature = "sharding")]
 mod array_sync_sharded_readable_ext;
 
-use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+use std::borrow::Cow;
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 #[cfg(all(feature = "sharding", feature = "async"))]
 pub use array_async_sharded_readable_ext::{
@@ -58,60 +60,57 @@ pub use array_async_sharded_readable_ext::{
 pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
 pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
+pub use chunk_cache::chunk_cache_lru::*;
 pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder, chunk_cache_lru::*,
+    ChunkCacheTypePartialDecoder,
 };
 pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType};
 pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 use zarrs_plugin::ZarrVersions;
 
+pub use self::array_builder::{
+    ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
+    ArrayBuilderFillValue,
+};
+pub use self::array_bytes::{
+    ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesVariableLength, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
+    copy_fill_value_into, update_array_bytes,
+};
 #[expect(deprecated)]
 pub use self::array_bytes::{RawBytes, RawBytesOffsets};
-pub use self::{
-    array_builder::{
-        ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
-        ArrayBuilderFillValue,
-    },
-    array_bytes::{
-        ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-        ArrayBytesVariableLength, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
-        copy_fill_value_into, update_array_bytes,
-    },
-    array_bytes_fixed_disjoint_view::{
-        ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError,
-    },
-    array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError},
-    array_metadata_options::ArrayMetadataOptions,
-    bytes_representation::BytesRepresentation,
-    chunk_grid::ChunkGrid,
-    chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator},
-    codec::CodecChain,
-    concurrency::RecommendedConcurrency,
-    element::{Element, ElementFixedLength, ElementOwned},
-    from_array_bytes::FromArrayBytes,
-    into_array_bytes::IntoArrayBytes,
-    storage_transformer::StorageTransformerChain,
-    tensor::{Tensor, TensorError},
+pub use self::array_bytes_fixed_disjoint_view::{
+    ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError,
 };
+pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
+pub use self::array_metadata_options::ArrayMetadataOptions;
+pub use self::bytes_representation::BytesRepresentation;
+pub use self::chunk_grid::ChunkGrid;
+pub use self::chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator};
+pub use self::codec::CodecChain;
+pub use self::concurrency::RecommendedConcurrency;
+pub use self::element::{Element, ElementFixedLength, ElementOwned};
+pub use self::from_array_bytes::FromArrayBytes;
+pub use self::into_array_bytes::IntoArrayBytes;
+pub use self::storage_transformer::StorageTransformerChain;
+pub use self::tensor::{Tensor, TensorError};
 use crate::array::chunk_grid::RegularChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
-use crate::convert::array_metadata_v2_to_v3;
+use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
+use crate::array::codec::{CodecOptions, CodecPlugin};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
+use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
+use crate::metadata::v2::DataTypeMetadataV2;
 pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
 pub use crate::metadata::v3::{
     ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
 pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness};
-use crate::{array::chunk_grid::RegularBoundedChunkGridConfiguration, config::global_config};
-use crate::{array::codec::CodecOptions, metadata::v2::DataTypeMetadataV2};
-use crate::{array::codec::CodecPlugin, plugin::PluginCreateError};
-use crate::{
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    config::MetadataConvertVersion,
-    node::{NodePath, data_key},
-    storage::StoreKey,
-};
-use crate::{config::MetadataEraseVersion, convert::ArrayMetadataV2ToV3Error};
+use crate::node::{NodePath, data_key};
+use crate::plugin::PluginCreateError;
+use crate::storage::StoreKey;
 pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
 #[deprecated(
     since = "0.23.0",
@@ -725,8 +724,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     #[allow(clippy::missing_panics_doc, clippy::too_many_lines)]
     #[must_use]
     pub fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata {
-        use ArrayMetadata as AM;
-        use MetadataConvertVersion as V;
+        use {ArrayMetadata as AM, MetadataConvertVersion as V};
         let mut metadata = self.metadata.clone();
 
         // Attribute manipulation

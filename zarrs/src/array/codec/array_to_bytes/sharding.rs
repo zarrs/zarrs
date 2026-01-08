@@ -59,7 +59,9 @@ mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
-use std::{borrow::Cow, num::NonZeroU64, sync::Arc};
+use std::borrow::Cow;
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
@@ -68,24 +70,21 @@ pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
+    CodecOptions, CodecPlugin,
+};
+use crate::array::concurrency::calc_concurrency_outer_inner;
+use crate::array::{
+    ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
+    RecommendedConcurrency, ravel_indices,
+};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use crate::{
-    array::{
-        ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
-        FillValue, RecommendedConcurrency,
-        codec::{
-            ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec,
-            CodecError, CodecOptions, CodecPlugin,
-        },
-        concurrency::calc_concurrency_outer_inner,
-        ravel_indices,
-    },
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-    storage::byte_range::ByteRange,
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::storage::byte_range::ByteRange;
 
 // Register the codec.
 inventory::submit! {
@@ -289,14 +288,10 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use crate::{
-        array::{
-            ArrayBytes,
-            codec::{BytesToBytesCodecTraits, bytes_to_bytes::test_unbounded::TestUnboundedCodec},
-            data_type,
-        },
-        array_subset::ArraySubset,
-    };
+    use crate::array::codec::BytesToBytesCodecTraits;
+    use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
+    use crate::array::{ArrayBytes, data_type};
+    use crate::array_subset::ArraySubset;
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {

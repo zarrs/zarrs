@@ -31,14 +31,12 @@ use std::sync::Arc;
 pub use crc32c_codec::Crc32cCodec;
 use zarrs_plugin::ExtensionIdentifier;
 
+use crate::array::codec::{Codec, CodecPlugin};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
 };
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the codec.
 inventory::submit! {
@@ -58,19 +56,16 @@ const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
-    use crate::{
-        array::{
-            BytesRepresentation,
-            codec::{
-                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions,
-                CodecOptions, CodecTraits,
-            },
-        },
-        storage::byte_range::ByteRange,
+    use crate::array::BytesRepresentation;
+    use crate::array::codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
+        CodecTraits,
     };
+    use crate::storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
 

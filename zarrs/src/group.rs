@@ -33,22 +33,24 @@ pub use group_metadata_options::GroupMetadataOptions;
 use thiserror::Error;
 
 pub use self::group_builder::GroupBuilder;
+use crate::array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError};
+use crate::config::{
+    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
+};
 use crate::convert::group_metadata_v2_to_v3;
+pub use crate::metadata::GroupMetadata;
 use crate::metadata::NodeMetadata;
-pub use crate::metadata::{GroupMetadata, v3::GroupMetadataV3};
-use crate::metadata::{v2::GroupMetadataV2, v3::AdditionalFieldV3};
+use crate::metadata::v2::GroupMetadataV2;
+use crate::metadata::v3::AdditionalFieldV3;
+pub use crate::metadata::v3::GroupMetadataV3;
 use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
-use crate::storage::ListableStorageTraits;
-use crate::{
-    array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError},
-    config::{
-        MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
-    },
-    node::{
-        Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
-        meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
-    },
-    storage::{ReadableStorageTraits, StorageError, StorageHandle, WritableStorageTraits},
+use crate::node::{
+    Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
+    meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
+};
+use crate::storage::{
+    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
+    WritableStorageTraits,
 };
 #[cfg(feature = "async")]
 use crate::{
@@ -138,8 +140,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// This method is used internally by [`Group::store_metadata`] and [`Group::store_metadata_opt`].
     #[must_use]
     pub fn metadata_opt(&self, options: &GroupMetadataOptions) -> GroupMetadata {
-        use GroupMetadata as GM;
-        use MetadataConvertVersion as V;
+        use {GroupMetadata as GM, MetadataConvertVersion as V};
         let metadata = self.metadata.clone();
 
         match (metadata, options.metadata_convert_version()) {
@@ -812,7 +813,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{StoreKey, store::MemoryStore};
+    use crate::storage::StoreKey;
+    use crate::storage::store::MemoryStore;
 
     const JSON_VALID1: &str = r#"{
     "zarr_format": 3,

@@ -5,11 +5,9 @@ use std::borrow::Cow;
 #[cfg(feature = "async")]
 use super::AsyncBytesPartialDecoderTraits;
 use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use crate::array::ArrayBytesRaw;
 use crate::storage::StorageError;
-use crate::{
-    array::ArrayBytesRaw,
-    storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges},
-};
+use crate::storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 
 /// A cache for a [`BytesPartialDecoderTraits`] partial decoder.
 pub(crate) struct BytesPartialDecoderCache {

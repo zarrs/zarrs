@@ -2,11 +2,8 @@
 
 use thiserror::Error;
 
-use crate::{
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape,
-};
-use crate::{MaybeSend, MaybeSync};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::{ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape, MaybeSend, MaybeSync};
 
 /// An incompatible indexer and array shape error.
 ///

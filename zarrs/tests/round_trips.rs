@@ -1,15 +1,13 @@
 #![allow(missing_docs)]
 
-use std::{error::Error, path::Path};
+use std::error::Error;
+use std::path::Path;
 
-use zarrs::{
-    array::{
-        ChunkKeyEncoding,
-        chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncoding},
-    },
-    node::{data_key, meta_key_v3},
-    storage::{ReadableStorageTraits, WritableStorageTraits, store::MemoryStore},
-};
+use zarrs::array::ChunkKeyEncoding;
+use zarrs::array::chunk_key_encoding::{DefaultChunkKeyEncoding, V2ChunkKeyEncoding};
+use zarrs::node::{data_key, meta_key_v3};
+use zarrs::storage::store::MemoryStore;
+use zarrs::storage::{ReadableStorageTraits, WritableStorageTraits};
 use zarrs_filesystem::FilesystemStore;
 
 #[must_use]

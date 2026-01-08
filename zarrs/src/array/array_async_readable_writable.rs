@@ -1,17 +1,16 @@
 use futures::{StreamExt, TryStreamExt};
 
-use super::{
-    Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes,
-    array_bytes::update_array_bytes,
-    codec::{
-        ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
-        StoragePartialEncoder,
-    },
-    concurrency::concurrency_chunks_and_codec,
+use super::array_bytes::update_array_bytes;
+use super::codec::{
+    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
+    StoragePartialEncoder,
 };
-use crate::storage::AsyncReadableStorageTraits;
-use crate::storage::{MaybeSend, MaybeSync};
-use crate::{array_subset::ArraySubset, storage::AsyncReadableWritableStorageTraits};
+use super::concurrency::concurrency_chunks_and_codec;
+use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
+use crate::array_subset::ArraySubset;
+use crate::storage::{
+    AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
+};
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
     /// Return a read-only instantiation of the array.

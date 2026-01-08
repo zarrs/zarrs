@@ -1,24 +1,17 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
+use crate::array::codec::{
+    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{
-    DataType, FillValue,
-    codec::{ArrayPartialEncoderTraits, PartialEncoderCapability},
-};
+use crate::array::{ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
-use crate::{
-    array::{
-        ChunkShape,
-        codec::{
-            ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToArrayCodecTraits,
-            CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-            RecommendedConcurrency,
-        },
-    },
-    plugin::PluginCreateError,
-};
+use crate::plugin::PluginCreateError;
 use zarrs_plugin::ExtensionIdentifier;
 
 /// A Squeeze codec implementation.

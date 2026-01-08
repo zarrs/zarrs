@@ -5,22 +5,17 @@ use std::sync::Arc;
 
 use ndarray::ArrayD;
 
+use zarrs::array::chunk_grid::RectangularChunkGridConfiguration;
 use zarrs::metadata::v3::MetadataV3;
-use zarrs::{
-    array::chunk_grid::RectangularChunkGridConfiguration,
-    storage::{
-        ReadableWritableListableStorage, storage_adapter::usage_log::UsageLogStorageAdapter,
-    },
-};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::{
-        array::{ZARR_NAN_F32, codec, data_type},
-        array_subset::ArraySubset,
-        node::Node,
-        storage::store,
-    };
+    use zarrs::array::{ZARR_NAN_F32, codec, data_type};
+    use zarrs::array_subset::ArraySubset;
+    use zarrs::node::Node;
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;

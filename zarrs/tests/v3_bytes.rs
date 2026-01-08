@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
-use std::{error::Error, sync::Arc};
+use std::error::Error;
+use std::sync::Arc;
 
 use zarrs_filesystem::FilesystemStore;
 

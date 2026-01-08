@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
-use serde::{de::DeserializeOwned, ser::SerializeMap, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{Configuration, ConfigurationError};

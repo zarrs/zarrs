@@ -46,7 +46,8 @@ pub enum ConsolidatedMetadataKind {
 
 #[cfg(test)]
 mod tests {
-    use zarrs_metadata::{v3::GroupMetadataV3, NodeMetadata};
+    use zarrs_metadata::v3::GroupMetadataV3;
+    use zarrs_metadata::NodeMetadata;
 
     use super::*;
 

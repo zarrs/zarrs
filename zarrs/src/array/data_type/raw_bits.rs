@@ -114,7 +114,8 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
         &self,
         fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        use base64::{Engine, prelude::BASE64_STANDARD};
+        use base64::Engine;
+        use base64::prelude::BASE64_STANDARD;
         // Use metadata_name for better error messages (e.g., "r16" instead of "r*")
         let name = self
             .default_name(zarrs_plugin::ZarrVersions::V3)

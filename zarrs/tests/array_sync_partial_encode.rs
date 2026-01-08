@@ -1,19 +1,16 @@
 #![allow(missing_docs)]
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
-use zarrs::storage::{
-    ReadableStorageTraits, storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
-    store::MemoryStore,
+use zarrs::array::codec::{
+    ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim,
 };
-use zarrs::{
-    array::{
-        ArrayBuilder, ChunkShapeTraits, DataTypeExt,
-        codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim},
-        data_type,
-    },
-    array_subset::ArraySubset,
-};
+use zarrs::array::{ArrayBuilder, ChunkShapeTraits, DataTypeExt, data_type};
+use zarrs::array_subset::ArraySubset;
+use zarrs::storage::ReadableStorageTraits;
+use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+use zarrs::storage::store::MemoryStore;
 
 /// Test sync partial encoding for array-to-array codecs in isolation
 fn test_array_to_array_codec_sync_partial_encoding<

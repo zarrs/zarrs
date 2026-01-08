@@ -64,9 +64,8 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
 #[cfg(target_os = "linux")]
 #[test]
 fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
-    use zarrs_storage::{
-        byte_range::ByteRange, Bytes, ReadableStorageTraits, WritableStorageTraits,
-    };
+    use zarrs_storage::byte_range::ByteRange;
+    use zarrs_storage::{Bytes, ReadableStorageTraits, WritableStorageTraits};
     let tmpfile = tempfile::NamedTempFile::new()?;
     if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
         // Skip this test if direct I/O is not supported

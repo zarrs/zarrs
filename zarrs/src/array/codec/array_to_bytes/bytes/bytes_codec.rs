@@ -5,23 +5,21 @@ use std::sync::Arc;
 use zarrs_plugin::PluginCreateError;
 
 use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
+use crate::array::codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
+use crate::array::data_type::DataTypeExt;
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataTypeSize, FillValue,
-    codec::{
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, RecommendedConcurrency,
-    },
-};
-use crate::array::{
-    DataType,
-    codec::{ArrayPartialEncoderTraits, BytesPartialEncoderTraits, PartialEncoderCapability},
-    data_type::DataTypeExt,
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
+    FillValue,
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;

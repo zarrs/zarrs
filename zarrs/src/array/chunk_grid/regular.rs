@@ -24,16 +24,12 @@ use std::num::NonZeroU64;
 
 use thiserror::Error;
 
+use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
+use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::{
-    array::{
-        ArrayIndices, ArrayShape, ChunkShape,
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-    },
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 use zarrs_plugin::ExtensionIdentifier;
 
 // Register the chunk grid.

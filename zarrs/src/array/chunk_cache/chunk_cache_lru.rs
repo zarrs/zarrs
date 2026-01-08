@@ -418,20 +418,17 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::array::chunk_cache::ChunkCache;
+    use crate::array::codec::CodecOptions;
+    use crate::array::{
+        Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, data_type,
+    };
+    use crate::array_subset::ArraySubset;
+    use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+    use crate::storage::store::MemoryStore;
     use crate::storage::{
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
-    };
-    use crate::{
-        array::{
-            Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-            ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, chunk_cache::ChunkCache,
-            codec::CodecOptions, data_type,
-        },
-        array_subset::ArraySubset,
-        storage::{
-            storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter,
-            store::MemoryStore,
-        },
     };
 
     fn create_store_array() -> (

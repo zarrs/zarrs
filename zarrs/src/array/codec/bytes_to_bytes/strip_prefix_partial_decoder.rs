@@ -1,15 +1,11 @@
 use std::sync::Arc;
 
+use crate::array::ArrayBytesRaw;
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use crate::array::codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use crate::storage::StorageError;
-use crate::{
-    array::{
-        ArrayBytesRaw,
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-    },
-    storage::byte_range::{ByteRange, ByteRangeIterator},
-};
+use crate::storage::byte_range::{ByteRange, ByteRangeIterator};
 
 /// Partial decoder for stripping a prefix (e.g. checksum).
 pub(crate) struct StripPrefixPartialDecoder {

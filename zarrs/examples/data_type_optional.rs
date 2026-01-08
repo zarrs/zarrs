@@ -12,10 +12,8 @@
 use std::sync::Arc;
 
 use ndarray::ArrayD;
-use zarrs::{
-    array::{ArrayBuilder, DataTypeExt, FillValue, data_type},
-    storage::ReadableStorageTraits,
-};
+use zarrs::array::{ArrayBuilder, DataTypeExt, FillValue, data_type};
+use zarrs::storage::ReadableStorageTraits;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store

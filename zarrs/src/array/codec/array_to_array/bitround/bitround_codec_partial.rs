@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
 use super::{BitroundCodec, round_bytes};
+use crate::array::DataType;
+use crate::array::codec::{
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{
-    DataType,
-    codec::{
-        ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
-    },
-};
 use crate::storage::StorageError;
 use zarrs_plugin::ExtensionIdentifier;
 
