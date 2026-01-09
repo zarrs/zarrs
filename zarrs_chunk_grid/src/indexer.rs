@@ -435,7 +435,7 @@ macro_rules! impl_indexer_for_ranges {
     ($ty:ty) => {
         impl Indexer for $ty {
             fn dimensionality(&self) -> usize {
-                self.len()
+                (*self).len()
             }
 
             fn len(&self) -> u64 {
@@ -475,7 +475,7 @@ macro_rules! impl_indexer_for_ranges {
     };
 }
 
-impl_indexer_for_ranges!([Range<u64>]);
+impl_indexer_for_ranges!(&[Range<u64>]);
 impl_indexer_for_ranges!(Vec<Range<u64>>);
 
 impl<const N: usize> Indexer for [Range<u64>; N] {

@@ -23,7 +23,7 @@ mod private {
 
 impl private::Sealed for ArraySubset {}
 impl<const N: usize> private::Sealed for [Range<u64>; N] {}
-impl private::Sealed for [Range<u64>] {}
+impl private::Sealed for &[Range<u64>] {}
 impl private::Sealed for Vec<Range<u64>> {}
 
 /// Trait for types that represent an array region (start and shape).
@@ -253,7 +253,7 @@ impl<const N: usize> ArraySubsetTraits for [Range<u64>; N] {
     }
 }
 
-impl ArraySubsetTraits for [Range<u64>] {
+impl ArraySubsetTraits for &[Range<u64>] {
     fn start(&self) -> Cow<'_, [u64]> {
         Cow::Owned(self.iter().map(|r| r.start).collect())
     }
