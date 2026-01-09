@@ -9,7 +9,7 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::{ArrayBytes, ArraySubsetTraits, DataType, FillValue};
+use crate::array::{ArrayBytes, DataType, FillValue};
 use crate::storage::StorageError;
 use std::num::NonZeroU64;
 
@@ -43,22 +43,22 @@ impl<T: ?Sized> TransposeCodecPartial<T> {
     }
 
     /// Encode: apply forward permutation to bytes in decoded shape.
-    fn encode_subset<'a>(
+    fn encode<'a>(
         &self,
         bytes: &ArrayBytes<'a>,
-        subset: &dyn ArraySubsetTraits,
+        shape: &[u64],
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        apply_permutation(bytes, &subset.shape(), &self.order, &self.data_type)
+        apply_permutation(bytes, shape, &self.order, &self.data_type)
     }
 
     /// Decode: apply inverse permutation to bytes in encoded (transposed) shape.
-    fn decode_subset<'a>(
+    fn decode<'a>(
         &self,
         bytes: &ArrayBytes<'a>,
-        subset: &dyn ArraySubsetTraits,
+        shape: &[u64],
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let transposed_shape: Vec<u64> =
-            permute(&subset.shape(), &self.order).expect("matching dimensionality");
+            permute(shape, &self.order).expect("matching dimensionality");
         apply_permutation(
             bytes,
             &transposed_shape,
@@ -94,7 +94,7 @@ where
             let encoded_value = self
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)?;
-            self.decode_subset(&encoded_value, array_subset)
+            self.decode(&encoded_value, &array_subset.shape())
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
             self.input_output_handle
@@ -126,7 +126,7 @@ where
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let encoded_value = self.encode_subset(bytes, array_subset)?;
+            let encoded_value = self.encode(bytes, &array_subset.shape())?;
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             self.input_output_handle.partial_encode(
                 &array_subset_transposed,
@@ -175,7 +175,7 @@ where
                 .input_output_handle
                 .partial_decode(&array_subset_transposed, options)
                 .await?;
-            self.decode_subset(&encoded_value, array_subset)
+            self.decode(&encoded_value, &array_subset.shape())
         } else {
             let indexer_transposed = get_transposed_indexer(&self.order, indexer)?;
             self.input_output_handle
@@ -211,7 +211,7 @@ where
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
         if let Some(array_subset) = indexer.as_array_subset() {
-            let encoded_value = self.encode_subset(bytes, array_subset)?;
+            let encoded_value = self.encode(bytes, &array_subset.shape())?;
             let array_subset_transposed = get_transposed_array_subset(&self.order, array_subset)?;
             self.input_output_handle
                 .partial_encode(&array_subset_transposed, &encoded_value, options)
