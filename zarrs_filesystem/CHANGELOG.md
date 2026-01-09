@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-01-09
+
 ### Changed
 - Use `FileExt::read_at` for DirectIO reads rather than calling `libc::pread` directly
 
@@ -94,7 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
  - Split from the `zarrs_storage` crate
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.7...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_filesystem-v0.3.8...HEAD
+[0.3.8]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.8
 [0.3.7]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.7
 [0.3.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.6
 [0.3.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs_filesystem-v0.3.5
