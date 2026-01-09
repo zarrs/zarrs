@@ -7,7 +7,7 @@ use super::codec::{
 };
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
 };
@@ -24,7 +24,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     pub async fn async_store_chunk_subset<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
         self.async_store_chunk_subset_opt(
@@ -42,7 +42,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     pub async fn async_store_chunk_subset_elements<T: Element + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.async_store_chunk_subset_opt(
@@ -88,7 +88,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_store_array_subset<'a>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_data: impl IntoArrayBytes<'a> + MaybeSend,
     ) -> Result<(), ArrayError> {
         self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
@@ -100,7 +100,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_store_array_subset_elements<T: Element + MaybeSend + MaybeSync>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.async_store_array_subset_opt(array_subset, subset_elements, &self.codec_options)
@@ -175,7 +175,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     pub async fn async_store_chunk_subset_opt<'a>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: impl IntoArrayBytes<'a> + MaybeSend,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -187,13 +187,15 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
             .any(|(end_exc, shape)| end_exc > *shape)
         {
             return Err(ArrayError::InvalidChunkSubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 chunk_indices.to_vec(),
                 chunk_shape,
             ));
         }
 
-        if chunk_subset.shape() == chunk_shape && chunk_subset.start().iter().all(|&x| x == 0) {
+        if chunk_subset.shape().as_ref() == chunk_shape.as_slice()
+            && chunk_subset.start().iter().all(|&x| x == 0)
+        {
             // The subset spans the whole chunk, so store the bytes directly and skip decoding
             self.async_store_chunk_opt(chunk_indices, chunk_subset_data, options)
                 .await
@@ -247,7 +249,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     pub async fn async_store_chunk_subset_elements_opt<T: Element + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -294,14 +296,14 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     #[allow(clippy::too_many_lines)]
     pub async fn async_store_array_subset_opt<'a>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_data: impl IntoArrayBytes<'a> + MaybeSend,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         // Validation
         if array_subset.dimensionality() != self.shape().len() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -310,7 +312,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         };
@@ -318,7 +320,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         if num_chunks == 1 {
             let chunk_indices = chunks.start();
             let chunk_subset = self.chunk_subset(chunk_indices)?;
-            if array_subset == &chunk_subset {
+            if chunk_subset == array_subset {
                 // A fast path if the array subset matches the chunk subset
                 // This skips the internal decoding occurring in store_chunk_subset
                 self.async_store_chunk_opt(chunk_indices, subset_data, options)
@@ -348,17 +350,19 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 &codec_concurrency,
             );
 
+            let array_subset_start = array_subset.start();
+            let array_subset_shape = array_subset.shape();
             let store_chunk = |chunk_indices: ArrayIndicesTinyVec| {
                 let chunk_subset = self.chunk_subset(&chunk_indices).unwrap(); // FIXME: unwrap
                 let overlap = array_subset.overlap(&chunk_subset).unwrap(); // FIXME: unwrap
                 let chunk_subset_in_array_subset =
-                    overlap.relative_to(array_subset.start()).unwrap();
+                    overlap.relative_to(&array_subset_start).unwrap();
                 let array_subset_in_chunk_subset =
                     overlap.relative_to(chunk_subset.start()).unwrap();
                 let chunk_subset_bytes = subset_bytes
                     .extract_array_subset(
                         &chunk_subset_in_array_subset,
-                        array_subset.shape(),
+                        &array_subset_shape,
                         self.data_type(),
                     )
                     .unwrap(); // FIXME: unwrap
@@ -386,7 +390,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_array_subset_elements_opt<T: Element + MaybeSend + MaybeSync>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         subset_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {

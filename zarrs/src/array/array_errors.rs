@@ -4,10 +4,7 @@ use thiserror::Error;
 use super::codec::CodecError;
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::data_type::{DataTypeFillValueError, DataTypeFillValueMetadataError};
-use crate::array_subset::{
-    ArraySubset, ArraySubsetError, IncompatibleDimensionalityError, IncompatibleOffsetError,
-    IncompatibleStartEndIndicesError,
-};
+use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
 use crate::plugin::PluginCreateError;
 use crate::storage::StorageError;
@@ -93,12 +90,9 @@ pub enum ArrayError {
     /// Incompatible dimensionality.
     #[error(transparent)]
     IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),
-    /// Incompatible start and end indices.
+    /// An [`ArraySubsetError`].
     #[error(transparent)]
-    IncompatibleStartEndIndicesError(#[from] IncompatibleStartEndIndicesError),
-    /// An incompatible offset.
-    #[error(transparent)]
-    IncompatibleOffset(#[from] IncompatibleOffsetError),
+    ArraySubsetError(#[from] ArraySubsetError),
     /// Incompatible array subset.
     #[error("array subset {_0} is not compatible with array shape {_1:?}")]
     InvalidArraySubset(ArraySubset, ArrayShape),
@@ -137,16 +131,6 @@ pub enum ArrayError {
     /// Any other error.
     #[error("{_0}")]
     Other(String),
-}
-
-impl From<ArraySubsetError> for ArrayError {
-    fn from(arr_subset_err: ArraySubsetError) -> Self {
-        match arr_subset_err {
-            ArraySubsetError::IncompatibleDimensionalityError(v) => v.into(),
-            ArraySubsetError::IncompatibleStartEndIndicesError(v) => v.into(),
-            ArraySubsetError::IncompatibleOffset(v) => v.into(),
-        }
-    }
 }
 
 /// An unsupported additional field error.

@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use zarrs::array::codec::{ArrayCodecTraits, CodecOptions};
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
-use zarrs::array_subset::ArraySubset;
 use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]
@@ -26,7 +25,7 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     // 0  0 | 0  0
     array.store_chunk(&[0, 0], &[1u8, 2, 0, 0])?;
     array.store_chunk(&[0, 1], &[3u8, 4, 7, 8])?;
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[1..3, 0..2]), &[5u8, 6, 9, 10])?;
+    array.store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10])?;
 
     assert!(array.retrieve_chunk::<ArrayBytes>(&[0, 0, 0]).is_err());
     assert_eq!(array.retrieve_chunk::<ArrayBytes>(&[0, 0])?, vec![1, 2, 5, 6].into());
@@ -51,52 +50,52 @@ fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error:
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 0])?, Some(ndarray::array![[9, 10], [0, 0]].into_dyn()));
     assert_eq!(array.retrieve_chunk_if_exists::<ndarray::ArrayD<u8>>(&[1, 1])?, None);
 
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2])).is_err());
-    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..3, 0..3])).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2]))?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 0..2]))?, vec![1, 2].into());
-    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 1..2]))?, vec![2, 6].into());
+    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2]).is_err());
+    assert!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 0..2])?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..1, 0..2])?, vec![1, 2].into());
+    assert_eq!(array.retrieve_chunk_subset::<ArrayBytes>(&[0, 0], &[0..2, 1..2])?, vec![2, 6].into());
 
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..3, 0..3])).is_err());
-    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2])).is_err());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 0..2]))?, ndarray::array![[1, 2], [5, 6]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..1, 0..2]))?, ndarray::array![[1, 2]].into_dyn());
-    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &ArraySubset::new_with_ranges(&[0..2, 1..2]))?, ndarray::array![[2], [6]].into_dyn());
+    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..3, 0..3]).is_err());
+    assert!(array.retrieve_chunk_subset::<ndarray::ArrayD<u16>>(&[0, 0], &[0..2, 0..2]).is_err());
+    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 0..2])?, ndarray::array![[1, 2], [5, 6]].into_dyn());
+    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..1, 0..2])?, ndarray::array![[1, 2]].into_dyn());
+    assert_eq!(array.retrieve_chunk_subset::<ndarray::ArrayD<u8>>(&[0, 0], &[0..2, 1..2])?, ndarray::array![[2], [6]].into_dyn());
 
-    assert!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2])).is_err());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..0, 0..0]))?, vec![].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..1, 0..1]))?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 0..2]))?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 1..2]))?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..1, 1..3]))?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
+    assert!(array.retrieve_chunks::<ArrayBytes>(&[0..2]).is_err());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 0..1])?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 0..2])?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..2, 1..2])?, vec![3, 4, 7, 8, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_chunks::<ArrayBytes>(&[0..1, 1..3])?, vec![3, 4, 0, 0, 7, 8, 0, 0].into());
 
-    assert!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2])).is_err());
-    assert!(array.retrieve_chunks::<ndarray::ArrayD<u16>>(&ArraySubset::new_with_ranges(&[0..2, 0..2])).is_err());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2, 0..2]))?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..2, 1..2]))?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
-    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..1, 1..3]))?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
+    assert!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2]).is_err());
+    assert!(array.retrieve_chunks::<ndarray::ArrayD<u16>>(&[0..2, 0..2]).is_err());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 0..2])?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 1..2])?, ndarray::array![[3, 4], [7, 8], [0, 0], [0, 0]].into_dyn());
+    assert_eq!(array.retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..1, 1..3])?, ndarray::array![[3, 4, 0, 0], [7, 8, 0, 0]].into_dyn());
 
-    assert!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..4])).is_err());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..0, 0..0]))?, vec![].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..2, 0..2]))?, vec![1, 2, 5, 6].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..4, 0..4]))?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?, vec![6, 7, 10 ,0].into());
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[5..7, 5..6]))?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&ArraySubset::new_with_ranges(&[0..5, 0..5]))?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
+    assert!(array.retrieve_array_subset::<ArrayBytes>(&[0..4]).is_err());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0])?, vec![].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..2, 0..2])?, vec![1, 2, 5, 6].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..4, 0..4])?, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[1..3, 1..3])?, vec![6, 7, 10 ,0].into());
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[5..7, 5..6])?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.retrieve_array_subset::<ArrayBytes>(&[0..5, 0..5])?, vec![1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into()); // OOB -> fill value
 
-    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..4])).is_err());
-    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&ArraySubset::new_with_ranges(&[0..4, 0..4])).is_err());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..0, 0..0]))?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..4, 0..4]))?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[5..7, 5..6]))?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
-    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&ArraySubset::new_with_ranges(&[0..5, 0..5]))?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
+    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4]).is_err());
+    assert!(array.retrieve_array_subset::<ndarray::ArrayD<u16>>(&[0..4, 0..4]).is_err());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..0, 0..0])?, ndarray::Array2::<u8>::zeros((0, 0)).into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..4, 0..4])?, ndarray::array![[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 0, 0], [0, 0, 0, 0]].into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[1..3, 1..3])?, ndarray::array![[6, 7], [10 ,0]].into_dyn());
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[5..7, 5..6])?, ndarray::array![[0], [0]].into_dyn()); // OOB -> fill value
+    assert_eq!(array.retrieve_array_subset::<ndarray::ArrayD<u8>>(&[0..5, 0..5])?, ndarray::array![[1, 2, 3, 4, 0], [5, 6, 7, 8, 0], [9, 10, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]].into_dyn()); // OOB -> fill value
 
     assert!(array.partial_decoder(&[0]).is_err());
-    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1]), &options).is_err());
-    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &options)?, vec![0, 0].into()); // OOB -> fill value
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &options)?, vec![1, 2].into());
-    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&ArraySubset::new_with_ranges(&[0..2, 1..2]), &options)?, vec![2, 6].into());
+    assert!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..1], &options).is_err());
+    assert_eq!(array.partial_decoder(&[5, 0])?.partial_decode(&[0..1, 0..2], &options)?, vec![0, 0].into()); // OOB -> fill value
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..1, 0..2], &options)?, vec![1, 2].into());
+    assert_eq!(array.partial_decoder(&[0, 0])?.partial_decode(&[0..2, 1..2], &options)?, vec![2, 6].into());
 
     Ok(())
 }
@@ -181,7 +180,7 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
 
     // Write array subset with full chunks
     array.store_array_subset(
-        &ArraySubset::new_with_ranges(&[2..4, 0..4]),
+        &[2..4, 0..4],
         &[
             "1", "22", "333", "4444", "55555", "666666", "7777777", "88888888",
         ],
@@ -196,10 +195,7 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
     );
 
     // Write array subset with partial chunks
-    array.store_array_subset(
-        &ArraySubset::new_with_ranges(&[1..3, 1..3]),
-        &["S1", "S22", "S333", "S4444"],
-    )?;
+    array.store_array_subset(&[1..3, 1..3], &["S1", "S22", "S333", "S4444"])?;
     assert_eq!(
         array.retrieve_chunk::<Vec<String>>(&[0, 0])?,
         &["a", "bb", "ccc", "S1"]
@@ -219,7 +215,7 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
 
     // Write multiple chunks
     array.store_chunks(
-        &ArraySubset::new_with_ranges(&[0..1, 0..2]),
+        &[0..1, 0..2],
         &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"],
     )?;
     assert_eq!(
@@ -231,13 +227,13 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
         &["ccc", "dddd", "C222", "C3333"]
     );
     assert_eq!(
-        array.retrieve_chunks::<Vec<String>>(&ArraySubset::new_with_ranges(&[0..1, 0..2]))?,
+        array.retrieve_chunks::<Vec<String>>(&[0..1, 0..2])?,
         &["a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333"]
     );
 
     // Full chunk requests
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[0..4, 0..4]))?,
+        array.retrieve_array_subset::<Vec<String>>(&[0..4, 0..4])?,
         &[
             "a", "bb", "ccc", "dddd", "C0", "C11", "C222", "C3333", //
             "1", "S333", "S4444", "4444", "55555", "666666", "7777777", "88888888" //
@@ -246,21 +242,13 @@ fn array_str_impl(array: Array<MemoryStore>) -> Result<(), Box<dyn std::error::E
 
     // Partial chunk requests
     assert_eq!(
-        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?,
+        array.retrieve_array_subset::<Vec<String>>(&[1..3, 1..3])?,
         &["C11", "C222", "S333", "S4444"]
     );
 
     // Incompatible chunks / bytes
-    assert!(
-        array
-            .store_chunks(&ArraySubset::new_with_ranges(&[0..0, 0..2]), &["a", "bb"])
-            .is_err()
-    );
-    assert!(
-        array
-            .store_chunks(&ArraySubset::new_with_ranges(&[0..1, 0..2]), &["a", "bb"])
-            .is_err()
-    );
+    assert!(array.store_chunks(&[0..0, 0..2], &["a", "bb"]).is_err());
+    assert!(array.store_chunks(&[0..1, 0..2], &["a", "bb"]).is_err());
 
     Ok(())
 }
@@ -339,7 +327,7 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     let array = builder.build(store, array_path).unwrap();
 
     array.store_array_subset(
-        &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+        &[1..3, 1..3],
         &[&[0u8][..], &[0u8, 1][..], &[0u8, 1, 2][..], &[0u8, 1, 2, 3][..]],
     )?;
     assert_eq!(
@@ -371,7 +359,7 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
         ],
     );
     assert_eq!(
-        array.retrieve_array_subset::<Vec<Vec<u8>>>(&ArraySubset::new_with_ranges(&[1..3, 0..4]))?,
+        array.retrieve_array_subset::<Vec<Vec<u8>>>(&[1..3, 0..4])?,
         vec![
             vec![], vec![0], vec![0, 1], vec![],
             vec![], vec![0, 1, 2], vec![0, 1, 2, 3], vec![],

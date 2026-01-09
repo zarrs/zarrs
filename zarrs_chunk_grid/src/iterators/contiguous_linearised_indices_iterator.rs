@@ -2,9 +2,8 @@ use std::iter::FusedIterator;
 
 use super::contiguous_indices_iterator::ContiguousIndices;
 use super::ContiguousIndicesIterator;
-use crate::array_subset::iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator;
-use crate::array_subset::{ArraySubset, IncompatibleIndexerError};
-use crate::{ravel_indices, ArrayShape};
+use crate::iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator;
+use crate::{ravel_indices, ArrayShape, ArraySubset, IndexerError};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///
@@ -37,12 +36,9 @@ impl ContiguousLinearisedIndices {
     ///
     /// # Errors
     ///
-    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
-    pub fn new(
-        subset: &ArraySubset,
-        array_shape: Vec<u64>,
-    ) -> Result<Self, IncompatibleIndexerError> {
-        let inner = subset.contiguous_indices(&array_shape)?;
+    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    pub fn new(subset: ArraySubset, array_shape: Vec<u64>) -> Result<Self, IndexerError> {
+        let inner = ContiguousIndices::new(subset, &array_shape)?;
         Ok(Self { inner, array_shape })
     }
 

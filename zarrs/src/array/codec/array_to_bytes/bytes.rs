@@ -192,9 +192,8 @@ mod tests {
     };
     use crate::array::data_type::DataTypeExt;
     use crate::array::{
-        ArrayBytes, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
     };
-    use crate::array_subset::ArraySubset;
 
     #[test]
     fn codec_bytes_configuration_big() {

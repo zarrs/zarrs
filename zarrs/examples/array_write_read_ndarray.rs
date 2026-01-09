@@ -8,8 +8,7 @@ use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
-    use zarrs::array::{ZARR_NAN_F32, data_type};
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
     use zarrs::node::Node;
     use zarrs::storage::store;
 
@@ -100,14 +99,14 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         [1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1,],
         [1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.1,],
     ];
-    array.store_chunks(&ArraySubset::new_with_ranges(&[1..2, 0..2]), ndarray_chunks)?;
+    array.store_chunks(&[1..2, 0..2], ndarray_chunks)?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
     println!("store_chunks [1..2, 0..2]:\n{data_all:+4.1}\n");
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     let ndarray_subset: Array2<f32> =
         array![[-3.3, -3.4, -3.5,], [-4.3, -4.4, -4.5,], [-5.3, -5.4, -5.5],];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[3..6, 3..6]), ndarray_subset)?;
+    array.store_array_subset(&[3..6, 3..6], ndarray_subset)?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
     println!("store_array_subset [3..6, 3..6]:\n{data_all:+4.1}\n");
 
@@ -122,7 +121,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         [-6.6],
         [-7.6],
     ];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[0..8, 6..7]), ndarray_subset)?;
+    array.store_array_subset(&[0..8, 6..7], ndarray_subset)?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;
     println!("store_array_subset [0..8, 6..7]:\n{data_all:+4.1}\n");
 
@@ -132,7 +131,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
         // chunk indices
         &[1, 1],
         // subset within chunk
-        &ArraySubset::new_with_ranges(&[3..4, 0..4]),
+        &[3..4, 0..4],
         ndarray_chunk_subset,
     )?;
     let data_all: ArrayD<f32> = array.retrieve_array_subset(&subset_all)?;

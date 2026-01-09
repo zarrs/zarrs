@@ -880,8 +880,7 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::{ChunkShapeTraits, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
@@ -967,7 +966,7 @@ mod tests {
         fill_value: &FillValue,
         elements: Vec<f32>,
         json_array_to_bytes: &str,
-        decoded_region: &ArraySubset,
+        decoded_region: &dyn ArraySubsetTraits,
         decoded_partial_chunk_true: Vec<f32>,
     ) {
         let bytes: ArrayBytes = crate::array::transmute_to_bytes_vec(elements).into();

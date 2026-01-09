@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add sealed `ArraySubsetTraits` trait
+  - Implemented by `ArraySubset`, `[Range<u64>; N]`, `[Range<u64>]`, and `Vec<Range<u64>>`.
+- Add sealed `ChunkShapeTraits` trait
+  - Implemented by `T: AsRef<[NonZeroU64]>`
+
+### Changed
+- **Breaking**: Move various items to the crate root:
+  - `ArraySubset` and `ArraySubsetError`
+  - `Indexer`, `IndexerError`, and `IndexerIterator` (renamed from `IncompatibleIndexerError`)
+  - `IncompatibleDimensionalityError`
+  - `iterators` module
+- **Breaking**: Change `ChunkGridTraits::chunks_in_array_subset()` to accept `&dyn ArraySubsetTraits` instead of `&ArraySubset`
+
+### Removed
+- **Breaking**: Remove `IncompatibleStartEndIndicesError`
+- **Breaking**: Remove `IncompatibleOffsetError`
+- **Breaking**: Make `indexer` and `array_subset` modules private
+
 ## [0.2.0] - 2025-12-31
 
 ### Added

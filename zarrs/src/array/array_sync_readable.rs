@@ -19,8 +19,7 @@ use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
     ArrayMetadata, ArrayMetadataV3, DataType, DataTypeExt, FromArrayBytes,
 };
-use crate::array::{ArrayBytes, ArrayMetadataV2};
-use crate::array_subset::ArraySubset;
+use crate::array::{ArrayBytes, ArrayMetadataV2, ArraySubset, ArraySubsetTraits};
 use crate::config::MetadataRetrieveVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
@@ -236,7 +235,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn retrieve_encoded_chunks(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -272,7 +271,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Panics if the number of array elements in the chunk exceeds `usize::MAX`.
     pub fn retrieve_chunks<T: FromArrayBytes>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
         self.retrieve_chunks_opt(chunks, &CodecOptions::default())
     }
@@ -287,7 +286,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Panics if the number of array elements in the chunks exceeds `usize::MAX`.
     pub fn retrieve_chunks_elements<T: ElementOwned>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
         self.retrieve_chunks_opt(chunks, &CodecOptions::default())
     }
@@ -306,7 +305,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Panics if the number of array elements in the chunks exceeds `usize::MAX`.
     pub fn retrieve_chunks_ndarray<T: ElementOwned>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunks_opt(chunks, &CodecOptions::default())
     }
@@ -325,7 +324,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
         self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
     }
@@ -345,7 +344,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset_elements<T: ElementOwned>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
         self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
     }
@@ -369,7 +368,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset_ndarray<T: ElementOwned>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
     }
@@ -388,7 +387,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Panics if attempting to reference a byte beyond `usize::MAX`.
     pub fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
         self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
     }
@@ -408,7 +407,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     ///  - an underlying store error.
     pub fn retrieve_array_subset_elements<T: ElementOwned>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
         self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
     }
@@ -430,7 +429,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Will panic if any dimension in `chunk_subset` is `usize::MAX` or larger.
     pub fn retrieve_array_subset_ndarray<T: ElementOwned>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
     }
@@ -620,12 +619,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunks_opt<T: FromArrayBytes>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         if chunks.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
-                chunks.clone(),
+                chunks.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -639,7 +638,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunks_elements_opt<T: ElementOwned>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
         T::from_array_bytes(
@@ -657,7 +656,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunks_ndarray_opt<T: ElementOwned>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunks_opt(chunks, options)
@@ -667,8 +666,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Also handles optional data types with variable-length inner types (including nested optionals).
     fn retrieve_multi_chunk_variable(
         &self,
-        array_subset: &ArraySubset,
-        chunks: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
+        chunks: &dyn ArraySubsetTraits,
         data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
@@ -686,7 +685,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                         &chunk_subset_overlap.relative_to(chunk_subset.start())?,
                         options,
                     )?,
-                    chunk_subset_overlap.relative_to(array_subset.start())?,
+                    chunk_subset_overlap.relative_to(&array_subset.start())?,
                 ))
             };
         let chunk_indices = chunks.indices();
@@ -697,13 +696,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         if nesting_depth > 0 {
             Ok(merge_chunks_vlen_optional(
                 chunk_bytes_and_subsets,
-                array_subset.shape(),
+                &array_subset.shape(),
                 nesting_depth,
             )?)
         } else {
             Ok(merge_chunks_vlen(
                 chunk_bytes_and_subsets,
-                array_subset.shape(),
+                &array_subset.shape(),
             )?)
         }
     }
@@ -712,8 +711,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Also handles optional data types with fixed-length inner types (including nested optionals).
     fn retrieve_multi_chunk_fixed(
         &self,
-        array_subset: &ArraySubset,
-        chunks: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
+        chunks: &dyn ArraySubsetTraits,
         data_type: &DataType,
         chunk_concurrent_limit: usize,
         options: &CodecOptions,
@@ -742,14 +741,15 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 let chunk_subset = self.chunk_subset(&chunk_indices)?;
                 let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
                 let chunk_subset_in_array =
-                    chunk_subset_overlap.relative_to(array_subset.start())?;
+                    chunk_subset_overlap.relative_to(&array_subset.start())?;
 
+                let array_subset_shape = array_subset.shape();
                 let mut data_view = unsafe {
                     // SAFETY: chunks represent disjoint array subsets
                     ArrayBytesFixedDisjointView::new(
                         data_output_slice,
                         data_type_size,
-                        array_subset.shape(),
+                        &array_subset_shape,
                         chunk_subset_in_array.clone(),
                     )?
                 };
@@ -762,7 +762,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                         ArrayBytesFixedDisjointView::new(
                             *mask_slice,
                             1, // 1 byte per element for mask
-                            array_subset.shape(),
+                            &array_subset_shape,
                             chunk_subset_in_array.clone(),
                         )
                     })
@@ -807,12 +807,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn retrieve_array_subset_opt<T: FromArrayBytes>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -821,7 +821,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         };
@@ -837,12 +837,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 )
                 .map_err(CodecError::from)
                 .map_err(ArrayError::from)?;
-                T::from_array_bytes(bytes, array_subset.shape(), self.data_type())
+                T::from_array_bytes(bytes, &array_subset.shape(), self.data_type())
             }
             1 => {
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
-                if &chunk_subset == array_subset {
+                if chunk_subset == array_subset {
                     // Single chunk fast path if the array subset domain matches the chunk domain
                     self.retrieve_chunk_opt(chunk_indices, options)
                 } else {
@@ -886,7 +886,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                         &options,
                     )?
                 };
-                T::from_array_bytes(bytes.into_owned(), array_subset.shape(), self.data_type())
+                T::from_array_bytes(bytes.into_owned(), &array_subset.shape(), self.data_type())
             }
         }
     }
@@ -899,7 +899,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_array_subset_elements_opt<T: ElementOwned>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
         T::from_array_bytes(
@@ -917,7 +917,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_array_subset_ndarray_opt<T: ElementOwned>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_array_subset_opt(array_subset, options)
@@ -928,14 +928,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -968,13 +968,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .into_owned()
         };
         bytes.validate(chunk_subset.num_elements(), self.data_type())?;
-        T::from_array_bytes(bytes, chunk_subset.shape(), self.data_type())
+        T::from_array_bytes(bytes, &chunk_subset.shape(), self.data_type())
     }
 
     fn retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -982,7 +982,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
         if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -1022,7 +1022,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset_elements_opt<T: ElementOwned>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
         T::from_array_bytes(
@@ -1045,7 +1045,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     pub fn retrieve_chunk_subset_ndarray_opt<T: ElementOwned>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)

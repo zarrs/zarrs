@@ -9,7 +9,7 @@ use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
     Element, IntoArrayBytes,
 };
-use crate::array_subset::ArraySubset;
+use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
@@ -148,7 +148,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_chunks<'a>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_data: impl IntoArrayBytes<'a>,
     ) -> Result<(), ArrayError> {
         self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
@@ -164,7 +164,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_chunks_elements<T: Element>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_elements: &[T],
     ) -> Result<(), ArrayError> {
         self.store_chunks_opt(chunks, chunks_elements, &CodecOptions::default())
@@ -181,7 +181,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_chunks_ndarray<T: Element, D: ndarray::Dimension>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_array: &ndarray::ArrayRef<T, D>,
     ) -> Result<(), ArrayError> {
         self.store_chunks_opt(
@@ -248,7 +248,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_chunks(&self, chunks: &ArraySubset) -> Result<(), StorageError> {
+    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -359,7 +359,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_chunks_opt<'a>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_data: impl IntoArrayBytes<'a>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -371,7 +371,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
             }
             1 => {
                 let chunk_indices = chunks.start();
-                self.store_chunk_opt(chunk_indices, chunks_data, options)?;
+                self.store_chunk_opt(&chunk_indices, chunks_data, options)?;
             }
             _ => {
                 let chunks_bytes = chunks_data.into_array_bytes(self.data_type())?;
@@ -412,7 +412,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_chunks_elements_opt<T: Element>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_elements: &[T],
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
@@ -426,7 +426,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_chunks_ndarray_opt<T: Element, D: ndarray::Dimension>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         chunks_array: &ndarray::ArrayRef<T, D>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {

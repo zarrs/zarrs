@@ -15,8 +15,9 @@ use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation};
-use crate::array_subset::ArraySubset;
+use crate::array::{
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArraySubset, BytesRepresentation,
+};
 use crate::metadata::DataTypeSize;
 use crate::storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
 use crate::storage::{OffsetBytesIterator, StorageError};
@@ -140,7 +141,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
@@ -194,7 +195,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -273,7 +274,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         // Read the entire chunk
@@ -328,7 +329,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -518,7 +519,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
@@ -578,7 +579,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -662,7 +663,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         // Read the entire chunk
@@ -720,7 +721,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {

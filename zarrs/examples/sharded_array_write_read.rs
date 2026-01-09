@@ -11,9 +11,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::array::codec::{self};
-    use zarrs::array::data_type;
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, codec, data_type};
     use zarrs::node::Node;
     use zarrs::storage::store;
 

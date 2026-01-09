@@ -97,6 +97,7 @@ use codec_partial_default::{
     ArrayToArrayCodecPartialDefault, ArrayToBytesCodecPartialDefault,
     BytesToBytesCodecPartialDefault,
 };
+use zarrs_chunk_grid::ArraySubsetError;
 use zarrs_data_type::{DataTypeFillValueError, FillValue};
 use zarrs_plugin::{
     ExtensionIdentifier, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersions,
@@ -110,8 +111,7 @@ use super::{
     ChunkShape, DataType, RawBytesOffsetsOutOfBoundsError,
 };
 use crate::array::data_type::{BytesDataType, StringDataType};
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
-use crate::indexer::IncompatibleIndexerError;
+use crate::array::{ArraySubset, IncompatibleDimensionalityError, IndexerError};
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 use crate::plugin::{Plugin, PluginCreateError};
@@ -547,7 +547,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError>;
 
@@ -564,7 +564,7 @@ pub trait ArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails or the number of elements in `indexer` does not match the number of elements in `output_view`,
     fn partial_decode_into(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -606,7 +606,7 @@ pub trait ArrayPartialEncoderTraits:
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -640,7 +640,7 @@ pub trait AsyncArrayPartialEncoderTraits:
     /// Returns [`CodecError`] if a codec fails or an array subset is invalid.
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError>;
@@ -767,7 +767,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     /// Returns [`CodecError`] if a codec fails, array subset is invalid, or the array subset shape does not match array view subset shape.
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
 
@@ -775,7 +775,7 @@ pub trait AsyncArrayPartialDecoderTraits: Any + MaybeSend + MaybeSync {
     #[allow(clippy::missing_safety_doc)]
     async fn partial_decode_into(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -1849,7 +1849,7 @@ pub enum CodecError {
     InvalidByteRangeError(#[from] InvalidByteRangeError),
     /// The indexer is invalid (e.g. incorrect dimensionality / out-of-bounds access).
     #[error(transparent)]
-    IncompatibleIndexer(#[from] IncompatibleIndexerError),
+    IncompatibleIndexer(#[from] IndexerError),
     /// The decoded size of a chunk did not match what was expected.
     #[error("the size of a decoded chunk is {}, expected {}", _0.len, _0.expected_len)]
     UnexpectedChunkDecodedSize(#[from] InvalidBytesLengthError),
@@ -1900,6 +1900,9 @@ pub enum CodecError {
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),
+    /// An array region error.
+    #[error(transparent)]
+    ArraySubsetError(#[from] ArraySubsetError),
 }
 
 fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {

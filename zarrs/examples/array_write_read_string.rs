@@ -9,7 +9,6 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
     use zarrs::array::{ArrayBytes, data_type};
-    use zarrs::array_subset::ArraySubset;
     use zarrs::storage::store;
 
     // Create a store
@@ -87,7 +86,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     let ndarray_subset: Array2<&str> = array![["!", "@@"], ["###", "$$$$"]];
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[1..3, 1..3]), ndarray_subset)?;
+    array.store_array_subset(&[1..3, 1..3], ndarray_subset)?;
     let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
     println!("store_array_subset [1..3, 1..3]:\nndarray::ArrayD<String>\n{data_all}");
 

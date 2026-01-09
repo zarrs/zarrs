@@ -1,9 +1,8 @@
 use std::iter::FusedIterator;
 
 use super::IndicesIterator;
-use crate::array_subset::iterators::indices_iterator::IndicesIntoIterator;
-use crate::array_subset::{ArraySubset, IncompatibleIndexerError};
-use crate::{ravel_indices, ArrayShape};
+use crate::iterators::indices_iterator::IndicesIntoIterator;
+use crate::{ravel_indices, ArrayShape, ArraySubset, IndexerError};
 
 /// An iterator over the linearised indices in an array subset.
 ///
@@ -26,21 +25,15 @@ impl LinearisedIndices {
     /// Create a new linearised indices iterator.
     ///
     /// # Errors
-    /// Returns [`IncompatibleIndexerError`] if `array_shape` does not encapsulate `subset`.
-    pub fn new(
-        subset: ArraySubset,
-        array_shape: ArrayShape,
-    ) -> Result<Self, IncompatibleIndexerError> {
+    /// Returns [`IndexerError`] if `array_shape` does not encapsulate `subset`.
+    pub fn new(subset: ArraySubset, array_shape: ArrayShape) -> Result<Self, IndexerError> {
         if subset.dimensionality() != array_shape.len() {
-            Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+            Err(IndexerError::new_incompatible_dimensionality(
                 subset.dimensionality(),
                 array_shape.len(),
             ))
         } else if std::iter::zip(subset.end_exc(), &array_shape).any(|(end, shape)| end > *shape) {
-            Err(IncompatibleIndexerError::new_oob(
-                subset.end_exc(),
-                array_shape,
-            ))
+            Err(IndexerError::new_oob(subset.end_exc(), array_shape))
         } else {
             Ok(Self {
                 subset,

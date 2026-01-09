@@ -32,8 +32,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
-use crate::array_subset::IncompatibleDimensionalityError;
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
@@ -363,7 +362,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array_subset::ArraySubset;
+    use crate::array::ArraySubset;
 
     #[test]
     fn chunk_grid_rectangular() {
@@ -395,9 +394,7 @@ mod tests {
         );
 
         assert_eq!(
-            chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..5, 2..6]))
-                .unwrap(),
+            chunk_grid.chunks_subset(&[1..5, 2..6]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[5..45, 20..60]))
         );
 

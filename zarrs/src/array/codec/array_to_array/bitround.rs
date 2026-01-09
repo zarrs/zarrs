@@ -427,8 +427,7 @@ mod tests {
     use crate::array::codec::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
-    use crate::array::{ArrayBytes, data_type};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBytes, ArraySubset, data_type};
 
     #[test]
     fn codec_bitround_float() {

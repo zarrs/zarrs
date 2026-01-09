@@ -2,8 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, DataType, DataTypeExt, FillValue, data_type};
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArrayBuilder, ArraySubset, DataType, DataTypeExt, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 
 /// Test helper to create an array with optional codec
@@ -116,9 +115,8 @@ fn optional_array_basic_operations() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Verify partial update
-    let retrieved_update = array.retrieve_array_subset::<ndarray::ArrayD<Option<u8>>>(
-        &ArraySubset::new_with_ranges(&[0..4, 2..6]),
-    )?;
+    let retrieved_update =
+        array.retrieve_array_subset::<ndarray::ArrayD<Option<u8>>>(&[0..4, 2..6])?;
     let retrieved_update: Array2<Option<u8>> = retrieved_update.into_dimensionality()?;
     assert_eq!(retrieved_update, update_data);
     let chunk0_updated_data = array![

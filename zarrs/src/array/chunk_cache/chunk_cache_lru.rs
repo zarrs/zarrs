@@ -4,10 +4,9 @@ use std::sync::{Arc, atomic};
 use super::ChunkCacheType;
 use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ChunkCache, ChunkCacheTypeDecoded,
-    ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkCache,
+    ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
-use crate::array_subset::ArraySubset;
 use crate::storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;
@@ -166,7 +165,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded: ChunkCacheTypeEncoded = self
@@ -239,7 +238,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk = self
@@ -298,7 +297,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
         fn retrieve_chunk_subset_bytes(
             &self,
             chunk_indices: &[u64],
-            chunk_subset: &ArraySubset,
+            chunk_subset: &dyn ArraySubsetTraits,
             options: &$crate::array::codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
@@ -421,10 +420,10 @@ mod tests {
     use crate::array::chunk_cache::ChunkCache;
     use crate::array::codec::CodecOptions;
     use crate::array::{
-        Array, ArrayBuilder, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
-        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit, data_type,
+        Array, ArrayBuilder, ArraySubset, ChunkCacheDecodedLruChunkLimit,
+        ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCacheEncodedLruSizeLimit, data_type,
     };
-    use crate::array_subset::ArraySubset;
     use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
     use crate::storage::store::MemoryStore;
     use crate::storage::{
@@ -473,7 +472,7 @@ mod tests {
         assert_eq!(
             cache
                 .retrieve_array_subset::<ndarray::ArrayD<u8>>(
-                    &ArraySubset::new_with_ranges(&[3..5, 0..4]),
+                    &[3..5, 0..4],
                     &CodecOptions::default()
                 )
                 .unwrap(),
@@ -519,7 +518,7 @@ mod tests {
             cache
                 .retrieve_chunk_subset::<ndarray::ArrayD<u8>>(
                     &[0, 0],
-                    &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+                    &[1..3, 1..3],
                     &CodecOptions::default()
                 )
                 .unwrap(),
@@ -539,10 +538,7 @@ mod tests {
         // Retrieve chunks in the cache
         assert_eq!(
             cache
-                .retrieve_chunks::<ndarray::ArrayD<u8>>(
-                    &ArraySubset::new_with_ranges(&[0..2, 0..1]),
-                    &CodecOptions::default()
-                )
+                .retrieve_chunks::<ndarray::ArrayD<u8>>(&[0..2, 0..1], &CodecOptions::default())
                 .unwrap(),
             ndarray::array![
                 [0, 1, 2, 3],
@@ -587,11 +583,7 @@ mod tests {
 
         // Partially retrieve from a cached chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[0, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[0, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if !thread_local {
             if partial_decoder {
@@ -604,11 +596,7 @@ mod tests {
 
         // Partially retrieve from an uncached chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[1, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[1, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if !thread_local {
             if partial_decoder {
@@ -622,11 +610,7 @@ mod tests {
 
         // Partially retrieve from an empty chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[2, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[2, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if !thread_local {
             if partial_decoder {
@@ -795,10 +779,7 @@ mod tests {
 
         // Retrieve an array subset (within a single chunk to test basic functionality)
         let result = cache
-            .retrieve_array_subset::<Vec<String>>(
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_array_subset::<Vec<String>>(&[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
             "x".to_string(),         // i=0: row 0, col 0
@@ -845,11 +826,7 @@ mod tests {
 
         // Retrieve a chunk subset
         let result = cache
-            .retrieve_chunk_subset::<Vec<String>>(
-                &[0, 0],
-                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset::<Vec<String>>(&[0, 0], &[1..3, 1..3], &CodecOptions::default())
             .unwrap();
         let expected: Vec<String> = vec![
             "x".repeat((9 % 8) + 1),  // i=9
@@ -866,10 +843,7 @@ mod tests {
 
         // Retrieve chunks in the cache
         let result = cache
-            .retrieve_chunks::<Vec<String>>(
-                &ArraySubset::new_with_ranges(&[0..2, 0..1]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunks::<Vec<String>>(&[0..2, 0..1], &CodecOptions::default())
             .unwrap();
         // Chunks [0,0] and [1,0]: rows 0-7, cols 0-3 -> indices: 0,1,2,3,8,9,10,11,...,56,57,58,59
         let expected: Vec<String> = vec![
@@ -921,11 +895,7 @@ mod tests {
 
         // Partially retrieve from a cached chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[0, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[0, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if thread_local {
             assert_eq!(store.reads(), 4);
@@ -936,11 +906,7 @@ mod tests {
 
         // Partially retrieve from an uncached chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[1, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[1, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if !thread_local {
             if partial_decoder {
@@ -953,11 +919,7 @@ mod tests {
 
         // Partially retrieve from an empty chunk
         cache
-            .retrieve_chunk_subset_bytes(
-                &[2, 1],
-                &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-                &CodecOptions::default(),
-            )
+            .retrieve_chunk_subset_bytes(&[2, 1], &[0..2, 0..2], &CodecOptions::default())
             .unwrap();
         if thread_local {
             assert_eq!(store.reads(), 6);

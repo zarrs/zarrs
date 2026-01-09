@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_chunk_grid"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.88"

@@ -158,10 +158,9 @@ mod tests {
     use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
     use crate::array::data_type::DataTypeExt;
     use crate::array::{
-        ArrayBytes, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
+        ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
         transmute_to_bytes_vec,
     };
-    use crate::array_subset::ArraySubset;
 
     const JSON_VALID: &str = r#"{
         "level": 8,

@@ -12,11 +12,9 @@ use zarrs::array::codec::{
 #[cfg(feature = "transpose")]
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
-    ArrayIndices, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, DataType,
-    ElementOwned, data_type,
+    ArrayIndices, ArrayIndicesTinyVec, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain,
+    DataType, ElementOwned, Indexer, IndexerError, data_type,
 };
-use zarrs::array_subset::ArraySubset;
-use zarrs::indexer::{IncompatibleIndexerError, Indexer};
 use zarrs_data_type::FillValue;
 
 fn indexer_basic<T: Indexer>(
@@ -54,25 +52,20 @@ fn indexer_basic<T: Indexer>(
     );
     assert!(matches!(
         indexer.iter_linearised_indices(&[4, 4, 4]),
-        Err(IncompatibleIndexerError::IncompatibleDimensionality(_))
+        Err(IndexerError::IncompatibleDimensionality(_))
     )); // incompatible dimensionality
     assert!(matches!(
         indexer.iter_contiguous_linearised_indices(&[4, 4, 4]),
-        Err(IncompatibleIndexerError::IncompatibleDimensionality(_))
+        Err(IndexerError::IncompatibleDimensionality(_))
     )); // incompatible dimensionality
     assert!(matches!(
         indexer.iter_linearised_indices(&[3, 3]),
-        Err(IncompatibleIndexerError::OutOfBounds(_, _))
+        Err(IndexerError::OutOfBounds(_, _))
     )); // OOB
     assert!(matches!(
         indexer.iter_contiguous_linearised_indices(&[3, 3]),
-        Err(IncompatibleIndexerError::OutOfBounds(_, _))
+        Err(IndexerError::OutOfBounds(_, _))
     )); // OOB
-    let subset = ArraySubset::new_with_shape(vec![4, 4]);
-    assert!(matches!(
-        subset.extract_elements(&[0u8, 4 * 4], &[5, 5]),
-        Err(IncompatibleIndexerError::IncompatibleLength(_, _))
-    ));
 }
 
 #[test]

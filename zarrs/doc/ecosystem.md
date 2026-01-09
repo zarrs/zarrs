@@ -20,9 +20,9 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 - [`zarrs_storage`]: The storage API.
   - Re-exports [`zarrs::storage`](crate::storage).
 - [`zarrs_chunk_grid`]: The chunk grid extension API.
-  - Re-exports [`zarrs::array::chunk_grid`](crate::array::chunk_grid), [`zarrs::array_subset`](crate::array_subset), and [`zarrs::indexer`](crate::indexer).
+  - Re-exports items under [`zarrs::array`](crate::array) and [`zarrs::array::chunk_grid`](crate::array::chunk_grid).
 - [`zarrs_data_type`]: The data type extension API.
-  - Re-exports [`zarrs::array::data_type`](crate::array::data_type).
+  - Re-exports items under [`zarrs::array`](crate::array) and [`zarrs::array::data_type`](crate::array::data_type).
 
 #### Stores
 - [`zarrs_filesystem`]: A filesystem store.

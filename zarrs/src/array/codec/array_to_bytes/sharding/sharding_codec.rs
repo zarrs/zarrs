@@ -28,11 +28,10 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::data_type::DataTypeExt;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, BytesRepresentation, ChunkShape,
-    ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
+    ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
     transmute_to_bytes_vec, unravel_index,
 };
-use crate::array_subset::ArraySubset;
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
 
@@ -490,9 +489,12 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 .expect("inbounds chunk");
 
             let output_subset_chunk = ArraySubset::new_with_start_shape(
-                std::iter::zip(output_view.subset().start(), chunk_subset.start())
-                    .map(|(o, s)| o + s)
-                    .collect(),
+                std::iter::zip(
+                    output_view.subset().start().iter(),
+                    chunk_subset.start().iter(),
+                )
+                .map(|(o, s)| o + s)
+                .collect(),
                 chunk_subset.shape().to_vec(),
             )
             .unwrap();

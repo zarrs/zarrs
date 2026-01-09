@@ -58,7 +58,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Bytes codec does pass-through decoding
@@ -84,7 +84,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -123,7 +123,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Bytes codec does pass-through decoding
@@ -154,7 +154,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {

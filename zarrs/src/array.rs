@@ -28,7 +28,6 @@ mod array_errors;
 mod array_metadata_options;
 mod bytes_representation;
 mod chunk_cache;
-mod chunk_shape;
 mod element;
 mod from_array_bytes;
 mod into_array_bytes;
@@ -40,6 +39,12 @@ pub mod codec;
 pub mod concurrency;
 pub mod data_type;
 pub mod storage_transformer;
+
+pub use zarrs_chunk_grid::{
+    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
+    ArraySubsetTraits, ChunkShape, ChunkShapeTraits, IncompatibleDimensionalityError, Indexer,
+    IndexerError, iterators,
+};
 
 #[cfg(feature = "dlpack")]
 mod array_dlpack_ext;
@@ -66,7 +71,6 @@ pub use chunk_cache::{
     ChunkCacheTypePartialDecoder,
 };
 pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType};
-pub use zarrs_chunk_grid::{ArrayIndices, ArrayIndicesTinyVec};
 use zarrs_plugin::ZarrVersions;
 
 pub use self::array_builder::{
@@ -99,7 +103,6 @@ use crate::array::chunk_grid::RegularChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
 use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
 use crate::array::codec::{CodecOptions, CodecPlugin};
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
 use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
 use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 use crate::metadata::v2::DataTypeMetadataV2;
@@ -111,7 +114,6 @@ pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness
 use crate::node::{NodePath, data_key};
 use crate::plugin::PluginCreateError;
 use crate::storage::StoreKey;
-pub use chunk_shape::{ArrayShape, ChunkShape, ChunkShapeTraits};
 #[deprecated(
     since = "0.23.0",
     note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
@@ -229,10 +231,9 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// ```rust
 /// # use std::sync::Arc;
-/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec};
-/// # use zarrs::array_subset::ArraySubset;
-/// # use zarrs::array_subset::iterators::Indices;
-/// # use zarrs::indexer::Indexer;
+/// # use zarrs::array::{Array, ArrayBytes, ArrayIndicesTinyVec, Indexer};
+/// # use zarrs::array::ArraySubset;
+/// # use zarrs::array::iterators::Indices;
 /// # use rayon::iter::{IntoParallelIterator, ParallelIterator};
 /// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
 /// # let array = Array::open(store, "/group/array")?;
@@ -936,10 +937,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Errors
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if a chunk in `chunks` is incompatible with the chunk grid.
     #[allow(clippy::similar_names)]
-    pub fn chunks_subset(&self, chunks: &ArraySubset) -> Result<ArraySubset, ArrayError> {
+    pub fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError> {
         match chunks.end_inc() {
             Some(end) => {
-                let chunk0 = self.chunk_subset(chunks.start())?;
+                let chunk0 = self.chunk_subset(&chunks.start())?;
                 let chunk1 = self.chunk_subset(&end)?;
                 let start = chunk0.start().to_vec();
                 let end = chunk1.end_exc();
@@ -953,7 +954,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
     ///
     /// # Errors
     /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
-    pub fn chunks_subset_bounded(&self, chunks: &ArraySubset) -> Result<ArraySubset, ArrayError> {
+    pub fn chunks_subset_bounded(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<ArraySubset, ArrayError> {
         let chunks_subset = self.chunks_subset(chunks)?;
         Ok(chunks_subset.bound(self.shape())?)
     }
@@ -966,7 +970,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Returns [`IncompatibleDimensionalityError`] if the array subset has an incorrect dimensionality.
     pub fn chunks_in_array_subset(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
         self.chunk_grid.chunks_in_array_subset(array_subset)
     }
@@ -1379,7 +1383,7 @@ mod tests {
 
         array
             .store_array_subset(
-                &ArraySubset::new_with_ranges(&[3..6, 3..6]),
+                &[3..6, 3..6],
                 &[1.0f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
             )
             .unwrap();

@@ -64,8 +64,7 @@ mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
     use crate::array::codec::CodecOptions;
-    use crate::array::{ArrayBuilder, Tensor, data_type, transmute_to_bytes};
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type, transmute_to_bytes};
     use crate::storage::store::MemoryStore;
 
     #[test]

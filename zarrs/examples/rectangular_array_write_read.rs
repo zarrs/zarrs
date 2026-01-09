@@ -12,8 +12,7 @@ use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use zarrs::array::{ZARR_NAN_F32, codec, data_type};
-    use zarrs::array_subset::ArraySubset;
+    use zarrs::array::{ArraySubset, ZARR_NAN_F32, codec, data_type};
     use zarrs::node::Node;
     use zarrs::storage::store;
 
@@ -113,7 +112,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     array.store_array_subset(
-        &ArraySubset::new_with_ranges(&[3..6, 3..6]), // start
+        &[3..6, 3..6], // start
         ndarray::ArrayD::<f32>::from_shape_vec(
             vec![3, 3],
             vec![0.1f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -121,14 +120,14 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Store elements directly, in this case set the 7th column to 123.0
-    array.store_array_subset(&ArraySubset::new_with_ranges(&[0..8, 6..7]), &[123.0f32; 8])?;
+    array.store_array_subset(&[0..8, 6..7], &[123.0f32; 8])?;
 
     // Store elements directly in a chunk, in this case set the last row of the bottom right chunk
     array.store_chunk_subset(
         // chunk indices
         &[3, 1],
         // subset within chunk
-        &ArraySubset::new_with_ranges(&[1..2, 0..4]),
+        &[1..2, 0..4],
         &[-4.0f32; 4],
     )?;
 

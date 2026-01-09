@@ -7,7 +7,6 @@ use std::sync::Arc;
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 use zarrs::array::codec::{BytesToBytesCodecTraits, CodecOptions};
 use zarrs::array::{ArrayBuilder, data_type};
-use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -72,7 +71,7 @@ fn array_partial_encode_sharding(
 
     // [1, 0]
     // [0, 0]
-    array.store_array_subset_opt(&ArraySubset::new_with_ranges(&[0..1, 0..1]), &[1u16], &opt)?;
+    array.store_array_subset_opt(&[0..1, 0..1], &[1u16], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     assert_eq!(store_perf.bytes_read(), 0);
@@ -86,7 +85,7 @@ fn array_partial_encode_sharding(
 
     // [0, 0]
     // [0, 0]
-    array.store_array_subset_opt(&ArraySubset::new_with_ranges(&[0..1, 0..1]), &[0u16], &opt)?;
+    array.store_array_subset_opt(&[0..1, 0..1], &[0u16], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), 0);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -97,11 +96,7 @@ fn array_partial_encode_sharding(
 
     // [1, 2]
     // [0, 0]
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[0..1, 0..2]),
-        &[1u16, 2],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[0..1, 0..2], &[1u16, 2], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -116,11 +111,7 @@ fn array_partial_encode_sharding(
     // Check that the shard is entirely rewritten when possible, rather than appended
     // [3, 4]
     // [0, 0]
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[0..1, 0..2]),
-        &[3u16, 4],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[0..1, 0..2], &[3u16, 4], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index + 1x inner chunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -137,11 +128,7 @@ fn array_partial_encode_sharding(
 
     // [99, 4]
     // [5, 0]
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[0..2, 0..1]),
-        &[99u16, 5],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[0..2, 0..1], &[99u16, 5], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -159,11 +146,7 @@ fn array_partial_encode_sharding(
     // [99, 4]
     // [5, 100]
     store_perf.reset();
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[1..2, 1..2]),
-        &[100u16],
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[1..2, 1..2], &[100u16], &opt)?;
     assert_eq!(store_perf.reads(), 1); // index
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
@@ -285,19 +268,11 @@ fn array_partial_encode_sharding_compact(
     // This creates gaps as the old compressed data is marked stale
     // Write to inner chunk [0,0] (elements [0..2, 0..2] of the shard)
     let random_data1 = vec![100u16, 101, 102, 103];
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[0..2, 0..2]),
-        &random_data1,
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[0..2, 0..2], &random_data1, &opt)?;
 
     // Write to inner chunk [1,0] (elements [2..4, 0..2] of the shard)
     let random_data2 = vec![200u16, 201, 202, 203];
-    array.store_array_subset_opt(
-        &ArraySubset::new_with_ranges(&[2..4, 0..2]),
-        &random_data2,
-        &opt,
-    )?;
+    array.store_array_subset_opt(&[2..4, 0..2], &random_data2, &opt)?;
 
     let size_after_overwrites = get_bytes_0_0()?.unwrap().len();
 

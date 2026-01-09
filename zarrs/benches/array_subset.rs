@@ -5,7 +5,7 @@ use criterion::{
     AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
     criterion_main,
 };
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::ArraySubset;
 
 fn array_subset_indices_iterator(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);

@@ -5,8 +5,7 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::array_subset::ArraySubset;
-use crate::{unravel_index, ArrayIndicesTinyVec};
+use crate::{unravel_index, ArrayIndicesTinyVec, ArraySubset};
 
 /// An iterator over the indices in an array subset.
 ///
@@ -226,11 +225,11 @@ macro_rules! impl_indices_iterator {
                 let start = self.subset.start();
                 match shape.len() {
                     0 => Some(ArrayIndicesTinyVec::new()),
-                    1 => Some(unravel_index_1d(index, shape, start)),
-                    2 => Some(unravel_index_2d(index, shape, start)),
-                    3 => Some(unravel_index_3d(index, shape, start)),
-                    4 => Some(unravel_index_4d(index, shape, start)),
-                    _ => unravel_index_nd(index, shape, start),
+                    1 => Some(unravel_index_1d(index, &shape, &start)),
+                    2 => Some(unravel_index_2d(index, &shape, &start)),
+                    3 => Some(unravel_index_3d(index, &shape, &start)),
+                    4 => Some(unravel_index_4d(index, &shape, &start)),
+                    _ => unravel_index_nd(index, &shape, &start),
                 }
             }
 
@@ -249,11 +248,11 @@ macro_rules! impl_indices_iterator {
                     let start = self.subset.start();
                     match shape.len() {
                         0 => Some(ArrayIndicesTinyVec::new()),
-                        1 => Some(unravel_index_1d(index, shape, start)),
-                        2 => Some(unravel_index_2d(index, shape, start)),
-                        3 => Some(unravel_index_3d(index, shape, start)),
-                        4 => Some(unravel_index_4d(index, shape, start)),
-                        _ => unravel_index_nd(index, shape, start),
+                        1 => Some(unravel_index_1d(index, &shape, &start)),
+                        2 => Some(unravel_index_2d(index, &shape, &start)),
+                        3 => Some(unravel_index_3d(index, &shape, &start)),
+                        4 => Some(unravel_index_4d(index, &shape, &start)),
+                        _ => unravel_index_nd(index, &shape, &start),
                     }
                 } else {
                     None

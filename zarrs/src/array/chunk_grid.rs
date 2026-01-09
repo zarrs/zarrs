@@ -14,7 +14,12 @@ pub mod regular_bounded;
 pub use rectangular::*;
 pub use regular::*;
 pub use regular_bounded::*;
-pub use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits, ChunkGridTraitsIterators};
+
+pub use zarrs_chunk_grid::{
+    CHUNK_GRID_RUNTIME_REGISTRY, ChunkGrid, ChunkGridPlugin, ChunkGridRuntimePlugin,
+    ChunkGridRuntimeRegistryHandle, ChunkGridTraits, ChunkGridTraitsIterators, register_chunk_grid,
+    unregister_chunk_grid,
+};
 
 #[cfg(test)]
 mod tests {

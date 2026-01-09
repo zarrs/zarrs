@@ -39,7 +39,7 @@ impl VlenV2PartialDecoder {
 
 fn decode_vlen_bytes<'a>(
     bytes: Option<ArrayBytesRaw>,
-    indexer: &dyn crate::indexer::Indexer,
+    indexer: &dyn crate::array::Indexer,
     data_type: &DataType,
     fill_value: &FillValue,
     shape: &[NonZeroU64],
@@ -70,7 +70,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
@@ -134,7 +134,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)

@@ -33,7 +33,7 @@ use crate::storage::byte_range::ByteRange;
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &dyn crate::indexer::Indexer,
+    indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 )))]
 fn partial_decode<'a>(
@@ -44,7 +44,7 @@ fn partial_decode<'a>(
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
-    indexer: &dyn crate::indexer::Indexer,
+    indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let PackBitsCodecComponents {
@@ -196,7 +196,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         partial_decode(
@@ -271,7 +271,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         partial_decode_async(

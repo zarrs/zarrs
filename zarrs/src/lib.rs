@@ -153,7 +153,7 @@
 //! array.erase_chunk(&[1, 1])?;
 //!
 //! // Retrieve all array elements as an ndarray
-//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
+//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&[0..3, 0..4])?;
 //! println!("{array_all:4}");
 //! // [[ NaN,  NaN,  0.2,  0.3],
 //! //  [ NaN, -1.1, -1.2,  1.3],
@@ -232,7 +232,6 @@ pub mod hierarchy;
 pub mod node;
 pub mod version;
 
-pub use zarrs_chunk_grid::{array_subset, indexer};
 #[cfg(feature = "filesystem")]
 pub use zarrs_filesystem as filesystem;
 pub use {

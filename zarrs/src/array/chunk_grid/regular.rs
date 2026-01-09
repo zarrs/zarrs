@@ -25,8 +25,10 @@ use std::num::NonZeroU64;
 use thiserror::Error;
 
 use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
-use crate::array_subset::{ArraySubset, IncompatibleDimensionalityError};
+use crate::array::{
+    ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
+    IncompatibleDimensionalityError,
+};
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
@@ -182,18 +184,19 @@ impl RegularChunkGrid {
     /// Determinate version of [`ChunkGridTraits::chunks_in_array_subset`].
     pub(crate) fn chunks_in_array_subset(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         match array_subset.end_inc() {
             Some(end) => {
-                let chunks_start = self.chunk_indices(array_subset.start())?;
+                let chunks_start = self.chunk_indices(&array_subset.start())?;
                 let chunks_end = self.chunk_indices(&end)?;
                 // .unwrap_or_else(|| self.grid_shape());
 
                 let shape = std::iter::zip(&chunks_start, chunks_end)
                     .map(|(&s, e)| e.saturating_sub(s) + 1)
                     .collect();
-                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)?)
+                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)
+                    .expect("start and shape have same length"))
             }
             None => Ok(ArraySubset::new_empty(self.dimensionality())),
         }
@@ -290,13 +293,6 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             ))
         }
     }
-
-    fn chunks_in_array_subset(
-        &self,
-        array_subset: &ArraySubset,
-    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        self.chunks_in_array_subset(array_subset).map(Option::Some)
-    }
 }
 
 #[cfg(test)]
@@ -304,9 +300,8 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::ArrayIndicesTinyVec;
     use crate::array::chunk_grid::ChunkGridTraitsIterators;
-    use crate::array_subset::ArraySubset;
+    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
 
     #[test]
     fn chunk_grid_regular_configuration() {
@@ -376,21 +371,15 @@ mod tests {
             );
 
             assert_eq!(
-                chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3, 1..2, 5..8]),)
-                    .unwrap(),
+                chunk_grid.chunks_subset(&[1..3, 1..2, 5..8],).unwrap(),
                 Some(ArraySubset::new_with_ranges(&[1..3, 2..4, 15..24]))
             );
 
-            assert!(
-                chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
-                    .is_err()
-            );
+            assert!(chunk_grid.chunks_subset(&[1..3]).is_err());
 
             assert!(
                 chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
+                    .chunks_subset(&[0..0, 0..0, 0..0],)
                     .unwrap()
                     .unwrap()
                     .is_empty()
