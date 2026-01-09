@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + array.store_array_subset(&subset, &data)?;
   ```
 
+- Many parameters are now `&dyn ArraySubsetTraits` instead of `ArraySubset` for ergonomic array subset indexing
+
+  ```diff
+  - array.retrieve_array_subset(&ArraySubset::new_with_ranges(&[0..3, 10..20]))?;
+  + array.retrieve_array_subset(&[0..3, 10..20])?;
+  ```
+
 - `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
   - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
 
@@ -88,7 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add runtime extension registration
   - Add `[un]register_{codec,chunk_key_encoding,storage_transformer}`
   - Add `{Codec,ChunkKeyEncoding,StorageTransformer}Runtime{Plugin,RegistryHandle}`
-- Add `ArrayError::ArrayRegionError` variant
+- Add `ArrayError::ArraySubsetError` variant
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition
@@ -162,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improve index iterator performance
 - **Breaking**: Move `ArraySubset` from the `array_subset` to `array` module
 - **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `ArrayBytesFixedDisjointViewCreateError::IndexerError`
+- `Array`, `ChunkCache`, and `ArrayShardedReadableExt` methods take `&dyn ArraySubsetTraits` instead of `&ArraySubset`
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency
@@ -176,6 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
 - **Breaking**: Remove `CodecError::DataTypeExtension` variant
 - **Breaking**: Remove `ArrayError::IncompatibleStartEndIndicesError` and `IncompatibleStartEndIndicesError` variants
+- **Breaking**: Remove `indexer` and `array_subset` modules, types are re-exported under in the `array` module
 
 ### Fixed
 - Fix `transpose` codec decoding with variable-size data types
