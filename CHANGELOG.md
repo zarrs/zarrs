@@ -102,11 +102,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `zarrs_metadata` (public) to 0.7.0
 - **Breaking**: Bump `zarrs_data_type` (public) to 0.7.0
 - **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.4.0
-- **Breaking**: Bump `zarrs_plugin` (public) to 0.3.0
+- **Breaking**: Bump `zarrs_plugin` (public) to 0.3.1
 - **Breaking**: Bump `float8` (public) to 0.5.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
 - **Breaking**: Bump `ndarray` (public) to 0.17.1
-- Bump `zarrs_filesystem` to 0.3.7
+- Bump `zarrs_filesystem` to 0.3.8
 - Bump `zfp-sys` to 0.4.2
 - Bump `pco` to 0.4.9
 - Bump `criterion` (dev) to 0.8.1
