@@ -6,13 +6,13 @@ use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin}
 #[derive(Debug, Clone, Copy)]
 pub struct BFloat16DataType;
 register_data_type_plugin!(BFloat16DataType);
-zarrs_plugin::impl_extension_aliases!(BFloat16DataType, "bfloat16");
+zarrs_plugin::impl_extension_aliases!(BFloat16DataType, v3: "bfloat16");
 
 /// The `float16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float16DataType;
 register_data_type_plugin!(Float16DataType);
-zarrs_plugin::impl_extension_aliases!(Float16DataType, "float16",
+zarrs_plugin::impl_extension_aliases!(Float16DataType,
     v3: "float16", [],
     v2: "<f2", ["<f2", ">f2"]
 );
@@ -21,7 +21,7 @@ zarrs_plugin::impl_extension_aliases!(Float16DataType, "float16",
 #[derive(Debug, Clone, Copy)]
 pub struct Float32DataType;
 register_data_type_plugin!(Float32DataType);
-zarrs_plugin::impl_extension_aliases!(Float32DataType, "float32",
+zarrs_plugin::impl_extension_aliases!(Float32DataType,
     v3: "float32", [],
     v2: "<f4", ["<f4", ">f4"]
 );
@@ -30,7 +30,7 @@ zarrs_plugin::impl_extension_aliases!(Float32DataType, "float32",
 #[derive(Debug, Clone, Copy)]
 pub struct Float64DataType;
 register_data_type_plugin!(Float64DataType);
-zarrs_plugin::impl_extension_aliases!(Float64DataType, "float64",
+zarrs_plugin::impl_extension_aliases!(Float64DataType,
     v3: "float64", [],
     v2: "<f8", ["<f8", ">f8"]
 );

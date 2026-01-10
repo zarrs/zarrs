@@ -23,4 +23,4 @@ pub use crate::metadata_ext::codec::vlen_bytes::{
     VlenBytesCodecConfiguration, VlenBytesCodecConfigurationV1,
 };
 
-vlen_v2_macros::vlen_v2_module!(vlen_bytes, vlen_bytes_codec, VlenBytesCodec, "vlen-bytes");
+vlen_v2_macros::vlen_v2_module!(vlen_bytes, vlen_bytes_codec, VlenBytesCodec);

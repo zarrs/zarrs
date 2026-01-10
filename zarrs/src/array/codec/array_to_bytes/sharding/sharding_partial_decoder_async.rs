@@ -5,7 +5,6 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::FillValue;
-use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::array::array_bytes::merge_chunks_vlen;
@@ -23,6 +22,7 @@ use crate::array::{
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange};
+use zarrs_plugin::ExtensionAliasesV3;
 
 /// Asynchronous partial decoder for the sharding codec.
 pub(crate) struct AsyncShardingPartialDecoder {
@@ -126,7 +126,7 @@ pub(crate) async fn partial_decode(
     if data_type.is_optional() {
         return Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            super::ShardingCodec::IDENTIFIER.to_string(),
+            super::ShardingCodec::aliases_v3().default_name.to_string(),
         ));
     }
 

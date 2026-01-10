@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError};
 
 use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, bitround_codec_partial, round_bytes,
@@ -15,7 +15,6 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncod
 use crate::array::{DataType, FillValue};
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bitround` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -51,11 +50,11 @@ impl BitroundCodec {
 }
 
 impl CodecTraits for BitroundCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
         if options.codec_store_metadata_if_encode_only() {
             let configuration = BitroundCodecConfiguration::V1(BitroundCodecConfigurationV1 {
                 keepbits: self.keepbits,
@@ -194,7 +193,7 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
         } else {
             Err(CodecError::UnsupportedDataType(
                 decoded_data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ))
         }
     }

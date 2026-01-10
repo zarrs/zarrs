@@ -2,7 +2,6 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -17,6 +16,7 @@ use crate::array::{
     FillValue,
 };
 use crate::metadata::Configuration;
+use zarrs_plugin::ExtensionAliasesV3;
 
 /// The `vlen_v2` codec implementation.
 #[derive(Debug, Clone, Default)]
@@ -31,11 +31,11 @@ impl VlenV2Codec {
 }
 
 impl CodecTraits for VlenV2Codec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         Some(Configuration::default())
     }
 
@@ -167,7 +167,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -175,7 +175,7 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             )),
         }
     }

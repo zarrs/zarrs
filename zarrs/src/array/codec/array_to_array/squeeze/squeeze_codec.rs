@@ -12,7 +12,6 @@ use crate::array::{ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A Squeeze codec implementation.
 #[derive(Clone, Debug)]
@@ -48,11 +47,11 @@ impl Default for SqueezeCodec {
 }
 
 impl CodecTraits for SqueezeCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = SqueezeCodecConfiguration::V0(SqueezeCodecConfigurationV0 {});
         Some(configuration.into())
     }

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `ExtensionName` and `ExtensionNameStatic` traits
+- Add `ExtensionAliases{V2,V3}` traits with blanket implementations
+- Add `PluginConfigurationInvalidError` replacing `PluginMetadataInvalidError`
+
+### Changed
+- **Breaking**: Remove simple form  `impl_extension_aliases!`, explicitly use `v3:` and `v2:` prefixes
+- **Breaking** Revise `PluginCreateError::NameInvalid` enum
+  - Add `NameInvalid` variant
+  - Replace `MetadataInvalid` with `ConfigurationInvalid`
+
+### Removed
+- **Breaking**: Remove `PluginMetadataInvalidError`
+- **Breaking**: Remove `ExtensionIdentifier`
+- **Breaking**: Remove `ExtensionAliases::{default_name,set_default_name}()`
+- **Breaking**: Remove `[Runtime]Plugin[2]::identifier()` method
+- **Breaking**: Remove `[Runtime]Plugin[2]::default_name()` method
+
 ## [0.3.1] - 2026-01-09
 
 ### Fixed

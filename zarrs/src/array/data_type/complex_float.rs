@@ -6,10 +6,6 @@ use super::macros::register_data_type_plugin;
 macro_rules! impl_complex_data_type {
     ($marker:ty, $size:tt, $component_type:tt) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
-            fn identifier(&self) -> &'static str {
-                <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
-            }
-
             fn configuration(&self) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
@@ -20,29 +16,21 @@ macro_rules! impl_complex_data_type {
 
             fn fill_value(
                 &self,
-                fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
+                fill_value_metadata: &zarrs_metadata::FillValueMetadata,
+                _version: zarrs_plugin::ZarrVersions,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-                let err = || {
-                    zarrs_data_type::DataTypeFillValueMetadataError::new(
-                        self.identifier().to_string(),
-                        fill_value_metadata.clone(),
-                    )
-                };
-                if let [re, im] = fill_value_metadata.as_array().ok_or_else(err)? {
-                    impl_complex_data_type!(@parse_components self, re, im, $component_type, err)
+                if let [re, im] = fill_value_metadata.as_array().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)? {
+                    impl_complex_data_type!(@parse_components self, re, im, $component_type)
                 } else {
-                    Err(err())
+                    Err(zarrs_data_type::DataTypeFillValueMetadataError)
                 }
             }
 
             fn metadata_fill_value(
                 &self,
                 fill_value: &zarrs_data_type::FillValue,
-            ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError> {
-                let error = || {
-                    zarrs_data_type::DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-                };
-                impl_complex_data_type!(@to_metadata self, fill_value, $component_type, $size, error)
+            ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
+                impl_complex_data_type!(@to_metadata self, fill_value, $component_type, $size)
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
@@ -91,61 +79,61 @@ macro_rules! impl_complex_data_type {
         );
     };
 
-    (@parse_components $self:ident, $re:ident, $im:ident, f32, $err:ident) => {{
-        let re = $re.as_f32().ok_or_else($err)?;
-        let im = $im.as_f32().ok_or_else($err)?;
+    (@parse_components $self:ident, $re:ident, $im:ident, f32) => {{
+        let re = $re.as_f32().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
+        let im = $im.as_f32().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
         Ok(zarrs_data_type::FillValue::from(num::complex::Complex32::new(re, im)))
     }};
-    (@parse_components $self:ident, $re:ident, $im:ident, f64, $err:ident) => {{
-        let re = $re.as_f64().ok_or_else($err)?;
-        let im = $im.as_f64().ok_or_else($err)?;
+    (@parse_components $self:ident, $re:ident, $im:ident, f64) => {{
+        let re = $re.as_f64().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
+        let im = $im.as_f64().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
         Ok(zarrs_data_type::FillValue::from(num::complex::Complex64::new(re, im)))
     }};
-    (@parse_components $self:ident, $re:ident, $im:ident, f16, $err:ident) => {{
-        let re = $re.as_f16().ok_or_else($err)?;
-        let im = $im.as_f16().ok_or_else($err)?;
+    (@parse_components $self:ident, $re:ident, $im:ident, f16) => {{
+        let re = $re.as_f16().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
+        let im = $im.as_f16().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
         Ok(zarrs_data_type::FillValue::from(num::complex::Complex::<half::f16>::new(re, im)))
     }};
-    (@parse_components $self:ident, $re:ident, $im:ident, bf16, $err:ident) => {{
-        let re = $re.as_bf16().ok_or_else($err)?;
-        let im = $im.as_bf16().ok_or_else($err)?;
+    (@parse_components $self:ident, $re:ident, $im:ident, bf16) => {{
+        let re = $re.as_bf16().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
+        let im = $im.as_bf16().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
         Ok(zarrs_data_type::FillValue::from(num::complex::Complex::<half::bf16>::new(re, im)))
     }};
 
-    (@to_metadata $self:ident, $fill_value:ident, f32, 8, $error:ident) => {{
-        let bytes: [u8; 8] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
+    (@to_metadata $self:ident, $fill_value:ident, f32, 8) => {{
+        let bytes: [u8; 8] = $fill_value.as_ne_bytes().try_into().map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let re = f32::from_ne_bytes(bytes[0..4].try_into().unwrap());
         let im = f32::from_ne_bytes(bytes[4..8].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
+        Ok(zarrs_metadata::FillValueMetadata::from(vec![
+            zarrs_metadata::FillValueMetadata::from(re),
+            zarrs_metadata::FillValueMetadata::from(im),
         ]))
     }};
-    (@to_metadata $self:ident, $fill_value:ident, f64, 16, $error:ident) => {{
-        let bytes: [u8; 16] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
+    (@to_metadata $self:ident, $fill_value:ident, f64, 16) => {{
+        let bytes: [u8; 16] = $fill_value.as_ne_bytes().try_into().map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let re = f64::from_ne_bytes(bytes[0..8].try_into().unwrap());
         let im = f64::from_ne_bytes(bytes[8..16].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
+        Ok(zarrs_metadata::FillValueMetadata::from(vec![
+            zarrs_metadata::FillValueMetadata::from(re),
+            zarrs_metadata::FillValueMetadata::from(im),
         ]))
     }};
-    (@to_metadata $self:ident, $fill_value:ident, f16, 4, $error:ident) => {{
-        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
+    (@to_metadata $self:ident, $fill_value:ident, f16, 4) => {{
+        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let re = half::f16::from_ne_bytes(bytes[0..2].try_into().unwrap());
         let im = half::f16::from_ne_bytes(bytes[2..4].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
+        Ok(zarrs_metadata::FillValueMetadata::from(vec![
+            zarrs_metadata::FillValueMetadata::from(re),
+            zarrs_metadata::FillValueMetadata::from(im),
         ]))
     }};
-    (@to_metadata $self:ident, $fill_value:ident, bf16, 4, $error:ident) => {{
-        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| $error())?;
+    (@to_metadata $self:ident, $fill_value:ident, bf16, 4) => {{
+        let bytes: [u8; 4] = $fill_value.as_ne_bytes().try_into().map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let re = half::bf16::from_ne_bytes(bytes[0..2].try_into().unwrap());
         let im = half::bf16::from_ne_bytes(bytes[2..4].try_into().unwrap());
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(vec![
-            zarrs_metadata::v3::FillValueMetadataV3::from(re),
-            zarrs_metadata::v3::FillValueMetadataV3::from(im),
+        Ok(zarrs_metadata::FillValueMetadata::from(vec![
+            zarrs_metadata::FillValueMetadata::from(re),
+            zarrs_metadata::FillValueMetadata::from(im),
         ]))
     }};
 }
@@ -154,31 +142,31 @@ macro_rules! impl_complex_data_type {
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexBFloat16DataType;
 register_data_type_plugin!(ComplexBFloat16DataType);
-zarrs_plugin::impl_extension_aliases!(ComplexBFloat16DataType, "complex_bfloat16");
+zarrs_plugin::impl_extension_aliases!(ComplexBFloat16DataType, v3: "complex_bfloat16");
 
 /// The `complex_float16` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat16DataType;
 register_data_type_plugin!(ComplexFloat16DataType);
-zarrs_plugin::impl_extension_aliases!(ComplexFloat16DataType, "complex_float16");
+zarrs_plugin::impl_extension_aliases!(ComplexFloat16DataType, v3: "complex_float16");
 
 /// The `complex_float32` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat32DataType;
 register_data_type_plugin!(ComplexFloat32DataType);
-zarrs_plugin::impl_extension_aliases!(ComplexFloat32DataType, "complex_float32");
+zarrs_plugin::impl_extension_aliases!(ComplexFloat32DataType, v3: "complex_float32");
 
 /// The `complex_float64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat64DataType;
 register_data_type_plugin!(ComplexFloat64DataType);
-zarrs_plugin::impl_extension_aliases!(ComplexFloat64DataType, "complex_float64");
+zarrs_plugin::impl_extension_aliases!(ComplexFloat64DataType, v3: "complex_float64");
 
 /// The `complex64` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Complex64DataType;
 register_data_type_plugin!(Complex64DataType);
-zarrs_plugin::impl_extension_aliases!(Complex64DataType, "complex64",
+zarrs_plugin::impl_extension_aliases!(Complex64DataType,
     v3: "complex64", [],
     v2: "<c8", ["<c8", ">c8"]
 );
@@ -187,7 +175,7 @@ zarrs_plugin::impl_extension_aliases!(Complex64DataType, "complex64",
 #[derive(Debug, Clone, Copy)]
 pub struct Complex128DataType;
 register_data_type_plugin!(Complex128DataType);
-zarrs_plugin::impl_extension_aliases!(Complex128DataType, "complex128",
+zarrs_plugin::impl_extension_aliases!(Complex128DataType,
     v3: "complex128", [],
     v2: "<c16", ["<c16", ">c16"]
 );

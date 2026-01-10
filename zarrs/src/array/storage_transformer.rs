@@ -12,11 +12,14 @@ mod storage_transformer_chain;
 use std::sync::{Arc, LazyLock};
 
 pub use storage_transformer_chain::StorageTransformerChain;
-use zarrs_plugin::{Plugin2, PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry};
+use zarrs_plugin::{
+    ExtensionAliases, Plugin2, PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry,
+    ZarrVersion3,
+};
 
 use crate::metadata::v3::MetadataV3;
 use crate::node::NodePath;
-use crate::plugin::{PluginCreateError, ZarrVersions};
+use crate::plugin::{ExtensionName, PluginCreateError};
 #[cfg(feature = "async")]
 use crate::storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
@@ -35,22 +38,16 @@ pub struct StorageTransformerPlugin(Plugin2<StorageTransformer, MetadataV3, Node
 inventory::collect!(StorageTransformerPlugin);
 
 impl StorageTransformerPlugin {
-    /// Create a new [`StorageTransformerPlugin`].
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
-        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
+    /// Create a new [`StorageTransformerPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
+    ///
+    /// The `match_name_fn` is automatically derived from `T::matches_name`.
+    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(
             metadata: &MetadataV3,
             path: &NodePath,
         ) -> Result<StorageTransformer, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(
-            identifier,
-            match_name_fn,
-            default_name_fn,
-            create_fn,
-        ))
+        Self(Plugin2::new(|name| T::matches_name(name), create_fn))
     }
 }
 
@@ -100,7 +97,7 @@ pub fn try_create_storage_transformer(
     {
         let result = STORAGE_TRANSFORMER_RUNTIME_REGISTRY.with_plugins(|plugins| {
             for plugin in plugins {
-                if plugin.match_name(name, ZarrVersions::V3) {
+                if plugin.match_name(name) {
                     return Some(plugin.create(metadata, path));
                 }
             }
@@ -113,7 +110,7 @@ pub fn try_create_storage_transformer(
 
     // Fall back to compile-time registered plugins
     for plugin in inventory::iter::<StorageTransformerPlugin> {
-        if plugin.match_name(name, ZarrVersions::V3) {
+        if plugin.match_name(name) {
             return plugin.create(metadata, path);
         }
     }
@@ -130,7 +127,9 @@ pub fn try_create_storage_transformer(
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync {
+pub trait StorageTransformerExtension:
+    ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
+{
     /// Create metadata.
     fn create_metadata(&self) -> MetadataV3;
 

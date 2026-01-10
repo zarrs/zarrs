@@ -16,7 +16,7 @@ use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_plugin::ExtensionAliasesV3;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {
@@ -70,7 +70,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BytesCodec::IDENTIFIER.to_string(),
+                BytesCodec::aliases_v3().default_name.to_string(),
             ));
         };
 
@@ -140,7 +140,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BytesCodec::IDENTIFIER.to_string(),
+                BytesCodec::aliases_v3().default_name.to_string(),
             ));
         };
 
@@ -206,7 +206,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BytesCodec::IDENTIFIER.to_string(),
+                BytesCodec::aliases_v3().default_name.to_string(),
             ));
         };
 
@@ -302,7 +302,7 @@ where
         let Some(data_type_size) = self.data_type.fixed_size() else {
             return Err(CodecError::UnsupportedDataType(
                 self.data_type.clone(),
-                BytesCodec::IDENTIFIER.to_string(),
+                BytesCodec::aliases_v3().default_name.to_string(),
             ));
         };
 

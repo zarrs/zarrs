@@ -70,7 +70,7 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
-pub use data_type::{DataType, DataTypeExt, FillValue, NamedDataType};
+pub use data_type::{DataType, DataTypeExt, FillValue};
 use zarrs_plugin::ZarrVersions;
 
 pub use self::array_builder::{
@@ -102,15 +102,19 @@ pub use self::tensor::{Tensor, TensorError};
 use crate::array::chunk_grid::RegularChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
 use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
-use crate::array::codec::{CodecOptions, CodecPlugin};
+use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
+use crate::array::codec::CodecOptions;
 use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
 use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
+pub use crate::metadata::v2::ArrayMetadataV2;
 use crate::metadata::v2::DataTypeMetadataV2;
-pub use crate::metadata::v2::{ArrayMetadataV2, FillValueMetadataV2};
+use crate::metadata::v3::MetadataV3;
 pub use crate::metadata::v3::{
-    ArrayMetadataV3, FillValueMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
+    ArrayMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
 };
-pub use crate::metadata::{ArrayMetadata, DataTypeSize, DimensionName, Endianness};
+pub use crate::metadata::{
+    ArrayMetadata, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
+};
 use crate::node::{NodePath, data_key};
 use crate::plugin::PluginCreateError;
 use crate::storage::StoreKey;
@@ -119,7 +123,7 @@ use crate::storage::StoreKey;
     note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
 )]
 pub use codec::ArrayCodecTraits;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -393,7 +397,7 @@ pub struct Array<TStorage: ?Sized> {
     /// The path of the array in a store.
     path: NodePath,
     /// The data type of the Zarr array.
-    data_type: NamedDataType,
+    data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
@@ -448,41 +452,61 @@ impl<TStorage: ?Sized> Array<TStorage> {
     ) -> Result<Self, ArrayCreateError> {
         let path = NodePath::new(path)?;
 
-        // Convert V2 metadata to V3 if it is a compatible subset
-        let metadata_v3 = match &metadata {
-            ArrayMetadata::V3(v3) => Ok(v3.clone()),
-            ArrayMetadata::V2(v2) => array_metadata_v2_to_v3(v2)
-                .map_err(|err| ArrayCreateError::UnsupportedZarrV2Array(err.to_string())),
-        }?;
+        match metadata {
+            ArrayMetadata::V3(v3) => Self::new_with_metadata_v3(storage, path, v3),
+            ArrayMetadata::V2(v2) => Self::new_with_metadata_v2(storage, path, v2),
+        }
+    }
 
-        let data_type = NamedDataType::try_from(&metadata_v3.data_type)
+    /// Create an array from V3 metadata.
+    fn new_with_metadata_v3(
+        storage: Arc<TStorage>,
+        path: NodePath,
+        v3: ArrayMetadataV3,
+    ) -> Result<Self, ArrayCreateError> {
+        // Create data type from V3 metadata
+        let data_type = DataType::from_metadata(&v3.data_type)
             .map_err(ArrayCreateError::DataTypeCreateError)?;
-        let chunk_grid = ChunkGrid::from_metadata(&metadata_v3.chunk_grid, &metadata_v3.shape)
+
+        // Create chunk grid
+        let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        if chunk_grid.dimensionality() != metadata_v3.shape.len() {
+        if chunk_grid.dimensionality() != v3.shape.len() {
             return Err(ArrayCreateError::InvalidChunkGridDimensionality(
                 chunk_grid.dimensionality(),
-                metadata_v3.shape.len(),
+                v3.shape.len(),
             ));
         }
-        let fill_value = data_type
-            .fill_value_from_metadata(&metadata_v3.fill_value)
-            .map_err(ArrayCreateError::InvalidFillValueMetadata)?;
+
+        // Create fill value from V3 metadata
+        let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
+            ArrayCreateError::InvalidFillValueMetadata {
+                data_type_name: v3.data_type.name().to_string(),
+                fill_value_metadata: v3.fill_value.clone(),
+            }
+        })?;
+
+        // Create codec chain from V3 metadata
         let codecs = Arc::new(
-            CodecChain::from_metadata(&metadata_v3.codecs)
-                .map_err(ArrayCreateError::CodecsCreateError)?,
+            CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
         );
+
+        // Create storage transformers
         let storage_transformers =
-            StorageTransformerChain::from_metadata(&metadata_v3.storage_transformers, &path)
+            StorageTransformerChain::from_metadata(&v3.storage_transformers, &path)
                 .map_err(ArrayCreateError::StorageTransformersCreateError)?;
-        let chunk_key_encoding = ChunkKeyEncoding::from_metadata(&metadata_v3.chunk_key_encoding)
+
+        // Create chunk key encoding
+        let chunk_key_encoding = ChunkKeyEncoding::from_metadata(&v3.chunk_key_encoding)
             .map_err(ArrayCreateError::ChunkKeyEncodingCreateError)?;
-        if let Some(dimension_names) = &metadata_v3.dimension_names
-            && dimension_names.len() != metadata_v3.shape.len()
+
+        // Validate dimension names
+        if let Some(dimension_names) = &v3.dimension_names
+            && dimension_names.len() != v3.shape.len()
         {
             return Err(ArrayCreateError::InvalidDimensionNames(
                 dimension_names.len(),
-                metadata_v3.shape.len(),
+                v3.shape.len(),
             ));
         }
 
@@ -498,18 +522,102 @@ impl<TStorage: ?Sized> Array<TStorage> {
         Ok(Self {
             storage,
             path,
-            // shape: metadata_v3.shape,
             data_type,
             chunk_grid,
             chunk_key_encoding,
             fill_value,
             codecs,
-            // attributes: metadata_v3.attributes,
-            // additional_fields: metadata_v3.additional_fields,
             storage_transformers,
-            dimension_names: metadata_v3.dimension_names,
-            metadata,
+            dimension_names: v3.dimension_names.clone(),
+            metadata: ArrayMetadata::V3(v3),
             codec_options,
+            metadata_options,
+            metadata_erase_version,
+        })
+    }
+
+    /// Create an array from V2 metadata.
+    ///
+    /// This uses the plugin system directly without converting the entire V2 metadata to V3.
+    fn new_with_metadata_v2(
+        storage: Arc<TStorage>,
+        path: NodePath,
+        v2: ArrayMetadataV2,
+    ) -> Result<Self, ArrayCreateError> {
+        use zarrs_metadata::v2::data_type_metadata_v2_to_endianness;
+
+        // Create data type from V2 metadata directly using the plugin system
+        let data_type =
+            DataType::from_metadata(&v2.dtype).map_err(ArrayCreateError::DataTypeCreateError)?;
+
+        // Create chunk grid from V2 chunks
+        let chunk_grid = ChunkGrid::new(
+            RegularChunkGrid::new(v2.shape.clone(), v2.chunks.clone()).map_err(|err| {
+                ArrayCreateError::ChunkGridCreateError(PluginCreateError::Other(err.to_string()))
+            })?,
+        );
+
+        // Create fill value from V2 metadata directly
+        // The data type handles V2-specific quirks (null -> default, 0/1 -> bool, etc.)
+        let fill_value = data_type.fill_value_v2(&v2.fill_value).map_err(|_| {
+            let data_type_name = match &v2.dtype {
+                DataTypeMetadataV2::Simple(s) => s.clone(),
+                DataTypeMetadataV2::Structured(_) => data_type
+                    .name_v3()
+                    .map_or_else(String::new, Cow::into_owned),
+            };
+            ArrayCreateError::InvalidFillValueMetadata {
+                data_type_name,
+                fill_value_metadata: v2.fill_value.clone(),
+            }
+        })?;
+
+        // Get endianness from V2 data type
+        let endianness = data_type_metadata_v2_to_endianness(&v2.dtype)
+            .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?;
+
+        // Create codec chain from V2 filters and compressor using the plugin system
+        // This handles some special cases for V2.
+        let codecs = Arc::new(
+            create_codec_chain_from_v2(
+                v2.order,
+                v2.shape.len(),
+                &data_type,
+                endianness,
+                v2.filters.as_ref(),
+                v2.compressor.as_ref(),
+            )
+            .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
+        );
+
+        // Create chunk key encoding from V2 dimension separator
+        let chunk_key_encoding =
+            ChunkKeyEncoding::new(V2ChunkKeyEncoding::new(v2.dimension_separator));
+
+        // V2 has no storage transformers or dimension names
+        let storage_transformers = StorageTransformerChain::default();
+
+        let (codec_options, metadata_options, metadata_erase_version) = {
+            let config = global_config();
+            (
+                config.codec_options(),
+                config.array_metadata_options(),
+                config.metadata_erase_version(),
+            )
+        };
+
+        Ok(Self {
+            storage,
+            path,
+            data_type,
+            chunk_grid,
+            chunk_key_encoding,
+            fill_value,
+            codecs,
+            storage_transformers,
+            dimension_names: None,
+            codec_options,
+            metadata: ArrayMetadata::V2(v2),
             metadata_options,
             metadata_erase_version,
         })
@@ -556,12 +664,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Get the data type.
     #[must_use]
     pub const fn data_type(&self) -> &DataType {
-        self.data_type.data_type()
-    }
-
-    /// Get the named data type.
-    #[must_use]
-    pub const fn named_data_type(&self) -> &NamedDataType {
         &self.data_type
     }
 
@@ -582,9 +684,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// # Errors
     /// Returns an [`ArrayCreateError`] if the chunk grid is not compatible with `array_shape`.
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
-        self.chunk_grid =
-            ChunkGrid::from_metadata(&self.chunk_grid.create_metadata(), &array_shape)
-                .map_err(ArrayCreateError::ChunkGridCreateError)?;
+        self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
+            .map_err(ArrayCreateError::ChunkGridCreateError)?;
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
@@ -637,7 +738,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
                         "Only regular chunk grids are supported in Zarr V2".to_string(),
                     ))
                 };
-                if chunk_grid_metadata.name() != RegularChunkGrid::IDENTIFIER {
+
+                if !RegularChunkGrid::matches_name_v3(chunk_grid_metadata.name()) {
                     return Err(err());
                 }
                 let regular_chunk_grid_configuration = chunk_grid_metadata
@@ -759,18 +861,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
             });
         }
 
-        // Codec metadata manipulation
-        match &mut metadata {
-            ArrayMetadata::V3(metadata) => {
-                metadata.codecs = self
-                    .codecs()
-                    .create_metadatas(options.codec_metadata_options());
-            }
-            ArrayMetadata::V2(_metadata) => {
-                // NOTE: The codec related options in ArrayMetadataOptions do not impact V2 codecs
-            }
-        }
-
         // Convert version
         let mut metadata = match (metadata, options.metadata_convert_version()) {
             (AM::V3(metadata), V::Default | V::V3) => ArrayMetadata::V3(metadata),
@@ -787,57 +877,69 @@ impl<TStorage: ?Sized> Array<TStorage> {
             match &mut metadata {
                 AM::V3(metadata) => {
                     // Codecs
-                    metadata.codecs.iter_mut().for_each(|codec| {
-                        codec.set_name(
-                            codec_default_name(codec.name(), ZarrVersions::V3).into_owned(),
-                        );
-                    });
+                    for codec in &mut metadata.codecs {
+                        let name = codec_default_name(codec, ZarrVersions::V3).into_owned();
+                        codec.set_name(name);
+                    }
                     // Data type
                     {
-                        let name = metadata.data_type.name();
-                        metadata
-                            .data_type
-                            .set_name(data_type::data_type_v3_default_name(name).into_owned());
+                        let name =
+                            data_type::data_type_v3_default_name(&metadata.data_type).into_owned();
+                        metadata.data_type.set_name(name);
                     }
                     // Chunk grid
-                    metadata.chunk_grid.set_name(
-                        chunk_grid_default_name(metadata.chunk_grid.name(), ZarrVersions::V3)
-                            .into_owned(),
-                    );
-                    // Chunk key encoding
-                    metadata.chunk_key_encoding.set_name(
-                        chunk_key_encoding_default_name(
-                            metadata.chunk_key_encoding.name(),
+                    {
+                        let array_shape: ArrayShape = metadata.shape.clone();
+                        let name = chunk_grid_default_name(
+                            &metadata.chunk_grid,
+                            &array_shape,
                             ZarrVersions::V3,
                         )
-                        .into_owned(),
-                    );
+                        .into_owned();
+                        metadata.chunk_grid.set_name(name);
+                    }
+                    // Chunk key encoding
+                    {
+                        let name = chunk_key_encoding_default_name(
+                            &metadata.chunk_key_encoding,
+                            ZarrVersions::V3,
+                        )
+                        .into_owned();
+                        metadata.chunk_key_encoding.set_name(name);
+                    }
                     // Storage transformers
-                    metadata
-                        .storage_transformers
-                        .iter_mut()
-                        .for_each(|transformer| {
-                            transformer.set_name(
-                                storage_transformer_default_name(
-                                    transformer.name(),
-                                    ZarrVersions::V3,
-                                )
-                                .into_owned(),
-                            );
-                        });
+                    for transformer in &mut metadata.storage_transformers {
+                        let name = storage_transformer_default_name(
+                            transformer,
+                            &self.path,
+                            ZarrVersions::V3,
+                        )
+                        .into_owned();
+                        transformer.set_name(name);
+                    }
                 }
                 AM::V2(metadata) => {
                     if let Some(filters) = &mut metadata.filters {
-                        for filter in filters.iter_mut() {
-                            filter.set_id(
-                                codec_default_name(filter.id(), ZarrVersions::V2).into_owned(),
-                            );
+                        for filter in filters {
+                            let filter_metadata = MetadataV3::new_with_serializable_configuration(
+                                filter.id().to_string(),
+                                filter.configuration(),
+                            )
+                            .unwrap_or_else(|_| MetadataV3::new(filter.id()));
+                            let name =
+                                codec_default_name(&filter_metadata, ZarrVersions::V2).into_owned();
+                            filter.set_id(name);
                         }
                     }
                     if let Some(compressor) = &mut metadata.compressor {
-                        compressor.set_id(
-                            codec_default_name(compressor.id(), ZarrVersions::V2).into_owned(),
-                        );
+                        let compressor_metadata = MetadataV3::new_with_serializable_configuration(
+                            compressor.id().to_string(),
+                            compressor.configuration(),
+                        )
+                        .unwrap_or_else(|_| MetadataV3::new(compressor.id()));
+                        let name =
+                            codec_default_name(&compressor_metadata, ZarrVersions::V2).into_owned();
+                        compressor.set_id(name);
                     }
                     match &mut metadata.dtype {
                         DataTypeMetadataV2::Simple(dtype) => {
@@ -854,7 +956,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         metadata
     }
 
-    pub(crate) fn fill_value_metadata_v3(&self) -> FillValueMetadataV3 {
+    pub(crate) fn fill_value_metadata(&self) -> FillValueMetadata {
         self.data_type
             .metadata_fill_value(&self.fill_value)
             .expect("data type and fill value are compatible")
@@ -1066,66 +1168,74 @@ impl<TStorage: ?Sized> Array<TStorage> {
     }
 }
 
-/// Get the default name for a codec by iterating over registered plugins.
+/// Get the default name for a codec by creating an instance from metadata.
 ///
-/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+/// Returns the default name if the codec can be created, otherwise returns the input name.
 #[must_use]
-fn codec_default_name(name: &str, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
-    let version = version.into();
-    for plugin in inventory::iter::<CodecPlugin> {
-        if plugin.match_name(name, version) {
-            return plugin.default_name(version);
-        }
+fn codec_default_name(
+    metadata: &MetadataV3,
+    version: impl Into<ZarrVersions>,
+) -> Cow<'static, str> {
+    let version: ZarrVersions = version.into();
+    if let Ok(codec) = codec::Codec::from_metadata(metadata)
+        && let Some(name) = codec.name(version)
+    {
+        return name;
     }
-    Cow::Owned(name.to_string())
+    Cow::Owned(metadata.name().to_string())
 }
 
-/// Get the default name for a chunk grid by iterating over registered plugins.
+/// Get the default name for a chunk grid by creating an instance from metadata.
 ///
-/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+/// Returns the default name if the chunk grid can be created, otherwise returns the input name.
 #[must_use]
-fn chunk_grid_default_name(name: &str, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
+fn chunk_grid_default_name(
+    metadata: &MetadataV3,
+    array_shape: &ArrayShape,
+    version: impl Into<ZarrVersions>,
+) -> Cow<'static, str> {
     let version = version.into();
-    for plugin in inventory::iter::<chunk_grid::ChunkGridPlugin> {
-        if plugin.match_name(name, version) {
-            return plugin.default_name(version);
-        }
+    if let Ok(chunk_grid) = chunk_grid::ChunkGrid::from_metadata(metadata, array_shape)
+        && let Some(name) = chunk_grid.name(version)
+    {
+        return name;
     }
-    Cow::Owned(name.to_string())
+    Cow::Owned(metadata.name().to_string())
 }
 
-/// Get the default name for a chunk key encoding by iterating over registered plugins.
+/// Get the default name for a chunk key encoding by creating an instance from metadata.
 ///
-/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+/// Returns the default name if the chunk key encoding can be created, otherwise returns the input name.
 #[must_use]
 fn chunk_key_encoding_default_name(
-    name: &str,
+    metadata: &MetadataV3,
     version: impl Into<ZarrVersions>,
 ) -> Cow<'static, str> {
     let version = version.into();
-    for plugin in inventory::iter::<chunk_key_encoding::ChunkKeyEncodingPlugin> {
-        if plugin.match_name(name, version) {
-            return plugin.default_name(version);
-        }
+    if let Ok(chunk_key_encoding) = chunk_key_encoding::ChunkKeyEncoding::from_metadata(metadata)
+        && let Some(name) = chunk_key_encoding.name(version)
+    {
+        return name;
     }
-    Cow::Owned(name.to_string())
+    Cow::Owned(metadata.name().to_string())
 }
 
-/// Get the default name for a storage transformer by iterating over registered plugins.
+/// Get the default name for a storage transformer by creating an instance from metadata.
 ///
-/// Returns the default name if a matching plugin is found, otherwise returns the input name.
+/// Returns the default name if the storage transformer can be created, otherwise returns the input name.
 #[must_use]
 fn storage_transformer_default_name(
-    name: &str,
+    metadata: &MetadataV3,
+    path: &crate::node::NodePath,
     version: impl Into<ZarrVersions>,
 ) -> Cow<'static, str> {
     let version = version.into();
-    for plugin in inventory::iter::<storage_transformer::StorageTransformerPlugin> {
-        if plugin.match_name(name, version) {
-            return plugin.default_name(version);
-        }
+    if let Ok(transformer) = storage_transformer::try_create_storage_transformer(metadata, path)
+        && let Some(name) = transformer.name(version)
+    {
+        return name;
     }
-    Cow::Owned(name.to_string())
+    Cow::Owned(metadata.name().to_string())
 }
 
 mod array_sync_readable;
@@ -1247,6 +1357,155 @@ pub fn bytes_to_ndarray<T: bytemuck::Pod>(
     }
     let elements = transmute_from_bytes_vec::<T>(bytes);
     elements_to_ndarray(shape, elements)
+}
+
+/// Create a codec chain from V2 filters and compressor using the plugin system.
+///
+/// This builds codec instances directly instead of creating them from V3 metadata.
+/// Handles various special cases.
+#[allow(clippy::too_many_lines)]
+fn create_codec_chain_from_v2(
+    order: zarrs_metadata::v2::ArrayMetadataV2Order,
+    dimensionality: usize,
+    data_type: &DataType,
+    endianness: Option<zarrs_metadata::Endianness>,
+    filters: Option<&Vec<zarrs_metadata::v2::MetadataV2>>,
+    compressor: Option<&zarrs_metadata::v2::MetadataV2>,
+) -> Result<CodecChain, crate::convert::ArrayMetadataV2ToV3Error> {
+    use crate::array::codec::{
+        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
+    };
+    use crate::convert::ArrayMetadataV2ToV3Error;
+
+    let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
+    let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
+    let mut bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>> = vec![];
+
+    // Insert transpose for F-order arrays
+    #[cfg(feature = "transpose")]
+    if order == zarrs_metadata::v2::ArrayMetadataV2Order::F {
+        use crate::array::codec::TransposeCodec;
+        use crate::metadata_ext::codec::transpose::TransposeOrder;
+        let f_order: Vec<usize> = (0..dimensionality).rev().collect();
+        let transpose_order = unsafe {
+            // SAFETY: f_order is valid (sequential indices in reverse)
+            TransposeOrder::new(&f_order).unwrap_unchecked()
+        };
+        let transpose = Arc::new(TransposeCodec::new(transpose_order));
+        array_to_array.push(transpose);
+    }
+    #[cfg(not(feature = "transpose"))]
+    if order == zarrs_metadata::v2::ArrayMetadataV2Order::F {
+        return Err(ArrayMetadataV2ToV3Error::Other(
+            "transpose feature is required for F-order arrays".to_string(),
+        ));
+    }
+
+    // Process filters
+    if let Some(filters) = filters {
+        for filter in filters {
+            let codec = crate::array::codec::Codec::from_metadata(filter)
+                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+
+            match codec {
+                crate::array::codec::Codec::ArrayToArray(c) => {
+                    array_to_array.push(c);
+                }
+                crate::array::codec::Codec::ArrayToBytes(c) => {
+                    if array_to_bytes.is_some() {
+                        return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
+                    }
+                    array_to_bytes = Some(c);
+                }
+                crate::array::codec::Codec::BytesToBytes(c) => {
+                    bytes_to_bytes.push(c);
+                }
+            }
+        }
+    }
+
+    // Process compressor
+    if let Some(compressor) = compressor {
+        // Special handling for blosc to pass data type size
+        #[cfg(feature = "blosc")]
+        if crate::array::codec::BloscCodec::matches_name_v2(compressor.id()) {
+            use crate::array::codec::BloscCodec;
+            use crate::metadata_ext::codec::blosc::{
+                BloscCodecConfigurationNumcodecs, BloscShuffleModeNumcodecs,
+                codec_blosc_v2_numcodecs_to_v3,
+            };
+
+            let blosc_config = serde_json::from_value::<BloscCodecConfigurationNumcodecs>(
+                serde_json::to_value(compressor.configuration())?,
+            )?;
+
+            let data_type_size = if blosc_config.shuffle == BloscShuffleModeNumcodecs::NoShuffle {
+                None
+            } else {
+                Some(data_type.size())
+            };
+
+            let v3_config = codec_blosc_v2_numcodecs_to_v3(&blosc_config, data_type_size);
+            let blosc = BloscCodec::new_with_configuration(&v3_config)
+                .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+            bytes_to_bytes.push(Arc::new(blosc));
+        } else {
+            let codec = crate::array::codec::Codec::from_metadata(compressor)
+                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+
+            match codec {
+                crate::array::codec::Codec::ArrayToArray(c) => {
+                    array_to_array.push(c);
+                }
+                crate::array::codec::Codec::ArrayToBytes(c) => {
+                    if array_to_bytes.is_some() {
+                        return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
+                    }
+                    array_to_bytes = Some(c);
+                }
+                crate::array::codec::Codec::BytesToBytes(c) => {
+                    bytes_to_bytes.push(c);
+                }
+            }
+        }
+        #[cfg(not(feature = "blosc"))]
+        {
+            let codec = crate::array::codec::Codec::from_metadata(compressor)
+                .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+
+            match codec {
+                crate::array::codec::Codec::ArrayToArray(c) => {
+                    array_to_array.push(c);
+                }
+                crate::array::codec::Codec::ArrayToBytes(c) => {
+                    if array_to_bytes.is_some() {
+                        return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
+                    }
+                    array_to_bytes = Some(c);
+                }
+                crate::array::codec::Codec::BytesToBytes(c) => {
+                    bytes_to_bytes.push(c);
+                }
+            }
+        }
+    }
+
+    // If no array-to-bytes codec, insert the bytes codec with endianness
+    if array_to_bytes.is_none() {
+        use crate::array::codec::BytesCodec;
+        let bytes_codec = Arc::new(BytesCodec::new(endianness));
+        array_to_bytes = Some(bytes_codec);
+    }
+
+    let array_to_bytes = array_to_bytes.ok_or_else(|| {
+        ArrayMetadataV2ToV3Error::Other("No array-to-bytes codec found".to_string())
+    })?;
+
+    Ok(CodecChain::new(
+        array_to_array,
+        array_to_bytes,
+        bytes_to_bytes,
+    ))
 }
 
 #[cfg(test)]
@@ -1471,7 +1730,8 @@ mod tests {
                 .store_metadata_opt(
                     &ArrayMetadataOptions::default()
                         .with_metadata_convert_version(version)
-                        .with_include_zarrs_metadata(false),
+                        .with_include_zarrs_metadata(false)
+                        .with_convert_aliased_extension_names(true),
                 )
                 .unwrap();
         }
@@ -1561,6 +1821,32 @@ mod tests {
         array_v2_to_v3(
             "tests/data/v2/array_pcodec_C.zarr",
             "tests/data/v3/array_pcodec.zarr",
+        );
+    }
+
+    #[test]
+    fn array_v2_invalid_fill_value() {
+        use std::num::NonZeroU64;
+
+        use crate::metadata::v2::{ArrayMetadataV2, DataTypeMetadataV2};
+
+        let store = Arc::new(MemoryStore::new());
+
+        // Create a V2 array with an incompatible fill value
+        // (a string fill value for an int32 data type)
+        let metadata = ArrayMetadataV2::new(
+            vec![10, 10],
+            vec![NonZeroU64::new(5).unwrap(); 2].try_into().unwrap(),
+            DataTypeMetadataV2::Simple("<i4".to_string()),
+            FillValueMetadata::from("invalid"),
+            None, // compressor
+            None, // filters
+        );
+
+        let err = Array::new_with_metadata(store, "/", ArrayMetadata::V2(metadata)).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid fill value metadata for data type `<i4`: \"invalid\""
         );
     }
 

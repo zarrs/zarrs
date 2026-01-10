@@ -3,13 +3,12 @@
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 use crate::array::chunk_key_encoding::ChunkKeyEncodingPlugin;
-use crate::metadata::ConfigurationSerialize;
 use crate::metadata::v3::MetadataV3;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::metadata::{Configuration, ConfigurationSerialize};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use crate::storage::StoreKey;
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
@@ -31,26 +30,23 @@ const fn default_separator() -> ChunkKeySeparator {
     ChunkKeySeparator::Slash
 }
 
+zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding,
+    v3: "zarrs.default_suffix", [],
+    v2: "zarrs.default_suffix", []
+);
+
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DefaultSuffixChunkKeyEncoding::IDENTIFIER, DefaultSuffixChunkKeyEncoding::matches_name, DefaultSuffixChunkKeyEncoding::default_name, create_chunk_key_encoding_default_suffix)
+    ChunkKeyEncodingPlugin::new::<DefaultSuffixChunkKeyEncoding>(create_chunk_key_encoding_default_suffix)
 }
-zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding, "default_suffix",
- v3: "zarrs.default_suffix", []
-);
 
 pub(crate) fn create_chunk_key_encoding_default_suffix(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
-    let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                DefaultSuffixChunkKeyEncoding::IDENTIFIER,
-                "chunk key encoding",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: DefaultSuffixChunkKeyEncodingConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let default = DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
     Ok(default.into())
 }
@@ -77,16 +73,12 @@ impl DefaultSuffixChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = DefaultSuffixChunkKeyEncodingConfiguration {
+    fn configuration(&self) -> Configuration {
+        DefaultSuffixChunkKeyEncodingConfiguration {
             separator: self.separator,
             suffix: self.suffix.clone(),
-        };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        }
+        .into()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

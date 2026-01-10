@@ -64,27 +64,42 @@ mod zfpy_codec;
 
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
 };
 pub use zfpy_codec::ZfpyCodec;
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(ZfpyCodec::IDENTIFIER, ZfpyCodec::matches_name, ZfpyCodec::default_name, create_codec_zfpy)
-}
-zarrs_plugin::impl_extension_aliases!(ZfpyCodec, "zfpy",
-    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"]
+zarrs_plugin::impl_extension_aliases!(ZfpyCodec,
+    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"],
+    v2: "zfpy"
 );
 
-pub(crate) fn create_codec_zfpy(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpyCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(ZfpyCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<ZfpyCodec>(create_codec_zfpy_v3)
+}
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<ZfpyCodec>(create_codec_zfpy_v2)
+}
+
+pub(crate) fn create_codec_zfpy_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ZfpyCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
+    Ok(Codec::ArrayToBytes(codec))
+}
+
+pub(crate) fn create_codec_zfpy_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    let configuration: ZfpyCodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

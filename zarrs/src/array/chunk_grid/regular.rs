@@ -29,16 +29,17 @@ use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
     IncompatibleDimensionalityError,
 };
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_plugin::ExtensionIdentifier;
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+
+zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RegularChunkGrid::IDENTIFIER, RegularChunkGrid::matches_name, RegularChunkGrid::default_name, create_chunk_grid_regular)
+    ChunkGridPlugin::new::<RegularChunkGrid>(create_chunk_grid_regular)
 }
-zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, "regular");
 
 /// Create a `regular` chunk grid from metadata.
 ///
@@ -48,14 +49,9 @@ pub(crate) fn create_chunk_grid_regular(
     metadata: &MetadataV3,
     array_shape: &ArrayShape,
 ) -> Result<ChunkGrid, PluginCreateError> {
-    let configuration: RegularChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                RegularChunkGrid::IDENTIFIER,
-                "chunk grid",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: RegularChunkGridConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
         .map_err(|_| {
             PluginCreateError::from(
@@ -204,15 +200,11 @@ impl RegularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RegularChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = RegularChunkGridConfiguration {
+    fn configuration(&self) -> Configuration {
+        RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
-        };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        }
+        .into()
     }
 
     fn dimensionality(&self) -> usize {
@@ -339,7 +331,7 @@ mod tests {
             create_chunk_grid_regular(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"chunk grid regular is unsupported with metadata: regular {"invalid":[1,2,3]}"#
+            r#"configuration is unsupported: regular {"invalid":[1,2,3]}"#
         );
     }
 

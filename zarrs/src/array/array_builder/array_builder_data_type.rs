@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use zarrs_data_type::DataTypeTraits;
 
-use crate::array::{ArrayCreateError, DataType, NamedDataType};
+use crate::array::{ArrayCreateError, DataType};
 use crate::metadata::v3::MetadataV3;
 
 /// An input that can be mapped to a data type.
@@ -17,7 +17,6 @@ impl PartialEq for ArrayBuilderDataType {
 
 #[derive(Debug, Clone)]
 enum ArrayBuilderDataTypeImpl {
-    NamedDataType(NamedDataType),
     DataType(DataType),
     Metadata(MetadataV3),
     MetadataString(String),
@@ -26,7 +25,6 @@ enum ArrayBuilderDataTypeImpl {
 impl PartialEq for ArrayBuilderDataTypeImpl {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::NamedDataType(a), Self::NamedDataType(b)) => a == b,
             (Self::DataType(a), Self::DataType(b)) => a.eq(b.as_ref()),
             (Self::Metadata(a), Self::Metadata(b)) => a == b,
             (Self::MetadataString(a), Self::MetadataString(b)) => a == b,
@@ -36,29 +34,20 @@ impl PartialEq for ArrayBuilderDataTypeImpl {
 }
 
 impl ArrayBuilderDataType {
-    pub(crate) fn to_data_type(&self) -> Result<NamedDataType, ArrayCreateError> {
+    pub(crate) fn to_data_type(&self) -> Result<DataType, ArrayCreateError> {
         match &self.0 {
-            ArrayBuilderDataTypeImpl::NamedDataType(named_data_type) => Ok(named_data_type.clone()),
-            ArrayBuilderDataTypeImpl::DataType(data_type) => {
-                Ok(NamedDataType::new_default_name(data_type.clone()))
-            }
+            ArrayBuilderDataTypeImpl::DataType(data_type) => Ok(data_type.clone()),
             ArrayBuilderDataTypeImpl::Metadata(metadata) => {
-                NamedDataType::try_from(metadata).map_err(ArrayCreateError::DataTypeCreateError)
+                DataType::from_metadata(metadata).map_err(ArrayCreateError::DataTypeCreateError)
             }
             ArrayBuilderDataTypeImpl::MetadataString(metadata) => {
                 // assume the metadata corresponds to a "name" if it cannot be parsed as MetadataV3
                 // this makes "float32" work for example, where normally r#""float32""# would be required
                 let metadata =
                     MetadataV3::try_from(metadata.as_str()).unwrap_or(MetadataV3::new(metadata));
-                NamedDataType::try_from(&metadata).map_err(ArrayCreateError::DataTypeCreateError)
+                DataType::from_metadata(&metadata).map_err(ArrayCreateError::DataTypeCreateError)
             }
         }
-    }
-}
-
-impl From<NamedDataType> for ArrayBuilderDataType {
-    fn from(value: NamedDataType) -> Self {
-        Self(ArrayBuilderDataTypeImpl::NamedDataType(value))
     }
 }
 

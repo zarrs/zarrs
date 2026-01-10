@@ -19,7 +19,6 @@ use crate::array::codec::{
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `blosc` codec implementation.
 #[derive(Clone, Debug)]
@@ -139,11 +138,11 @@ impl BloscCodec {
 }
 
 impl CodecTraits for BloscCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = BloscCodecConfiguration::V1(BloscCodecConfigurationV1 {
             cname: self.cname,
             clevel: self.clevel,

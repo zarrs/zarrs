@@ -11,7 +11,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bz2` codec implementation.
 #[derive(Clone, Debug)]
@@ -44,11 +43,11 @@ impl Bz2Codec {
 }
 
 impl CodecTraits for Bz2Codec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = Bz2CodecConfiguration::V1(Bz2CodecConfigurationV1 {
             level: Bz2CompressionLevel::try_from(self.compression.level())
                 .expect("checked on init"),

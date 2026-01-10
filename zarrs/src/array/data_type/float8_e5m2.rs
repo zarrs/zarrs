@@ -6,7 +6,7 @@ use super::macros::register_data_type_plugin;
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E5M2DataType;
 register_data_type_plugin!(Float8E5M2DataType);
-zarrs_plugin::impl_extension_aliases!(Float8E5M2DataType, "float8_e5m2");
+zarrs_plugin::impl_extension_aliases!(Float8E5M2DataType, v3: "float8_e5m2");
 
 // Default implementation when float8 feature is not enabled
 #[cfg(not(feature = "float8"))]
@@ -15,15 +15,10 @@ mod impl_default {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::v3::FillValueMetadataV3;
-    use zarrs_metadata::{Configuration, DataTypeSize};
-    use zarrs_plugin::ExtensionIdentifier;
+    use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+    use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for Float8E5M2DataType {
-        fn identifier(&self) -> &'static str {
-            <Self as ExtensionIdentifier>::IDENTIFIER
-        }
-
         fn configuration(&self) -> Configuration {
             Configuration::default()
         }
@@ -34,14 +29,9 @@ mod impl_default {
 
         fn fill_value(
             &self,
-            fill_value_metadata: &FillValueMetadataV3,
+            fill_value_metadata: &FillValueMetadata,
+            _version: ZarrVersions,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-            let err = || {
-                DataTypeFillValueMetadataError::new(
-                    self.identifier().to_string(),
-                    fill_value_metadata.clone(),
-                )
-            };
             // Subfloats use hex string representation like "0x00"
             if let Some(s) = fill_value_metadata.as_str() {
                 if let Some(hex) = s.strip_prefix("0x") {
@@ -56,18 +46,19 @@ mod impl_default {
                     return Ok(FillValue::from(byte));
                 }
             }
-            Err(err())
+            Err(DataTypeFillValueMetadataError)
         }
 
         fn metadata_fill_value(
             &self,
             fill_value: &FillValue,
-        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-            let error =
-                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
-            let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            let bytes: [u8; 1] = fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?;
             // Return as hex string
-            Ok(FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])))
+            Ok(FillValueMetadata::from(format!("0x{:02x}", bytes[0])))
         }
 
         fn as_any(&self) -> &dyn std::any::Any {
@@ -83,15 +74,10 @@ mod impl_float8 {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::v3::FillValueMetadataV3;
-    use zarrs_metadata::{Configuration, DataTypeSize};
-    use zarrs_plugin::ExtensionIdentifier;
+    use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+    use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for Float8E5M2DataType {
-        fn identifier(&self) -> &'static str {
-            <Self as ExtensionIdentifier>::IDENTIFIER
-        }
-
         fn configuration(&self) -> Configuration {
             Configuration::default()
         }
@@ -102,15 +88,9 @@ mod impl_float8 {
 
         fn fill_value(
             &self,
-            fill_value_metadata: &FillValueMetadataV3,
+            fill_value_metadata: &FillValueMetadata,
+            _version: ZarrVersions,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-            let err = || {
-                DataTypeFillValueMetadataError::new(
-                    self.identifier().to_string(),
-                    fill_value_metadata.clone(),
-                )
-            };
-
             // Handle hex string like "0xaa"
             if let Some(s) = fill_value_metadata.as_str() {
                 if let Some(hex) = s.strip_prefix("0x")
@@ -137,27 +117,28 @@ mod impl_float8 {
                 return Ok(FillValue::from(f8.to_bits()));
             }
 
-            Err(err())
+            Err(DataTypeFillValueMetadataError)
         }
 
         fn metadata_fill_value(
             &self,
             fill_value: &FillValue,
-        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-            let error =
-                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
-            let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            let bytes: [u8; 1] = fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?;
             let f8 = float8::F8E5M2::from_bits(bytes[0]);
 
             // Return special values as strings, numeric values as floats
             if f8.is_nan() {
-                Ok(FillValueMetadataV3::from("NaN".to_string()))
+                Ok(FillValueMetadata::from("NaN".to_string()))
             } else if f8 == float8::F8E5M2::INFINITY {
-                Ok(FillValueMetadataV3::from("Infinity".to_string()))
+                Ok(FillValueMetadata::from("Infinity".to_string()))
             } else if f8 == float8::F8E5M2::NEG_INFINITY {
-                Ok(FillValueMetadataV3::from("-Infinity".to_string()))
+                Ok(FillValueMetadata::from("-Infinity".to_string()))
             } else {
-                Ok(FillValueMetadataV3::from(f8.to_f64()))
+                Ok(FillValueMetadata::from(f8.to_f64()))
             }
         }
 

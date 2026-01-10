@@ -1,23 +1,22 @@
 #![allow(missing_docs)]
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
-    ElementOwned, FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeExt, DataTypeSize,
+    Element, ElementOwned,
 };
-use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
+use zarrs::metadata::{Configuration, FillValueMetadata};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersions};
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, Deref)]
 struct CustomDataTypeVariableSizeElement(Option<f32>);
@@ -30,7 +29,8 @@ impl From<Option<f32>> for CustomDataTypeVariableSizeElement {
 
 impl Element for CustomDataTypeVariableSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type.identifier() == CUSTOM_NAME)
+        data_type
+            .is::<CustomDataTypeVariableSize>()
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -96,38 +96,29 @@ struct CustomDataTypeVariableSize;
 
 const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
 
-fn matches_name_custom(name: &str, _version: zarrs_plugin::ZarrVersions) -> bool {
-    name == CUSTOM_NAME
-}
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeVariableSize, v3: CUSTOM_NAME);
 
-fn default_name_custom(_version: zarrs_plugin::ZarrVersions) -> Cow<'static, str> {
-    CUSTOM_NAME.into()
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeVariableSize>(create_custom_dtype)
 }
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeVariableSize).into())
     } else {
-        Err(PluginMetadataInvalidError::new(CUSTOM_NAME, "codec", metadata.to_string()).into())
+        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
     }
-}
-
-inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, matches_name_custom, default_name_custom, create_custom_dtype)
 }
 
 impl DataTypeTraits for CustomDataTypeVariableSize {
-    fn identifier(&self) -> &'static str {
-        CUSTOM_NAME
-    }
-
     fn configuration(&self) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersions,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
         if let Some(f) = fill_value_metadata.as_f32() {
             Ok(FillValue::new(f.to_ne_bytes().to_vec()))
@@ -136,28 +127,22 @@ impl DataTypeTraits for CustomDataTypeVariableSize {
         } else if let Some(bytes) = fill_value_metadata.as_bytes() {
             Ok(FillValue::new(bytes))
         } else {
-            Err(DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
-                fill_value_metadata.clone(),
-            ))
+            Err(DataTypeFillValueMetadataError)
         }
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let fill_value = fill_value.as_ne_bytes();
         if fill_value.len() == 0 {
-            Ok(FillValueMetadataV3::Null)
+            Ok(FillValueMetadata::Null)
         } else if fill_value.len() == 4 {
             let value = f32::from_ne_bytes(fill_value.try_into().unwrap());
-            Ok(FillValueMetadataV3::from(value))
+            Ok(FillValueMetadata::from(value))
         } else {
-            Err(DataTypeFillValueError::new(
-                self.identifier().to_string(),
-                fill_value.into(),
-            ))
+            Err(DataTypeFillValueError)
         }
     }
 

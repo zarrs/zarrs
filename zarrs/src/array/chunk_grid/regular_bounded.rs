@@ -29,7 +29,6 @@
 use std::num::NonZeroU64;
 
 use itertools::izip;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
@@ -38,16 +37,19 @@ use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
 };
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+
+zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
+  v3: "zarrs.regular_bounded", [],
+  v2: "zarrs.regular_bounded", []
+);
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RegularBoundedChunkGrid::IDENTIFIER, RegularBoundedChunkGrid::matches_name, RegularBoundedChunkGrid::default_name, create_chunk_grid_regular_bounded)
+    ChunkGridPlugin::new::<RegularBoundedChunkGrid>(create_chunk_grid_regular_bounded)
 }
-zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid, "regular_bounded",
-  v3: "zarrs.regular_bounded", []
-);
 
 /// Create a `regular_bounded` chunk grid from metadata.
 ///
@@ -58,14 +60,9 @@ pub(crate) fn create_chunk_grid_regular_bounded(
     array_shape: &ArrayShape,
 ) -> Result<ChunkGrid, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "chunk grid");
-    let configuration: RegularBoundedChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                RegularBoundedChunkGrid::IDENTIFIER,
-                "chunk grid",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: RegularBoundedChunkGridConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let chunk_grid = RegularBoundedChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
         .map_err(|_| {
         PluginCreateError::from(
@@ -115,15 +112,11 @@ impl RegularBoundedChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = RegularBoundedChunkGridConfiguration {
+    fn configuration(&self) -> Configuration {
+        RegularBoundedChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
-        };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        }
+        .into()
     }
 
     fn dimensionality(&self) -> usize {
@@ -322,7 +315,7 @@ mod tests {
             create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"chunk grid regular_bounded is unsupported with metadata: zarrs.regular_bounded {"invalid":[1,2,3]}"#
+            r#"configuration is unsupported: zarrs.regular_bounded {"invalid":[1,2,3]}"#
         );
     }
 

@@ -6,7 +6,7 @@ use super::macros::register_data_type_plugin;
 #[derive(Debug, Clone, Copy)]
 pub struct ComplexFloat8E5M2DataType;
 register_data_type_plugin!(ComplexFloat8E5M2DataType);
-zarrs_plugin::impl_extension_aliases!(ComplexFloat8E5M2DataType, "complex_float8_e5m2");
+zarrs_plugin::impl_extension_aliases!(ComplexFloat8E5M2DataType, v3: "complex_float8_e5m2");
 
 // Default implementation when float8 feature is not enabled
 #[cfg(not(feature = "float8"))]
@@ -15,15 +15,10 @@ mod impl_default {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::v3::FillValueMetadataV3;
-    use zarrs_metadata::{Configuration, DataTypeSize};
-    use zarrs_plugin::ExtensionIdentifier;
+    use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+    use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for ComplexFloat8E5M2DataType {
-        fn identifier(&self) -> &'static str {
-            <Self as ExtensionIdentifier>::IDENTIFIER
-        }
-
         fn configuration(&self) -> Configuration {
             Configuration::default()
         }
@@ -34,17 +29,12 @@ mod impl_default {
 
         fn fill_value(
             &self,
-            fill_value_metadata: &FillValueMetadataV3,
+            fill_value_metadata: &FillValueMetadata,
+            _version: ZarrVersions,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-            let err = || {
-                DataTypeFillValueMetadataError::new(
-                    self.identifier().to_string(),
-                    fill_value_metadata.clone(),
-                )
-            };
             // Complex subfloats use array of two hex strings like ["0x00", "0x00"]
             if let Some([re, im]) = fill_value_metadata.as_array() {
-                let parse_hex = |v: &FillValueMetadataV3| -> Option<u8> {
+                let parse_hex = |v: &FillValueMetadata| -> Option<u8> {
                     if let Some(s) = v.as_str() {
                         if let Some(hex) = s.strip_prefix("0x") {
                             return u8::from_str_radix(hex, 16).ok();
@@ -59,20 +49,21 @@ mod impl_default {
                     return Ok(FillValue::from([re_byte, im_byte]));
                 }
             }
-            Err(err())
+            Err(DataTypeFillValueMetadataError)
         }
 
         fn metadata_fill_value(
             &self,
             fill_value: &FillValue,
-        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-            let error =
-                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
-            let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            let bytes: [u8; 2] = fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?;
             // Return as array of hex strings
-            Ok(FillValueMetadataV3::from(vec![
-                FillValueMetadataV3::from(format!("0x{:02x}", bytes[0])),
-                FillValueMetadataV3::from(format!("0x{:02x}", bytes[1])),
+            Ok(FillValueMetadata::from(vec![
+                FillValueMetadata::from(format!("0x{:02x}", bytes[0])),
+                FillValueMetadata::from(format!("0x{:02x}", bytes[1])),
             ]))
         }
 
@@ -89,15 +80,10 @@ mod impl_float8 {
     use zarrs_data_type::{
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
-    use zarrs_metadata::v3::FillValueMetadataV3;
-    use zarrs_metadata::{Configuration, DataTypeSize};
-    use zarrs_plugin::ExtensionIdentifier;
+    use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+    use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for ComplexFloat8E5M2DataType {
-        fn identifier(&self) -> &'static str {
-            <Self as ExtensionIdentifier>::IDENTIFIER
-        }
-
         fn configuration(&self) -> Configuration {
             Configuration::default()
         }
@@ -108,18 +94,12 @@ mod impl_float8 {
 
         fn fill_value(
             &self,
-            fill_value_metadata: &FillValueMetadataV3,
+            fill_value_metadata: &FillValueMetadata,
+            _version: ZarrVersions,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-            let err = || {
-                DataTypeFillValueMetadataError::new(
-                    self.identifier().to_string(),
-                    fill_value_metadata.clone(),
-                )
-            };
-
             // Complex fill values are arrays of two elements [re, im]
             if let Some([re, im]) = fill_value_metadata.as_array() {
-                let parse_component = |v: &FillValueMetadataV3| -> Option<u8> {
+                let parse_component = |v: &FillValueMetadata| -> Option<u8> {
                     // Handle hex string like "0xaa"
                     if let Some(s) = v.as_str() {
                         if let Some(hex) = s.strip_prefix("0x") {
@@ -143,31 +123,32 @@ mod impl_float8 {
                     return Ok(FillValue::from([re_byte, im_byte]));
                 }
             }
-            Err(err())
+            Err(DataTypeFillValueMetadataError)
         }
 
         fn metadata_fill_value(
             &self,
             fill_value: &FillValue,
-        ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
-            let error =
-                || DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone());
-            let bytes: [u8; 2] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+        ) -> Result<FillValueMetadata, DataTypeFillValueError> {
+            let bytes: [u8; 2] = fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?;
 
-            let component_to_metadata = |byte: u8| -> FillValueMetadataV3 {
+            let component_to_metadata = |byte: u8| -> FillValueMetadata {
                 let f8 = float8::F8E5M2::from_bits(byte);
                 if f8.is_nan() {
-                    FillValueMetadataV3::from("NaN".to_string())
+                    FillValueMetadata::from("NaN".to_string())
                 } else if f8 == float8::F8E5M2::INFINITY {
-                    FillValueMetadataV3::from("Infinity".to_string())
+                    FillValueMetadata::from("Infinity".to_string())
                 } else if f8 == float8::F8E5M2::NEG_INFINITY {
-                    FillValueMetadataV3::from("-Infinity".to_string())
+                    FillValueMetadata::from("-Infinity".to_string())
                 } else {
-                    FillValueMetadataV3::from(f8.to_f64())
+                    FillValueMetadata::from(f8.to_f64())
                 }
             };
 
-            Ok(FillValueMetadataV3::from(vec![
+            Ok(FillValueMetadata::from(vec![
                 component_to_metadata(bytes[0]),
                 component_to_metadata(bytes[1]),
             ]))

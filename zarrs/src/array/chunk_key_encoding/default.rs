@@ -1,32 +1,28 @@
 //! The `default` chunk key encoding.
 
 use itertools::Itertools;
-use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 use crate::array::chunk_key_encoding::ChunkKeyEncodingPlugin;
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use crate::storage::StoreKey;
+
+zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, v3: "default");
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DefaultChunkKeyEncoding::IDENTIFIER, DefaultChunkKeyEncoding::matches_name, DefaultChunkKeyEncoding::default_name, create_chunk_key_encoding_default)
+    ChunkKeyEncodingPlugin::new::<DefaultChunkKeyEncoding>(create_chunk_key_encoding_default)
 }
-zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, "default");
 
 pub(crate) fn create_chunk_key_encoding_default(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    let configuration: DefaultChunkKeyEncodingConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                DefaultChunkKeyEncoding::IDENTIFIER,
-                "chunk key encoding",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: DefaultChunkKeyEncodingConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let default = DefaultChunkKeyEncoding::new(configuration.separator);
     Ok(default.into())
 }
@@ -77,15 +73,11 @@ impl Default for DefaultChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = DefaultChunkKeyEncodingConfiguration {
+    fn configuration(&self) -> Configuration {
+        DefaultChunkKeyEncodingConfiguration {
             separator: self.separator,
-        };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        }
+        .into()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

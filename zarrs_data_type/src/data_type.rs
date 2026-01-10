@@ -4,13 +4,16 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use derive_more::{Deref, From};
-use zarrs_metadata::v3::{FillValueMetadataV3, MetadataV3};
-use zarrs_metadata::{Configuration, DataTypeSize};
-use zarrs_plugin::{MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersions};
+use zarrs_metadata::v2::DataTypeMetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
+use zarrs_plugin::{
+    ExtensionName, MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersions,
+};
 
 use crate::{
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
-    DATA_TYPE_RUNTIME_REGISTRY,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV2, DataTypePluginV3,
+    FillValue, DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
 };
 
 /// A data type implementing [`DataTypeTraits`].
@@ -23,6 +26,21 @@ impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
     }
 }
 
+impl ExtensionName for DataType {
+    fn name(&self, version: ZarrVersions) -> Option<Cow<'static, str>> {
+        self.0.name(version)
+    }
+}
+
+/// Data type metadata for different Zarr versions.
+#[derive(Debug, Clone, Copy, derive_more::From)]
+pub enum DataTypeMetadata<'a> {
+    /// Zarr V3 metadata.
+    V3(&'a MetadataV3),
+    /// Zarr V2 metadata.
+    V2(&'a DataTypeMetadataV2),
+}
+
 impl DataType {
     /// Create a data type.
     pub fn new<T: DataTypeTraits + 'static>(data_type: T) -> Self {
@@ -33,9 +51,23 @@ impl DataType {
     /// Create a data type from metadata.
     ///
     /// # Errors
+    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    pub fn from_metadata<'a>(
+        metadata: impl Into<DataTypeMetadata<'a>>,
+    ) -> Result<Self, PluginCreateError> {
+        match metadata.into() {
+            DataTypeMetadata::V2(metadata) => Self::from_metadata_v2(metadata),
+            DataTypeMetadata::V3(metadata) => Self::from_metadata_v3(metadata),
+        }
+    }
+
+    /// Create a data type from V3 metadata.
+    ///
+    /// # Errors
     ///
     /// Returns a [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
-    pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+        // Validate must_understand for V3
         if !metadata.must_understand() {
             return Err(PluginCreateError::Other(
                 r#"data type must not have `"must_understand": false`"#.to_string(),
@@ -46,9 +78,9 @@ impl DataType {
 
         // Check runtime registry first (higher priority)
         {
-            let result = DATA_TYPE_RUNTIME_REGISTRY.with_plugins(|plugins| {
+            let result = DATA_TYPE_RUNTIME_REGISTRY_V3.with_plugins(|plugins| {
                 for plugin in plugins {
-                    if plugin.match_name(name, ZarrVersions::V3) {
+                    if plugin.match_name(name) {
                         return Some(plugin.create(metadata));
                     }
                 }
@@ -60,15 +92,47 @@ impl DataType {
         }
 
         // Fall back to compile-time registered plugins
-        for plugin in inventory::iter::<DataTypePlugin> {
-            if plugin.match_name(name, ZarrVersions::V3) {
+        for plugin in inventory::iter::<DataTypePluginV3> {
+            if plugin.match_name(name) {
                 return plugin.create(metadata);
             }
         }
-        Err(
-            PluginUnsupportedError::new(metadata.name().to_string(), "data type".to_string())
-                .into(),
-        )
+        Err(PluginUnsupportedError::new(name.to_string(), "data type".to_string()).into())
+    }
+
+    /// Create a data type from V2 metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginCreateError`] if the metadata is invalid or not associated with a registered data type plugin.
+    fn from_metadata_v2(metadata: &DataTypeMetadataV2) -> Result<Self, PluginCreateError> {
+        let name = match metadata {
+            DataTypeMetadataV2::Simple(s) => s.as_str(),
+            DataTypeMetadataV2::Structured(_) => "structured_v2", // special case name for V2 structured types
+        };
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = DATA_TYPE_RUNTIME_REGISTRY_V2.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name) {
+                        return Some(plugin.create(metadata));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
+        for plugin in inventory::iter::<DataTypePluginV2> {
+            if plugin.match_name(name) {
+                return plugin.create(metadata);
+            }
+        }
+        Err(PluginUnsupportedError::new(name.to_string(), "data type".to_string()).into())
     }
 }
 
@@ -83,19 +147,7 @@ impl DataType {
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
-pub trait DataTypeTraits: Debug + MaybeSend + MaybeSync {
-    /// The identifier of the data type.
-    fn identifier(&self) -> &'static str;
-
-    /// The name to use when creating metadata for this data type.
-    ///
-    /// This is used when creating metadata. Most data types return their identifier,
-    /// but some (like `RawBitsDataType`) return a version-specific name like `r{bits}`.
-    #[allow(unused_variables)]
-    fn default_name(&self, zarr_version: ZarrVersions) -> Option<Cow<'static, str>> {
-        None
-    }
-
+pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// The configuration of the data type.
     fn configuration(&self) -> Configuration;
 
@@ -111,8 +163,31 @@ pub trait DataTypeTraits: Debug + MaybeSend + MaybeSync {
     /// Returns [`DataTypeFillValueMetadataError`] if the fill value is incompatible with the data type.
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        version: ZarrVersions,
     ) -> Result<FillValue, DataTypeFillValueMetadataError>;
+
+    /// Create a fill value from Zarr V2 metadata.
+    ///
+    /// # Errors
+    /// Returns [`DataTypeFillValueMetadataError`] if the fill value is incompatible with the data type.
+    fn fill_value_v2(
+        &self,
+        fill_value_metadata: &FillValueMetadata,
+    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+        self.fill_value(fill_value_metadata, ZarrVersions::V2)
+    }
+
+    /// Create a fill value from Zarr V3 metadata.
+    ///
+    /// # Errors
+    /// Returns [`DataTypeFillValueMetadataError`] if the fill value is incompatible with the data type.
+    fn fill_value_v3(
+        &self,
+        fill_value_metadata: &FillValueMetadata,
+    ) -> Result<FillValue, DataTypeFillValueMetadataError> {
+        self.fill_value(fill_value_metadata, ZarrVersions::V3)
+    }
 
     /// Create fill value metadata.
     ///
@@ -121,14 +196,15 @@ pub trait DataTypeTraits: Debug + MaybeSend + MaybeSync {
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError>;
+    ) -> Result<FillValueMetadata, DataTypeFillValueError>;
 
     /// Compare this data type with another for equality.
     ///
-    /// The default implementation compares identifier and configuration.
+    /// The default implementation compares type via [`TypeId`](std::any::TypeId) and configuration.
     /// Custom data types may override this for more efficient comparison.
     fn eq(&self, other: &dyn DataTypeTraits) -> bool {
-        self.identifier() == other.identifier() && self.configuration() == other.configuration()
+        self.as_any().type_id() == other.as_any().type_id()
+            && self.configuration() == other.configuration()
     }
 
     /// Returns self as `Any` for downcasting.

@@ -39,28 +39,29 @@ mod bitround_codec_partial;
 use std::sync::Arc;
 
 pub use bitround_codec::BitroundCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(BitroundCodec::IDENTIFIER, BitroundCodec::matches_name, BitroundCodec::default_name, create_codec_bitround)
-}
-zarrs_plugin::impl_extension_aliases!(BitroundCodec, "bitround",
+zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
 );
 
-pub(crate) fn create_codec_bitround(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: BitroundCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(BitroundCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<BitroundCodec>(create_codec_bitround_v3)
+}
+
+pub(crate) fn create_codec_bitround_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: BitroundCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }
@@ -410,7 +411,10 @@ pub use _impl_bitround_codec as impl_bitround_codec;
 fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
     // Use get_bitround_support() for all types
     let bitround = get_bitround_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(data_type.clone(), BitroundCodec::IDENTIFIER.to_string())
+        CodecError::UnsupportedDataType(
+            data_type.clone(),
+            BitroundCodec::aliases_v3().default_name.to_string(),
+        )
     })?;
     bitround.round(bytes, keepbits);
     Ok(())

@@ -1,13 +1,11 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::ExtensionIdentifier;
-
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
     BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    NamedCodec, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -19,6 +17,7 @@ use crate::array::{
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::plugin::PluginCreateError;
+use zarrs_plugin::ExtensionAliasesV3;
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]
@@ -31,20 +30,14 @@ pub struct VlenCodec {
 
 impl Default for VlenCodec {
     fn default() -> Self {
-        let index_codecs = Arc::new(CodecChain::new_named(
+        let index_codecs = Arc::new(CodecChain::new(
             vec![],
-            NamedCodec::new(
-                BytesCodec::IDENTIFIER.to_string(),
-                Arc::new(BytesCodec::new(Some(Endianness::Little))),
-            ),
+            Arc::new(BytesCodec::new(Some(Endianness::Little))),
             vec![],
         ));
-        let data_codecs = Arc::new(CodecChain::new_named(
+        let data_codecs = Arc::new(CodecChain::new(
             vec![],
-            NamedCodec::new(
-                BytesCodec::IDENTIFIER.to_string(),
-                Arc::new(BytesCodec::new(None)),
-            ),
+            Arc::new(BytesCodec::new(None)),
             vec![],
         ));
         Self {
@@ -118,11 +111,11 @@ impl VlenCodec {
 }
 
 impl CodecTraits for VlenCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = VlenCodecConfiguration::V0_1(VlenCodecConfigurationV0_1 {
             index_codecs: self.index_codecs.create_metadatas(options),
             data_codecs: self.data_codecs.create_metadatas(options),
@@ -327,7 +320,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -335,7 +328,7 @@ impl ArrayToBytesCodecTraits for VlenCodec {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             )),
         }
     }

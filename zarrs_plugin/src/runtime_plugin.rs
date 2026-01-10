@@ -2,9 +2,7 @@
 //!
 //! These types enable runtime registration of extension plugins.
 
-use std::borrow::Cow;
-
-use crate::{MaybeSend, MaybeSync, PluginCreateError, ZarrVersions};
+use crate::{MaybeSend, MaybeSync, PluginCreateError};
 
 /// A runtime plugin (single input parameter).
 ///
@@ -12,12 +10,11 @@ use crate::{MaybeSend, MaybeSync, PluginCreateError, ZarrVersions};
 ///
 /// # Example
 /// ```ignore
-/// use zarrs_plugin::{RuntimePlugin, ZarrVersions, PluginCreateError};
+/// use zarrs_plugin::{RuntimePlugin, PluginCreateError};
 ///
 /// let plugin = RuntimePlugin::new(
 ///     "my.custom.codec",
-///     |name, zarr_version| name == "my.custom.codec",
-///     |zarr_version| "my.custom.codec".into(),
+///     |name| name == "my.custom.codec",
 ///     |metadata| {
 ///         // Create the extension from metadata
 ///         Ok(MyCustomCodec::from_metadata(metadata)?)
@@ -30,12 +27,8 @@ where
     TPlugin: MaybeSend + MaybeSync + 'static,
     TInput: ?Sized + 'static,
 {
-    /// The identifier of the plugin.
-    identifier: String,
-    /// Tests if the name is a match for this plugin for a given Zarr version.
-    match_name_fn: Box<dyn Fn(&str, ZarrVersions) -> bool + Send + Sync + 'static>,
-    /// Returns the default name for this plugin for the given Zarr version.
-    default_name_fn: Box<dyn Fn(ZarrVersions) -> Cow<'static, str> + Send + Sync + 'static>,
+    /// Tests if the name is a match for this plugin.
+    match_name_fn: Box<dyn Fn(&str) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
     create_fn: Box<dyn Fn(&TInput) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static>,
 }
@@ -46,21 +39,13 @@ where
     TInput: ?Sized + 'static,
 {
     /// Create a new runtime plugin for registration.
-    pub fn new<M, D, C>(
-        identifier: impl Into<String>,
-        match_name_fn: M,
-        default_name_fn: D,
-        create_fn: C,
-    ) -> Self
+    pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
     where
-        M: Fn(&str, ZarrVersions) -> bool + Send + Sync + 'static,
-        D: Fn(ZarrVersions) -> Cow<'static, str> + Send + Sync + 'static,
+        M: Fn(&str) -> bool + Send + Sync + 'static,
         C: Fn(&TInput) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
     {
         Self {
-            identifier: identifier.into(),
             match_name_fn: Box::new(match_name_fn),
-            default_name_fn: Box::new(default_name_fn),
             create_fn: Box::new(create_fn),
         }
     }
@@ -73,33 +58,10 @@ where
         (self.create_fn)(input)
     }
 
-    /// Returns true if this plugin is associated with `name` for the given Zarr version.
+    /// Returns true if this plugin is associated with `name`.
     #[must_use]
-    pub fn match_name(&self, name: &str, version: impl Into<ZarrVersions>) -> bool {
-        (self.match_name_fn)(name, version.into())
-    }
-
-    /// Return the default name for this plugin for the given Zarr version.
-    pub fn default_name(&self, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
-        (self.default_name_fn)(version.into())
-    }
-
-    /// Returns the identifier of the plugin.
-    #[must_use]
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-}
-
-impl<TPlugin, TInput> std::fmt::Debug for RuntimePlugin<TPlugin, TInput>
-where
-    TPlugin: MaybeSend + MaybeSync + 'static,
-    TInput: ?Sized + 'static,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RuntimePlugin")
-            .field("identifier", &self.identifier)
-            .finish_non_exhaustive()
+    pub fn match_name(&self, name: &str) -> bool {
+        (self.match_name_fn)(name)
     }
 }
 
@@ -113,12 +75,8 @@ where
     TInput1: ?Sized + 'static,
     TInput2: ?Sized + 'static,
 {
-    /// The identifier of the plugin.
-    identifier: String,
-    /// Tests if the name is a match for this plugin for a given Zarr version.
-    match_name_fn: Box<dyn Fn(&str, ZarrVersions) -> bool + Send + Sync + 'static>,
-    /// Returns the default name for this plugin for the given Zarr version.
-    default_name_fn: Box<dyn Fn(ZarrVersions) -> Cow<'static, str> + Send + Sync + 'static>,
+    /// Tests if the name is a match for this plugin.
+    match_name_fn: Box<dyn Fn(&str) -> bool + Send + Sync + 'static>,
     /// Create an implementation of this plugin from input.
     create_fn: Box<
         dyn Fn(&TInput1, &TInput2) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
@@ -132,21 +90,13 @@ where
     TInput2: ?Sized + 'static,
 {
     /// Create a new runtime plugin for registration.
-    pub fn new<M, D, C>(
-        identifier: impl Into<String>,
-        match_name_fn: M,
-        default_name_fn: D,
-        create_fn: C,
-    ) -> Self
+    pub fn new<M, C>(match_name_fn: M, create_fn: C) -> Self
     where
-        M: Fn(&str, ZarrVersions) -> bool + Send + Sync + 'static,
-        D: Fn(ZarrVersions) -> Cow<'static, str> + Send + Sync + 'static,
+        M: Fn(&str) -> bool + Send + Sync + 'static,
         C: Fn(&TInput1, &TInput2) -> Result<TPlugin, PluginCreateError> + Send + Sync + 'static,
     {
         Self {
-            identifier: identifier.into(),
             match_name_fn: Box::new(match_name_fn),
-            default_name_fn: Box::new(default_name_fn),
             create_fn: Box::new(create_fn),
         }
     }
@@ -159,34 +109,10 @@ where
         (self.create_fn)(input1, input2)
     }
 
-    /// Returns true if this plugin is associated with `name` for the given Zarr version.
+    /// Returns true if this plugin is associated with `name`.
     #[must_use]
-    pub fn match_name(&self, name: &str, version: impl Into<ZarrVersions>) -> bool {
-        (self.match_name_fn)(name, version.into())
-    }
-
-    /// Return the default name for this plugin for the given Zarr version.
-    pub fn default_name(&self, version: impl Into<ZarrVersions>) -> Cow<'static, str> {
-        (self.default_name_fn)(version.into())
-    }
-
-    /// Returns the identifier of the plugin.
-    #[must_use]
-    pub fn identifier(&self) -> &str {
-        &self.identifier
-    }
-}
-
-impl<TPlugin, TInput1, TInput2> std::fmt::Debug for RuntimePlugin2<TPlugin, TInput1, TInput2>
-where
-    TPlugin: MaybeSend + MaybeSync + 'static,
-    TInput1: ?Sized + 'static,
-    TInput2: ?Sized + 'static,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RuntimePlugin2")
-            .field("identifier", &self.identifier)
-            .finish_non_exhaustive()
+    pub fn match_name(&self, name: &str) -> bool {
+        (self.match_name_fn)(name)
     }
 }
 

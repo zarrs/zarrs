@@ -11,7 +11,7 @@ use crate::array::codec::{
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 
-zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
 
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
@@ -29,11 +29,11 @@ impl TestUnboundedCodec {
 }
 
 impl CodecTraits for TestUnboundedCodec {
-    fn identifier(&self) -> &'static str {
-        "zarrs.test_unbounded"
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         None
     }
 

@@ -15,6 +15,7 @@
 use half::{bf16, f16};
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
+use std::any::TypeId;
 use std::borrow::Cow;
 use std::fs;
 use std::num::NonZeroU64;
@@ -30,7 +31,81 @@ use zarrs::array::{
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_filesystem::FilesystemStore;
-use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
+use zarrs_plugin::ExtensionAliasesV3;
+
+/// Get a string identifier for a data type (for test matching purposes)
+fn data_type_id(data_type: &DataType) -> &'static str {
+    let type_id = data_type.as_any().type_id();
+    if type_id == TypeId::of::<data_type::BoolDataType>() {
+        "bool"
+    } else if type_id == TypeId::of::<data_type::Int2DataType>() {
+        "int2"
+    } else if type_id == TypeId::of::<data_type::Int4DataType>() {
+        "int4"
+    } else if type_id == TypeId::of::<data_type::Int8DataType>() {
+        "int8"
+    } else if type_id == TypeId::of::<data_type::Int16DataType>() {
+        "int16"
+    } else if type_id == TypeId::of::<data_type::Int32DataType>() {
+        "int32"
+    } else if type_id == TypeId::of::<data_type::Int64DataType>() {
+        "int64"
+    } else if type_id == TypeId::of::<data_type::UInt2DataType>() {
+        "uint2"
+    } else if type_id == TypeId::of::<data_type::UInt4DataType>() {
+        "uint4"
+    } else if type_id == TypeId::of::<data_type::UInt8DataType>() {
+        "uint8"
+    } else if type_id == TypeId::of::<data_type::UInt16DataType>() {
+        "uint16"
+    } else if type_id == TypeId::of::<data_type::UInt32DataType>() {
+        "uint32"
+    } else if type_id == TypeId::of::<data_type::UInt64DataType>() {
+        "uint64"
+    } else if type_id == TypeId::of::<data_type::Float16DataType>() {
+        "float16"
+    } else if type_id == TypeId::of::<data_type::Float32DataType>() {
+        "float32"
+    } else if type_id == TypeId::of::<data_type::Float64DataType>() {
+        "float64"
+    } else if type_id == TypeId::of::<data_type::BFloat16DataType>() {
+        "bfloat16"
+    } else if type_id == TypeId::of::<data_type::Float8E4M3DataType>() {
+        "float8_e4m3"
+    } else if type_id == TypeId::of::<data_type::Float8E5M2DataType>() {
+        "float8_e5m2"
+    } else if type_id == TypeId::of::<data_type::StringDataType>() {
+        "string"
+    } else if type_id == TypeId::of::<data_type::BytesDataType>() {
+        "bytes"
+    } else if type_id == TypeId::of::<data_type::Complex64DataType>() {
+        "complex64"
+    } else if type_id == TypeId::of::<data_type::Complex128DataType>() {
+        "complex128"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat16DataType>() {
+        "complex_float16"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat32DataType>() {
+        "complex_float32"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat64DataType>() {
+        "complex_float64"
+    } else if type_id == TypeId::of::<data_type::ComplexBFloat16DataType>() {
+        "complex_bfloat16"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E4M3DataType>() {
+        "complex_float8_e4m3"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E5M2DataType>() {
+        "complex_float8_e5m2"
+    } else if type_id == TypeId::of::<data_type::NumpyDateTime64DataType>() {
+        "numpy.datetime64"
+    } else if type_id == TypeId::of::<data_type::NumpyTimeDelta64DataType>() {
+        "numpy.timedelta64"
+    } else if type_id == TypeId::of::<data_type::RawBitsDataType>() {
+        "raw_bits"
+    } else if type_id == TypeId::of::<data_type::OptionalDataType>() {
+        "optional"
+    } else {
+        "unknown"
+    }
+}
 
 // =============================================================================
 // Core Types
@@ -52,7 +127,7 @@ pub enum CodecTestResult {
 }
 
 /// Configuration for a single test case
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TestConfig {
     /// Data type to test
     pub data_type: DataType,
@@ -240,12 +315,12 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
 
 /// Generate deterministic fixed-length test data bytes for a given data type
 fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
-    match data_type.identifier() {
-        data_type::BoolDataType::IDENTIFIER => (0..num_elements).map(|i| (i % 2) as u8).collect(),
+    match data_type_id(data_type) {
+        "bool" => (0..num_elements).map(|i| (i % 2) as u8).collect(),
 
         // Sub-byte integer types use i8/u8 representation in memory (unpacked)
         // The packbits codec handles packing to sub-byte sizes
-        data_type::Int2DataType::IDENTIFIER => {
+        "int2" => {
             // Int2 values range from -2 to 1 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -254,11 +329,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-        data_type::UInt2DataType::IDENTIFIER => {
+        "uint2" => {
             // UInt2 values range from 0 to 3 (stored as u8)
             (0..num_elements).map(|i| (i % 4) as u8).collect()
         }
-        data_type::Int4DataType::IDENTIFIER => {
+        "int4" => {
             // Int4 values range from -8 to 7 (stored as i8)
             (0..num_elements)
                 .map(|i| {
@@ -267,58 +342,54 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 })
                 .collect()
         }
-        data_type::UInt4DataType::IDENTIFIER => {
+        "uint4" => {
             // UInt4 values range from 0 to 15 (stored as u8)
             (0..num_elements).map(|i| (i % 16) as u8).collect()
         }
 
         // Integer types
-        data_type::Int8DataType::IDENTIFIER => (0..num_elements)
+        "int8" => (0..num_elements)
             .map(|i| ((i % 256) as i8).to_ne_bytes()[0])
             .collect(),
-        data_type::UInt8DataType::IDENTIFIER => {
-            (0..num_elements).map(|i| (i % 256) as u8).collect()
-        }
-        data_type::Int16DataType::IDENTIFIER => (0..num_elements)
+        "uint8" => (0..num_elements).map(|i| (i % 256) as u8).collect(),
+        "int16" => (0..num_elements)
             .flat_map(|i| ((i % 65536) as i16).to_ne_bytes())
             .collect(),
-        data_type::UInt16DataType::IDENTIFIER => (0..num_elements)
+        "uint16" => (0..num_elements)
             .flat_map(|i| ((i % 65536) as u16).to_ne_bytes())
             .collect(),
-        data_type::Int32DataType::IDENTIFIER => (0..num_elements)
+        "int32" => (0..num_elements)
             .flat_map(|i| (i as i32).to_ne_bytes())
             .collect(),
-        data_type::UInt32DataType::IDENTIFIER => (0..num_elements)
+        "uint32" => (0..num_elements)
             .flat_map(|i| (i as u32).to_ne_bytes())
             .collect(),
-        data_type::Int64DataType::IDENTIFIER => (0..num_elements)
+        "int64" => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
-        data_type::UInt64DataType::IDENTIFIER => (0..num_elements)
+        "uint64" => (0..num_elements)
             .flat_map(|i| (i as u64).to_ne_bytes())
             .collect(),
-        data_type::BFloat16DataType::IDENTIFIER => (0..num_elements)
+        "bfloat16" => (0..num_elements)
             .flat_map(|i| bf16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
-        data_type::Float16DataType::IDENTIFIER => (0..num_elements)
+        "float16" => (0..num_elements)
             .flat_map(|i| f16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
         // Float8 variants (1 byte each)
-        data_type::Float8E4M3DataType::IDENTIFIER | data_type::Float8E5M2DataType::IDENTIFIER => {
-            (0..num_elements).map(|i| (i % 128) as u8).collect()
-        }
+        "float8_e4m3" | "float8_e5m2" => (0..num_elements).map(|i| (i % 128) as u8).collect(),
 
-        data_type::Float32DataType::IDENTIFIER => (0..num_elements)
+        "float32" => (0..num_elements)
             .flat_map(|i| ((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
-        data_type::Float64DataType::IDENTIFIER => (0..num_elements)
+        "float64" => (0..num_elements)
             .flat_map(|i| ((i as f64) * 0.5).to_ne_bytes())
             .collect(),
 
         // Complex half-precision (4 bytes total)
-        data_type::ComplexBFloat16DataType::IDENTIFIER => (0..num_elements)
+        "complex_bfloat16" => (0..num_elements)
             .flat_map(|i| {
                 let real = bf16::from_f32((i as f32) * 0.5);
                 let imag = bf16::from_f32((i as f32) * 0.25);
@@ -328,7 +399,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        data_type::ComplexFloat16DataType::IDENTIFIER => (0..num_elements)
+        "complex_float16" => (0..num_elements)
             .flat_map(|i| {
                 let real = f16::from_f32((i as f32) * 0.5);
                 let imag = f16::from_f32((i as f32) * 0.25);
@@ -339,13 +410,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // Complex float8 (2 bytes total)
-        data_type::ComplexFloat8E4M3DataType::IDENTIFIER
-        | data_type::ComplexFloat8E5M2DataType::IDENTIFIER => (0..num_elements)
+        "complex_float8_e4m3" | "complex_float8_e5m2" => (0..num_elements)
             .flat_map(|i| vec![(i % 128) as u8, ((i + 1) % 128) as u8])
             .collect(),
 
-        data_type::ComplexFloat32DataType::IDENTIFIER
-        | data_type::Complex64DataType::IDENTIFIER => (0..num_elements)
+        "complex_float32" | "complex64" => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f32) * 0.5;
                 let imag = (i as f32) * 0.25;
@@ -355,8 +424,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             })
             .collect(),
 
-        data_type::ComplexFloat64DataType::IDENTIFIER
-        | data_type::Complex128DataType::IDENTIFIER => (0..num_elements)
+        "complex_float64" | "complex128" => (0..num_elements)
             .flat_map(|i| {
                 let real = (i as f64) * 0.5;
                 let imag = (i as f64) * 0.25;
@@ -367,12 +435,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .collect(),
 
         // NumPy datetime/timedelta (8 bytes - stored as i64)
-        data_type::NumpyDateTime64DataType::IDENTIFIER
-        | data_type::NumpyTimeDelta64DataType::IDENTIFIER => (0..num_elements)
+        "numpy.datetime64" | "numpy.timedelta64" => (0..num_elements)
             .flat_map(|i| (i as i64).to_ne_bytes())
             .collect(),
 
-        data_type::RawBitsDataType::IDENTIFIER => {
+        "raw_bits" => {
             let size = data_type.fixed_size().unwrap();
             (0..num_elements)
                 .flat_map(|i| vec![(i % 256) as u8; size])
@@ -395,11 +462,9 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
 /// Generate deterministic test data for a given data type and element count
 /// Returns `ArrayBytes` which can be Fixed, Variable, or Optional
 pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayBytes<'static> {
-    use zarrs::array::data_type;
-
-    match data_type.identifier() {
+    match data_type_id(data_type) {
         // Variable-length String type
-        data_type::StringDataType::IDENTIFIER => {
+        "string" => {
             let strings: Vec<String> = (0..num_elements)
                 .map(|i| format!("str_{:04}", i % 10000))
                 .collect();
@@ -417,7 +482,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Variable-length Bytes type
-        data_type::BytesDataType::IDENTIFIER => {
+        "bytes" => {
             let byte_arrays: Vec<Vec<u8>> = (0..num_elements)
                 .map(|i| vec![(i % 256) as u8; (i % 8) + 1])
                 .collect();
@@ -435,7 +500,7 @@ pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayByt
         }
 
         // Optional types - wrap inner data with validity mask
-        data_type::OptionalDataType::IDENTIFIER => {
+        "optional" => {
             let opt = data_type.as_optional().unwrap();
             let inner_bytes = generate_test_data(opt.data_type(), num_elements);
             // Create validity mask - every 4th element is null
@@ -467,14 +532,16 @@ pub fn sanitize_data_type_name(data_type: &DataType) -> String {
     let name = if let Some(opt) = data_type.as_optional() {
         format!(
             "{}({})",
-            OptionalCodec::default_name(ZarrVersions::V3),
+            OptionalCodec::aliases_v3().default_name.clone(),
             sanitize_data_type_name(opt.data_type())
         )
     } else {
-        data_type.clone().to_named().name().to_string()
+        data_type
+            .name_v3()
+            .map_or_else(String::new, |n| n.to_string())
     };
     name.chars()
-        .map(|c| {
+        .map(|c: char| {
             if c.is_alphanumeric() || c == '_' || c == '.' || c == '(' || c == ')' {
                 c.to_ascii_lowercase()
             } else {
@@ -877,7 +944,10 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
         // For unsupported tests, compute checksum from config description
         compute_metadata_checksum(&format!(
             "{}:{}:{}",
-            config.data_type.clone().to_named().name(),
+            config
+                .data_type
+                .name_v3()
+                .map_or_else(String::new, |n| n.to_string()),
             config.chunk_grid_name,
             snapshot_path.codec
         ))
@@ -936,7 +1006,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                             verify_snapshot(generated_dir, &reference_dir, config.non_deterministic)
                         {
                             panic!(
-                                "Snapshot verification failed for {display_path}/{checksum}: {e}"
+                                "Snapshot verification failed for {display_path}/{checksum}/{config:?}: {e}"
                             );
                         }
                     }
@@ -1044,7 +1114,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                 let marker = serde_json::json!({
                     "status": "failure",
                     "reason": reason,
-                    "data_type": config.data_type.clone().to_named().name(),
+                    "data_type": config.data_type.name_v3().map_or_else(String::new, |n| n.to_string()),
                     "chunk_grid": config.chunk_grid_name,
                 });
                 fs::write(&marker_path, serde_json::to_string_pretty(&marker).unwrap())
@@ -1138,7 +1208,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "gzip")]
     codecs.push(CodecDef {
-        name: GzipCodec::default_name(ZarrVersions::V3),
+        name: GzipCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(GzipCodec::new(5).unwrap())),
@@ -1149,7 +1219,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zstd")]
     codecs.push(CodecDef {
-        name: ZstdCodec::default_name(ZarrVersions::V3),
+        name: ZstdCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(ZstdCodec::new(5, false))),
@@ -1160,7 +1230,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "blosc")]
     codecs.push(CodecDef {
-        name: BloscCodec::default_name(ZarrVersions::V3),
+        name: BloscCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| {
@@ -1182,7 +1252,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "crc32c")]
     codecs.push(CodecDef {
-        name: Crc32cCodec::default_name(ZarrVersions::V3),
+        name: Crc32cCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Crc32cCodec::new())),
@@ -1193,7 +1263,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zlib")]
     codecs.push(CodecDef {
-        name: ZlibCodec::default_name(ZarrVersions::V3),
+        name: ZlibCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| {
@@ -1209,7 +1279,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "bz2")]
     codecs.push(CodecDef {
-        name: Bz2Codec::default_name(ZarrVersions::V3),
+        name: Bz2Codec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| {
@@ -1225,7 +1295,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "adler32")]
     codecs.push(CodecDef {
-        name: Adler32Codec::default_name(ZarrVersions::V3),
+        name: Adler32Codec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Adler32Codec::default())),
@@ -1236,7 +1306,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "fletcher32")]
     codecs.push(CodecDef {
-        name: Fletcher32Codec::default_name(ZarrVersions::V3),
+        name: Fletcher32Codec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(Fletcher32Codec::new())),
@@ -1247,7 +1317,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "gdeflate")]
     codecs.push(CodecDef {
-        name: GDeflateCodec::default_name(ZarrVersions::V3),
+        name: GDeflateCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: Some("level5"),
         factory: |_dt| CodecInstance::BytesToBytes(Arc::new(GDeflateCodec::new(5).unwrap())),
@@ -1257,7 +1327,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: ShuffleCodec::default_name(ZarrVersions::V3),
+        name: ShuffleCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::BytesToBytes,
         name_suffix: None,
         factory: |dt| {
@@ -1277,7 +1347,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "transpose")]
     codecs.push(CodecDef {
-        name: TransposeCodec::default_name(ZarrVersions::V3),
+        name: TransposeCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |_dt| {
@@ -1297,7 +1367,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "bitround")]
     codecs.push(CodecDef {
-        name: BitroundCodec::default_name(ZarrVersions::V3),
+        name: BitroundCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: Some("keepbits10"),
         factory: |_dt| CodecInstance::ArrayToArray(Arc::new(BitroundCodec::new(10))),
@@ -1307,7 +1377,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: SqueezeCodec::default_name(ZarrVersions::V3),
+        name: SqueezeCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToArray(Arc::new(SqueezeCodec::new())),
@@ -1317,7 +1387,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: ReshapeCodec::default_name(ZarrVersions::V3),
+        name: ReshapeCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: Some("flatten"),
         factory: |_dt| {
@@ -1332,22 +1402,21 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: FixedScaleOffsetCodec::default_name(ZarrVersions::V3),
+        name: FixedScaleOffsetCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
         factory: |dt| {
-            use zarrs::array::data_type;
             // fixedscaleoffset requires a dtype configuration - use a sensible default
             // based on the data type, or fall back to f64 for unsupported types
-            let dtype_str = match dt.identifier() {
-                data_type::Int16DataType::IDENTIFIER => "<i2",
-                data_type::Int32DataType::IDENTIFIER => "<i4",
-                data_type::Int64DataType::IDENTIFIER => "<i8",
-                data_type::UInt16DataType::IDENTIFIER => "<u2",
-                data_type::UInt32DataType::IDENTIFIER => "<u4",
-                data_type::UInt64DataType::IDENTIFIER => "<u8",
-                data_type::Float32DataType::IDENTIFIER => "<f4",
-                data_type::Float64DataType::IDENTIFIER => "<f8",
+            let dtype_str = match data_type_id(dt) {
+                "int16" => "<i2",
+                "int32" => "<i4",
+                "int64" => "<i8",
+                "uint16" => "<u2",
+                "uint32" => "<u4",
+                "uint64" => "<u8",
+                "float32" => "<f4",
+                "float64" => "<f8",
                 // For unsupported types, use f64 as a fallback - the codec will fail at runtime
                 _ => "<f8",
             };
@@ -1376,7 +1445,7 @@ fn codec_registry() -> Vec<CodecDef> {
     // =========================================================================
 
     codecs.push(CodecDef {
-        name: BytesCodec::default_name(ZarrVersions::V3),
+        name: BytesCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(BytesCodec::default())),
@@ -1392,7 +1461,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "sharding")]
     codecs.push(CodecDef {
-        name: ShardingCodec::default_name(ZarrVersions::V3),
+        name: ShardingCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: Some("inner2x2"),
         factory: |dt| {
@@ -1407,7 +1476,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "pcodec")]
     codecs.push(CodecDef {
-        name: PcodecCodec::default_name(ZarrVersions::V3),
+        name: PcodecCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| {
@@ -1423,7 +1492,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     #[cfg(feature = "zfp")]
     codecs.push(CodecDef {
-        name: ZfpCodec::default_name(ZarrVersions::V3),
+        name: ZfpCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: Some("reversible"),
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(ZfpCodec::new_reversible())),
@@ -1438,7 +1507,7 @@ fn codec_registry() -> Vec<CodecDef> {
     }
 
     codecs.push(CodecDef {
-        name: VlenCodec::default_name(ZarrVersions::V3),
+        name: VlenCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenCodec::default())),
@@ -1448,7 +1517,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: VlenV2Codec::default_name(ZarrVersions::V3),
+        name: VlenV2Codec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenV2Codec::new())),
@@ -1458,7 +1527,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: VlenArrayCodec::default_name(ZarrVersions::V3),
+        name: VlenArrayCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenArrayCodec::new())),
@@ -1468,7 +1537,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: VlenBytesCodec::default_name(ZarrVersions::V3),
+        name: VlenBytesCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenBytesCodec::new())),
@@ -1478,7 +1547,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: VlenUtf8Codec::default_name(ZarrVersions::V3),
+        name: VlenUtf8Codec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(VlenUtf8Codec::new())),
@@ -1488,7 +1557,7 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
-        name: PackBitsCodec::default_name(ZarrVersions::V3),
+        name: PackBitsCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |_dt| CodecInstance::ArrayToBytes(Arc::new(PackBitsCodec::default())),
@@ -1503,12 +1572,12 @@ fn codec_registry() -> Vec<CodecDef> {
     }
 
     codecs.push(CodecDef {
-        name: OptionalCodec::default_name(ZarrVersions::V3),
+        name: OptionalCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,
         name_suffix: None,
         factory: |dt| {
             // For optional types, default_array_to_bytes_codec returns an OptionalCodec
-            CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt).codec().clone())
+            CodecInstance::ArrayToBytes(default_array_to_bytes_codec(dt))
         },
         lossy: false,
         non_deterministic: false,
@@ -1603,8 +1672,8 @@ mod compatibility_matrix {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use zarrs::array::{codec, data_type};
-    use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
+    use zarrs::array::codec;
+    use zarrs_plugin::ExtensionAliasesV3;
 
     /// Get codecs for a specific category from `registered_codecs`
     fn get_codecs_for_category(category: &str) -> Vec<String> {
@@ -1636,8 +1705,7 @@ mod compatibility_matrix {
             .iter()
             .filter(|dt| {
                 // Exclude parameterized types - these are tested via specific instances
-                **dt != data_type::RawBitsDataType::IDENTIFIER
-                    && **dt != data_type::OptionalDataType::IDENTIFIER
+                **dt != "raw_bits" && **dt != "optional"
             })
             .map(|dt| sanitize_data_type_name(dt))
             .collect()
@@ -1698,96 +1766,137 @@ mod compatibility_matrix {
     fn registered_codecs() -> Vec<(Cow<'static, str>, &'static str)> {
         vec![
             // Array-to-Array
-            (codec::BitroundCodec::default_name(ZarrVersions::V3), "a2a"),
             (
-                codec::FixedScaleOffsetCodec::default_name(ZarrVersions::V3),
+                codec::BitroundCodec::aliases_v3().default_name.clone(),
                 "a2a",
             ),
-            (codec::ReshapeCodec::default_name(ZarrVersions::V3), "a2a"),
-            (codec::SqueezeCodec::default_name(ZarrVersions::V3), "a2a"),
-            (codec::TransposeCodec::default_name(ZarrVersions::V3), "a2a"),
-            // Array-to-Bytes
-            (codec::BytesCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::OptionalCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::PackBitsCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::PcodecCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::ShardingCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::VlenCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::VlenArrayCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::VlenBytesCodec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::VlenUtf8Codec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::VlenV2Codec::default_name(ZarrVersions::V3), "a2b"),
-            (codec::ZfpCodec::default_name(ZarrVersions::V3), "a2b"),
-            // (ZfpyCodec::default_name(ZarrVersions::V3), "a2b"),
-            // Bytes-to-Bytes
-            (codec::Adler32Codec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::BloscCodec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::Bz2Codec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::Crc32cCodec::default_name(ZarrVersions::V3), "b2b"),
             (
-                codec::Fletcher32Codec::default_name(ZarrVersions::V3),
+                codec::FixedScaleOffsetCodec::aliases_v3()
+                    .default_name
+                    .clone(),
+                "a2a",
+            ),
+            (
+                codec::ReshapeCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            (
+                codec::SqueezeCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            (
+                codec::TransposeCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            // Array-to-Bytes
+            (codec::BytesCodec::aliases_v3().default_name.clone(), "a2b"),
+            (
+                codec::OptionalCodec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (
+                codec::PackBitsCodec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (codec::PcodecCodec::aliases_v3().default_name.clone(), "a2b"),
+            (
+                codec::ShardingCodec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (codec::VlenCodec::aliases_v3().default_name.clone(), "a2b"),
+            (
+                codec::VlenArrayCodec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (
+                codec::VlenBytesCodec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (
+                codec::VlenUtf8Codec::aliases_v3().default_name.clone(),
+                "a2b",
+            ),
+            (codec::VlenV2Codec::aliases_v3().default_name.clone(), "a2b"),
+            (codec::ZfpCodec::aliases_v3().default_name.clone(), "a2b"),
+            // (ZfpyCodec::aliases_v3().default_name.clone(), "a2b"),
+            // Bytes-to-Bytes
+            (
+                codec::Adler32Codec::aliases_v3().default_name.clone(),
                 "b2b",
             ),
-            (codec::GDeflateCodec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::GzipCodec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::ShuffleCodec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::ZlibCodec::default_name(ZarrVersions::V3), "b2b"),
-            (codec::ZstdCodec::default_name(ZarrVersions::V3), "b2b"),
+            (codec::BloscCodec::aliases_v3().default_name.clone(), "b2b"),
+            (codec::Bz2Codec::aliases_v3().default_name.clone(), "b2b"),
+            (codec::Crc32cCodec::aliases_v3().default_name.clone(), "b2b"),
+            (
+                codec::Fletcher32Codec::aliases_v3().default_name.clone(),
+                "b2b",
+            ),
+            (
+                codec::GDeflateCodec::aliases_v3().default_name.clone(),
+                "b2b",
+            ),
+            (codec::GzipCodec::aliases_v3().default_name.clone(), "b2b"),
+            (
+                codec::ShuffleCodec::aliases_v3().default_name.clone(),
+                "b2b",
+            ),
+            (codec::ZlibCodec::aliases_v3().default_name.clone(), "b2b"),
+            (codec::ZstdCodec::aliases_v3().default_name.clone(), "b2b"),
         ]
     }
 
     /// All registered data types from `zarrs_registry::data_type`
     #[rustfmt::skip]
     const REGISTERED_DATA_TYPES: &[&str] = &[
-        data_type::BoolDataType::IDENTIFIER,
-        data_type::Int2DataType::IDENTIFIER,
-        data_type::Int4DataType::IDENTIFIER,
-        data_type::Int8DataType::IDENTIFIER,
-        data_type::Int16DataType::IDENTIFIER,
-        data_type::Int32DataType::IDENTIFIER,
-        data_type::Int64DataType::IDENTIFIER,
-        data_type::UInt2DataType::IDENTIFIER,
-        data_type::UInt4DataType::IDENTIFIER,
-        data_type::UInt8DataType::IDENTIFIER,
-        data_type::UInt16DataType::IDENTIFIER,
-        data_type::UInt32DataType::IDENTIFIER,
-        data_type::UInt64DataType::IDENTIFIER,
-        data_type::Float4E2M1FNDataType::IDENTIFIER,
-        data_type::Float6E2M3FNDataType::IDENTIFIER,
-        data_type::Float6E3M2FNDataType::IDENTIFIER,
-        data_type::Float8E3M4DataType::IDENTIFIER,
-        data_type::Float8E4M3DataType::IDENTIFIER,
-        data_type::Float8E4M3B11FNUZDataType::IDENTIFIER,
-        data_type::Float8E4M3FNUZDataType::IDENTIFIER,
-        data_type::Float8E5M2DataType::IDENTIFIER,
-        data_type::Float8E5M2FNUZDataType::IDENTIFIER,
-        data_type::Float8E8M0FNUDataType::IDENTIFIER,
-        data_type::Float16DataType::IDENTIFIER,
-        data_type::Float32DataType::IDENTIFIER,
-        data_type::Float64DataType::IDENTIFIER,
-        data_type::Complex64DataType::IDENTIFIER,
-        data_type::Complex128DataType::IDENTIFIER,
-        data_type::RawBitsDataType::IDENTIFIER,
-        data_type::BFloat16DataType::IDENTIFIER,
-        data_type::ComplexBFloat16DataType::IDENTIFIER,
-        data_type::ComplexFloat16DataType::IDENTIFIER,
-        data_type::ComplexFloat32DataType::IDENTIFIER,
-        data_type::ComplexFloat64DataType::IDENTIFIER,
-        data_type::ComplexFloat4E2M1FNDataType::IDENTIFIER,
-        data_type::ComplexFloat6E2M3FNDataType::IDENTIFIER,
-        data_type::ComplexFloat6E3M2FNDataType::IDENTIFIER,
-        data_type::ComplexFloat8E3M4DataType::IDENTIFIER,
-        data_type::ComplexFloat8E4M3DataType::IDENTIFIER,
-        data_type::ComplexFloat8E4M3B11FNUZDataType::IDENTIFIER,
-        data_type::ComplexFloat8E4M3FNUZDataType::IDENTIFIER,
-        data_type::ComplexFloat8E5M2DataType::IDENTIFIER,
-        data_type::ComplexFloat8E5M2FNUZDataType::IDENTIFIER,
-        data_type::ComplexFloat8E8M0FNUDataType::IDENTIFIER,
-        data_type::StringDataType::IDENTIFIER,
-        data_type::BytesDataType::IDENTIFIER,
-        data_type::NumpyDateTime64DataType::IDENTIFIER,
-        data_type::NumpyTimeDelta64DataType::IDENTIFIER,
-        data_type::OptionalDataType::IDENTIFIER,
+        "bool",
+        "int2",
+        "int4",
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint2",
+        "uint4",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float4_e2m1fn",
+        "float6_e2m3fn",
+        "float6_e3m2fn",
+        "float8_e3m4",
+        "float8_e4m3",
+        "float8_e4m3b11fnuz",
+        "float8_e4m3fnuz",
+        "float8_e5m2",
+        "float8_e5m2fnuz",
+        "float8_e8m0fnu",
+        "float16",
+        "float32",
+        "float64",
+        "complex64",
+        "complex128",
+        "raw_bits",
+        "bfloat16",
+        "complex_bfloat16",
+        "complex_float16",
+        "complex_float32",
+        "complex_float64",
+        "complex_float4_e2m1fn",
+        "complex_float6_e2m3fn",
+        "complex_float6_e3m2fn",
+        "complex_float8_e3m4",
+        "complex_float8_e4m3",
+        "complex_float8_e4m3b11fnuz",
+        "complex_float8_e4m3fnuz",
+        "complex_float8_e5m2",
+        "complex_float8_e5m2fnuz",
+        "complex_float8_e8m0fnu",
+        "string",
+        "bytes",
+        "numpy.datetime64",
+        "numpy.timedelta64",
+        "optional",
     ];
 
     /// Extract the base codec name from a directory name like "gzip(level5)" -> "gzip"

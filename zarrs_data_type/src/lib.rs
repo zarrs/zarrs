@@ -13,7 +13,9 @@ mod fill_value;
 
 pub use data_type::{DataType, DataTypeTraits};
 pub use data_type_plugin::{
-    register_data_type, unregister_data_type, DataTypePlugin, DataTypeRuntimePlugin,
-    DataTypeRuntimeRegistryHandle, DATA_TYPE_RUNTIME_REGISTRY,
+    register_data_type_v2, register_data_type_v3, unregister_data_type_v2, unregister_data_type_v3,
+    DataTypePluginV2, DataTypePluginV3, DataTypeRuntimePluginV2, DataTypeRuntimePluginV3,
+    DataTypeRuntimeRegistryHandleV2, DataTypeRuntimeRegistryHandleV3,
+    DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
 };
 pub use fill_value::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};

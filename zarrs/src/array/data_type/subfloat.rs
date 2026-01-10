@@ -6,10 +6,6 @@ use super::macros::register_data_type_plugin;
 macro_rules! impl_subfloat_data_type {
     ($marker:ty) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
-            fn identifier(&self) -> &'static str {
-                <Self as zarrs_plugin::ExtensionIdentifier>::IDENTIFIER
-            }
-
             fn configuration(&self) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
@@ -20,15 +16,10 @@ macro_rules! impl_subfloat_data_type {
 
             fn fill_value(
                 &self,
-                fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
+                fill_value_metadata: &zarrs_metadata::FillValueMetadata,
+                _version: zarrs_plugin::ZarrVersions,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError>
             {
-                let err = || {
-                    zarrs_data_type::DataTypeFillValueMetadataError::new(
-                        self.identifier().to_string(),
-                        fill_value_metadata.clone(),
-                    )
-                };
                 // Subfloats use hex string representation like "0x00"
                 if let Some(s) = fill_value_metadata.as_str() {
                     if let Some(hex) = s.strip_prefix("0x") {
@@ -43,25 +34,20 @@ macro_rules! impl_subfloat_data_type {
                         return Ok(zarrs_data_type::FillValue::from(byte));
                     }
                 }
-                Err(err())
+                Err(zarrs_data_type::DataTypeFillValueMetadataError)
             }
 
             fn metadata_fill_value(
                 &self,
                 fill_value: &zarrs_data_type::FillValue,
-            ) -> Result<
-                zarrs_metadata::v3::FillValueMetadataV3,
-                zarrs_data_type::DataTypeFillValueError,
-            > {
-                let error = || {
-                    zarrs_data_type::DataTypeFillValueError::new(
-                        self.identifier().to_string(),
-                        fill_value.clone(),
-                    )
-                };
-                let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+            ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError>
+            {
+                let bytes: [u8; 1] = fill_value
+                    .as_ne_bytes()
+                    .try_into()
+                    .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
                 // Return as hex string
-                Ok(zarrs_metadata::v3::FillValueMetadataV3::from(format!(
+                Ok(zarrs_metadata::FillValueMetadata::from(format!(
                     "0x{:02x}",
                     bytes[0]
                 )))
@@ -78,49 +64,49 @@ macro_rules! impl_subfloat_data_type {
 #[derive(Debug, Clone, Copy)]
 pub struct Float4E2M1FNDataType;
 register_data_type_plugin!(Float4E2M1FNDataType);
-zarrs_plugin::impl_extension_aliases!(Float4E2M1FNDataType, "float4_e2m1fn");
+zarrs_plugin::impl_extension_aliases!(Float4E2M1FNDataType, v3: "float4_e2m1fn");
 
 /// The `float6_e2m3fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float6E2M3FNDataType;
 register_data_type_plugin!(Float6E2M3FNDataType);
-zarrs_plugin::impl_extension_aliases!(Float6E2M3FNDataType, "float6_e2m3fn");
+zarrs_plugin::impl_extension_aliases!(Float6E2M3FNDataType, v3: "float6_e2m3fn");
 
 /// The `float6_e3m2fn` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float6E3M2FNDataType;
 register_data_type_plugin!(Float6E3M2FNDataType);
-zarrs_plugin::impl_extension_aliases!(Float6E3M2FNDataType, "float6_e3m2fn");
+zarrs_plugin::impl_extension_aliases!(Float6E3M2FNDataType, v3: "float6_e3m2fn");
 
 /// The `float8_e3m4` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E3M4DataType;
 register_data_type_plugin!(Float8E3M4DataType);
-zarrs_plugin::impl_extension_aliases!(Float8E3M4DataType, "float8_e3m4");
+zarrs_plugin::impl_extension_aliases!(Float8E3M4DataType, v3: "float8_e3m4");
 
 /// The `float8_e4m3b11fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E4M3B11FNUZDataType;
 register_data_type_plugin!(Float8E4M3B11FNUZDataType);
-zarrs_plugin::impl_extension_aliases!(Float8E4M3B11FNUZDataType, "float8_e4m3b11fnuz");
+zarrs_plugin::impl_extension_aliases!(Float8E4M3B11FNUZDataType, v3: "float8_e4m3b11fnuz");
 
 /// The `float8_e4m3fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E4M3FNUZDataType;
 register_data_type_plugin!(Float8E4M3FNUZDataType);
-zarrs_plugin::impl_extension_aliases!(Float8E4M3FNUZDataType, "float8_e4m3fnuz");
+zarrs_plugin::impl_extension_aliases!(Float8E4M3FNUZDataType, v3: "float8_e4m3fnuz");
 
 /// The `float8_e5m2fnuz` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E5M2FNUZDataType;
 register_data_type_plugin!(Float8E5M2FNUZDataType);
-zarrs_plugin::impl_extension_aliases!(Float8E5M2FNUZDataType, "float8_e5m2fnuz");
+zarrs_plugin::impl_extension_aliases!(Float8E5M2FNUZDataType, v3: "float8_e5m2fnuz");
 
 /// The `float8_e8m0fnu` data type.
 #[derive(Debug, Clone, Copy)]
 pub struct Float8E8M0FNUDataType;
 register_data_type_plugin!(Float8E8M0FNUDataType);
-zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, "float8_e8m0fnu");
+zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, v3: "float8_e8m0fnu");
 
 // DataTypeTraits implementations for subfloats
 impl_subfloat_data_type!(Float4E2M1FNDataType);

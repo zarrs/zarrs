@@ -53,26 +53,40 @@ use blosc_src::{
 };
 use derive_more::From;
 use thiserror::Error;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
     BloscShuffleMode,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(BloscCodec, v3: "blosc", v2: "blosc");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(BloscCodec::IDENTIFIER, BloscCodec::matches_name, BloscCodec::default_name, create_codec_blosc)
+    CodecPluginV3::new::<BloscCodec>(create_codec_blosc_v3)
 }
-zarrs_plugin::impl_extension_aliases!(BloscCodec, "blosc");
 
-pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: BloscCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(BloscCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<BloscCodec>(create_codec_blosc_v2)
+}
+
+pub(crate) fn create_codec_blosc_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: BloscCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
+    Ok(Codec::BytesToBytes(codec))
+}
+
+pub(crate) fn create_codec_blosc_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    let configuration: BloscCodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

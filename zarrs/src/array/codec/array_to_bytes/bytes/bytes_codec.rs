@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError};
 
 use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
 use crate::array::codec::{
@@ -23,7 +23,6 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]
@@ -75,11 +74,11 @@ impl BytesCodec {
 }
 
 impl CodecTraits for BytesCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = BytesCodecConfiguration::V1(BytesCodecConfigurationV1 {
             endian: self.endian,
         });
@@ -145,7 +144,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -156,7 +155,10 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         // Use get_bytes_support() for all types
         let bytes_encoded = super::get_bytes_support(data_type)
             .ok_or_else(|| {
-                CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+                CodecError::UnsupportedDataType(
+                    data_type.clone(),
+                    Self::aliases_v3().default_name.to_string(),
+                )
             })?
             .encode(bytes, self.endian)?;
         Ok(bytes_encoded)
@@ -174,14 +176,17 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
         // Use get_bytes_support() for all types
         let bytes_decoded: ArrayBytes = super::get_bytes_support(data_type)
             .ok_or_else(|| {
-                CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+                CodecError::UnsupportedDataType(
+                    data_type.clone(),
+                    Self::aliases_v3().default_name.to_string(),
+                )
             })?
             .decode(bytes, self.endian)?
             .into();
@@ -272,14 +277,14 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
         match data_type.size() {
             DataTypeSize::Variable => Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             )),
             DataTypeSize::Fixed(data_type_size) => Ok(BytesRepresentation::FixedSize(
                 shape.num_elements_u64() * data_type_size as u64,

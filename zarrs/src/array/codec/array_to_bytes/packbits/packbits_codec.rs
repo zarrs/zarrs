@@ -33,7 +33,6 @@ use crate::array::{
 use crate::metadata::{Configuration, Endianness};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]
@@ -102,11 +101,11 @@ impl PackBitsCodec {
 }
 
 impl CodecTraits for PackBitsCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = PackBitsCodecConfiguration::V1(PackBitsCodecConfigurationV1 {
             padding_encoding: Some(self.padding_encoding),
             first_bit: self.first_bit,

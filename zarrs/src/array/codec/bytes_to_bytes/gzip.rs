@@ -30,25 +30,40 @@ mod gzip_codec;
 use std::sync::Arc;
 
 pub use gzip_codec::GzipCodec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(GzipCodec, v3: "gzip", v2: "gzip");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(GzipCodec::IDENTIFIER, GzipCodec::matches_name, GzipCodec::default_name, create_codec_gzip)
+    CodecPluginV3::new::<GzipCodec>(create_codec_gzip_v3)
 }
-zarrs_plugin::impl_extension_aliases!(GzipCodec, "gzip");
 
-pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: GzipCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(GzipCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<GzipCodec>(create_codec_gzip_v2)
+}
+
+pub(crate) fn create_codec_gzip_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: GzipCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
+    Ok(Codec::BytesToBytes(codec))
+}
+
+pub(crate) fn create_codec_gzip_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    let configuration: GzipCodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

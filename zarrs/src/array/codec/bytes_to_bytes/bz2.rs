@@ -35,28 +35,43 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
-use zarrs_plugin::ExtensionIdentifier;
-
 pub use self::bz2_codec::Bz2Codec;
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(Bz2Codec::IDENTIFIER, Bz2Codec::matches_name, Bz2Codec::default_name, create_codec_bz2)
-}
-zarrs_plugin::impl_extension_aliases!(Bz2Codec, "bz2",
-    v3: "numcodecs.bz2", []
+zarrs_plugin::impl_extension_aliases!(Bz2Codec,
+    v3: "numcodecs.bz2", [],
+    v2: "bz2", []
 );
 
-pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: Bz2CodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(Bz2Codec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<Bz2Codec>(create_codec_bz2_v3)
+}
+
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<Bz2Codec>(create_codec_bz2_v2)
+}
+
+pub(crate) fn create_codec_bz2_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: Bz2CodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
+    Ok(Codec::BytesToBytes(codec))
+}
+
+pub(crate) fn create_codec_bz2_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    let configuration: Bz2CodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }

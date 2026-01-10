@@ -11,7 +11,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]
@@ -44,11 +43,11 @@ impl ZlibCodec {
 }
 
 impl CodecTraits for ZlibCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
         let configuration = ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 {
             level: ZlibCompressionLevel::try_from(self.compression.level())
                 .expect("checked on init"),
