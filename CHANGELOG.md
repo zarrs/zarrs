@@ -107,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Bump `dlpark` (public) to 0.6.0
 - **Breaking**: Bump `ndarray` (public) to 0.17.1
 - Bump `zarrs_filesystem` to 0.3.8
+- Bump `zarrs_storage` to 0.4.2
 - Bump `zfp-sys` to 0.4.2
 - Bump `pco` to 0.4.9
 - Bump `criterion` (dev) to 0.8.1

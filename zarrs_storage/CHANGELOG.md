@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `test::[async_]store_list_size` to check size aggregation methods return expected values for uncompressed stores
+
+### Fixed
+- Move size aggregation tests out of `test::[async_]store_list`, as these are not applicable to stores that compress data (e.g. `zarrs_zip`)
+
 ## [0.4.1] - 2025-12-31
 
 ### Fixed

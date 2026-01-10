@@ -99,11 +99,6 @@ pub fn store_read<T: ReadableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 /// List the store and check the data matches the expected values after [`store_write`].
 pub fn store_list<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
-    assert_eq!(store.size()?, 7);
-    assert_eq!(store.size_prefix(&"a/".try_into()?)?, 5);
-    assert_eq!(store.size_prefix(&"i/".try_into()?)?, 2);
-    assert_eq!(store.size_prefix(&"notfound/".try_into()?)?, 0);
-
     assert_eq!(
         store.list()?,
         &[
@@ -157,6 +152,18 @@ pub fn store_list<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Err
         assert_eq!(list_dir.keys(), &[]);
         assert_eq!(list_dir.prefixes(), &[]);
     }
+    Ok(())
+}
+
+/// Check that size aggregation methods return the expected number of bytes after [`store_write`].
+///
+/// This test is not applicable to stores that perform compression or transformation of values.
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+pub fn store_list_size<T: ListableStorageTraits>(store: &T) -> Result<(), Box<dyn Error>> {
+    assert_eq!(store.size()?, 7);
+    assert_eq!(store.size_prefix(&"a/".try_into()?)?, 5);
+    assert_eq!(store.size_prefix(&"i/".try_into()?)?, 2);
+    assert_eq!(store.size_prefix(&"notfound/".try_into()?)?, 0);
     Ok(())
 }
 
@@ -294,11 +301,6 @@ pub async fn async_store_read<T: AsyncReadableStorageTraits>(
 pub async fn async_store_list<T: AsyncListableStorageTraits>(
     store: &T,
 ) -> Result<(), Box<dyn Error>> {
-    assert_eq!(store.size().await?, 7);
-    assert_eq!(store.size_prefix(&"a/".try_into()?).await?, 5);
-    assert_eq!(store.size_prefix(&"i/".try_into()?).await?, 2);
-    assert_eq!(store.size_prefix(&"notfound/".try_into()?).await?, 0);
-
     assert_eq!(
         store.list().await?,
         &[
@@ -352,5 +354,19 @@ pub async fn async_store_list<T: AsyncListableStorageTraits>(
         assert_eq!(list_dir.keys(), &[]);
         assert_eq!(list_dir.prefixes(), &[]);
     }
+    Ok(())
+}
+
+/// Check that size aggregation methods return the expected number of bytes after [`store_write`].
+///
+/// This test is not applicable to stores that perform compression or transformation of values.
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+pub async fn async_store_list_size<T: AsyncListableStorageTraits>(
+    store: &T,
+) -> Result<(), Box<dyn Error>> {
+    assert_eq!(store.size().await?, 7);
+    assert_eq!(store.size_prefix(&"a/".try_into()?).await?, 5);
+    assert_eq!(store.size_prefix(&"i/".try_into()?).await?, 2);
+    assert_eq!(store.size_prefix(&"notfound/".try_into()?).await?, 0);
     Ok(())
 }

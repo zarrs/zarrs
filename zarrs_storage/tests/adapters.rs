@@ -38,6 +38,7 @@ async fn sync_to_async_memory_store() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::async_store_write(&store).await?;
     zarrs_storage::store_test::async_store_read(&store).await?;
     zarrs_storage::store_test::async_store_list(&store).await?;
+    zarrs_storage::store_test::async_store_list_size(&store).await?;
     Ok(())
 }
 
@@ -52,4 +53,5 @@ fn async_to_sync_memory_store() {
     zarrs_storage::store_test::store_write(&store).unwrap();
     zarrs_storage::store_test::store_read(&store).unwrap();
     zarrs_storage::store_test::store_list(&store).unwrap();
+    zarrs_storage::store_test::store_list_size(&store).unwrap();
 }

@@ -203,6 +203,7 @@ mod tests {
         crate::store_test::store_write(&store)?;
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
+        crate::store_test::store_list_size(&store)?;
         Ok(())
     }
 
@@ -212,6 +213,7 @@ mod tests {
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable())?;
         crate::store_test::store_list(&store.clone().listable())?;
+        crate::store_test::store_list_size(&store.clone().listable())?;
         Ok(())
     }
 
@@ -229,6 +231,7 @@ mod tests {
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable_listable().readable())?;
         crate::store_test::store_list(&store.clone().readable_listable().listable())?;
+        crate::store_test::store_list_size(&store.clone().readable_listable().listable())?;
         Ok(())
     }
 }

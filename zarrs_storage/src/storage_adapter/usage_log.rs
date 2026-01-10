@@ -512,5 +512,6 @@ mod tests {
         store_test::store_write(&store).unwrap();
         store_test::store_read(&store).unwrap();
         store_test::store_list(&store).unwrap();
+        store_test::store_list_size(&store).unwrap();
     }
 }
