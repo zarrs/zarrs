@@ -41,6 +41,7 @@ fn filesystem() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
+    zarrs_storage::store_test::store_list_size(&store)?;
     Ok(())
 }
 
@@ -58,6 +59,7 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
+    zarrs_storage::store_test::store_list_size(&store)?;
     Ok(())
 }
 

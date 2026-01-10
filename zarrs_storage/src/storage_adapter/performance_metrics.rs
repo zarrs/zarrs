@@ -351,6 +351,7 @@ mod tests {
         store_test::store_write(&store).unwrap();
         store_test::store_read(&store).unwrap();
         store_test::store_list(&store).unwrap();
+        store_test::store_list_size(&store).unwrap();
         assert!(store.bytes_read() >= 12);
         assert!(store.bytes_written() >= 10);
         assert!(store.reads() >= 8);

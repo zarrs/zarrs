@@ -215,6 +215,7 @@ mod tests {
         crate::store_test::store_write(&store)?;
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
+        crate::store_test::store_list_size(&store)?;
         Ok(())
     }
 }
