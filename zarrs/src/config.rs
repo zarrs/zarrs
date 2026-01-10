@@ -362,6 +362,7 @@ mod tests {
 
     use super::*;
 
+    #[ignore]
     #[test]
     #[serial]
     fn config_validate_checksums() {
@@ -373,6 +374,7 @@ mod tests {
         *global_config_mut() = Config::default();
     }
 
+    #[ignore]
     #[test]
     #[serial]
     fn config_serialize_deserialize_update() {

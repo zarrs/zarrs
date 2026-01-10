@@ -90,12 +90,19 @@ impl<TStorage: ?Sized> Group<TStorage> {
         metadata: GroupMetadata,
     ) -> Result<Self, GroupCreateError> {
         let path = NodePath::new(path)?;
+        let (metadata_options, metadata_erase_version) = {
+            let config = global_config();
+            (
+                config.group_metadata_options(),
+                config.metadata_erase_version(),
+            )
+        };
         Ok(Self {
             storage,
             path,
             metadata,
-            metadata_options: global_config().group_metadata_options(),
-            metadata_erase_version: global_config().metadata_erase_version(),
+            metadata_options,
+            metadata_erase_version,
         })
     }
 

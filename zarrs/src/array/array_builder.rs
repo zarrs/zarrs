@@ -12,7 +12,7 @@ use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
-use crate::array::codec::{CodecOptions, NamedCodec};
+use crate::array::codec::{self, CodecOptions, NamedCodec};
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::metadata::v3::AdditionalFieldsV3;
@@ -151,6 +151,11 @@ impl ArrayBuilder {
         let chunk_grid: ArrayBuilderChunkGridMaybe = (shape, chunk_grid_metadata).into();
         let fill_value = fill_value.into();
 
+        let (codec_options, metadata_options) = {
+            let config = global_config();
+            (config.codec_options(), config.array_metadata_options())
+        };
+
         Self {
             data_type,
             chunk_grid,
@@ -165,8 +170,8 @@ impl ArrayBuilder {
             additional_fields: AdditionalFieldsV3::default(),
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
-            codec_options: global_config().codec_options(),
-            metadata_options: global_config().array_metadata_options(),
+            codec_options,
+            metadata_options,
         }
     }
 
@@ -180,6 +185,10 @@ impl ArrayBuilder {
         let chunk_grid: ArrayBuilderChunkGrid = chunk_grid.into();
         let chunk_grid: ArrayBuilderChunkGridMaybe = chunk_grid.into();
         let fill_value = fill_value.into();
+        let (codec_options, metadata_options) = {
+            let config = global_config();
+            (config.codec_options(), config.array_metadata_options())
+        };
 
         Self {
             data_type,
@@ -195,8 +204,8 @@ impl ArrayBuilder {
             additional_fields: AdditionalFieldsV3::default(),
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
-            codec_options: global_config().codec_options(),
-            metadata_options: global_config().array_metadata_options(),
+            codec_options,
+            metadata_options,
         }
     }
 

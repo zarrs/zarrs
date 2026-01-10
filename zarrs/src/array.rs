@@ -486,6 +486,15 @@ impl<TStorage: ?Sized> Array<TStorage> {
             ));
         }
 
+        let (codec_options, metadata_options, metadata_erase_version) = {
+            let config = global_config();
+            (
+                config.codec_options(),
+                config.array_metadata_options(),
+                config.metadata_erase_version(),
+            )
+        };
+
         Ok(Self {
             storage,
             path,
@@ -500,9 +509,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
             storage_transformers,
             dimension_names: metadata_v3.dimension_names,
             metadata,
-            codec_options: global_config().codec_options(),
-            metadata_options: global_config().array_metadata_options(),
-            metadata_erase_version: global_config().metadata_erase_version(),
+            codec_options,
+            metadata_options,
+            metadata_erase_version,
         })
     }
 
