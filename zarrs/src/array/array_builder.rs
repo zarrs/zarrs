@@ -12,7 +12,7 @@ use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
-use crate::array::codec::{self, CodecOptions, NamedCodec};
+use crate::array::codec::{CodecOptions, NamedCodec};
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::metadata::v3::AdditionalFieldsV3;

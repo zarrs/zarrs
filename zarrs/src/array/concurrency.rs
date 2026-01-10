@@ -14,7 +14,6 @@
 // }
 
 use super::codec::CodecOptions;
-use crate::config::global_config;
 
 /// The recommended concurrency of a codec includes the most efficient and maximum recommended concurrency.
 ///
@@ -127,7 +126,7 @@ pub fn concurrency_chunks_and_codec(
     codec_concurrency: &RecommendedConcurrency,
 ) -> (usize, CodecOptions) {
     // core::cmp::minmax https://github.com/rust-lang/rust/issues/115939
-    let chunk_concurrent_minimum = global_config().chunk_concurrent_minimum();
+    let chunk_concurrent_minimum = codec_options.chunk_concurrent_minimum();
     let min_concurrent_chunks = std::cmp::min(chunk_concurrent_minimum, num_chunks);
     let max_concurrent_chunks = std::cmp::max(chunk_concurrent_minimum, num_chunks);
     let (self_concurrent_limit, codec_concurrent_limit) = calc_concurrency_outer_inner(

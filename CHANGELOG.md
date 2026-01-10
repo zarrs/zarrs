@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `[un]register_{codec,chunk_key_encoding,storage_transformer}`
   - Add `{Codec,ChunkKeyEncoding,StorageTransformer}Runtime{Plugin,RegistryHandle}`
 - Add `ArrayError::ArraySubsetError` variant
+- Add `CodecOptions::[{set_,with_}]chunk_concurrent_minimum()`
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.88 and use Rust 2024 edition

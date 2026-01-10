@@ -149,6 +149,7 @@ impl Config {
             .with_validate_checksums(self.validate_checksums)
             .with_store_empty_chunks(self.store_empty_chunks)
             .with_concurrent_target(self.codec_concurrent_target)
+            .with_chunk_concurrent_minimum(self.chunk_concurrent_minimum)
             .with_experimental_partial_encoding(self.experimental_partial_encoding)
     }
 
