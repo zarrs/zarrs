@@ -20,9 +20,10 @@ use zarrs_storage::{
 
 #[cfg(target_os = "linux")]
 mod direct_io;
+use positioned_io::{RandomAccessFile, ReadAt, WriteAt};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -208,6 +209,13 @@ impl FilesystemStore {
 
         // Write
         if enable_direct {
+            if offset != 0 {
+                // This is unreachable, but keeping the check for safety.
+                return Err(StorageError::Other(
+                    "Direct I/O with non-zero offset is not supported".to_string(),
+                ));
+            }
+
             if need_copy {
                 let mut buf = bytes_aligned(value.len());
                 buf.extend_from_slice(value);
@@ -224,8 +232,7 @@ impl FilesystemStore {
             // Truncate again to requested size
             file.set_len(value.len() as u64)?;
         } else {
-            file.seek(SeekFrom::Start(offset))?;
-            file.write_all(value)?;
+            file.write_all_at(offset, value)?;
         }
 
         Ok(())
@@ -277,7 +284,7 @@ impl FilesystemStore {
                 let buf = unsafe {
                     std::slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), length)
                 };
-                file.read_at(buf, offset as u64)?
+                FileExt::read_at(&file, buf, offset as u64)?
             };
             unsafe {
                 buf.set_len(bytes_read);
@@ -341,11 +348,9 @@ impl ReadableStorageTraits for FilesystemStore {
         }
 
         // Lock and open the file
-        let file = self.get_file_mutex(key);
-        let _lock = file.read();
-        let mut flags = OpenOptions::new();
-        flags.read(true);
-        let mut file = match flags.open(self.key_to_fspath(key)) {
+        let file_mutex = self.get_file_mutex(key);
+        let _lock = file_mutex.read();
+        let file = match RandomAccessFile::open(self.key_to_fspath(key)) {
             Ok(file) => file,
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::NotFound {
@@ -354,22 +359,21 @@ impl ReadableStorageTraits for FilesystemStore {
                 return Err(err.into());
             }
         };
-        let file_size = file.metadata()?.len();
+        let file_size = positioned_io::Size::size(&file)?
+            .ok_or_else(|| StorageError::Other("Could not determine file size".to_string()))?;
 
         let out = byte_ranges
             .map(|byte_range| {
-                // Seek
-                match byte_range {
-                    ByteRange::FromStart(offset, _) => file.seek(SeekFrom::Start(offset)),
-                    ByteRange::Suffix(length) => {
-                        file.seek(SeekFrom::End(-(i64::try_from(length).unwrap())))
-                    }
-                }?;
+                // Calculate offset
+                let offset = match byte_range {
+                    ByteRange::FromStart(offset, _) => offset,
+                    ByteRange::Suffix(length) => file_size.saturating_sub(length),
+                };
 
                 // Get read length
                 let length = match byte_range {
-                    ByteRange::FromStart(offset, None) => {
-                        file_size.checked_sub(offset).ok_or_else(|| {
+                    ByteRange::FromStart(start, None) => {
+                        file_size.checked_sub(start).ok_or_else(|| {
                             StorageError::from(InvalidByteRangeError::new(byte_range, file_size))
                         })?
                     }
@@ -377,16 +381,16 @@ impl ReadableStorageTraits for FilesystemStore {
                 };
                 let length = usize::try_from(length).unwrap();
 
-                // Read
+                // Read at position
                 let mut buffer = Vec::with_capacity(length);
                 let spare = buffer.spare_capacity_mut();
                 // SAFETY: We're reading into uninitialised memory, which is safe because
-                // read_exact will fill all bytes or return an error
+                // read_exact_at will fill all bytes or return an error
                 let slice = unsafe {
                     std::slice::from_raw_parts_mut(spare.as_mut_ptr().cast::<u8>(), length)
                 };
-                file.read_exact(slice)?;
-                // SAFETY: read_exact succeeded, so all bytes are now initialised
+                file.read_exact_at(offset, slice)?;
+                // SAFETY: read_exact_at succeeded, so all bytes are now initialised
                 unsafe {
                     buffer.set_len(length);
                 }
