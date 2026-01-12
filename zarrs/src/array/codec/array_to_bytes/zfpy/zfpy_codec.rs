@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::super::zfp::ZfpCodec;
 use crate::array::codec::{
@@ -88,11 +88,15 @@ impl ZfpyCodec {
 }
 
 impl CodecTraits for ZfpyCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let mode = match self.inner.mode() {
             ZfpMode::FixedRate { rate } => ZfpyCodecConfigurationMode::FixedRate { rate },
             ZfpMode::FixedPrecision { precision } => {

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zarrs_plugin::ZarrVersion;
+
 use super::test_unbounded_partial_decoder;
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -11,7 +13,7 @@ use crate::array::codec::{
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 
-zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, "zarrs.test_unbounded");
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
 
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
@@ -29,11 +31,15 @@ impl TestUnboundedCodec {
 }
 
 impl CodecTraits for TestUnboundedCodec {
-    fn identifier(&self) -> &'static str {
-        "zarrs.test_unbounded"
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         None
     }
 

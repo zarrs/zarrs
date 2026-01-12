@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `DataType::fill_value_{v2,v3}()`
+- Add `DataType::configuration_{v2,v3}()`
+
+### Changed
+- **Breaking**: Change `DataType::from_metadata` parameter to `&DataTypeMetadata` instead of `&MetadataV3`
+- **Breaking**: Add `ZarrVersion` parameter to `DataTypeTraits::configuration()`
+- **Breaking**: Change `DataTypeTraits::fill_value` parameter to `&FillValueMetadata` instead of `&FillValueMetadataV3`
+- **Breaking**: Remove `DataTypeTraits::identifier()` method
+- **Breaking**: Add `DataTypeTraits` supertrait: `ExtensionName`
+- **Breaking**: Remove `DataTypeTraits::default_name()` method
+- **Breaking**: Change `DataType[Runtime]Plugin` to the new `Plugin` system from `zarrs_plugin`
+
 ## [0.7.0] - 2025-12-31
 
 ### Changed

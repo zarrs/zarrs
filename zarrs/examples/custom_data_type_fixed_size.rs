@@ -20,17 +20,17 @@ use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeExt, DataTypeSize, Element,
+    ElementOwned, FillValueMetadata,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -40,11 +40,11 @@ struct CustomDataTypeFixedSizeElement {
 }
 
 /// Defines the conversion of an element to a fill value
-impl From<CustomDataTypeFixedSizeElement> for FillValueMetadataV3 {
+impl From<CustomDataTypeFixedSizeElement> for FillValueMetadata {
     fn from(value: CustomDataTypeFixedSizeElement) -> Self {
-        FillValueMetadataV3::from(HashMap::from([
-            ("x".to_string(), FillValueMetadataV3::from(value.x)),
-            ("y".to_string(), FillValueMetadataV3::from(value.y)),
+        FillValueMetadata::from(HashMap::from([
+            ("x".to_string(), FillValueMetadata::from(value.x)),
+            ("y".to_string(), FillValueMetadata::from(value.y)),
         ]))
     }
 }
@@ -103,7 +103,8 @@ impl FromBytes for CustomDataTypeFixedSizeElement {
 /// This defines how an in-memory CustomDataTypeFixedSizeElement is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFixedSizeElement {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type.identifier() == CUSTOM_NAME)
+        data_type
+            .is::<CustomDataTypeFixedSize>()
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }
@@ -154,67 +155,52 @@ impl ElementOwned for CustomDataTypeFixedSizeElement {
 #[derive(Debug)]
 struct CustomDataTypeFixedSize;
 
-/// A custom unique identifier
+/// A custom name for the data type.
 const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeFixedSize";
 
-zarrs_plugin::impl_extension_aliases!(CustomDataTypeFixedSize, CUSTOM_NAME);
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeFixedSize, v3: CUSTOM_NAME);
 
-fn matches_name_dtype(name: &str, _version: ZarrVersions) -> bool {
-    name == CUSTOM_NAME
-}
-
-fn default_name_dtype(_version: ZarrVersions) -> Cow<'static, str> {
-    CUSTOM_NAME.into()
+// Register the data type so that it can be recognised when opening arrays.
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeFixedSize>(create_custom_dtype)
 }
 
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeFixedSize).into())
     } else {
-        Err(PluginMetadataInvalidError::new(CUSTOM_NAME, "codec", metadata.to_string()).into())
+        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
     }
-}
-
-// Register the data type so that it can be recognised when opening arrays.
-inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, matches_name_dtype, default_name_dtype, create_custom_dtype)
 }
 
 /// Implement the core data type extension methods
 impl DataTypeTraits for CustomDataTypeFixedSize {
-    fn identifier(&self) -> &'static str {
-        CUSTOM_NAME
-    }
-
-    fn configuration(&self) -> Configuration {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || {
-            DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
-                fill_value_metadata.clone(),
-            )
-        };
-        let element_metadata: CustomDataTypeFixedSizeMetadata =
-            fill_value_metadata.as_custom().ok_or_else(err)?;
+        let element_metadata: CustomDataTypeFixedSizeMetadata = fill_value_metadata
+            .as_custom()
+            .ok_or(DataTypeFillValueMetadataError)?;
         Ok(FillValue::new(element_metadata.to_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let element = CustomDataTypeFixedSizeMetadata::from_ne_bytes(
-            fill_value.as_ne_bytes().try_into().map_err(|_| {
-                DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-            })?,
+            fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadataV3::from(element))
+        Ok(FillValueMetadata::from(element))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {

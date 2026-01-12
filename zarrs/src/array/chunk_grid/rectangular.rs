@@ -33,18 +33,19 @@ use thiserror::Error;
 
 use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_plugin::ExtensionIdentifier;
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+
+zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RectangularChunkGrid::IDENTIFIER, RectangularChunkGrid::matches_name, RectangularChunkGrid::default_name, create_chunk_grid_rectangular)
+    ChunkGridPlugin::new::<RectangularChunkGrid>(create_chunk_grid_rectangular)
 }
-zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, "rectangular");
 
 /// Create a `rectangular` chunk grid from metadata.
 ///
@@ -55,14 +56,9 @@ pub(crate) fn create_chunk_grid_rectangular(
     array_shape: &ArrayShape,
 ) -> Result<ChunkGrid, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "chunk grid");
-    let configuration: RectangularChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                RectangularChunkGrid::IDENTIFIER,
-                "chunk grid",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: RectangularChunkGridConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
         .map_err(|err| PluginCreateError::Other(err.to_string()))?;
     Ok(ChunkGrid::new(chunk_grid))
@@ -169,7 +165,7 @@ impl RectangularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RectangularChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
+    fn configuration(&self) -> Configuration {
         let chunk_shape = self
             .chunks
             .iter()
@@ -187,12 +183,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                 }
             })
             .collect();
-        let configuration = RectangularChunkGridConfiguration { chunk_shape };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        RectangularChunkGridConfiguration { chunk_shape }.into()
     }
 
     fn dimensionality(&self) -> usize {

@@ -1,47 +1,47 @@
 macro_rules! vlen_v2_module {
-    ($module:ident, $module_codec:ident, $struct:ident, $identifier:literal) => {
+    ($module:ident, $module_codec:ident, $struct:ident) => {
         mod $module_codec;
 
         use std::sync::Arc;
 
         pub use $module_codec::$struct;
 
-        use crate::array::codec::{Codec, CodecPlugin};
-        use crate::metadata::v3::MetadataV3;
-        use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
-        use zarrs_plugin::ExtensionIdentifier;
+        use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
+        use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+        use zarrs_metadata::v2::MetadataV2;
+        use zarrs_metadata::v3::MetadataV3;
 
-        // Register the codec.
+        // Register the V3 codec.
         inventory::submit! {
-            CodecPlugin::new($struct::IDENTIFIER, matches_name, default_name, create_codec)
+            CodecPluginV3::new::<$struct>(create_codec_v3)
+        }
+        // Register the V2 codec.
+        inventory::submit! {
+            CodecPluginV2::new::<$struct>(create_codec_v2)
         }
 
-        fn matches_name(name: &str, version: zarrs_plugin::ZarrVersions) -> bool {
-            $struct::matches_name(name, version)
-        }
-
-        fn default_name(version: zarrs_plugin::ZarrVersions) -> std::borrow::Cow<'static, str> {
-            $struct::default_name(version)
-        }
-
-        fn create_codec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-            if metadata.configuration_is_none_or_empty() {
+        fn create_codec_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+            if metadata.configuration().is_none_or(|c| c.is_empty()) {
                 let codec = Arc::new($struct::new());
                 Ok(Codec::ArrayToBytes(codec))
             } else {
-                Err(PluginMetadataInvalidError::new(
-                    $struct::IDENTIFIER,
-                    "codec",
-                    metadata.to_string(),
-                )
-                .into())
+                Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+            }
+        }
+
+        fn create_codec_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+            if metadata.configuration().is_empty() {
+                let codec = Arc::new($struct::new());
+                Ok(Codec::ArrayToBytes(codec))
+            } else {
+                Err(PluginConfigurationInvalidError::new(format!("{metadata:?}")).into())
             }
         }
     };
 }
 
 macro_rules! vlen_v2_codec {
-    ($struct:ident, $identifier:literal) => {
+    ($struct:ident, $default_name:literal) => {
         use std::sync::Arc;
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -60,18 +60,18 @@ macro_rules! vlen_v2_codec {
         };
         use crate::metadata::Configuration;
         use zarrs_plugin::{
-            ExtensionAliases, ExtensionAliasesConfig, ExtensionIdentifier, ZarrVersion2,
-            ZarrVersion3,
+            ExtensionAliasesConfig, ExtensionAliases,
+            ZarrVersion2, ZarrVersion3,
         };
 
-        #[doc = concat!("The `", $identifier, "` codec implementation.")]
+        #[doc = concat!("The `", $default_name, "` codec implementation.")]
         #[derive(Debug, Clone)]
         pub struct $struct {
             inner: Arc<VlenV2Codec>,
         }
 
         impl $struct {
-            #[doc = concat!("Create a new `", $identifier, "` codec.")]
+            #[doc = concat!("Create a new `", $default_name, "` codec.")]
             #[must_use]
             pub fn new() -> Self {
                 Self {
@@ -87,16 +87,16 @@ macro_rules! vlen_v2_codec {
         }
 
         impl CodecTraits for $struct {
-            fn identifier(&self) -> &'static str {
-                Self::IDENTIFIER
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
 
             fn configuration(
                 &self,
-                name: &str,
+                version: zarrs_plugin::ZarrVersion,
                 options: &CodecMetadataOptions,
             ) -> Option<Configuration> {
-                self.inner.configuration(name, options)
+                self.inner.configuration(version, options)
             }
 
             fn partial_decoder_capability(&self) -> PartialDecoderCapability {
@@ -214,10 +214,10 @@ macro_rules! vlen_v2_codec {
 
         paste::paste! {
             static [<$struct:upper _ALIASES_V3>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
-                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($identifier, vec![], vec![])));
+                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($default_name, vec![], vec![])));
 
             static [<$struct:upper _ALIASES_V2>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
-                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($identifier, vec![], vec![])));
+                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($default_name, vec![], vec![])));
 
             impl ExtensionAliases<ZarrVersion3> for $struct {
                 fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
@@ -239,9 +239,29 @@ macro_rules! vlen_v2_codec {
                 }
             }
 
-            impl ExtensionIdentifier for $struct {
-                const IDENTIFIER: &'static str = $identifier;
+            impl zarrs_plugin::ExtensionNameStatic for $struct {
+                const DEFAULT_NAME_FN: fn(zarrs_plugin::ZarrVersion) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
+                    match version {
+                        zarrs_plugin::ZarrVersion::V2 => {
+                            let aliases = [<$struct:upper _ALIASES_V2>].read().unwrap();
+                            if aliases.default_name.is_empty() {
+                                ::core::option::Option::None
+                            } else {
+                                ::core::option::Option::Some(aliases.default_name.clone())
+                            }
+                        }
+                        zarrs_plugin::ZarrVersion::V3 => {
+                            let aliases = [<$struct:upper _ALIASES_V3>].read().unwrap();
+                            if aliases.default_name.is_empty() {
+                                ::core::option::Option::None
+                            } else {
+                                ::core::option::Option::Some(aliases.default_name.clone())
+                            }
+                        }
+                    }
+                };
             }
+
         }
     };
 }

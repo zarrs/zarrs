@@ -31,6 +31,9 @@ pub mod v3;
 /// Zarr V2 metadata.
 pub mod v2;
 
+/// Zarr V3 or V2 fill value metadata.
+pub use v3::FillValueMetadataV3 as FillValueMetadata;
+
 pub use array::{ChunkKeySeparator, DimensionName, Endianness, IntoDimensionName};
 use thiserror::Error;
 

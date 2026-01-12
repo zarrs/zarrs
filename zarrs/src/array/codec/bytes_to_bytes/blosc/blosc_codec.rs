@@ -3,11 +3,13 @@ use std::ffi::c_char;
 use std::sync::Arc;
 
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
+use zarrs_plugin::ZarrVersion;
 
 use super::{
-    BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
-    BloscError, BloscShuffleMode, blosc_compress_bytes, blosc_decompress_bytes,
-    blosc_partial_decoder, blosc_validate, compressor_as_cstr,
+    BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
+    BloscCompressionLevel, BloscCompressor, BloscError, BloscShuffleMode,
+    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder,
+    blosc_validate, compressor_as_cstr,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -19,7 +21,6 @@ use crate::array::codec::{
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `blosc` codec implementation.
 #[derive(Clone, Debug)]
@@ -139,25 +140,49 @@ impl BloscCodec {
 }
 
 impl CodecTraits for BloscCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
-        let configuration = BloscCodecConfiguration::V1(BloscCodecConfigurationV1 {
-            cname: self.cname,
-            clevel: self.clevel,
-            shuffle: self.shuffle_mode.unwrap_or_else(|| {
-                if self.typesize.unwrap_or_default() > 0 {
-                    BloscShuffleMode::BitShuffle
-                } else {
-                    BloscShuffleMode::NoShuffle
-                }
-            }),
-            typesize: self.typesize,
-            blocksize: self.blocksize,
+    fn configuration(
+        &self,
+        version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        let shuffle = self.shuffle_mode.unwrap_or_else(|| {
+            if self.typesize.unwrap_or_default() > 0 {
+                BloscShuffleMode::BitShuffle
+            } else {
+                BloscShuffleMode::NoShuffle
+            }
         });
-        Some(configuration.into())
+        match version {
+            ZarrVersion::V2 => {
+                let shuffle = match shuffle {
+                    BloscShuffleMode::NoShuffle => BloscShuffleModeNumcodecs::NoShuffle,
+                    BloscShuffleMode::Shuffle => BloscShuffleModeNumcodecs::Shuffle,
+                    BloscShuffleMode::BitShuffle => BloscShuffleModeNumcodecs::BitShuffle,
+                };
+                let configuration =
+                    BloscCodecConfiguration::Numcodecs(BloscCodecConfigurationNumcodecs {
+                        cname: self.cname,
+                        clevel: self.clevel,
+                        shuffle,
+                        blocksize: self.blocksize,
+                    });
+                Some(configuration.into())
+            }
+            ZarrVersion::V3 => {
+                let configuration = BloscCodecConfiguration::V1(BloscCodecConfigurationV1 {
+                    cname: self.cname,
+                    clevel: self.clevel,
+                    shuffle,
+                    typesize: self.typesize,
+                    blocksize: self.blocksize,
+                });
+                Some(configuration.into())
+            }
+        }
     }
 
     fn partial_decoder_capability(&self) -> PartialDecoderCapability {

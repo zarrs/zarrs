@@ -1,32 +1,28 @@
 //! The `v2` chunk key encoding.
 
 use itertools::Itertools;
-use zarrs_plugin::ExtensionIdentifier;
 
 use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
 use crate::array::chunk_key_encoding::ChunkKeyEncodingPlugin;
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use crate::storage::StoreKey;
+
+zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, v3: "v2");
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(V2ChunkKeyEncoding::IDENTIFIER, V2ChunkKeyEncoding::matches_name, V2ChunkKeyEncoding::default_name, create_chunk_key_encoding_v2)
+    ChunkKeyEncodingPlugin::new::<V2ChunkKeyEncoding>(create_chunk_key_encoding_v2)
 }
-zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, "v2");
 
 pub(crate) fn create_chunk_key_encoding_v2(
     metadata: &MetadataV3,
 ) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    let configuration: V2ChunkKeyEncodingConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                V2ChunkKeyEncoding::IDENTIFIER,
-                "chunk key encoding",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: V2ChunkKeyEncodingConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let v2 = V2ChunkKeyEncoding::new(configuration.separator);
     Ok(v2.into())
 }
@@ -77,15 +73,11 @@ impl Default for V2ChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = V2ChunkKeyEncodingConfiguration {
+    fn configuration(&self) -> Configuration {
+        V2ChunkKeyEncodingConfiguration {
             separator: self.separator,
-        };
-        MetadataV3::new_with_serializable_configuration(
-            Self::IDENTIFIER.to_string(),
-            &configuration,
-        )
-        .unwrap()
+        }
+        .into()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {

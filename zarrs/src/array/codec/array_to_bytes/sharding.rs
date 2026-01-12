@@ -63,39 +63,38 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-pub use sharding_codec::ShardingCodec;
-pub use sharding_codec_builder::ShardingCodecBuilder;
-#[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
-use zarrs_plugin::ExtensionIdentifier;
-
 use crate::array::codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
-    CodecOptions, CodecPlugin,
+    CodecOptions, CodecPluginV3,
 };
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
     RecommendedConcurrency, ravel_indices,
 };
-use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use crate::storage::byte_range::ByteRange;
+pub use sharding_codec::ShardingCodec;
+pub use sharding_codec_builder::ShardingCodecBuilder;
+#[cfg(feature = "async")]
+pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
+use zarrs_metadata::v3::MetadataV3;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(ShardingCodec::IDENTIFIER, ShardingCodec::matches_name, ShardingCodec::default_name, create_codec_sharding)
+    CodecPluginV3::new::<ShardingCodec>(create_codec_sharding_v3)
 }
-zarrs_plugin::impl_extension_aliases!(ShardingCodec, "sharding_indexed");
 
-pub(crate) fn create_codec_sharding(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ShardingCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(ShardingCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+pub(crate) fn create_codec_sharding_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ShardingCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

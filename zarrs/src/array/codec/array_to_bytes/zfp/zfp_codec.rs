@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 use zfp_sys::{
     zfp_compress,
     zfp_stream_maximum_size,
@@ -27,7 +27,6 @@ use crate::array::{BytesRepresentation, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::zfp::ZfpMode;
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]
@@ -130,11 +129,15 @@ impl ZfpCodec {
 }
 
 impl CodecTraits for ZfpCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
     }
 
@@ -267,7 +270,10 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         let zfp_type = zarr_to_zfp_data_type(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            CodecError::UnsupportedDataType(
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
+            )
         })?;
 
         let bufsize = {

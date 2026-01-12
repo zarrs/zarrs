@@ -10,7 +10,7 @@ use crate::{Configuration, ConfigurationError};
 /// Zarr V3 generic metadata with a `name`, optional `configuration`, and optional `must_understand`.
 ///
 /// Represents most fields in Zarr V3 array metadata (see [`ArrayMetadataV3`](crate::v3::ArrayMetadataV3)) which is either:
-/// - a string name / identifier, or
+/// - a string name, or
 /// - a JSON object with a required `name` field and optional `configuration` and `must_understand` fields.
 ///
 /// `must_understand` is implicitly set to [`true`] if omitted.
@@ -201,6 +201,7 @@ impl MetadataV3 {
     ///
     /// # Errors
     /// Returns a [`ConfigurationError`] if the metadata cannot be converted.
+    // FIXME: return the serde_json error
     pub fn to_configuration<TConfiguration: DeserializeOwned>(
         &self,
     ) -> Result<TConfiguration, ConfigurationError> {

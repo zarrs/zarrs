@@ -101,40 +101,40 @@ mod vlen_partial_decoder;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use itertools::Itertools;
-pub use vlen_codec::VlenCodec;
-use zarrs_data_type::FillValue;
-use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
-use zarrs_plugin::ExtensionIdentifier;
-
 use super::bytes::reverse_endianness;
 use crate::array::codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPlugin, InvalidBytesLengthError,
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    InvalidBytesLengthError,
 };
 use crate::array::{
     ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
     data_type,
 };
-use crate::metadata::v3::MetadataV3;
 use crate::metadata_ext::codec::vlen::VlenIndexLocation;
 pub use crate::metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use itertools::Itertools;
+pub use vlen_codec::VlenCodec;
+use zarrs_data_type::FillValue;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(VlenCodec::IDENTIFIER, VlenCodec::matches_name, VlenCodec::default_name, create_codec_vlen)
-}
-zarrs_plugin::impl_extension_aliases!(VlenCodec, "zarrs.vlen",
+zarrs_plugin::impl_extension_aliases!(VlenCodec,
     v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
 );
 
-pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<VlenCodec>(create_codec_vlen_v3)
+}
+
+pub(crate) fn create_codec_vlen_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: VlenCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(VlenCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+    let configuration: VlenCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

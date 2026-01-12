@@ -42,28 +42,42 @@ mod pcodec_codec;
 use std::sync::Arc;
 
 pub use pcodec_codec::PcodecCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(PcodecCodec::IDENTIFIER, PcodecCodec::matches_name, PcodecCodec::default_name, create_codec_pcodec)
-}
-zarrs_plugin::impl_extension_aliases!(PcodecCodec, "pcodec",
-    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"]
+zarrs_plugin::impl_extension_aliases!(PcodecCodec,
+    v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"],
+    v2: "pcodec"
 );
 
-pub(crate) fn create_codec_pcodec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(PcodecCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<PcodecCodec>(create_codec_pcodec_v3)
+}
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<PcodecCodec>(create_codec_pcodec_v2)
+}
+
+pub(crate) fn create_codec_pcodec_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
+    Ok(Codec::ArrayToBytes(codec))
+}
+
+pub(crate) fn create_codec_pcodec_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+    let configuration: PcodecCodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }

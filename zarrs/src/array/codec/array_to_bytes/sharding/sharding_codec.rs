@@ -6,7 +6,6 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "async")]
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
@@ -34,6 +33,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -93,11 +93,15 @@ impl ShardingCodec {
 }
 
 impl CodecTraits for ShardingCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ShardingCodecConfiguration::V1(ShardingCodecConfigurationV1 {
             chunk_shape: self.subchunk_shape.clone(),
             codecs: self.inner_codecs.create_metadatas(options),
@@ -220,7 +224,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                Self::IDENTIFIER.to_string(),
+                Self::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -459,7 +463,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             ArrayBytesDecodeIntoTarget::Optional(..) => {
                 return Err(CodecError::UnsupportedDataType(
                     data_type.clone(),
-                    Self::IDENTIFIER.to_string(),
+                    Self::aliases_v3().default_name.to_string(),
                 ));
             }
         };

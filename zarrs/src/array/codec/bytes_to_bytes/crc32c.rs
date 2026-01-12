@@ -29,25 +29,25 @@ mod crc32c_codec;
 use std::sync::Arc;
 
 pub use crc32c_codec::Crc32cCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV3};
 pub use crate::metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(Crc32cCodec::IDENTIFIER, Crc32cCodec::matches_name, Crc32cCodec::default_name, create_codec_crc32c)
+    CodecPluginV3::new::<Crc32cCodec>(create_codec_crc32c_v3)
 }
-zarrs_plugin::impl_extension_aliases!(Crc32cCodec, "crc32c");
 
-pub(crate) fn create_codec_crc32c(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(Crc32cCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+pub(crate) fn create_codec_crc32c_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
     Ok(Codec::BytesToBytes(codec))
 }
@@ -74,7 +74,7 @@ mod tests {
         let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
         let metadata = codec
-            .configuration("crc32c", &CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), r"{}");
     }

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `ChunkGrid::metadata()`
+
+### Changed
+- **Breaking**: Change `DataType[Runtime]Plugin` to the new `Plugin` system from `zarrs_plugin`
+- **Breaking**: Revise `ChunkGridTraits`:
+  - Replace `create_metadata()` with `configuration()`
+- **Breaking**: Add `ExtensionName` supertrait to `ChunkGridTraits`
+
 ## [0.3.0] - 2026-01-09
 
 ### Added

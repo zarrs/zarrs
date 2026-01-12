@@ -32,26 +32,27 @@ use std::sync::Arc;
 
 use num::Integer;
 pub use packbits_codec::PackBitsCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(PackBitsCodec, v3: "packbits");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(PackBitsCodec::IDENTIFIER, PackBitsCodec::matches_name, PackBitsCodec::default_name, create_codec_packbits)
+    CodecPluginV3::new::<PackBitsCodec>(create_codec_packbits_v3)
 }
-zarrs_plugin::impl_extension_aliases!(PackBitsCodec, "packbits");
 
-pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: PackBitsCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(PackBitsCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+pub(crate) fn create_codec_packbits_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: PackBitsCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
@@ -158,7 +159,10 @@ struct PackBitsCodecComponents {
 
 fn pack_bits_components(data_type: &DataType) -> Result<PackBitsCodecComponents, CodecError> {
     let packbits = get_packbits_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(data_type.clone(), PackBitsCodec::IDENTIFIER.to_string())
+        CodecError::UnsupportedDataType(
+            data_type.clone(),
+            PackBitsCodec::aliases_v3().default_name.to_string(),
+        )
     })?;
     Ok(PackBitsCodecComponents {
         component_size_bits: packbits.component_size_bits(),

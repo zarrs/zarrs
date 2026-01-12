@@ -6,25 +6,31 @@ use std::sync::Arc;
 use serial_test::serial;
 use zarrs::array::codec::{
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, register_codec, unregister_codec,
+    PartialDecoderCapability, PartialEncoderCapability, register_codec_v3, unregister_codec_v3,
 };
 use zarrs::array::concurrency::RecommendedConcurrency;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytesRaw, BytesRepresentation, data_type};
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
-use zarrs_plugin::RuntimePlugin;
+use zarrs_plugin::{RuntimePlugin, ZarrVersion};
 
 /// A simple passthrough codec for testing runtime registration.
 #[derive(Clone, Debug)]
 struct TestPassthroughCodec;
 
+zarrs_plugin::impl_extension_aliases!(TestPassthroughCodec, v3: "test.passthrough", v2: "test.passthrough");
+
 impl CodecTraits for TestPassthroughCodec {
-    fn identifier(&self) -> &'static str {
-        "test.passthrough"
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         Some(Configuration::default())
     }
 
@@ -95,10 +101,8 @@ fn codec_runtime_registration() {
     assert!(Codec::from_metadata(&metadata).is_err());
 
     // Register the codec at runtime
-    let handle = register_codec(RuntimePlugin::new(
-        "test.passthrough",
-        |name, _| name == "test.passthrough",
-        |_| "test.passthrough".into(),
+    let handle = register_codec_v3(RuntimePlugin::new(
+        |name| name == "test.passthrough",
         |_metadata| Ok(Codec::BytesToBytes(Arc::new(TestPassthroughCodec))),
     ));
 
@@ -123,23 +127,22 @@ fn codec_runtime_registration() {
     }
 
     // Unregister the codec
-    assert!(unregister_codec(&handle));
+    assert!(unregister_codec_v3(&handle));
 
     // Verify the codec is no longer registered
+    let metadata = MetadataV3::new("test.passthrough");
     assert!(Codec::from_metadata(&metadata).is_err());
 
     // Unregistering again should return false
-    assert!(!unregister_codec(&handle));
+    assert!(!unregister_codec_v3(&handle));
 }
 
 #[test]
 #[serial]
 fn codec_runtime_registration_array_roundtrip() {
     // Register the codec at runtime
-    let handle = register_codec(RuntimePlugin::new(
-        "test.passthrough",
-        |name, _| name == "test.passthrough",
-        |_| "test.passthrough".into(),
+    let handle = register_codec_v3(RuntimePlugin::new(
+        |name| name == "test.passthrough",
         |_metadata| Ok(Codec::BytesToBytes(Arc::new(TestPassthroughCodec))),
     ));
 
@@ -173,7 +176,7 @@ fn codec_runtime_registration_array_roundtrip() {
     assert_eq!(full_data, expected_full_data);
 
     // Unregister the codec
-    assert!(unregister_codec(&handle));
+    assert!(unregister_codec_v3(&handle));
 
     // Opening the array after unregistering should fail because the codec is no longer available
     let open_result: Result<Array<MemoryStore>, _> = Array::open(store.clone(), array_path);

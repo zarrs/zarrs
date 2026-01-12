@@ -9,89 +9,74 @@ use std::sync::Arc;
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeExt, DataTypeSize, Element,
+    ElementOwned, FillValueMetadata,
 };
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin, DataTypeTraits,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError, ZarrVersions};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
 
-/// A unique identifier for  the custom data type.
+/// A name for  the custom data type.
 const UINT4: &str = "zarrs.test.uint4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeUInt4;
 
-zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, UINT4);
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, v3: UINT4);
+
+// Register the data type so that it can be recognised when opening arrays.
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeUInt4>(create_custom_dtype)
+}
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 struct CustomDataTypeUInt4Element(u8);
 
-// Register the data type so that it can be recognised when opening arrays.
-inventory::submit! {
-    DataTypePlugin::new(UINT4, matches_name_custom_dtype, default_name_custom_dtype, create_custom_dtype)
-}
-
-fn matches_name_custom_dtype(name: &str, _version: ZarrVersions) -> bool {
-    name == UINT4
-}
-
-fn default_name_custom_dtype(_version: ZarrVersions) -> Cow<'static, str> {
-    UINT4.into()
-}
-
 fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
     if metadata.configuration_is_none_or_empty() {
         Ok(Arc::new(CustomDataTypeUInt4).into())
     } else {
-        Err(PluginMetadataInvalidError::new(UINT4, "codec", metadata.to_string()).into())
+        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
     }
 }
 
 /// Implement the core data type extension methods
 impl DataTypeTraits for CustomDataTypeUInt4 {
-    fn identifier(&self) -> &'static str {
-        UINT4
-    }
-
-    fn configuration(&self) -> Configuration {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || {
-            DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
-                fill_value_metadata.clone(),
-            )
-        };
-        let element_metadata: u64 = fill_value_metadata.as_u64().ok_or_else(err)?;
-        let element = CustomDataTypeUInt4Element::try_from(element_metadata).map_err(|_| {
-            DataTypeFillValueMetadataError::new(UINT4.to_string(), fill_value_metadata.clone())
-        })?;
+        let element_metadata: u64 = fill_value_metadata
+            .as_u64()
+            .ok_or(DataTypeFillValueMetadataError)?;
+        let element = CustomDataTypeUInt4Element::try_from(element_metadata)
+            .map_err(|_| DataTypeFillValueMetadataError)?;
         Ok(FillValue::new(element.to_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let element = CustomDataTypeUInt4Element::from_ne_bytes(
-            fill_value.as_ne_bytes().try_into().map_err(|_| {
-                DataTypeFillValueError::new(self.identifier().to_string(), fill_value.clone())
-            })?,
+            fill_value
+                .as_ne_bytes()
+                .try_into()
+                .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadataV3::from(element.as_u8()))
+        Ok(FillValueMetadata::from(element.as_u8()))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
@@ -178,8 +163,9 @@ impl CustomDataTypeUInt4Element {
 /// This defines how an in-memory CustomDataTypeUInt4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        // Check if the data type identifier matches our custom data type
-        (data_type.identifier() == UINT4)
+        // Check if the data type matches our custom data type
+        data_type
+            .is::<CustomDataTypeUInt4>()
             .then_some(())
             .ok_or(ArrayError::IncompatibleElementType)
     }

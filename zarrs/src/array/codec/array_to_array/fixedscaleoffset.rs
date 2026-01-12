@@ -37,35 +37,29 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV3};
 pub use crate::metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(FixedScaleOffsetCodec::IDENTIFIER, FixedScaleOffsetCodec::matches_name, FixedScaleOffsetCodec::default_name, create_codec_fixedscaleoffset)
-}
-zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec, "fixedscaleoffset",
-    v3: "numcodecs.fixedscaleoffset", [],
-    v2: "fixedscaleoffset", []
+zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
+    v3: "numcodecs.fixedscaleoffset", []
 );
 
-pub(crate) fn create_codec_fixedscaleoffset(
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<FixedScaleOffsetCodec>(create_codec_fixedscaleoffset_v3)
+}
+
+pub(crate) fn create_codec_fixedscaleoffset_v3(
     metadata: &MetadataV3,
 ) -> Result<Codec, PluginCreateError> {
-    let configuration: FixedScaleOffsetCodecConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                FixedScaleOffsetCodec::IDENTIFIER,
-                "codec",
-                metadata.to_string(),
-            )
-        })?;
+    let configuration: FixedScaleOffsetCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
         &configuration,
     )?);

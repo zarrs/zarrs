@@ -1,21 +1,17 @@
 #![allow(missing_docs)]
 
-use zarrs_plugin::{Plugin, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{Plugin, PluginCreateError};
 
 struct TestPlugin;
 
-// plugin can be an arbitraty input, usually zarrs_metadata::MetadataV3.
+// plugin can be an arbitrary input, usually zarrs_metadata::MetadataV3.
 enum Input {
     Accept,
     Reject,
 }
 
-fn matches_name_test(name: &str, _version: ZarrVersions) -> bool {
+fn matches_name_test(name: &str) -> bool {
     name == "test"
-}
-
-fn default_name_test(_version: ZarrVersions) -> std::borrow::Cow<'static, str> {
-    "test".into()
 }
 
 fn create_test(input: &Input) -> Result<TestPlugin, PluginCreateError> {
@@ -27,10 +23,9 @@ fn create_test(input: &Input) -> Result<TestPlugin, PluginCreateError> {
 
 #[test]
 fn plugin() {
-    let plugin = Plugin::new("test", matches_name_test, default_name_test, create_test);
-    assert!(!plugin.match_name("fail", ZarrVersions::V3));
-    assert!(plugin.match_name("test", ZarrVersions::V3));
-    assert_eq!(plugin.identifier(), "test");
+    let plugin = Plugin::new(matches_name_test, create_test);
+    assert!(!plugin.match_name("fail"));
+    assert!(plugin.match_name("test"));
     assert!(plugin.create(&Input::Accept).is_ok());
     assert!(plugin.create(&Input::Reject).is_err());
 }

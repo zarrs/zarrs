@@ -36,16 +36,15 @@ use std::sync::Arc;
 
 use num::Integer;
 pub use reshape_codec::ReshapeCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
 use crate::array::ChunkShape;
-use crate::array::codec::{Codec, CodecError, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -97,16 +96,17 @@ fn get_encoded_shape(
     Ok(encoded_shape)
 }
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(ReshapeCodec::IDENTIFIER, ReshapeCodec::matches_name, ReshapeCodec::default_name, create_codec_reshape)
-}
-zarrs_plugin::impl_extension_aliases!(ReshapeCodec, "reshape");
+zarrs_plugin::impl_extension_aliases!(ReshapeCodec, v3: "reshape");
 
-pub(crate) fn create_codec_reshape(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ReshapeCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(ReshapeCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<ReshapeCodec>(create_codec_reshape_v3)
+}
+
+pub(crate) fn create_codec_reshape_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: ReshapeCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }

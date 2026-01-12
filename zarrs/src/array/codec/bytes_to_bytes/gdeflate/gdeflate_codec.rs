@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
@@ -13,7 +13,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]
@@ -52,11 +51,15 @@ impl GDeflateCodec {
 }
 
 impl CodecTraits for GDeflateCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = GDeflateCodecConfiguration::V0(GDeflateCodecConfigurationV0 {
             level: self.compression_level,
         });

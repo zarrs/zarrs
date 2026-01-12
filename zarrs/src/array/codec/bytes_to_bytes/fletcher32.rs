@@ -36,27 +36,45 @@ mod fletcher32_codec;
 use std::sync::Arc;
 
 pub use fletcher32_codec::Fletcher32Codec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPlugin};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::fletcher32::{
     Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(Fletcher32Codec::IDENTIFIER, Fletcher32Codec::matches_name, Fletcher32Codec::default_name, create_codec_fletcher32)
-}
-zarrs_plugin::impl_extension_aliases!(Fletcher32Codec, "fletcher32",
-    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"]
+zarrs_plugin::impl_extension_aliases!(Fletcher32Codec,
+    v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"],
+    v2: "fletcher32"
 );
 
-pub(crate) fn create_codec_fletcher32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(Fletcher32Codec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<Fletcher32Codec>(create_codec_fletcher32_v3)
+}
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<Fletcher32Codec>(create_codec_fletcher32_v2)
+}
+
+pub(crate) fn create_codec_fletcher32_v3(
+    metadata: &MetadataV3,
+) -> Result<Codec, PluginCreateError> {
+    let configuration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+    let codec = Arc::new(Fletcher32Codec::new_with_configuration(&configuration));
+    Ok(Codec::BytesToBytes(codec))
+}
+
+pub(crate) fn create_codec_fletcher32_v2(
+    metadata: &MetadataV2,
+) -> Result<Codec, PluginCreateError> {
+    let configuration: Fletcher32CodecConfiguration =
+        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
     let codec = Arc::new(Fletcher32Codec::new_with_configuration(&configuration));
     Ok(Codec::BytesToBytes(codec))
 }
@@ -84,7 +102,7 @@ mod tests {
             serde_json::from_str(r"{}").unwrap();
         let codec = Fletcher32Codec::new_with_configuration(&codec_configuration);
         let configuration = codec
-            .configuration("numcodecs.fletcher32", &CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }

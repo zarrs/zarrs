@@ -6,7 +6,7 @@ use super::macros::{impl_data_type_extension_numeric, register_data_type_plugin}
 #[derive(Debug, Clone, Copy)]
 pub struct Int8DataType;
 register_data_type_plugin!(Int8DataType);
-zarrs_plugin::impl_extension_aliases!(Int8DataType, "int8",
+zarrs_plugin::impl_extension_aliases!(Int8DataType,
     v3: "int8", [],
     v2: "|i1", ["|i1"]
 );
@@ -16,7 +16,7 @@ impl_data_type_extension_numeric!(Int8DataType, 1, i8);
 #[derive(Debug, Clone, Copy)]
 pub struct Int16DataType;
 register_data_type_plugin!(Int16DataType);
-zarrs_plugin::impl_extension_aliases!(Int16DataType, "int16",
+zarrs_plugin::impl_extension_aliases!(Int16DataType,
     v3: "int16", [],
     v2: "<i2", ["<i2", ">i2"]
 );
@@ -26,7 +26,7 @@ impl_data_type_extension_numeric!(Int16DataType, 2, i16);
 #[derive(Debug, Clone, Copy)]
 pub struct Int32DataType;
 register_data_type_plugin!(Int32DataType);
-zarrs_plugin::impl_extension_aliases!(Int32DataType, "int32",
+zarrs_plugin::impl_extension_aliases!(Int32DataType,
     v3: "int32", [],
     v2: "<i4", ["<i4", ">i4"]
 );
@@ -36,7 +36,7 @@ impl_data_type_extension_numeric!(Int32DataType, 4, i32);
 #[derive(Debug, Clone, Copy)]
 pub struct Int64DataType;
 register_data_type_plugin!(Int64DataType);
-zarrs_plugin::impl_extension_aliases!(Int64DataType, "int64",
+zarrs_plugin::impl_extension_aliases!(Int64DataType,
     v3: "int64", [],
     v2: "<i8", ["<i8", ">i8"]
 );

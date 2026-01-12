@@ -8,7 +8,6 @@ pub mod default;
 pub mod default_suffix;
 pub mod v2;
 
-use std::borrow::Cow;
 use std::sync::{Arc, LazyLock};
 
 pub use default::{DefaultChunkKeyEncoding, DefaultChunkKeyEncodingConfiguration};
@@ -17,11 +16,14 @@ pub use default_suffix::{
 };
 use derive_more::{Deref, From};
 pub use v2::{V2ChunkKeyEncoding, V2ChunkKeyEncodingConfiguration};
-use zarrs_plugin::{PluginUnsupportedError, RuntimePlugin, RuntimeRegistry};
+use zarrs_plugin::{
+    ExtensionAliases, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersion3,
+};
 
 pub use crate::metadata::ChunkKeySeparator;
+use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
-use crate::plugin::{Plugin, PluginCreateError, ZarrVersions};
+use crate::plugin::{ExtensionName, Plugin, PluginCreateError, ZarrVersion};
 use crate::storage::{MaybeSend, MaybeSync, StoreKey};
 
 /// A chunk key encoding.
@@ -40,19 +42,13 @@ pub struct ChunkKeyEncodingPlugin(Plugin<ChunkKeyEncoding, MetadataV3>);
 inventory::collect!(ChunkKeyEncodingPlugin);
 
 impl ChunkKeyEncodingPlugin {
-    /// Create a new [`ChunkKeyEncodingPlugin`].
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
-        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
+    /// Create a new [`ChunkKeyEncodingPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
+    ///
+    /// The `match_name_fn` is automatically derived from `T::matches_name`.
+    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(
-            identifier,
-            match_name_fn,
-            default_name_fn,
-            create_fn,
-        ))
+        Self(Plugin::new(|name| T::matches_name(name), create_fn))
     }
 }
 
@@ -87,11 +83,35 @@ pub fn unregister_chunk_key_encoding(handle: &ChunkKeyEncodingRuntimeRegistryHan
     CHUNK_KEY_ENCODING_RUNTIME_REGISTRY.unregister(handle)
 }
 
+impl ExtensionName for ChunkKeyEncoding {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
+        self.0.name(version)
+    }
+}
+
 impl ChunkKeyEncoding {
     /// Create a chunk key encoding.
     pub fn new<T: ChunkKeyEncodingTraits + 'static>(chunk_key_encoding: T) -> Self {
         let chunk_key_encoding: Arc<dyn ChunkKeyEncodingTraits> = Arc::new(chunk_key_encoding);
         chunk_key_encoding.into()
+    }
+
+    /// Create the metadata for the chunk key encoding.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the chunk key encoding has no name for V3.
+    #[must_use]
+    pub fn metadata(&self) -> MetadataV3 {
+        let name = self
+            .name_v3()
+            .expect("chunk key encoding must have a V3 name");
+        let configuration = self.0.configuration();
+        if configuration.is_empty() {
+            MetadataV3::new(name.into_owned())
+        } else {
+            MetadataV3::new_with_configuration(name.into_owned(), configuration)
+        }
     }
 
     /// Create a chunk key encoding from metadata.
@@ -106,7 +126,7 @@ impl ChunkKeyEncoding {
         {
             let result = CHUNK_KEY_ENCODING_RUNTIME_REGISTRY.with_plugins(|plugins| {
                 for plugin in plugins {
-                    if plugin.match_name(name, ZarrVersions::V3) {
+                    if plugin.match_name(name) {
                         return Some(plugin.create(metadata));
                     }
                 }
@@ -119,21 +139,8 @@ impl ChunkKeyEncoding {
 
         // Fall back to compile-time registered plugins
         for plugin in inventory::iter::<ChunkKeyEncodingPlugin> {
-            if plugin.match_name(name, ZarrVersions::V3) {
+            if plugin.match_name(name) {
                 return plugin.create(metadata);
-            }
-        }
-        #[cfg(miri)]
-        {
-            // Inventory does not work in miri, so manually handle all known chunk key encodings
-            match metadata.name() {
-                chunk_key_encoding::DEFAULT => {
-                    return default::create_chunk_key_encoding_default(metadata);
-                }
-                chunk_key_encoding::V2 => {
-                    return v2::create_chunk_key_encoding_v2(metadata);
-                }
-                _ => {}
             }
         }
         Err(PluginUnsupportedError::new(
@@ -154,9 +161,9 @@ where
 }
 
 /// Chunk key encoding traits.
-pub trait ChunkKeyEncodingTraits: core::fmt::Debug + MaybeSend + MaybeSync {
-    /// Create the metadata of this chunk key encoding.
-    fn create_metadata(&self) -> MetadataV3;
+pub trait ChunkKeyEncodingTraits: ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync {
+    /// The configuration of the chunk key encoding.
+    fn configuration(&self) -> Configuration;
 
     /// Encode chunk grid indices (grid cell coordinates) into a store key.
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey;

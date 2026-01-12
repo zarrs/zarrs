@@ -6,14 +6,17 @@ use std::sync::Arc;
 use zarrs::array::codec::Bz2Codec;
 use zarrs::array::{Array, ArrayMetadataOptions};
 use zarrs_filesystem::FilesystemStore;
-use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
+use zarrs_plugin::ExtensionAliasesV3;
 
-/// bz2 could stabilise as is, so test supporting that via the codec map
+/// bz2 could stabilise as is, so test supporting that via the codec map.
+/// This test verifies that changing the default name and adding an alias
+/// still allows reading arrays with the old name, and that convert_aliased_extension_names
+/// properly converts to the new default name.
 #[test]
 fn array_future_stabilisation_bz2() {
-    assert_eq!(Bz2Codec::default_name(ZarrVersions::V3), "numcodecs.bz2");
-    Bz2Codec::set_default_name("stable.bz2", ZarrVersions::V3);
-    Bz2Codec::aliases_mut(ZarrVersions::V3)
+    assert_eq!(Bz2Codec::aliases_v3().default_name, "numcodecs.bz2");
+    Bz2Codec::aliases_v3_mut().default_name = "stable.bz2".into();
+    Bz2Codec::aliases_v3_mut()
         .aliases_str
         .push("numcodecs.bz2".into());
 
@@ -39,6 +42,8 @@ fn array_future_stabilisation_bz2() {
         ],
     );
 
+    // By default, metadata_opt() returns the original stored metadata, preserving
+    // the original codec name from the file ("numcodecs.bz2").
     let mut options = ArrayMetadataOptions::default();
     assert!(
         array
@@ -53,6 +58,8 @@ fn array_future_stabilisation_bz2() {
             .contains(r#""stable.bz2"#)
     );
 
+    // When convert_aliased_extension_names is enabled, it converts to the
+    // current default name ("stable.bz2").
     options.set_convert_aliased_extension_names(true);
     assert!(
         array
@@ -61,5 +68,5 @@ fn array_future_stabilisation_bz2() {
             .contains(r#""stable.bz2"#)
     );
 
-    Bz2Codec::set_default_name("numcodecs.bz2", ZarrVersions::V3);
+    Bz2Codec::aliases_v3_mut().default_name = "numcodecs.bz2".into();
 }

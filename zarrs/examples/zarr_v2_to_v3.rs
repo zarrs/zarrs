@@ -6,10 +6,8 @@ use std::sync::Arc;
 use zarrs::array::ArrayMetadataOptions;
 use zarrs::config::MetadataConvertVersion;
 use zarrs::group::{Group, GroupMetadataOptions};
-use zarrs::metadata::v2::{
-    ArrayMetadataV2, ArrayMetadataV2Order, FillValueMetadataV2, GroupMetadataV2,
-};
-use zarrs::metadata::{ChunkKeySeparator, GroupMetadata};
+use zarrs::metadata::v2::{ArrayMetadataV2, ArrayMetadataV2Order, GroupMetadataV2};
+use zarrs::metadata::{ChunkKeySeparator, FillValueMetadata, GroupMetadata};
 use zarrs::storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
 
 fn key_to_str<T: ReadableStorageTraits>(
@@ -64,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![10, 10],
         vec![NonZeroU64::new(5).unwrap(); 2],
         ">f4".into(), // big endian float32
-        FillValueMetadataV2::from(f32::NAN),
+        FillValueMetadata::from(f32::NAN),
         None,
         None,
     )

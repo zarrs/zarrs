@@ -32,30 +32,31 @@ mod transpose_codec_partial;
 use std::sync::Arc;
 
 pub use transpose_codec::TransposeCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength};
-use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
 };
 use crate::metadata::DataTypeSize;
-use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(TransposeCodec::IDENTIFIER, TransposeCodec::matches_name, TransposeCodec::default_name, create_codec_transpose)
+    CodecPluginV3::new::<TransposeCodec>(create_codec_transpose_v3)
 }
-zarrs_plugin::impl_extension_aliases!(TransposeCodec, "transpose");
 
-pub(crate) fn create_codec_transpose(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: TransposeCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(TransposeCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+pub(crate) fn create_codec_transpose_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+    let configuration: TransposeCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToArray(codec))
 }
@@ -223,7 +224,7 @@ pub(crate) fn apply_permutation<'a>(
         }
         (ArrayBytes::Optional(..), _) => Err(CodecError::UnsupportedDataType(
             data_type.clone(),
-            TransposeCodec::IDENTIFIER.to_string(),
+            TransposeCodec::aliases_v3().default_name.to_string(),
         )),
         (_, _) => Err(CodecError::Other(
             "dev error: transpose data type mismatch".to_string(),

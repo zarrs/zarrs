@@ -1,21 +1,21 @@
+use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use derive_more::From;
+use zarrs_plugin::ExtensionName;
 
 use super::chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding};
-use super::codec::{
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec,
-};
+use super::codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
-use crate::array::codec::{CodecOptions, NamedCodec};
+use crate::array::array_builder::array_builder_fill_value::ArrayBuilderFillValueImpl;
+use crate::array::codec::CodecOptions;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
-use crate::metadata::v3::AdditionalFieldsV3;
+use crate::metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use crate::metadata::{ChunkKeySeparator, IntoDimensionName};
 use crate::node::NodePath;
 
@@ -105,11 +105,11 @@ pub struct ArrayBuilder {
     /// Fill value.
     fill_value: ArrayBuilderFillValue,
     /// The array-to-array codecs.
-    array_to_array_codecs: Vec<NamedArrayToArrayCodec>,
+    array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     /// The array-to-bytes codec.
-    array_to_bytes_codec: Option<NamedArrayToBytesCodec>,
+    array_to_bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
     /// The bytes-to-bytes codecs. If [`None`], chooses a default based on the data type.
-    bytes_to_bytes_codecs: Vec<NamedBytesToBytesCodec>,
+    bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     /// Storage transformer chain.
     storage_transformers: StorageTransformerChain,
     /// Attributes.
@@ -214,23 +214,24 @@ impl ArrayBuilder {
     pub fn from_array<T: ?Sized>(array: &Array<T>) -> Self {
         let mut builder = Self::new(
             array.shape().to_vec(),
-            array.chunk_grid().create_metadata(),
+            array.chunk_grid().metadata(),
             array.data_type().clone(),
-            array.fill_value_metadata_v3(),
+            array.fill_value_metadata(),
         );
         let additional_fields = match array.metadata() {
             ArrayMetadata::V2(_metadata) => AdditionalFieldsV3::default(),
             ArrayMetadata::V3(metadata) => metadata.additional_fields.clone(),
         };
 
+        builder.array_to_array_codecs = array.codecs().array_to_array_codecs().to_vec();
+        builder.array_to_bytes_codec = Some(array.codecs().array_to_bytes_codec().clone());
+        builder.bytes_to_bytes_codecs = array.codecs().bytes_to_bytes_codecs().to_vec();
+
         builder
             .additional_fields(additional_fields)
             .attributes(array.attributes().clone())
             .chunk_key_encoding(array.chunk_key_encoding().clone())
             .dimension_names(array.dimension_names().clone())
-            .array_to_array_codecs_named(array.codecs().array_to_array_codecs().to_vec())
-            .array_to_bytes_codec_named(array.codecs().array_to_bytes_codec().clone())
-            .bytes_to_bytes_codecs_named(array.codecs().bytes_to_bytes_codecs().to_vec())
             .storage_transformers(array.storage_transformers().clone());
         builder
     }
@@ -240,7 +241,7 @@ impl ArrayBuilder {
         let shape = shape.into();
         let chunk_grid_metadata = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => {
-                ArrayBuilderChunkGridMetadata::from(chunk_grid.as_chunk_grid().create_metadata())
+                ArrayBuilderChunkGridMetadata::from(chunk_grid.as_chunk_grid().metadata())
             }
             ArrayBuilderChunkGridMaybe::Metadata(_array_shape, chunk_grid_metadata) => {
                 chunk_grid_metadata.clone()
@@ -314,21 +315,7 @@ impl ArrayBuilder {
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     ) -> &mut Self {
-        self.array_to_array_codecs = array_to_array_codecs
-            .into_iter()
-            .map(NamedCodec::new_default_name)
-            .collect();
-        self
-    }
-
-    /// Set the array-to-array codecs with non-default names.
-    ///
-    /// If left unmodified, the array will have no array-to-array codecs.
-    pub fn array_to_array_codecs_named(
-        &mut self,
-        array_to_array_codecs: Vec<impl Into<NamedArrayToArrayCodec>>,
-    ) -> &mut Self {
-        self.array_to_array_codecs = array_to_array_codecs.into_iter().map(Into::into).collect();
+        self.array_to_array_codecs = array_to_array_codecs;
         self
     }
 
@@ -339,18 +326,7 @@ impl ArrayBuilder {
         &mut self,
         array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
     ) -> &mut Self {
-        self.array_to_bytes_codec = Some(NamedCodec::new_default_name(array_to_bytes_codec));
-        self
-    }
-
-    /// Set the array-to-bytes codec with non-default names.
-    ///
-    /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
-    pub fn array_to_bytes_codec_named(
-        &mut self,
-        array_to_bytes_codec: impl Into<NamedArrayToBytesCodec>,
-    ) -> &mut Self {
-        self.array_to_bytes_codec = Some(array_to_bytes_codec.into());
+        self.array_to_bytes_codec = Some(array_to_bytes_codec);
         self
     }
 
@@ -361,21 +337,7 @@ impl ArrayBuilder {
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> &mut Self {
-        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs
-            .into_iter()
-            .map(NamedCodec::new_default_name)
-            .collect();
-        self
-    }
-
-    /// Set the bytes-to-bytes codecs with non-default names.
-    ///
-    /// If left unmodified, the array will have no bytes-to-bytes codecs.
-    pub fn bytes_to_bytes_codecs_named(
-        &mut self,
-        bytes_to_bytes_codecs: Vec<impl Into<NamedBytesToBytesCodec>>,
-    ) -> &mut Self {
-        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs.into_iter().map(Into::into).collect();
+        self.bytes_to_bytes_codecs = bytes_to_bytes_codecs;
         self
     }
 
@@ -496,7 +458,20 @@ impl ArrayBuilder {
             }
         };
         let data_type = self.data_type.to_data_type()?;
-        let fill_value = self.fill_value.to_fill_value(&data_type)?;
+        let fill_value = match &self.fill_value.0 {
+            ArrayBuilderFillValueImpl::FillValue(fill_value) => fill_value.clone(),
+            ArrayBuilderFillValueImpl::Metadata(fill_value_metadata) => {
+                // ArrayBuilder is always for V3 arrays
+                data_type.fill_value_v3(fill_value_metadata).map_err(|_| {
+                    ArrayCreateError::InvalidFillValueMetadata {
+                        data_type_name: data_type
+                            .name_v3()
+                            .map_or_else(String::new, Cow::into_owned),
+                        fill_value_metadata: fill_value_metadata.clone(),
+                    }
+                })?
+            }
+        };
         if let Some(dimension_names) = &self.dimension_names
             && dimension_names.len() != chunk_grid.dimensionality()
         {
@@ -514,8 +489,6 @@ impl ArrayBuilder {
         // If subchunk_shape is set, wrap the codec chain with a sharding codec
         #[cfg(feature = "sharding")]
         let codec_chain = if let Some(subchunk_shape) = &self.subchunk_shape {
-            use crate::array::codec::NamedCodec;
-
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
             // Validate and convert ArrayShape to ChunkShape (all elements must be non-zero)
@@ -528,17 +501,13 @@ impl ArrayBuilder {
 
             let mut sharding_builder = ShardingCodecBuilder::new(subchunk_shape, &data_type);
             sharding_builder
-                .array_to_array_codecs_named(self.array_to_array_codecs.clone())
-                .array_to_bytes_codec_named(array_to_bytes_codec.clone())
-                .bytes_to_bytes_codecs_named(self.bytes_to_bytes_codecs.clone());
+                .array_to_array_codecs(self.array_to_array_codecs.clone())
+                .array_to_bytes_codec(array_to_bytes_codec.clone())
+                .bytes_to_bytes_codecs(self.bytes_to_bytes_codecs.clone());
 
-            CodecChain::new_named(
-                vec![],
-                NamedCodec::new_default_name(Arc::new(sharding_builder.build())),
-                vec![],
-            )
+            CodecChain::new(vec![], Arc::new(sharding_builder.build()), vec![])
         } else {
-            CodecChain::new_named(
+            CodecChain::new(
                 self.array_to_array_codecs.clone(),
                 array_to_bytes_codec,
                 self.bytes_to_bytes_codecs.clone(),
@@ -546,22 +515,38 @@ impl ArrayBuilder {
         };
 
         #[cfg(not(feature = "sharding"))]
-        let codec_chain = CodecChain::new_named(
+        let codec_chain = CodecChain::new(
             self.array_to_array_codecs.clone(),
             array_to_bytes_codec,
             self.bytes_to_bytes_codecs.clone(),
         );
 
+        // Create data type metadata
+        let data_type_name = data_type
+            .name_v3()
+            .map_or_else(String::new, Cow::into_owned);
+        let data_type_configuration = data_type.configuration_v3();
+        let data_type_metadata = if data_type_configuration.is_empty() {
+            MetadataV3::new(data_type_name.clone())
+        } else {
+            MetadataV3::new_with_configuration(data_type_name.clone(), data_type_configuration)
+        };
+
         Ok(ArrayMetadataV3::new(
             chunk_grid.array_shape().to_vec(),
-            chunk_grid.create_metadata(),
-            data_type.metadata(),
-            data_type.metadata_fill_value(&fill_value)?,
+            chunk_grid.metadata(),
+            data_type_metadata,
+            data_type.metadata_fill_value(&fill_value).map_err(|_| {
+                ArrayCreateError::InvalidFillValue {
+                    data_type_name,
+                    fill_value,
+                }
+            })?,
             codec_chain.create_metadatas(self.metadata_options.codec_metadata_options()),
         )
         .with_attributes(self.attributes.clone())
         .with_additional_fields(self.additional_fields.clone())
-        .with_chunk_key_encoding(self.chunk_key_encoding.create_metadata())
+        .with_chunk_key_encoding(self.chunk_key_encoding.metadata())
         .with_dimension_names(self.dimension_names.clone())
         .with_storage_transformers(self.storage_transformers.create_metadatas()))
     }
@@ -611,7 +596,8 @@ mod tests {
     use crate::array::chunk_grid::{ChunkGridTraits, RegularChunkGrid};
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::{ChunkGrid, data_type};
-    use crate::metadata::v3::{FillValueMetadataV3, MetadataV3};
+    use crate::metadata::FillValueMetadata;
+    use crate::metadata::v3::MetadataV3;
     use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use crate::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
     use crate::storage::store::MemoryStore;
@@ -685,6 +671,18 @@ mod tests {
         let mut builder = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::int8(), 0i8);
         builder.dimension_names(["z", "y", "x"].into());
         assert!(builder.build(storage.clone(), "/").is_err());
+    }
+
+    #[test]
+    fn array_builder_invalid_fill_value_metadata_error() {
+        let storage = Arc::new(MemoryStore::new());
+        // Use a fill value metadata that is incompatible with the data type
+        let builder = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::string(), 123);
+        let err = builder.build(storage, "/").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid fill value metadata for data type `string`: 123"
+        );
     }
 
     #[test]
@@ -859,7 +857,7 @@ mod tests {
             vec![8, 8],
             vec![2, 2],
             data_type::int8(),
-            FillValueMetadataV3::Number(serde_json::Number::from(0u8)),
+            FillValueMetadata::Number(serde_json::Number::from(0u8)),
         )
         .build_metadata()
         .unwrap();
@@ -878,7 +876,7 @@ mod tests {
         let ab = ArrayBuilder::new(vec![8, 8], vec![2, 2], data_type::float32(), "0x7fc00000");
         assert_eq!(
             ab.build_metadata().unwrap().fill_value,
-            FillValueMetadataV3::from("NaN")
+            FillValueMetadata::from("NaN")
         );
         let ab = ArrayBuilder::new(
             vec![8, 8],
@@ -888,7 +886,7 @@ mod tests {
         ); // non-standard NaN
         assert_eq!(
             ab.build_metadata().unwrap().fill_value,
-            FillValueMetadataV3::from("0x7fc00001")
+            FillValueMetadata::from("0x7fc00001")
         );
     }
 }

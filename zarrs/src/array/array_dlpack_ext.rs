@@ -2,7 +2,7 @@ use std::ffi::c_void;
 
 use dlpark::ffi::Device;
 use dlpark::traits::{RowMajorCompactLayout, TensorLike};
-use zarrs_plugin::ExtensionIdentifier;
+use std::any::TypeId;
 
 use super::{DataType, Tensor, TensorError};
 use crate::array::data_type as dt;
@@ -12,21 +12,36 @@ use crate::array::data_type as dt;
 /// # Errors
 /// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported.
 fn data_type_to_dlpack(data_type: &DataType) -> Result<dlpark::ffi::DataType, TensorError> {
-    match data_type.identifier() {
-        dt::BoolDataType::IDENTIFIER => Ok(dlpark::ffi::DataType::BOOL),
-        dt::Int8DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I8),
-        dt::Int16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I16),
-        dt::Int32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I32),
-        dt::Int64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::I64),
-        dt::UInt8DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U8),
-        dt::UInt16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U16),
-        dt::UInt32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U32),
-        dt::UInt64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::U64),
-        dt::Float16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F16),
-        dt::Float32DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F32),
-        dt::Float64DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::F64),
-        dt::BFloat16DataType::IDENTIFIER => Ok(dlpark::ffi::DataType::BF16),
-        _ => Err(TensorError::UnsupportedDataType(data_type.clone())),
+    let type_id = data_type.as_any().type_id();
+    // https://github.com/rust-lang/rust/issues/70861 for match?
+    if type_id == TypeId::of::<dt::BoolDataType>() {
+        Ok(dlpark::ffi::DataType::BOOL)
+    } else if type_id == TypeId::of::<dt::Int8DataType>() {
+        Ok(dlpark::ffi::DataType::I8)
+    } else if type_id == TypeId::of::<dt::Int16DataType>() {
+        Ok(dlpark::ffi::DataType::I16)
+    } else if type_id == TypeId::of::<dt::Int32DataType>() {
+        Ok(dlpark::ffi::DataType::I32)
+    } else if type_id == TypeId::of::<dt::Int64DataType>() {
+        Ok(dlpark::ffi::DataType::I64)
+    } else if type_id == TypeId::of::<dt::UInt8DataType>() {
+        Ok(dlpark::ffi::DataType::U8)
+    } else if type_id == TypeId::of::<dt::UInt16DataType>() {
+        Ok(dlpark::ffi::DataType::U16)
+    } else if type_id == TypeId::of::<dt::UInt32DataType>() {
+        Ok(dlpark::ffi::DataType::U32)
+    } else if type_id == TypeId::of::<dt::UInt64DataType>() {
+        Ok(dlpark::ffi::DataType::U64)
+    } else if type_id == TypeId::of::<dt::Float16DataType>() {
+        Ok(dlpark::ffi::DataType::F16)
+    } else if type_id == TypeId::of::<dt::Float32DataType>() {
+        Ok(dlpark::ffi::DataType::F32)
+    } else if type_id == TypeId::of::<dt::Float64DataType>() {
+        Ok(dlpark::ffi::DataType::F64)
+    } else if type_id == TypeId::of::<dt::BFloat16DataType>() {
+        Ok(dlpark::ffi::DataType::BF16)
+    } else {
+        Err(TensorError::UnsupportedDataType(data_type.clone()))
     }
 }
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
@@ -23,7 +23,6 @@ use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]
@@ -92,11 +91,15 @@ impl PcodecCodec {
 }
 
 impl CodecTraits for PcodecCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let mode_spec = mode_spec_pco_to_config(&self.chunk_config.mode_spec);
         let (delta_spec, delta_encoding_order) = match self.chunk_config.delta_spec {
             DeltaSpec::Auto => (PcodecDeltaSpecConfiguration::Auto, None),
@@ -175,7 +178,10 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
         let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            CodecError::UnsupportedDataType(
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
+            )
         })?;
         let element_type = pcodec.pcodec_element_type();
 
@@ -214,7 +220,10 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Use get_pcodec_support() to get element type
         let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            CodecError::UnsupportedDataType(
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
+            )
         })?;
         let element_type = pcodec.pcodec_element_type();
 
@@ -248,7 +257,10 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     ) -> Result<BytesRepresentation, CodecError> {
         // Use get_pcodec_support() to get element type info
         let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(data_type.clone(), Self::IDENTIFIER.to_string())
+            CodecError::UnsupportedDataType(
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
+            )
         })?;
         let element_type = pcodec.pcodec_element_type();
 

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
@@ -11,12 +11,11 @@ use crate::array::codec::{
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
-use crate::array::{DataType, FillValue, NamedDataType};
+use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use crate::metadata::Configuration;
 use crate::metadata::v2::DataTypeMetadataV2;
 use std::num::NonZeroU64;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `fixedscaleoffset` codec implementation.
 #[derive(Clone, Debug)]
@@ -25,8 +24,8 @@ pub struct FixedScaleOffsetCodec {
     scale: f32,
     dtype_str: String,
     astype_str: Option<String>,
-    dtype: NamedDataType,
-    astype: Option<NamedDataType>,
+    dtype: DataType,
+    astype: Option<DataType>,
 }
 
 fn add_byteoder_to_dtype(dtype: &str) -> String {
@@ -70,11 +69,11 @@ impl FixedScaleOffsetCodec {
                             .to_string(),
                     )
                 };
-                let dtype = NamedDataType::try_from(
+                let dtype = DataType::from_metadata(
                     &data_type_metadata_v2_to_v3(&dtype).map_err(dtype_err)?,
                 )?;
                 let astype = if let Some(astype) = astype {
-                    Some(NamedDataType::try_from(
+                    Some(DataType::from_metadata(
                         &data_type_metadata_v2_to_v3(&astype).map_err(dtype_err)?,
                     )?)
                 } else {
@@ -98,11 +97,15 @@ impl FixedScaleOffsetCodec {
 }
 
 impl CodecTraits for FixedScaleOffsetCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = FixedScaleOffsetCodecConfiguration::Numcodecs(
             FixedScaleOffsetCodecConfigurationNumcodecs {
                 offset: self.offset,
@@ -143,7 +146,7 @@ fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType,
     let fso = super::get_fixedscaleoffset_support(data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(
             data_type.clone(),
-            FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+            FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
         )
     })?;
     Ok(fso.fixedscaleoffset_element_type())
@@ -189,7 +192,7 @@ fn scale_array(
         _ => {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
             ));
         }
     }
@@ -251,7 +254,7 @@ fn unscale_array(
         _ => {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
             ));
         }
     }
@@ -417,10 +420,10 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.data_type().eq(data_type.as_ref()) {
+        if !self.dtype.eq(data_type.as_ref()) {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -429,7 +432,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             data_type,
             self.offset,
             self.scale,
-            self.astype.as_ref().map(NamedDataType::data_type),
+            self.astype.as_ref(),
         )
     }
 
@@ -441,10 +444,10 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.data_type().eq(data_type.as_ref()) {
+        if !self.dtype.eq(data_type.as_ref()) {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                FixedScaleOffsetCodec::IDENTIFIER.to_string(),
+                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
             ));
         }
 
@@ -463,7 +466,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         get_element_type(decoded_data_type)?;
 
         if let Some(astype) = &self.astype {
-            Ok(astype.data_type().clone())
+            Ok(astype.clone())
         } else {
             Ok(decoded_data_type.clone())
         }

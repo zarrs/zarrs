@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use zarrs_plugin::ZarrVersion;
+
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -14,7 +16,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -35,11 +36,15 @@ impl Crc32cCodec {
 }
 
 impl CodecTraits for Crc32cCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = Crc32cCodecConfiguration::V1(Crc32cCodecConfigurationV1 {});
         Some(configuration.into())
     }

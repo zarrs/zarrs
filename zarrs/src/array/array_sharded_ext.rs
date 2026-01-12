@@ -2,7 +2,6 @@ use super::codec::ShardingCodecConfiguration;
 use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
 use crate::metadata::ConfigurationSerialize;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
 pub trait ArrayShardedExt: private::Sealed {
@@ -41,7 +40,10 @@ pub trait ArrayShardedExt: private::Sealed {
 
 impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
     fn is_sharded(&self) -> bool {
-        self.codecs.array_to_bytes_codec().name() == ShardingCodec::IDENTIFIER
+        self.codecs
+            .array_to_bytes_codec()
+            .as_any()
+            .is::<ShardingCodec>()
     }
 
     fn is_exclusively_sharded(&self) -> bool {
@@ -54,7 +56,7 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
         let configuration = self
             .codecs
             .array_to_bytes_codec()
-            .configuration(self.metadata_options.codec_metadata_options())
+            .configuration_v3(self.metadata_options.codec_metadata_options())
             .expect("the array to bytes codec should have metadata");
         if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
             ShardingCodecConfiguration::try_from_configuration(configuration)

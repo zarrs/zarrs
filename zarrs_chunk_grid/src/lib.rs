@@ -37,10 +37,13 @@ pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::Configuration;
 use zarrs_plugin::{
-    MaybeSend, MaybeSync, Plugin2, PluginCreateError, PluginUnsupportedError, RuntimePlugin2,
-    RuntimeRegistry, ZarrVersions,
+    ExtensionAliases, ExtensionName, MaybeSend, MaybeSync, Plugin2, PluginCreateError,
+    PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry, ZarrVersion, ZarrVersion3,
 };
+
+// Note: Chunk grids are V3-only, so the version parameter is not needed in match functions
 
 /// An incompatible dimensionality error.
 #[derive(Copy, Clone, Debug, thiserror::Error)]
@@ -65,28 +68,28 @@ impl<T: ChunkGridTraits + 'static> From<Arc<T>> for ChunkGrid {
     }
 }
 
+impl ExtensionName for ChunkGrid {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
+        self.0.name(version)
+    }
+}
+
 /// A chunk grid plugin.
 #[derive(derive_more::Deref)]
 pub struct ChunkGridPlugin(Plugin2<ChunkGrid, MetadataV3, ArrayShape>);
 inventory::collect!(ChunkGridPlugin);
 
 impl ChunkGridPlugin {
-    /// Create a new [`ChunkGridPlugin`].
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
-        default_name_fn: fn(ZarrVersions) -> std::borrow::Cow<'static, str>,
+    /// Create a new [`ChunkGridPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
+    ///
+    /// The `match_name_fn` is automatically derived from `T::matches_name`.
+    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(
             metadata: &MetadataV3,
             array_shape: &ArrayShape,
         ) -> Result<ChunkGrid, PluginCreateError>,
     ) -> Self {
-        Self(Plugin2::new(
-            identifier,
-            match_name_fn,
-            default_name_fn,
-            create_fn,
-        ))
+        Self(Plugin2::new(|name| T::matches_name(name), create_fn))
     }
 }
 
@@ -127,6 +130,23 @@ impl ChunkGrid {
         chunk_grid.into()
     }
 
+    /// Create the metadata for the chunk grid.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the chunk grid has no name for V3.
+    // TODO: Remove this method
+    #[must_use]
+    pub fn metadata(&self) -> MetadataV3 {
+        let name = self.name_v3().expect("chunk grid must have a V3 name");
+        let configuration = self.configuration();
+        if configuration.is_empty() {
+            MetadataV3::new(name.into_owned())
+        } else {
+            MetadataV3::new_with_configuration(name.into_owned(), configuration)
+        }
+    }
+
     /// Create a chunk grid from metadata and an array shape.
     ///
     /// # Errors
@@ -142,7 +162,7 @@ impl ChunkGrid {
         {
             let result = CHUNK_GRID_RUNTIME_REGISTRY.with_plugins(|plugins| {
                 for plugin in plugins {
-                    if plugin.match_name(name, ZarrVersions::V3) {
+                    if plugin.match_name(name) {
                         return Some(plugin.create(metadata, &array_shape.to_vec()));
                     }
                 }
@@ -155,21 +175,8 @@ impl ChunkGrid {
 
         // Fall back to compile-time registered plugins
         for plugin in inventory::iter::<ChunkGridPlugin> {
-            if plugin.match_name(name, ZarrVersions::V3) {
+            if plugin.match_name(name) {
                 return plugin.create(metadata, &array_shape.to_vec());
-            }
-        }
-        #[cfg(miri)]
-        {
-            // Inventory does not work in miri, so manually handle all known chunk grids
-            match metadata.name() {
-                chunk_grid::REGULAR => {
-                    return regular::create_chunk_grid_regular(metadata);
-                }
-                chunk_grid::RECTANGULAR => {
-                    return rectangular::create_chunk_grid_rectangular(metadata);
-                }
-                _ => {}
             }
         }
         Err(
@@ -184,9 +191,11 @@ impl ChunkGrid {
 /// # Safety
 /// - Chunks must be disjoint.
 /// - Methods must check the dimensionality of arguments and returned indices/shapes/subsets must match the chunk grid dimensionality.
-pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
-    /// Create the metadata for the chunk grid.
-    fn create_metadata(&self) -> MetadataV3;
+pub unsafe trait ChunkGridTraits:
+    ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
+{
+    /// The configuration of the chunk grid.
+    fn configuration(&self) -> Configuration;
 
     /// The dimensionality of the chunk grid.
     fn dimensionality(&self) -> usize;
@@ -387,8 +396,8 @@ pub unsafe trait ChunkGridTraits: core::fmt::Debug + MaybeSend + MaybeSync {
 }
 
 unsafe impl ChunkGridTraits for ChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
-        self.0.create_metadata()
+    fn configuration(&self) -> Configuration {
+        self.0.configuration()
     }
 
     fn dimensionality(&self) -> usize {
@@ -440,8 +449,8 @@ unsafe impl ChunkGridTraits for ChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for Arc<dyn ChunkGridTraits> {
-    fn create_metadata(&self) -> MetadataV3 {
-        self.as_ref().create_metadata()
+    fn configuration(&self) -> Configuration {
+        self.as_ref().configuration()
     }
 
     fn dimensionality(&self) -> usize {

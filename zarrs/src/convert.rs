@@ -4,19 +4,19 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use thiserror::Error;
-#[cfg(feature = "blosc")]
-use zarrs_metadata::DataTypeSize;
-use zarrs_metadata::Endianness;
 use zarrs_metadata::v2::{
     ArrayMetadataV2, ArrayMetadataV2Order, DataTypeMetadataV2, DataTypeMetadataV2EndiannessError,
-    FillValueMetadataV2, GroupMetadataV2, MetadataV2, data_type_metadata_v2_to_endianness,
+    GroupMetadataV2, MetadataV2, data_type_metadata_v2_to_endianness,
 };
-use zarrs_metadata::v3::{ArrayMetadataV3, FillValueMetadataV3, GroupMetadataV3, MetadataV3};
-use zarrs_plugin::{ExtensionIdentifier, ZarrVersions};
+use zarrs_metadata::v3::{ArrayMetadataV3, GroupMetadataV3, MetadataV3};
+use zarrs_metadata::{Endianness, FillValueMetadata};
+use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-use crate::array::codec::{BytesCodec, CodecPlugin, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec};
+use crate::array::codec::{
+    BytesCodec, CodecMetadataOptions, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec,
+};
 use crate::array::data_type;
 use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
@@ -42,20 +42,16 @@ use crate::{
 #[cfg(feature = "zfp")]
 use crate::array::codec::{ZfpCodec, ZfpyCodec};
 
-#[cfg(feature = "zstd")]
-use crate::{
-    array::codec::ZstdCodec,
-    metadata_ext::codec::zstd::{ZstdCodecConfiguration, codec_zstd_v2_numcodecs_to_v3},
-};
-
-/// Try to find a V3 default name for a V2 data type name by iterating over registered data type plugins.
+/// Try to find a V3 default name for a V2 data type name by creating an instance.
 ///
 /// Returns `Some(default_v3_name)` if a match is found, `None` otherwise.
 #[must_use]
 fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
+    use zarrs_data_type::DataTypePluginV2;
+
     // Special handling for RawBits V2 format (|V8 -> r64)
     // Must be checked before plugin iteration since the plugin won't know the size
-    if data_type::RawBitsDataType::matches_name(v2_name, ZarrVersions::V2) {
+    if data_type::RawBitsDataType::matches_name_v2(v2_name) {
         if let Some(size_str) = v2_name.strip_prefix("|V")
             && let Ok(size_bytes) = size_str.parse::<usize>()
         {
@@ -65,27 +61,48 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
         return Some(Cow::Owned(v2_name.to_string()));
     }
 
-    // Check plugins (all registered data types including bool, string, bytes, numeric, etc.)
-    for plugin in inventory::iter::<data_type::DataTypePlugin> {
-        if plugin.match_name(v2_name, ZarrVersions::V2) {
-            return Some(plugin.default_name(ZarrVersions::V3));
+    // Check if any V2 plugin matches the name and create an instance to get the V3 name
+    let metadata = DataTypeMetadataV2::Simple(v2_name.to_string());
+    for plugin in inventory::iter::<DataTypePluginV2> {
+        if plugin.match_name(v2_name)
+            && let Ok(data_type) = plugin.create(&metadata)
+        {
+            return data_type.name_v3();
         }
     }
 
     None
 }
 
-/// Try to find a V3 default name for a V2 codec name by iterating over registered plugins.
+/// Try to convert V2 codec metadata to V3 metadata.
 ///
-/// Returns `Some(default_v3_name)` if a match is found, `None` otherwise.
-#[must_use]
-fn codec_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
-    for plugin in inventory::iter::<CodecPlugin> {
-        if plugin.match_name(v2_name, ZarrVersions::V2) {
-            return Some(plugin.default_name(ZarrVersions::V3));
+/// # Errors
+/// Returns [`ArrayMetadataV2ToV3Error::UnsupportedCodec`] if the codec is not supported.
+fn codec_v2_to_v3(v2_metadata: &MetadataV2) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
+    use crate::array::codec::CodecPluginV2;
+
+    let v2_name = v2_metadata.id();
+
+    // Try to instantiate the codec via V2 plugin to get the V3 name and configuration
+    for plugin in inventory::iter::<CodecPluginV2> {
+        if plugin.match_name(v2_name)
+            && let Ok(codec) = plugin.create(v2_metadata)
+            && let Some(v3_name) = codec.name_v3()
+        {
+            let configuration = codec.configuration_v3(&CodecMetadataOptions::default());
+            if let Some(configuration) = configuration {
+                return Ok(MetadataV3::new_with_configuration(
+                    v3_name.into_owned(),
+                    configuration,
+                ));
+            }
+            return Ok(MetadataV3::new(v3_name.into_owned()));
         }
     }
-    None
+    Err(ArrayMetadataV2ToV3Error::UnsupportedCodec(
+        v2_name.to_string(),
+        v2_metadata.configuration().clone().into(),
+    ))
 }
 
 /// Convert Zarr V2 group metadata to Zarr V3.
@@ -109,7 +126,7 @@ pub enum ArrayMetadataV2ToV3Error {
     UnsupportedCodec(String, serde_json::Map<String, serde_json::Value>),
     /// An unsupported fill value.
     #[error("unsupported fill value {_1:?} for data type {_0}")]
-    UnsupportedFillValue(String, FillValueMetadataV2),
+    UnsupportedFillValue(String, FillValueMetadata),
     /// Serialization/deserialization error.
     #[error("JSON serialization or deserialization error: {_0}")]
     SerdeError(#[from] Arc<serde_json::Error>),
@@ -146,7 +163,10 @@ pub fn codec_metadata_v2_to_v3(
     #[cfg(feature = "transpose")]
     if order == ArrayMetadataV2Order::F {
         let transpose_metadata = MetadataV3::new_with_serializable_configuration(
-            TransposeCodec::default_name(ZarrVersions::V3).to_string(),
+            TransposeCodec::aliases_v3()
+                .default_name
+                .clone()
+                .to_string(),
             &TransposeCodecConfigurationV1 {
                 order: {
                     let f_order: Vec<usize> = (0..dimensionality).rev().collect();
@@ -173,17 +193,17 @@ pub fn codec_metadata_v2_to_v3(
             let id = filter.id();
 
             // Check for vlen codecs (array to bytes)
-            if VlenArrayCodec::matches_name(id, ZarrVersions::V2)
-                || VlenBytesCodec::matches_name(id, ZarrVersions::V2)
-                || VlenUtf8Codec::matches_name(id, ZarrVersions::V2)
+            if VlenArrayCodec::matches_name_v2(id)
+                || VlenBytesCodec::matches_name_v2(id)
+                || VlenUtf8Codec::matches_name_v2(id)
             {
                 array_to_bytes_count += 1;
-                let name = if VlenArrayCodec::matches_name(id, ZarrVersions::V2) {
-                    VlenArrayCodec::default_name(ZarrVersions::V3)
-                } else if VlenBytesCodec::matches_name(id, ZarrVersions::V2) {
-                    VlenBytesCodec::default_name(ZarrVersions::V3)
+                let name = if VlenArrayCodec::matches_name_v2(id) {
+                    VlenArrayCodec::aliases_v3().default_name.clone()
+                } else if VlenBytesCodec::matches_name_v2(id) {
+                    VlenBytesCodec::aliases_v3().default_name.clone()
                 } else {
-                    VlenUtf8Codec::default_name(ZarrVersions::V3)
+                    VlenUtf8Codec::aliases_v3().default_name.clone()
                 };
                 let vlen_v2_metadata = MetadataV3::new_with_configuration(
                     name.to_string(),
@@ -191,11 +211,8 @@ pub fn codec_metadata_v2_to_v3(
                 );
                 codecs.push(vlen_v2_metadata);
             } else {
-                // Generic filter - pass through with V2 id as name
-                codecs.push(MetadataV3::new_with_configuration(
-                    codec_v2_to_v3_name(id).unwrap_or(id.into()),
-                    filter.configuration().clone(),
-                ));
+                // Generic filter - convert to V3
+                codecs.push(codec_v2_to_v3(filter)?);
             }
         }
     }
@@ -206,27 +223,27 @@ pub fn codec_metadata_v2_to_v3(
         let id = compressor.id();
 
         #[cfg(feature = "zfp")]
-        if ZfpyCodec::matches_name(id, ZarrVersions::V2) {
+        if ZfpyCodec::matches_name_v2(id) {
             array_to_bytes_count += 1;
             codecs.push(MetadataV3::new_with_configuration(
-                ZfpyCodec::default_name(ZarrVersions::V3).to_string(),
+                ZfpyCodec::aliases_v3().default_name.clone().to_string(),
                 compressor.configuration().clone(),
             ));
         }
         #[cfg(feature = "zfp")]
-        if ZfpCodec::matches_name(id, ZarrVersions::V2) {
+        if ZfpCodec::matches_name_v2(id) {
             array_to_bytes_count += 1;
             codecs.push(MetadataV3::new_with_configuration(
-                ZfpCodec::default_name(ZarrVersions::V3).to_string(),
+                ZfpCodec::aliases_v3().default_name.clone().to_string(),
                 compressor.configuration().clone(),
             ));
         }
         #[cfg(feature = "pcodec")]
-        if PcodecCodec::matches_name(id, ZarrVersions::V2) {
+        if PcodecCodec::matches_name_v2(id) {
             // pcodec is v2/v3 compatible
             array_to_bytes_count += 1;
             codecs.push(MetadataV3::new_with_configuration(
-                PcodecCodec::default_name(ZarrVersions::V3).to_string(),
+                PcodecCodec::aliases_v3().default_name.clone().to_string(),
                 compressor.configuration().clone(),
             ));
         }
@@ -238,7 +255,7 @@ pub fn codec_metadata_v2_to_v3(
 
     if array_to_bytes_count == 0 {
         let bytes_metadata = MetadataV3::new_with_serializable_configuration(
-            BytesCodec::default_name(ZarrVersions::V3).to_string(),
+            BytesCodec::aliases_v3().default_name.clone().to_string(),
             &BytesCodecConfigurationV1 {
                 endian: Some(endianness.unwrap_or(Endianness::native())),
             },
@@ -257,7 +274,7 @@ pub fn codec_metadata_v2_to_v3(
         let mut handled = is_array_to_bytes_codec;
 
         #[cfg(feature = "blosc")]
-        if !handled && BloscCodec::matches_name(id, ZarrVersions::V2) {
+        if !handled && BloscCodec::matches_name_v2(id) {
             let blosc = serde_json::from_value::<BloscCodecConfigurationNumcodecs>(
                 serde_json::to_value(compressor.configuration())?,
             )?;
@@ -266,109 +283,29 @@ pub fn codec_metadata_v2_to_v3(
                 // The data type size does not matter
                 None
             } else {
-                // Special case for known Zarr V2 / Zarr V3 compatible data types
                 // If the data type has an unknown size
                 //  - the metadata will not match how the data is encoded, but it can still be decoded just fine
                 //  - resaving the array metadata as v3 will not have optimal blosc encoding parameters
-                get_data_type_size_for_blosc(data_type.name())?
+                data_type::DataType::from_metadata(data_type)
+                    .ok()
+                    .map(|dt| dt.size())
             };
 
             let configuration = codec_blosc_v2_numcodecs_to_v3(&blosc, data_type_size);
             codecs.push(MetadataV3::new_with_serializable_configuration(
-                BloscCodec::default_name(ZarrVersions::V3).to_string(),
-                &configuration,
-            )?);
-            handled = true;
-        }
-
-        #[cfg(feature = "zstd")]
-        if !handled && ZstdCodec::matches_name(id, ZarrVersions::V2) {
-            let zstd = serde_json::from_value::<ZstdCodecConfiguration>(serde_json::to_value(
-                compressor.configuration(),
-            )?)?;
-            let configuration = codec_zstd_v2_numcodecs_to_v3(&zstd);
-            codecs.push(MetadataV3::new_with_serializable_configuration(
-                ZstdCodec::default_name(ZarrVersions::V3).to_string(),
+                BloscCodec::aliases_v3().default_name.clone().to_string(),
                 &configuration,
             )?);
             handled = true;
         }
 
         if !handled {
-            // Generic compressor - pass through
-            codecs.push(MetadataV3::new_with_configuration(
-                codec_v2_to_v3_name(id).unwrap_or(id.into()),
-                compressor.configuration().clone(),
-            ));
+            // Generic compressor - convert to V3
+            codecs.push(codec_v2_to_v3(compressor)?);
         }
     }
 
     Ok(codecs)
-}
-
-/// Get the data type size for blosc shuffle mode.
-#[cfg(feature = "blosc")]
-fn get_data_type_size_for_blosc(
-    name: &str,
-) -> Result<Option<DataTypeSize>, ArrayMetadataV2ToV3Error> {
-    use zarrs_plugin::ExtensionIdentifier;
-
-    // Check using ExtensionIdentifier matches for known data types
-    if data_type::BoolDataType::matches_name(name, ZarrVersions::V3)
-        || data_type::Int8DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::UInt8DataType::matches_name(name, ZarrVersions::V3)
-    {
-        return Ok(Some(DataTypeSize::Fixed(1)));
-    }
-
-    if data_type::Int16DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::UInt16DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::Float16DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::BFloat16DataType::matches_name(name, ZarrVersions::V3)
-    {
-        return Ok(Some(DataTypeSize::Fixed(2)));
-    }
-
-    if data_type::Int32DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::UInt32DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::Float32DataType::matches_name(name, ZarrVersions::V3)
-    {
-        return Ok(Some(DataTypeSize::Fixed(4)));
-    }
-
-    if data_type::Int64DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::UInt64DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::Float64DataType::matches_name(name, ZarrVersions::V3)
-        || data_type::Complex64DataType::matches_name(name, ZarrVersions::V3)
-    {
-        return Ok(Some(DataTypeSize::Fixed(8)));
-    }
-
-    if data_type::Complex128DataType::matches_name(name, ZarrVersions::V3) {
-        return Ok(Some(DataTypeSize::Fixed(16)));
-    }
-
-    if data_type::StringDataType::matches_name(name, ZarrVersions::V3)
-        || data_type::BytesDataType::matches_name(name, ZarrVersions::V3)
-    {
-        return Ok(Some(DataTypeSize::Variable));
-    }
-
-    // Raw bits data types (r8, r16, r24, etc.)
-    if data_type::RawBitsDataType::matches_name(name, ZarrVersions::V3)
-        && let Ok(size_bits) = name[1..].parse::<usize>()
-    {
-        if size_bits % 8 == 0 {
-            let size_bytes = size_bits / 8;
-            return Ok(Some(DataTypeSize::Fixed(size_bytes)));
-        }
-        return Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
-            DataTypeMetadataV2::Simple(name.to_string()),
-        ));
-    }
-
-    // Unknown data type size
-    Ok(None)
 }
 
 /// Convert Zarr V2 array metadata to Zarr V3.
@@ -381,7 +318,10 @@ pub fn array_metadata_v2_to_v3(
 ) -> Result<ArrayMetadataV3, ArrayMetadataV2ToV3Error> {
     let shape = array_metadata_v2.shape.clone();
     let chunk_grid = MetadataV3::new_with_serializable_configuration(
-        RegularChunkGrid::default_name(ZarrVersions::V3).to_string(),
+        RegularChunkGrid::aliases_v3()
+            .default_name
+            .clone()
+            .to_string(),
         &RegularChunkGridConfiguration {
             chunk_shape: array_metadata_v2.chunks.clone(),
         },
@@ -402,7 +342,10 @@ pub fn array_metadata_v2_to_v3(
     )?;
 
     let chunk_key_encoding = MetadataV3::new_with_serializable_configuration(
-        V2ChunkKeyEncoding::default_name(ZarrVersions::V3).to_string(),
+        V2ChunkKeyEncoding::aliases_v3()
+            .default_name
+            .clone()
+            .to_string(),
         &V2ChunkKeyEncodingConfiguration {
             separator: array_metadata_v2.dimension_separator,
         },
@@ -447,22 +390,22 @@ pub fn data_type_metadata_v2_to_v3(
 /// # Errors
 /// Returns a [`ArrayMetadataV2ToV3Error`] if the fill value is not supported for the given data type.
 pub fn fill_value_metadata_v2_to_v3(
-    fill_value: &FillValueMetadataV2,
+    fill_value: &FillValueMetadata,
     data_type: &MetadataV3,
-) -> Result<FillValueMetadataV3, ArrayMetadataV2ToV3Error> {
+) -> Result<FillValueMetadata, ArrayMetadataV2ToV3Error> {
     let converted_value = match fill_value {
-        FillValueMetadataV2::Null => None,
-        FillValueMetadataV2::Bool(_)
-        | FillValueMetadataV2::Number(_)
-        | FillValueMetadataV2::String(_)
-        | FillValueMetadataV2::Array(_)
-        | FillValueMetadataV2::Object(_) => Some(fill_value),
+        FillValueMetadata::Null => None,
+        FillValueMetadata::Bool(_)
+        | FillValueMetadata::Number(_)
+        | FillValueMetadata::String(_)
+        | FillValueMetadata::Array(_)
+        | FillValueMetadata::Object(_) => Some(fill_value),
     };
 
     let data_type_name = data_type.name();
 
-    let is_string = data_type::StringDataType::matches_name(data_type_name, ZarrVersions::V3);
-    let is_bool = data_type::BoolDataType::matches_name(data_type_name, ZarrVersions::V3);
+    let is_string = data_type::StringDataType::matches_name_v3(data_type_name);
+    let is_bool = data_type::BoolDataType::matches_name_v3(data_type_name);
 
     // Add some special cases which are supported in v2 but not v3
     let converted_value = match converted_value {
@@ -473,34 +416,34 @@ pub fn fill_value_metadata_v2_to_v3(
             );
             if is_string {
                 // Support zarr-python encoded string arrays with a `null` fill value
-                FillValueMetadataV3::from("")
+                FillValueMetadata::from("")
             } else if is_bool {
                 // Any other null fill value is "undefined"; we pick false for bools
-                FillValueMetadataV3::from(false)
+                FillValueMetadata::from(false)
             } else {
                 // And zero for other data types
-                FillValueMetadataV3::from(0)
+                FillValueMetadata::from(0)
             }
         }
         Some(value) => {
             // Add a special case for `zarr-python` string data with a 0 fill value -> empty string
             if is_string
-                && let FillValueMetadataV3::Number(n) = value
+                && let FillValueMetadata::Number(n) = value
                 && n.as_u64() == Some(0)
             {
                 log::warn!(
                     "Permitting non-conformant `0` fill value for `string` data type (zarr-python compatibility)."
                 );
-                return Ok(FillValueMetadataV3::from(""));
+                return Ok(FillValueMetadata::from(""));
             }
 
             // Map a 0/1 scalar fill value to a bool
-            if is_bool && let FillValueMetadataV3::Number(n) = value {
+            if is_bool && let FillValueMetadata::Number(n) = value {
                 if n.as_u64() == Some(0) {
-                    return Ok(FillValueMetadataV3::from(false));
+                    return Ok(FillValueMetadata::from(false));
                 }
                 if n.as_u64() == Some(1) {
-                    return Ok(FillValueMetadataV3::from(true));
+                    return Ok(FillValueMetadata::from(true));
                 }
             }
 
@@ -543,9 +486,7 @@ mod tests {
                 },
                 "dtype": "<f8",
                 "fill_value": "NaN",
-                "filters": [
-                    {"id": "delta", "dtype": "<f8", "astype": "<f4"}
-                ],
+                "filters": null,
                 "order": "F",
                 "shape": [
                     10000,
@@ -580,7 +521,7 @@ mod tests {
         let first_codec = array_metadata_v3.codecs.first().unwrap();
         assert_eq!(
             first_codec.name(),
-            TransposeCodec::default_name(ZarrVersions::V3)
+            TransposeCodec::aliases_v3().default_name.clone()
         );
         let configuration = first_codec
             .to_configuration::<TransposeCodecConfigurationV1>()
@@ -590,7 +531,7 @@ mod tests {
         let last_codec = array_metadata_v3.codecs.last().unwrap();
         assert_eq!(
             last_codec.name(),
-            BloscCodec::default_name(ZarrVersions::V3)
+            BloscCodec::aliases_v3().default_name.clone()
         );
         let configuration = last_codec
             .to_configuration::<BloscCodecConfigurationV1>()

@@ -14,7 +14,7 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::{ExtensionIdentifier, PluginCreateError};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]
@@ -51,11 +51,15 @@ impl GzipCodec {
 }
 
 impl CodecTraits for GzipCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = GzipCodecConfiguration::V1(GzipCodecConfigurationV1 {
             level: self.compression_level,
         });

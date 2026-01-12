@@ -180,10 +180,7 @@ impl<'a> ArrayBytes<'a> {
                         fill_value.as_ne_bytes().repeat(num_elements),
                     ))
                 } else {
-                    Err(DataTypeFillValueError::new(
-                        data_type.identifier().to_string(),
-                        fill_value.clone(),
-                    ))
+                    Err(DataTypeFillValueError)
                 }
             }
             DataTypeSize::Variable => {

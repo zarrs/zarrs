@@ -2,7 +2,6 @@ use std::mem::ManuallyDrop;
 
 use ArrayError::IncompatibleElementType as IET;
 use itertools::Itertools;
-use zarrs_plugin::ExtensionIdentifier;
 
 use crate::array::data_type;
 
@@ -79,7 +78,8 @@ impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type.identifier() == data_type::BoolDataType::IDENTIFIER)
+        data_type
+            .is::<data_type::BoolDataType>()
             .then_some(())
             .ok_or(IET)
     }
@@ -123,13 +123,13 @@ impl ElementOwned for bool {
 }
 
 /// Helper macro to implement `Element` for POD (plain old data) types.
-/// Uses identifier matching instead of pattern matching for data type validation.
+/// Uses `TypeId` matching for data type validation.
 macro_rules! impl_element_pod {
     ($raw_type:ty, $($data_type:ty),+ $(,)?) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-                let id = data_type.identifier();
-                if $( id == <$data_type>::IDENTIFIER )||+ {
+                let type_id = data_type.as_any().type_id();
+                if $( type_id == std::any::TypeId::of::<$data_type>() )||+ {
                     Ok(())
                 } else {
                     Err(IET)
@@ -214,10 +214,8 @@ impl_element_pod!(
 
 impl<const N: usize> Element for &[u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        // RawBits has identifier "r*" and fixed size equal to N
-        if data_type.identifier() == data_type::RawBitsDataType::IDENTIFIER
-            && data_type.fixed_size() == Some(N)
-        {
+        // RawBits and fixed size equal to N
+        if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
             Ok(())
         } else {
             Err(IET)
@@ -245,10 +243,8 @@ impl<const N: usize> Element for &[u8; N] {
 
 impl<const N: usize> Element for [u8; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        // RawBits has identifier "r*" and fixed size equal to N
-        if data_type.identifier() == data_type::RawBitsDataType::IDENTIFIER
-            && data_type.fixed_size() == Some(N)
-        {
+        // RawBits and fixed size equal to N
+        if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
             Ok(())
         } else {
             Err(IET)
@@ -287,7 +283,8 @@ macro_rules! impl_element_string {
     ($raw_type:ty) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-                (data_type.identifier() == data_type::StringDataType::IDENTIFIER)
+                data_type
+                    .is::<data_type::StringDataType>()
                     .then_some(())
                     .ok_or(IET)
             }
@@ -358,7 +355,8 @@ macro_rules! impl_element_bytes {
     ($raw_type:ty) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-                (data_type.identifier() == crate::array::data_type::BytesDataType::IDENTIFIER)
+                data_type
+                    .is::<crate::array::data_type::BytesDataType>()
                     .then_some(())
                     .ok_or(IET)
             }

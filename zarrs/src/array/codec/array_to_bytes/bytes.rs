@@ -36,31 +36,31 @@ use std::sync::Arc;
 
 pub use bytes_codec::BytesCodec;
 pub(crate) use bytes_codec_partial::BytesCodecPartial;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPlugin};
+use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::array::data_type::DataTypeExt;
 use crate::metadata::Endianness;
-use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(BytesCodec::IDENTIFIER, BytesCodec::matches_name, BytesCodec::default_name, create_codec_bytes)
-}
-zarrs_plugin::impl_extension_aliases!(BytesCodec, "bytes",
+zarrs_plugin::impl_extension_aliases!(BytesCodec,
     v3: "bytes", ["endian"]
 );
 
-pub(crate) fn create_codec_bytes(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+// Register the V3 codec (bytes is V3-only).
+inventory::submit! {
+    CodecPluginV3::new::<BytesCodec>(create_codec_bytes_v3)
+}
+
+pub(crate) fn create_codec_bytes_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     if metadata.name() == "binary" {
         crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
     }
-    let configuration: BytesCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(BytesCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+    let configuration: BytesCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(BytesCodec::new_with_configuration(&configuration)?);
     Ok(Codec::ArrayToBytes(codec))
 }
@@ -201,7 +201,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"big"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -215,7 +215,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"little"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -228,7 +228,7 @@ mod tests {
         let codec_configuration: BytesCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(BytesCodec::IDENTIFIER, &CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }

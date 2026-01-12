@@ -1,9 +1,10 @@
 use serde_json::Value;
 use thiserror::Error;
+use zarrs_data_type::FillValue;
+use zarrs_metadata::FillValueMetadata;
 
 use super::codec::CodecError;
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
-use crate::array::data_type::{DataTypeFillValueError, DataTypeFillValueMetadataError};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
 use crate::plugin::PluginCreateError;
@@ -22,8 +23,13 @@ pub enum ArrayCreateError {
     #[error(transparent)]
     DataTypeCreateError(PluginCreateError),
     /// Invalid fill value.
-    #[error(transparent)]
-    InvalidFillValue(#[from] DataTypeFillValueError),
+    #[error("invalid fill value for data type `{data_type_name}`: {fill_value}")]
+    InvalidFillValue {
+        /// The data type name.
+        data_type_name: String,
+        /// The fill value.
+        fill_value: FillValue,
+    },
     // /// Unparseable metadata.
     // #[error("unparseable metadata: {_0:?}")]
     // UnparseableMetadata(String),
@@ -34,8 +40,13 @@ pub enum ArrayCreateError {
     // #[error("unsupported chunk grid metadata: {_0:?}")]
     // UnsupportedChunkGridMetadata(MetadataV3),
     /// Invalid fill value metadata.
-    #[error(transparent)]
-    InvalidFillValueMetadata(#[from] DataTypeFillValueMetadataError),
+    #[error("invalid fill value metadata for data type `{data_type_name}`: {fill_value_metadata}")]
+    InvalidFillValueMetadata {
+        /// The data type name.
+        data_type_name: String,
+        /// The fill value metadata.
+        fill_value_metadata: FillValueMetadata,
+    },
     /// Error creating codecs.
     #[error(transparent)]
     CodecsCreateError(PluginCreateError),

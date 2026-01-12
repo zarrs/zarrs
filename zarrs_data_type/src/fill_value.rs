@@ -3,33 +3,16 @@
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#fill-value>.
 
 use thiserror::Error;
-use zarrs_metadata::v3::FillValueMetadataV3;
 
 /// A data type and fill value metadata incompatibility error.
 #[derive(Clone, Debug, Error)]
-#[error("incompatible fill value {} for data type {}", _1.to_string(), _0.clone())]
-pub struct DataTypeFillValueMetadataError(String, FillValueMetadataV3);
-
-impl DataTypeFillValueMetadataError {
-    /// Create a new [`DataTypeFillValueMetadataError`].
-    #[must_use]
-    pub fn new(data_type: String, fill_value_metadata: FillValueMetadataV3) -> Self {
-        Self(data_type, fill_value_metadata)
-    }
-}
+#[error("incompatible fill value metadata")]
+pub struct DataTypeFillValueMetadataError;
 
 /// A data type and fill value incompatibility error.
 #[derive(Clone, Debug, Error)]
-#[error("incompatible fill value {1} for data type {0}")]
-pub struct DataTypeFillValueError(String, FillValue);
-
-impl DataTypeFillValueError {
-    /// Create a new incompatible fill value error.
-    #[must_use]
-    pub const fn new(data_type_name: String, fill_value: FillValue) -> Self {
-        Self(data_type_name, fill_value)
-    }
-}
+#[error("fill value is incompatible with data type")]
+pub struct DataTypeFillValueError;
 
 /// A fill value.
 ///

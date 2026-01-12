@@ -3,6 +3,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_plugin::ZarrVersion;
+
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncArrayPartialDecoderTraits;
 use crate::array::codec::{
@@ -16,7 +18,6 @@ use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]
@@ -50,11 +51,15 @@ impl ReshapeCodec {
 }
 
 impl CodecTraits for ReshapeCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ReshapeCodecConfiguration::V1(ReshapeCodecConfigurationV1 {
             shape: self.shape.clone(),
         });

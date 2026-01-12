@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
 use crate::array::codec::{
@@ -11,7 +11,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]
@@ -44,11 +43,15 @@ impl ZlibCodec {
 }
 
 impl CodecTraits for ZlibCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 {
             level: ZlibCompressionLevel::try_from(self.compression.level())
                 .expect("checked on init"),

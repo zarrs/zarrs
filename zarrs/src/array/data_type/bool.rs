@@ -1,6 +1,6 @@
 //! The `bool` data type.
 
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::FillValueMetadata;
 
 use super::macros::register_data_type_plugin;
 
@@ -8,17 +8,13 @@ use super::macros::register_data_type_plugin;
 #[derive(Debug, Clone, Copy)]
 pub struct BoolDataType;
 register_data_type_plugin!(BoolDataType);
-zarrs_plugin::impl_extension_aliases!(BoolDataType, "bool",
+zarrs_plugin::impl_extension_aliases!(BoolDataType,
     v3: "bool", [],
     v2: "|b1", ["|b1"]
 );
 
 impl zarrs_data_type::DataTypeTraits for BoolDataType {
-    fn identifier(&self) -> &'static str {
-        <Self as ExtensionIdentifier>::IDENTIFIER
-    }
-
-    fn configuration(&self) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -28,31 +24,37 @@ impl zarrs_data_type::DataTypeTraits for BoolDataType {
 
     fn fill_value(
         &self,
-        fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        let err = || {
-            zarrs_data_type::DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
-                fill_value_metadata.clone(),
-            )
-        };
-        let b = fill_value_metadata.as_bool().ok_or_else(err)?;
-        Ok(zarrs_data_type::FillValue::from(u8::from(b)))
+        // V2 compatibility: 0/1 integers are accepted as false/true, null -> false
+        if let Some(b) = fill_value_metadata.as_bool() {
+            Ok(zarrs_data_type::FillValue::from(b))
+        } else if matches!(version, zarrs_plugin::ZarrVersion::V2) {
+            // V2: accept 0/1 as false/true, null -> false
+            if fill_value_metadata.is_null() {
+                Ok(zarrs_data_type::FillValue::from(false))
+            } else {
+                match fill_value_metadata.as_u64() {
+                    Some(0) => Ok(zarrs_data_type::FillValue::from(false)),
+                    Some(1) => Ok(zarrs_data_type::FillValue::from(true)),
+                    _ => Err(zarrs_data_type::DataTypeFillValueMetadataError),
+                }
+            }
+        } else {
+            Err(zarrs_data_type::DataTypeFillValueMetadataError)
+        }
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &zarrs_data_type::FillValue,
-    ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError>
-    {
-        let error = || {
-            zarrs_data_type::DataTypeFillValueError::new(
-                self.identifier().to_string(),
-                fill_value.clone(),
-            )
-        };
-        let bytes: [u8; 1] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
-        Ok(zarrs_metadata::v3::FillValueMetadataV3::from(bytes[0] != 0))
+    ) -> Result<FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
+        let bytes: [u8; 1] = fill_value
+            .as_ne_bytes()
+            .try_into()
+            .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
+        Ok(FillValueMetadata::from(bytes[0] != 0))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

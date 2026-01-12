@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_data_type::FillValue;
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::array_bytes::ArrayBytesVariableLength;
@@ -18,7 +18,6 @@ use crate::array::codec::{
 use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use crate::metadata::{Configuration, DataTypeSize};
-use zarrs_plugin::ExtensionIdentifier;
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -272,11 +271,15 @@ impl OptionalCodec {
 }
 
 impl CodecTraits for OptionalCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = OptionalCodecConfiguration::V1(OptionalCodecConfigurationV1 {
             mask_codecs: self.mask_codecs.create_metadatas(options),
             data_codecs: self.data_codecs.create_metadatas(options),
@@ -517,8 +520,7 @@ mod tests {
         )
         .unwrap();
         let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration =
-            codec.configuration(OptionalCodec::IDENTIFIER, &CodecMetadataOptions::default());
+        let configuration = codec.configuration_v3(&CodecMetadataOptions::default());
         assert!(configuration.is_some());
     }
 
@@ -642,12 +644,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_null() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_named().into_optional().into(),
+            data_type::uint8().to_optional(),
             FillValue::from(None::<u8>), // null/missing value: [0]
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_named().into_optional().into(),
+            data_type::uint8().to_optional(),
             FillValue::new_optional_null(), // null/missing value: [0]
         )
         .unwrap();
@@ -656,12 +658,12 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_u8_nonnull() {
         codec_optional_round_trip_impl(
-            data_type::uint8().to_named().into_optional().into(),
+            data_type::uint8().to_optional(),
             FillValue::from(Some(0u8)),
         )
         .unwrap();
         codec_optional_round_trip_impl(
-            data_type::uint8().to_named().into_optional().into(),
+            data_type::uint8().to_optional(),
             FillValue::from(0u8).into_optional(),
         )
         .unwrap();
@@ -670,7 +672,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_i32() {
         codec_optional_round_trip_impl(
-            data_type::int32().to_named().into_optional().into(),
+            data_type::int32().to_optional(),
             FillValue::from(None::<i32>), // null/missing value: [0]
         )
         .unwrap();
@@ -679,7 +681,7 @@ mod tests {
     #[test]
     fn codec_optional_round_trip_f32() {
         codec_optional_round_trip_impl(
-            data_type::float32().to_named().into_optional().into(),
+            data_type::float32().to_optional(),
             FillValue::from(None::<f32>), // null/missing value: [0]
         )
         .unwrap();
@@ -689,11 +691,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level() {
         // Test Option<Option<u8>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into(),
+            data_type::uint8().to_optional().to_optional(),
             FillValue::from(None::<Option<u8>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -703,11 +701,7 @@ mod tests {
     fn codec_optional_round_trip_nested_2_level_i32() {
         // Test Option<Option<i32>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::int32()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into(),
+            data_type::int32().to_optional().to_optional(),
             FillValue::from(None::<Option<i32>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -717,12 +711,7 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level() {
         // Test Option<Option<Option<u8>>> with null fill value
         codec_optional_round_trip_impl(
-            data_type::uint8()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+            data_type::uint8().to_optional().to_optional().to_optional(),
             FillValue::from(None::<Option<Option<u8>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -733,11 +722,9 @@ mod tests {
         // Test Option<Option<Option<f64>>> with null fill value
         codec_optional_round_trip_impl(
             data_type::float64()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+                .to_optional()
+                .to_optional()
+                .to_optional(),
             FillValue::from(None::<Option<Option<f64>>>), // null/missing value for outer optional: [0]
         )
         .unwrap();
@@ -747,11 +734,9 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none() {
         codec_optional_round_trip_impl(
             data_type::float64()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+                .to_optional()
+                .to_optional()
+                .to_optional(),
             Some(Some(None::<f64>)),
         )
         .unwrap();
@@ -761,11 +746,9 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_some_some_none_alt() {
         codec_optional_round_trip_impl(
             data_type::float64()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+                .to_optional()
+                .to_optional()
+                .to_optional(),
             FillValue::new_optional_null()
                 .into_optional()
                 .into_optional(), // null/missing value for outer optional: [0]
@@ -777,11 +760,9 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_some_none() {
         codec_optional_round_trip_impl(
             data_type::float64()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+                .to_optional()
+                .to_optional()
+                .to_optional(),
             Some(None::<Option<f64>>),
         )
         .unwrap();
@@ -791,11 +772,9 @@ mod tests {
     fn codec_optional_round_trip_nested_3_level_f64_some_some_some() {
         codec_optional_round_trip_impl(
             data_type::float64()
-                .to_named()
-                .into_optional()
-                .into_optional()
-                .into_optional()
-                .into(),
+                .to_optional()
+                .to_optional()
+                .to_optional(),
             Some(Some(Some(0.0f64))),
         )
         .unwrap();
@@ -806,11 +785,7 @@ mod tests {
         use std::num::NonZeroU64;
 
         // Test Option<Option<u8>> with explicit mask construction
-        let data_type: DataType = data_type::uint8()
-            .to_named()
-            .into_optional()
-            .into_optional()
-            .into();
+        let data_type: DataType = data_type::uint8().to_optional().to_optional();
         let fill_value = FillValue::from(None::<Option<u8>>);
         let chunk_shape = vec![NonZeroU64::new(8).unwrap()];
 
@@ -896,7 +871,7 @@ mod tests {
 
         // Test Option<u8> where the u8 has a non-zero fill value
         // This represents the outer optional wrapping a non-optional type
-        let data_type: DataType = data_type::uint8().to_named().into_optional().into();
+        let data_type: DataType = data_type::uint8().to_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         // Use a non-null fill value of 255 for missing elements
         let fill_value = FillValue::new(vec![255u8]);
@@ -972,11 +947,9 @@ mod tests {
 
         // Test Option<Option<Option<u16>>> with explicit mask construction
         let data_type: DataType = data_type::uint16()
-            .to_named()
-            .into_optional()
-            .into_optional()
-            .into_optional()
-            .into();
+            .to_optional()
+            .to_optional()
+            .to_optional();
         let chunk_shape = vec![NonZeroU64::new(6).unwrap()];
         let fill_value = FillValue::from(None::<Option<Option<u16>>>);
 
@@ -1081,7 +1054,7 @@ mod tests {
         use std::num::NonZeroU64;
 
         // Test Option<f32> with a specific fill value (e.g., NaN)
-        let data_type: DataType = data_type::float32().to_named().into_optional().into();
+        let data_type: DataType = data_type::float32().to_optional();
         let chunk_shape = vec![NonZeroU64::new(5).unwrap()];
         let fill_value = FillValue::from(Some(f32::NAN));
 

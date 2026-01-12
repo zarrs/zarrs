@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::codec::{
@@ -10,7 +10,6 @@ use crate::array::codec::{
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -44,11 +43,15 @@ impl ShuffleCodec {
 }
 
 impl CodecTraits for ShuffleCodec {
-    fn identifier(&self) -> &'static str {
-        Self::IDENTIFIER
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration(&self, _name: &str, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersion,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ShuffleCodecConfiguration::V1(ShuffleCodecConfigurationV1 {
             elementsize: self.elementsize,
         });

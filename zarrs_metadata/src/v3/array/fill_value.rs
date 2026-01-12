@@ -48,7 +48,7 @@ impl FillValueMetadataV3 {
     /// Returns true if the value is a `null`. Returns `false` otherwise.
     #[must_use]
     pub fn is_null(&self) -> bool {
-        matches!(self, FillValueMetadataV3::Null)
+        matches!(self, Self::Null)
     }
 
     /// If the value is a Null, returns (). Returns [`None`] otherwise.
@@ -208,18 +208,13 @@ impl FillValueMetadataV3 {
 
 impl From<&[u8]> for FillValueMetadataV3 {
     fn from(value: &[u8]) -> Self {
-        Self::Array(
-            value
-                .iter()
-                .map(|v| FillValueMetadataV3::from(*v))
-                .collect(),
-        )
+        Self::Array(value.iter().map(|v| Self::from(*v)).collect())
     }
 }
 
 impl From<Vec<u8>> for FillValueMetadataV3 {
     fn from(value: Vec<u8>) -> Self {
-        Self::Array(value.into_iter().map(FillValueMetadataV3::from).collect())
+        Self::Array(value.into_iter().map(Self::from).collect())
     }
 }
 

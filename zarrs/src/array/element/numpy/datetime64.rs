@@ -2,9 +2,8 @@
 
 use crate::array::data_type::NumpyDateTime64DataType;
 use crate::array::{
-    ArrayBytes, ArrayError, DataType, Element, ElementOwned, convert_from_bytes_slice,
+    ArrayBytes, ArrayError, DataType, DataTypeExt, Element, ElementOwned, convert_from_bytes_slice,
 };
-use zarrs_plugin::ExtensionIdentifier;
 
 #[cfg(feature = "chrono")]
 impl Element for chrono::DateTime<chrono::Utc> {
@@ -15,7 +14,7 @@ impl Element for chrono::DateTime<chrono::Utc> {
         use chrono::DateTime;
 
         // Self::validate_data_type(data_type)?;
-        let Some(dt) = data_type.as_any().downcast_ref::<NumpyDateTime64DataType>() else {
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let (unit, scale_factor) = (dt.unit, dt.scale_factor);
@@ -48,7 +47,7 @@ impl Element for chrono::DateTime<chrono::Utc> {
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if data_type.identifier() == NumpyDateTime64DataType::IDENTIFIER {
+        if data_type.is::<NumpyDateTime64DataType>() {
             Ok(())
         } else {
             Err(ArrayError::IncompatibleElementType)
@@ -64,7 +63,7 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
     ) -> Result<Vec<Self>, ArrayError> {
         use chrono::{DateTime, NaiveDateTime};
 
-        let Some(dt) = data_type.as_any().downcast_ref::<NumpyDateTime64DataType>() else {
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let (unit, scale_factor) = (dt.unit, dt.scale_factor);
@@ -104,7 +103,7 @@ impl Element for jiff::Timestamp {
         use jiff::{Span, Timestamp, Unit};
 
         // Self::validate_data_type(data_type)?;
-        let Some(dt) = data_type.as_any().downcast_ref::<NumpyDateTime64DataType>() else {
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let (unit, scale_factor) = (dt.unit, dt.scale_factor);
@@ -135,7 +134,7 @@ impl Element for jiff::Timestamp {
     }
 
     fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if data_type.identifier() == NumpyDateTime64DataType::IDENTIFIER {
+        if data_type.is::<NumpyDateTime64DataType>() {
             Ok(())
         } else {
             Err(ArrayError::IncompatibleElementType)
@@ -152,7 +151,7 @@ impl ElementOwned for jiff::Timestamp {
         use jiff::{SignedDuration, Span, Timestamp};
 
         // Self::validate_data_type(data_type)?;
-        let Some(dt) = data_type.as_any().downcast_ref::<NumpyDateTime64DataType>() else {
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
             return Err(ArrayError::IncompatibleElementType);
         };
         let (unit, scale_factor) = (dt.unit, dt.scale_factor);

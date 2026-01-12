@@ -4,7 +4,8 @@ use std::num::NonZeroU32;
 
 use zarrs_data_type::DataType;
 use zarrs_metadata::ConfigurationSerialize;
-use zarrs_plugin::{ExtensionIdentifier, PluginCreateError, PluginMetadataInvalidError};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 use crate::metadata_ext::data_type::NumpyTimeUnit;
 use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
@@ -18,32 +19,23 @@ pub struct NumpyDateTime64DataType {
     pub scale_factor: NonZeroU32,
 }
 
+zarrs_plugin::impl_extension_aliases!(NumpyDateTime64DataType, v3: "numpy.datetime64");
+
+// Register as V3-only data type.
 inventory::submit! {
-    zarrs_data_type::DataTypePlugin::new(
-        <NumpyDateTime64DataType as ExtensionIdentifier>::IDENTIFIER,
-        <NumpyDateTime64DataType as ExtensionIdentifier>::matches_name,
-        <NumpyDateTime64DataType as ExtensionIdentifier>::default_name,
-        |metadata: &zarrs_metadata::v3::MetadataV3| -> Result<DataType, PluginCreateError> {
+    zarrs_data_type::DataTypePluginV3::new::<NumpyDateTime64DataType>(
+        |metadata: &MetadataV3| -> Result<DataType, PluginCreateError> {
             let configuration = metadata.configuration().ok_or_else(|| {
-                PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                    NumpyDateTime64DataType::IDENTIFIER,
-                    "data_type",
-                    "missing configuration".to_string(),
-                ))
+                PluginConfigurationInvalidError::new(metadata.to_string())
             })?;
             let config = NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
                 .map_err(|_| {
-                    PluginCreateError::MetadataInvalid(PluginMetadataInvalidError::new(
-                        NumpyDateTime64DataType::IDENTIFIER,
-                        "data_type",
-                        metadata.to_string(),
-                    ))
+                    PluginConfigurationInvalidError::new(metadata.to_string())
                 })?;
             Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)).into())
         },
     )
 }
-zarrs_plugin::impl_extension_aliases!(NumpyDateTime64DataType, "numpy.datetime64");
 
 impl NumpyDateTime64DataType {
     /// Static instance for use in trait implementations (bytes codec only).
@@ -61,11 +53,7 @@ impl NumpyDateTime64DataType {
 }
 
 impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
-    fn identifier(&self) -> &'static str {
-        <Self as ExtensionIdentifier>::IDENTIFIER
-    }
-
-    fn configuration(&self) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::from(NumpyDateTime64DataTypeConfigurationV1 {
             unit: self.unit,
             scale_factor: self.scale_factor,
@@ -78,40 +66,33 @@ impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
 
     fn fill_value(
         &self,
-        fill_value_metadata: &zarrs_metadata::v3::FillValueMetadataV3,
+        fill_value_metadata: &zarrs_metadata::FillValueMetadata,
+        _version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        let err = || {
-            zarrs_data_type::DataTypeFillValueMetadataError::new(
-                self.identifier().to_string(),
-                fill_value_metadata.clone(),
-            )
-        };
         // Handle "NaT" (Not a Time) as i64::MIN
         if let Some("NaT") = fill_value_metadata.as_str() {
             return Ok(zarrs_data_type::FillValue::from(i64::MIN));
         }
         // Otherwise expect an integer
-        let i = fill_value_metadata.as_i64().ok_or_else(err)?;
+        let i = fill_value_metadata
+            .as_i64()
+            .ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;
         Ok(zarrs_data_type::FillValue::from(i))
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &zarrs_data_type::FillValue,
-    ) -> Result<zarrs_metadata::v3::FillValueMetadataV3, zarrs_data_type::DataTypeFillValueError>
-    {
-        let error = || {
-            zarrs_data_type::DataTypeFillValueError::new(
-                self.identifier().to_string(),
-                fill_value.clone(),
-            )
-        };
-        let bytes: [u8; 8] = fill_value.as_ne_bytes().try_into().map_err(|_| error())?;
+    ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
+        let bytes: [u8; 8] = fill_value
+            .as_ne_bytes()
+            .try_into()
+            .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let i = i64::from_ne_bytes(bytes);
         if i == i64::MIN {
-            Ok(zarrs_metadata::v3::FillValueMetadataV3::from("NaT"))
+            Ok(zarrs_metadata::FillValueMetadata::from("NaT"))
         } else {
-            Ok(zarrs_metadata::v3::FillValueMetadataV3::from(i))
+            Ok(zarrs_metadata::FillValueMetadata::from(i))
         }
     }
 

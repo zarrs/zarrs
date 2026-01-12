@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zarrs_plugin::ExtensionAliasesV3;
+
 use super::{BitroundCodec, round_bytes};
 use crate::array::DataType;
 use crate::array::codec::{
@@ -8,7 +10,6 @@ use crate::array::codec::{
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use crate::storage::StorageError;
-use zarrs_plugin::ExtensionIdentifier;
 
 /// Generic partial codec for the bitround codec.
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {
@@ -34,7 +35,7 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         } else {
             Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
-                BitroundCodec::IDENTIFIER.to_string(),
+                BitroundCodec::aliases_v3().default_name.to_string(),
             ))
         }
     }

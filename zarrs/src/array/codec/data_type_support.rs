@@ -61,8 +61,8 @@ macro_rules! _define_data_type_support {
             ///
             /// Use [`register_data_type_extension_codec!`](crate::array::codec::register_data_type_extension_codec) to register.
             pub struct [<$name Plugin>] {
-                /// The data type identifier.
-                pub data_type_id: &'static str,
+                /// The data type's [`TypeId`](std::any::TypeId).
+                pub type_id: ::std::any::TypeId,
                 /// Function that casts from `&dyn Any` to the codec trait.
                 pub caster: fn(&dyn ::std::any::Any) -> ::core::option::Option<&dyn $trait_name>,
             }
@@ -72,10 +72,10 @@ macro_rules! _define_data_type_support {
             type [<$name CasterFn>] = fn(&dyn ::std::any::Any) -> ::core::option::Option<&dyn $trait_name>;
 
             static [<$name:upper _CASTERS>]: ::std::sync::LazyLock<
-                ::std::collections::HashMap<&'static str, [<$name CasterFn>]>
+                ::std::collections::HashMap<::std::any::TypeId, [<$name CasterFn>]>
             > = ::std::sync::LazyLock::new(|| {
                 ::inventory::iter::<[<$name Plugin>]>()
-                    .map(|p| (p.data_type_id, p.caster))
+                    .map(|p| (p.type_id, p.caster))
                     .collect()
             });
 
@@ -85,7 +85,7 @@ macro_rules! _define_data_type_support {
             pub fn [<get_ $name:lower _support>](
                 data_type: &zarrs_data_type::DataType,
             ) -> ::core::option::Option<&dyn $trait_name> {
-                let caster = [<$name:upper _CASTERS>].get(data_type.identifier())?;
+                let caster = [<$name:upper _CASTERS>].get(&data_type.as_any().type_id())?;
                 caster(data_type.as_any())
             }
         }
@@ -102,7 +102,7 @@ pub use _define_data_type_support as define_data_type_support;
 ///
 /// # Arguments
 ///
-/// - `$data_type`: The data type marker struct (must implement `ExtensionIdentifier`)
+/// - `$data_type`: The data type marker struct
 /// - `$plugin`: The path to the `Plugin` struct (e.g., `$crate::array::codec::BitroundPlugin`)
 /// - `$trait`: The path to the codec trait (e.g., `$crate::array::codec::BitroundCodecDataTypeTraits`)
 ///
@@ -125,7 +125,7 @@ macro_rules! _register_data_type_extension_codec {
     ($data_type:ty, $plugin:path, $trait:path) => {
         ::inventory::submit! {
             $plugin {
-                data_type_id: <$data_type as ::zarrs_plugin::ExtensionIdentifier>::IDENTIFIER,
+                type_id: ::std::any::TypeId::of::<$data_type>(),
                 caster: |any: &dyn ::std::any::Any| -> ::core::option::Option<&dyn $trait> {
                     any.downcast_ref::<$data_type>().map(|t| t as &dyn $trait)
                 },

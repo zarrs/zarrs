@@ -17,8 +17,6 @@ pub mod array_to_bytes;
 pub mod bytes_to_bytes;
 mod options;
 
-mod named_codec;
-
 mod data_type_support;
 pub use data_type_support::{define_data_type_support, register_data_type_extension_codec};
 
@@ -70,9 +68,6 @@ pub use bytes_to_bytes::zlib::*;
 #[cfg(feature = "zstd")]
 pub use bytes_to_bytes::zstd::*;
 use derive_more::derive::Display;
-pub use named_codec::{
-    NamedArrayToArrayCodec, NamedArrayToBytesCodec, NamedBytesToBytesCodec, NamedCodec,
-};
 pub use options::{CodecMetadataOptions, CodecOptions};
 use thiserror::Error;
 
@@ -99,8 +94,11 @@ use codec_partial_default::{
 };
 use zarrs_chunk_grid::ArraySubsetError;
 use zarrs_data_type::{DataTypeFillValueError, FillValue};
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
-    ExtensionIdentifier, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry, ZarrVersions,
+    ExtensionAliases, ExtensionName, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry,
+    ZarrVersion, ZarrVersion2, ZarrVersion3,
 };
 
 use super::array_bytes::RawBytesOffsetsCreateError;
@@ -113,7 +111,6 @@ use super::{
 use crate::array::data_type::{BytesDataType, StringDataType};
 use crate::array::{ArraySubset, IncompatibleDimensionalityError, IndexerError};
 use crate::metadata::Configuration;
-use crate::metadata::v3::MetadataV3;
 use crate::plugin::{Plugin, PluginCreateError};
 use crate::storage::byte_range::{
     ByteRange, ByteRangeIterator, InvalidByteRangeError, extract_byte_ranges,
@@ -188,39 +185,59 @@ pub struct PartialEncoderCapability {
     pub partial_encode: bool,
 }
 
-/// A codec plugin.
+/// A Zarr V3 codec plugin.
 #[derive(derive_more::Deref)]
-pub struct CodecPlugin(Plugin<Codec, MetadataV3>);
-inventory::collect!(CodecPlugin);
+pub struct CodecPluginV3(Plugin<Codec, MetadataV3>);
+inventory::collect!(CodecPluginV3);
 
-impl CodecPlugin {
-    /// Create a new [`CodecPlugin`].
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str, version: ZarrVersions) -> bool,
-        default_name_fn: fn(ZarrVersions) -> Cow<'static, str>,
+impl CodecPluginV3 {
+    /// Create a new [`CodecPluginV3`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
+    ///
+    /// The `match_name_fn` is automatically derived from `T::matches_name`.
+    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(
-            identifier,
-            match_name_fn,
-            default_name_fn,
-            create_fn,
-        ))
+        Self(Plugin::new(|name| T::matches_name(name), create_fn))
     }
 }
 
-/// A runtime codec plugin for dynamic registration.
-pub type CodecRuntimePlugin = RuntimePlugin<Codec, MetadataV3>;
+/// A Zarr V2 codec plugin.
+#[derive(derive_more::Deref)]
+pub struct CodecPluginV2(Plugin<Codec, MetadataV2>);
+inventory::collect!(CodecPluginV2);
 
-/// Global runtime registry for codec plugins.
-pub static CODEC_RUNTIME_REGISTRY: LazyLock<RuntimeRegistry<CodecRuntimePlugin>> =
+impl CodecPluginV2 {
+    /// Create a new [`CodecPluginV2`] for a type implementing [`ExtensionAliases<ZarrVersion2>`].
+    ///
+    /// The `match_name_fn` is automatically derived from `T::matches_name`.
+    pub const fn new<T: ExtensionAliases<ZarrVersion2>>(
+        create_fn: fn(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>,
+    ) -> Self {
+        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+    }
+}
+
+/// A runtime V3 codec plugin for dynamic registration.
+pub type CodecRuntimePluginV3 = RuntimePlugin<Codec, MetadataV3>;
+
+/// A runtime V2 codec plugin for dynamic registration.
+pub type CodecRuntimePluginV2 = RuntimePlugin<Codec, MetadataV2>;
+
+/// Global runtime registry for V3 codec plugins.
+pub static CODEC_RUNTIME_REGISTRY_V3: LazyLock<RuntimeRegistry<CodecRuntimePluginV3>> =
     LazyLock::new(RuntimeRegistry::new);
 
-/// A handle to a registered codec plugin.
-pub type CodecRuntimeRegistryHandle = Arc<CodecRuntimePlugin>;
+/// Global runtime registry for V2 codec plugins.
+pub static CODEC_RUNTIME_REGISTRY_V2: LazyLock<RuntimeRegistry<CodecRuntimePluginV2>> =
+    LazyLock::new(RuntimeRegistry::new);
 
-/// Register a codec plugin at runtime.
+/// A handle to a registered V3 codec plugin.
+pub type CodecRuntimeRegistryHandleV3 = Arc<CodecRuntimePluginV3>;
+
+/// A handle to a registered V2 codec plugin.
+pub type CodecRuntimeRegistryHandleV2 = Arc<CodecRuntimePluginV2>;
+
+/// Register a V3 codec plugin at runtime.
 ///
 /// Runtime-registered plugins take precedence over compile-time registered plugins.
 ///
@@ -231,25 +248,42 @@ pub type CodecRuntimeRegistryHandle = Arc<CodecRuntimePlugin>;
 /// # Example
 ///
 /// ```ignore
-/// use zarrs::array::codec::{register_codec, CodecRuntimePlugin, Codec};
+/// use zarrs::array::codec::{register_codec_v3, CodecRuntimePluginV3, Codec};
 ///
-/// let handle = register_codec(CodecRuntimePlugin::new(
-///     "my.custom.codec",
-///     |name, zarr_version| name == "my.custom.codec",
-///     |zarr_version| "my.custom.codec".into(),
+/// let handle = register_codec_v3(CodecRuntimePluginV3::new(
+///     |name| name == "my.custom.codec",
 ///     |metadata| Ok(Codec::BytesToBytes(Arc::new(MyCodec::from_metadata(metadata)?))),
 /// ));
 /// ```
-pub fn register_codec(plugin: CodecRuntimePlugin) -> CodecRuntimeRegistryHandle {
-    CODEC_RUNTIME_REGISTRY.register(plugin)
+pub fn register_codec_v3(plugin: CodecRuntimePluginV3) -> CodecRuntimeRegistryHandleV3 {
+    CODEC_RUNTIME_REGISTRY_V3.register(plugin)
 }
 
-/// Unregister a runtime codec plugin.
+/// Register a V2 codec plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+///
+/// A handle that can be used to unregister the plugin later.
+pub fn register_codec_v2(plugin: CodecRuntimePluginV2) -> CodecRuntimeRegistryHandleV2 {
+    CODEC_RUNTIME_REGISTRY_V2.register(plugin)
+}
+
+/// Unregister a runtime V3 codec plugin.
 ///
 /// # Returns
 /// `true` if the plugin was found and removed, `false` otherwise.
-pub fn unregister_codec(handle: &CodecRuntimeRegistryHandle) -> bool {
-    CODEC_RUNTIME_REGISTRY.unregister(handle)
+pub fn unregister_codec_v3(handle: &CodecRuntimeRegistryHandleV3) -> bool {
+    CODEC_RUNTIME_REGISTRY_V3.unregister(handle)
+}
+
+/// Unregister a runtime V2 codec plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_codec_v2(handle: &CodecRuntimeRegistryHandleV2) -> bool {
+    CODEC_RUNTIME_REGISTRY_V2.unregister(handle)
 }
 
 /// A generic array to array, array to bytes, or bytes to bytes codec.
@@ -263,19 +297,41 @@ pub enum Codec {
     BytesToBytes(Arc<dyn BytesToBytesCodecTraits>),
 }
 
+/// Codec metadata for different Zarr versions.
+#[derive(Debug, Clone, Copy, derive_more::From)]
+pub enum CodecMetadata<'a> {
+    /// Zarr V3 metadata.
+    V3(&'a MetadataV3),
+    /// Zarr V2 metadata.
+    V2(&'a MetadataV2),
+}
+
 impl Codec {
     /// Create a codec from metadata.
     ///
     /// # Errors
     /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
-    pub fn from_metadata(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
+    pub fn from_metadata<'a>(
+        metadata: impl Into<CodecMetadata<'a>>,
+    ) -> Result<Self, PluginCreateError> {
+        match metadata.into() {
+            CodecMetadata::V2(metadata) => Self::from_metadata_v2(metadata),
+            CodecMetadata::V3(metadata) => Self::from_metadata_v3(metadata),
+        }
+    }
+
+    /// Create a codec from V3 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v3(metadata: &MetadataV3) -> Result<Self, PluginCreateError> {
         let name = metadata.name();
 
         // Check runtime registry first (higher priority)
         {
-            let result = CODEC_RUNTIME_REGISTRY.with_plugins(|plugins| {
+            let result = CODEC_RUNTIME_REGISTRY_V3.with_plugins(|plugins| {
                 for plugin in plugins {
-                    if plugin.match_name(name, ZarrVersions::V3) {
+                    if plugin.match_name(name) {
                         return Some(plugin.create(metadata));
                     }
                 }
@@ -287,88 +343,105 @@ impl Codec {
         }
 
         // Fall back to compile-time registered plugins
-        for plugin in inventory::iter::<CodecPlugin> {
-            if plugin.match_name(name, ZarrVersions::V3) {
+        for plugin in inventory::iter::<CodecPluginV3> {
+            if plugin.match_name(name) {
                 return plugin.create(metadata);
-            }
-        }
-        #[cfg(miri)]
-        {
-            // Inventory does not work in miri, so manually handle all known codecs
-            match metadata.name() {
-                #[cfg(feature = "transpose")]
-                codec::TRANSPOSE => {
-                    return array_to_array::transpose::create_codec_transpose(metadata);
-                }
-                #[cfg(feature = "bitround")]
-                codec::BITROUND => {
-                    return array_to_array::bitround::create_codec_bitround(metadata);
-                }
-                codec::BYTES => {
-                    return array_to_bytes::bytes::create_codec_bytes(metadata);
-                }
-                #[cfg(feature = "pcodec")]
-                codec::PCODEC => {
-                    return array_to_bytes::pcodec::create_codec_pcodec(metadata);
-                }
-                #[cfg(feature = "sharding")]
-                codec::SHARDING => {
-                    return array_to_bytes::sharding::create_codec_sharding(metadata);
-                }
-                #[cfg(feature = "zfp")]
-                codec::ZFP => {
-                    return array_to_bytes::zfp::create_codec_zfp(metadata);
-                }
-                #[cfg(feature = "zfp")]
-                codec::ZFPY => {
-                    return array_to_bytes::zfpy::create_codec_zfpy(metadata);
-                }
-                codec::VLEN => {
-                    return array_to_bytes::vlen::create_codec_vlen(metadata);
-                }
-                codec::VLEN_V2 => {
-                    return array_to_bytes::vlen_v2::create_codec_vlen_v2(metadata);
-                }
-                #[cfg(feature = "blosc")]
-                codec::BLOSC => {
-                    return bytes_to_bytes::blosc::create_codec_blosc(metadata);
-                }
-                #[cfg(feature = "bz2")]
-                codec::BZ2 => {
-                    return bytes_to_bytes::bz2::create_codec_bz2(metadata);
-                }
-                #[cfg(feature = "crc32c")]
-                codec::CRC32C => {
-                    return bytes_to_bytes::crc32c::create_codec_crc32c(metadata);
-                }
-                #[cfg(feature = "gdeflate")]
-                codec::GDEFLATE => {
-                    return bytes_to_bytes::gdeflate::create_codec_gdeflate(metadata);
-                }
-                #[cfg(feature = "gzip")]
-                codec::GZIP => {
-                    return bytes_to_bytes::gzip::create_codec_gzip(metadata);
-                }
-                #[cfg(feature = "zstd")]
-                codec::ZSTD => {
-                    return bytes_to_bytes::zstd::create_codec_zstd(metadata);
-                }
-                _ => {}
             }
         }
         Err(PluginUnsupportedError::new(metadata.name().to_string(), "codec".to_string()).into())
     }
+
+    /// Create a codec from V2 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the metadata is invalid or not associated with a registered codec plugin.
+    fn from_metadata_v2(metadata: &MetadataV2) -> Result<Self, PluginCreateError> {
+        let name = metadata.id();
+
+        // Check runtime registry first (higher priority)
+        {
+            let result = CODEC_RUNTIME_REGISTRY_V2.with_plugins(|plugins| {
+                for plugin in plugins {
+                    if plugin.match_name(name) {
+                        return Some(plugin.create(metadata));
+                    }
+                }
+                None
+            });
+            if let Some(result) = result {
+                return result;
+            }
+        }
+
+        // Fall back to compile-time registered plugins
+        for plugin in inventory::iter::<CodecPluginV2> {
+            if plugin.match_name(name) {
+                return plugin.create(metadata);
+            }
+        }
+        Err(PluginUnsupportedError::new(metadata.id().to_string(), "codec".to_string()).into())
+    }
+
+    /// Create the codec configuration.
+    #[must_use]
+    pub fn configuration(
+        &self,
+        version: ZarrVersion,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
+        match self {
+            Self::ArrayToArray(codec) => codec.configuration(version, options),
+            Self::ArrayToBytes(codec) => codec.configuration(version, options),
+            Self::BytesToBytes(codec) => codec.configuration(version, options),
+        }
+    }
+
+    /// Create the Zarr V3 codec configuration.
+    #[must_use]
+    pub fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersion::V3, options)
+    }
+
+    /// Create the Zarr V2 codec configuration.
+    #[must_use]
+    pub fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersion::V2, options)
+    }
+}
+
+impl ExtensionName for Codec {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
+        match self {
+            Self::ArrayToArray(codec) => codec.name(version),
+            Self::ArrayToBytes(codec) => codec.name(version),
+            Self::BytesToBytes(codec) => codec.name(version),
+        }
+    }
 }
 
 /// Codec traits.
-pub trait CodecTraits: MaybeSend + MaybeSync {
-    /// Unique identifier for the codec.
-    fn identifier(&self) -> &'static str;
+pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
+    /// Returns this codec as [`Any`].
+    fn as_any(&self) -> &dyn Any;
 
     /// Create the codec configuration.
     ///
     /// A hidden codec (e.g. a cache) will return [`None`], since it will not have any associated metadata.
-    fn configuration(&self, name: &str, options: &CodecMetadataOptions) -> Option<Configuration>;
+    fn configuration(
+        &self,
+        version: ZarrVersion,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration>;
+
+    /// Create the Zarr V3 codec configuration.
+    fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersion::V3, options)
+    }
+
+    /// Create the Zarr V2 codec configuration.
+    fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersion::V2, options)
+    }
 
     /// Returns the partial decoder capability of this codec.
     fn partial_decoder_capability(&self) -> PartialDecoderCapability;
@@ -1905,17 +1978,16 @@ pub enum CodecError {
     ArraySubsetError(#[from] ArraySubsetError),
 }
 
-fn format_unsupported_data_type(data_type: &DataType, codec: &str) -> String {
+fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> String {
+    let data_type_name = data_type
+        .name(zarrs_plugin::ZarrVersion::V3)
+        .unwrap_or_default();
     if data_type.is_optional() {
         format!(
-            "Unsupported data type {} for codec {codec}. Use the optional codec to handle optional data types.",
-            data_type.identifier()
+            "Unsupported data type {data_type_name} for codec {codec_name}. Use the optional codec to handle optional data types.",
         )
     } else {
-        format!(
-            "Unsupported data type {} for codec {codec}",
-            data_type.identifier()
-        )
+        format!("Unsupported data type {data_type_name} for codec {codec_name}",)
     }
 }
 
@@ -1946,44 +2018,43 @@ impl From<String> for CodecError {
 ///  - [`vlen`](array_to_bytes::vlen) for any other variable-length data type, and
 ///  - [`optional`](array_to_bytes::optional) wrapping the appropriate inner codec for optional data types.
 #[must_use]
-pub fn default_array_to_bytes_codec(data_type: &DataType) -> NamedArrayToBytesCodec {
+pub fn default_array_to_bytes_codec(data_type: &DataType) -> Arc<dyn ArrayToBytesCodecTraits> {
     // Special handling for optional types
     if let Some(opt) = data_type.as_optional() {
         // Create mask codec chain using PackBitsCodec
-        let mask_codec_chain = Arc::new(CodecChain::new_named(
+        let mask_codec_chain = Arc::new(CodecChain::new(
             vec![],
-            NamedCodec::new_default_name(Arc::new(PackBitsCodec::default())),
+            Arc::new(PackBitsCodec::default()),
             vec![],
         ));
 
         // For data codec chain, recursively handle nested data types
-        let data_codec_chain = Arc::new(CodecChain::new_named(
+        let data_codec_chain = Arc::new(CodecChain::new(
             vec![],
             default_array_to_bytes_codec(opt.data_type()), // Recursive call handles nested Optional types
             vec![],
         ));
 
-        return NamedArrayToBytesCodec::new_default_name(Arc::new(
-            array_to_bytes::optional::OptionalCodec::new(mask_codec_chain, data_codec_chain),
+        return Arc::new(array_to_bytes::optional::OptionalCodec::new(
+            mask_codec_chain,
+            data_codec_chain,
         ));
     }
 
     // Handle non-optional types based on size
     if data_type.is_fixed() {
-        NamedArrayToBytesCodec::new_default_name(Arc::<BytesCodec>::default())
+        Arc::<BytesCodec>::default()
     } else {
         // FIXME: Default to VlenCodec if ever stabilised
         // Variable-sized types
-        match data_type.identifier() {
-            StringDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
-                VlenUtf8Codec::IDENTIFIER.to_string(),
-                Arc::new(VlenV2Codec::new()),
-            ),
-            BytesDataType::IDENTIFIER => NamedArrayToBytesCodec::new(
-                VlenBytesCodec::IDENTIFIER.to_string(),
-                Arc::new(VlenV2Codec::new()),
-            ),
-            _ => NamedArrayToBytesCodec::new_default_name(Arc::new(VlenCodec::default())),
+        use std::any::TypeId;
+        let type_id = data_type.as_any().type_id();
+        if type_id == TypeId::of::<StringDataType>() {
+            Arc::new(VlenUtf8Codec::new())
+        } else if type_id == TypeId::of::<BytesDataType>() {
+            Arc::new(VlenBytesCodec::new())
+        } else {
+            Arc::new(VlenCodec::default())
         }
     }
 }

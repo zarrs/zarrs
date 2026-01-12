@@ -46,30 +46,28 @@ mod gdeflate_codec;
 use std::sync::Arc;
 
 pub use gdeflate_codec::GDeflateCodec;
-use zarrs_plugin::ExtensionIdentifier;
+use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::ArrayBytesRaw;
-use crate::array::codec::{Codec, CodecError, CodecPlugin, InvalidBytesLengthError};
-use crate::metadata::v3::MetadataV3;
+use crate::array::codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
 pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(GDeflateCodec::IDENTIFIER, GDeflateCodec::matches_name, GDeflateCodec::default_name, create_codec_gdeflate)
+    CodecPluginV3::new::<GDeflateCodec>(create_codec_gdeflate_v3)
 }
-zarrs_plugin::impl_extension_aliases!(GDeflateCodec, "gdeflate",
-    v3: "zarrs.gdeflate", []
-);
 
-pub(crate) fn create_codec_gdeflate(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+pub(crate) fn create_codec_gdeflate_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
     crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: GDeflateCodecConfiguration = metadata.to_configuration().map_err(|_| {
-        PluginMetadataInvalidError::new(GDeflateCodec::IDENTIFIER, "codec", metadata.to_string())
-    })?;
+    let configuration: GDeflateCodecConfiguration = metadata
+        .to_configuration()
+        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
     let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);
     Ok(Codec::BytesToBytes(codec))
 }
