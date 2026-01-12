@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::ZarrVersion;
 
 use crate::array::codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -55,7 +55,7 @@ impl CodecTraits for SqueezeCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = SqueezeCodecConfiguration::V0(SqueezeCodecConfigurationV0 {});

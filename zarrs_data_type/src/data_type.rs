@@ -8,7 +8,7 @@ use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
 use zarrs_plugin::{
-    ExtensionName, MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersions,
+    ExtensionName, MaybeSend, MaybeSync, PluginCreateError, PluginUnsupportedError, ZarrVersion,
 };
 
 use crate::{
@@ -27,7 +27,7 @@ impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
 }
 
 impl ExtensionName for DataType {
-    fn name(&self, version: ZarrVersions) -> Option<Cow<'static, str>> {
+    fn name(&self, version: ZarrVersion) -> Option<Cow<'static, str>> {
         self.0.name(version)
     }
 }
@@ -149,16 +149,16 @@ impl DataType {
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// The configuration of the data type.
-    fn configuration(&self, version: ZarrVersions) -> Configuration;
+    fn configuration(&self, version: ZarrVersion) -> Configuration;
 
     /// The Zarr V3 configuration of the data type.
     fn configuration_v3(&self) -> Configuration {
-        self.configuration(ZarrVersions::V3)
+        self.configuration(ZarrVersion::V3)
     }
 
     /// The Zarr V2 configuration of the data type.
     fn configuration_v2(&self) -> Configuration {
-        self.configuration(ZarrVersions::V2)
+        self.configuration(ZarrVersion::V2)
     }
 
     /// The size of the data type.
@@ -174,7 +174,7 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     fn fill_value(
         &self,
         fill_value_metadata: &FillValueMetadata,
-        version: ZarrVersions,
+        version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError>;
 
     /// Create a fill value from Zarr V2 metadata.
@@ -185,7 +185,7 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
         &self,
         fill_value_metadata: &FillValueMetadata,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        self.fill_value(fill_value_metadata, ZarrVersions::V2)
+        self.fill_value(fill_value_metadata, ZarrVersion::V2)
     }
 
     /// Create a fill value from Zarr V3 metadata.
@@ -196,7 +196,7 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
         &self,
         fill_value_metadata: &FillValueMetadata,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        self.fill_value(fill_value_metadata, ZarrVersions::V3)
+        self.fill_value(fill_value_metadata, ZarrVersion::V3)
     }
 
     /// Create fill value metadata.
@@ -214,7 +214,7 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// Custom data types may override this for more efficient comparison.
     fn eq(&self, other: &dyn DataTypeTraits) -> bool {
         self.as_any().type_id() == other.as_any().type_id()
-            && self.configuration(ZarrVersions::V3) == other.configuration(ZarrVersions::V3)
+            && self.configuration(ZarrVersion::V3) == other.configuration(ZarrVersion::V3)
     }
 
     /// Returns self as `Any` for downcasting.

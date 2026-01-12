@@ -17,7 +17,7 @@ use crate::array::{
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersions};
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]
@@ -117,7 +117,7 @@ impl CodecTraits for VlenCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = VlenCodecConfiguration::V0_1(VlenCodecConfigurationV0_1 {

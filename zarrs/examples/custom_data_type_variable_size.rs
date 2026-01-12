@@ -16,7 +16,7 @@ use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, Deref)]
 struct CustomDataTypeVariableSizeElement(Option<f32>);
@@ -111,14 +111,14 @@ fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateEr
 }
 
 impl DataTypeTraits for CustomDataTypeVariableSize {
-    fn configuration(&self, _version: ZarrVersions) -> Configuration {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
         fill_value_metadata: &FillValueMetadata,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
         if let Some(f) = fill_value_metadata.as_f32() {
             Ok(FillValue::new(f.to_ne_bytes().to_vec()))

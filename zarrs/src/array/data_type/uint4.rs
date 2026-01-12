@@ -11,7 +11,7 @@ register_data_type_plugin!(UInt4DataType);
 zarrs_plugin::impl_extension_aliases!(UInt4DataType, v3: "uint4");
 
 impl zarrs_data_type::DataTypeTraits for UInt4DataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -22,7 +22,7 @@ impl zarrs_data_type::DataTypeTraits for UInt4DataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersions,
+        _version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, DataTypeFillValueMetadataError> {
         let int = fill_value_metadata
             .as_u64()

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
 use crate::array::codec::{
@@ -80,7 +80,7 @@ impl CodecTraits for BytesCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = BytesCodecConfiguration::V1(BytesCodecConfigurationV1 {

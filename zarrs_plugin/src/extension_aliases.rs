@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
-use crate::{ZarrVersion, ZarrVersion2, ZarrVersion3};
+use crate::{ZarrVersion2, ZarrVersion3, ZarrVersionTraits};
 
 /// Per-extension runtime-configurable aliases.
 ///
@@ -36,7 +36,7 @@ impl ExtensionAliasesConfig {
 ///
 /// This trait is implemented for each Zarr version (`ZarrVersion2`, `ZarrVersion3`)
 /// to provide version-specific alias configuration.
-pub trait ExtensionAliases<V: ZarrVersion>: Sized {
+pub trait ExtensionAliases<V: ZarrVersionTraits>: Sized {
     /// Get a read lock on the aliases configuration for this version.
     fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig>;
 

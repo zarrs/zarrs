@@ -40,7 +40,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::Configuration;
 use zarrs_plugin::{
     ExtensionAliases, ExtensionName, MaybeSend, MaybeSync, Plugin2, PluginCreateError,
-    PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry, ZarrVersion3, ZarrVersions,
+    PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry, ZarrVersion, ZarrVersion3,
 };
 
 // Note: Chunk grids are V3-only, so the version parameter is not needed in match functions
@@ -69,7 +69,7 @@ impl<T: ChunkGridTraits + 'static> From<Arc<T>> for ChunkGrid {
 }
 
 impl ExtensionName for ChunkGrid {
-    fn name(&self, version: ZarrVersions) -> Option<std::borrow::Cow<'static, str>> {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
         self.0.name(version)
     }
 }

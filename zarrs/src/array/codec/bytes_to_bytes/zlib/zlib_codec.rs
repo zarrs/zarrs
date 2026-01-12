@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
-use zarrs_plugin::{PluginCreateError, ZarrVersions};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
 use crate::array::codec::{
@@ -49,7 +49,7 @@ impl CodecTraits for ZlibCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = ZlibCodecConfiguration::V1(ZlibCodecConfigurationV1 {

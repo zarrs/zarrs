@@ -23,7 +23,7 @@ use zarrs_plugin::{
 pub use crate::metadata::ChunkKeySeparator;
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
-use crate::plugin::{ExtensionName, Plugin, PluginCreateError, ZarrVersions};
+use crate::plugin::{ExtensionName, Plugin, PluginCreateError, ZarrVersion};
 use crate::storage::{MaybeSend, MaybeSync, StoreKey};
 
 /// A chunk key encoding.
@@ -84,7 +84,7 @@ pub fn unregister_chunk_key_encoding(handle: &ChunkKeyEncodingRuntimeRegistryHan
 }
 
 impl ExtensionName for ChunkKeyEncoding {
-    fn name(&self, version: ZarrVersions) -> Option<std::borrow::Cow<'static, str>> {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
         self.0.name(version)
     }
 }

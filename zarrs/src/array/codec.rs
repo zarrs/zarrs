@@ -98,7 +98,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
     ExtensionAliases, ExtensionName, PluginUnsupportedError, RuntimePlugin, RuntimeRegistry,
-    ZarrVersion2, ZarrVersion3, ZarrVersions,
+    ZarrVersion, ZarrVersion2, ZarrVersion3,
 };
 
 use super::array_bytes::RawBytesOffsetsCreateError;
@@ -386,7 +386,7 @@ impl Codec {
     #[must_use]
     pub fn configuration(
         &self,
-        version: ZarrVersions,
+        version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         match self {
@@ -399,18 +399,18 @@ impl Codec {
     /// Create the Zarr V3 codec configuration.
     #[must_use]
     pub fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
-        self.configuration(ZarrVersions::V3, options)
+        self.configuration(ZarrVersion::V3, options)
     }
 
     /// Create the Zarr V2 codec configuration.
     #[must_use]
     pub fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
-        self.configuration(ZarrVersions::V2, options)
+        self.configuration(ZarrVersion::V2, options)
     }
 }
 
 impl ExtensionName for Codec {
-    fn name(&self, version: ZarrVersions) -> Option<std::borrow::Cow<'static, str>> {
+    fn name(&self, version: ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
         match self {
             Self::ArrayToArray(codec) => codec.name(version),
             Self::ArrayToBytes(codec) => codec.name(version),
@@ -429,18 +429,18 @@ pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
     /// A hidden codec (e.g. a cache) will return [`None`], since it will not have any associated metadata.
     fn configuration(
         &self,
-        version: ZarrVersions,
+        version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration>;
 
     /// Create the Zarr V3 codec configuration.
     fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
-        self.configuration(ZarrVersions::V3, options)
+        self.configuration(ZarrVersion::V3, options)
     }
 
     /// Create the Zarr V2 codec configuration.
     fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
-        self.configuration(ZarrVersions::V2, options)
+        self.configuration(ZarrVersion::V2, options)
     }
 
     /// Returns the partial decoder capability of this codec.
@@ -1980,7 +1980,7 @@ pub enum CodecError {
 
 fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> String {
     let data_type_name = data_type
-        .name(zarrs_plugin::ZarrVersions::V3)
+        .name(zarrs_plugin::ZarrVersion::V3)
         .unwrap_or_default();
     if data_type.is_optional() {
         format!(

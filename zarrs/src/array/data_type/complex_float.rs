@@ -6,7 +6,7 @@ use super::macros::register_data_type_plugin;
 macro_rules! impl_complex_data_type {
     ($marker:ty, $size:tt, $component_type:tt) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
-            fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+            fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
 
@@ -17,7 +17,7 @@ macro_rules! impl_complex_data_type {
             fn fill_value(
                 &self,
                 fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-                _version: zarrs_plugin::ZarrVersions,
+                _version: zarrs_plugin::ZarrVersion,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
                 if let [re, im] = fill_value_metadata.as_array().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)? {
                     impl_complex_data_type!(@parse_components self, re, im, $component_type)

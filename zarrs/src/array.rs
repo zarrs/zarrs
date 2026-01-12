@@ -71,7 +71,7 @@ pub use chunk_cache::{
     ChunkCacheTypePartialDecoder,
 };
 pub use data_type::{DataType, DataTypeExt, FillValue};
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::ZarrVersion;
 
 pub use self::array_builder::{
     ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
@@ -878,7 +878,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 AM::V3(metadata) => {
                     // Codecs
                     for codec in &mut metadata.codecs {
-                        let name = codec_default_name(codec, ZarrVersions::V3).into_owned();
+                        let name = codec_default_name(codec, ZarrVersion::V3).into_owned();
                         codec.set_name(name);
                     }
                     // Data type
@@ -893,7 +893,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                         let name = chunk_grid_default_name(
                             &metadata.chunk_grid,
                             &array_shape,
-                            ZarrVersions::V3,
+                            ZarrVersion::V3,
                         )
                         .into_owned();
                         metadata.chunk_grid.set_name(name);
@@ -902,7 +902,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     {
                         let name = chunk_key_encoding_default_name(
                             &metadata.chunk_key_encoding,
-                            ZarrVersions::V3,
+                            ZarrVersion::V3,
                         )
                         .into_owned();
                         metadata.chunk_key_encoding.set_name(name);
@@ -912,7 +912,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                         let name = storage_transformer_default_name(
                             transformer,
                             &self.path,
-                            ZarrVersions::V3,
+                            ZarrVersion::V3,
                         )
                         .into_owned();
                         transformer.set_name(name);
@@ -927,7 +927,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                             )
                             .unwrap_or_else(|_| MetadataV3::new(filter.id()));
                             let name =
-                                codec_default_name(&filter_metadata, ZarrVersions::V2).into_owned();
+                                codec_default_name(&filter_metadata, ZarrVersion::V2).into_owned();
                             filter.set_id(name);
                         }
                     }
@@ -938,7 +938,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                         )
                         .unwrap_or_else(|_| MetadataV3::new(compressor.id()));
                         let name =
-                            codec_default_name(&compressor_metadata, ZarrVersions::V2).into_owned();
+                            codec_default_name(&compressor_metadata, ZarrVersion::V2).into_owned();
                         compressor.set_id(name);
                     }
                     match &mut metadata.dtype {
@@ -1172,11 +1172,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
 ///
 /// Returns the default name if the codec can be created, otherwise returns the input name.
 #[must_use]
-fn codec_default_name(
-    metadata: &MetadataV3,
-    version: impl Into<ZarrVersions>,
-) -> Cow<'static, str> {
-    let version: ZarrVersions = version.into();
+fn codec_default_name(metadata: &MetadataV3, version: impl Into<ZarrVersion>) -> Cow<'static, str> {
+    let version: ZarrVersion = version.into();
     if let Ok(codec) = codec::Codec::from_metadata(metadata)
         && let Some(name) = codec.name(version)
     {
@@ -1192,7 +1189,7 @@ fn codec_default_name(
 fn chunk_grid_default_name(
     metadata: &MetadataV3,
     array_shape: &ArrayShape,
-    version: impl Into<ZarrVersions>,
+    version: impl Into<ZarrVersion>,
 ) -> Cow<'static, str> {
     let version = version.into();
     if let Ok(chunk_grid) = chunk_grid::ChunkGrid::from_metadata(metadata, array_shape)
@@ -1209,7 +1206,7 @@ fn chunk_grid_default_name(
 #[must_use]
 fn chunk_key_encoding_default_name(
     metadata: &MetadataV3,
-    version: impl Into<ZarrVersions>,
+    version: impl Into<ZarrVersion>,
 ) -> Cow<'static, str> {
     let version = version.into();
     if let Ok(chunk_key_encoding) = chunk_key_encoding::ChunkKeyEncoding::from_metadata(metadata)
@@ -1227,7 +1224,7 @@ fn chunk_key_encoding_default_name(
 fn storage_transformer_default_name(
     metadata: &MetadataV3,
     path: &crate::node::NodePath,
-    version: impl Into<ZarrVersions>,
+    version: impl Into<ZarrVersion>,
 ) -> Cow<'static, str> {
     let version = version.into();
     if let Ok(transformer) = storage_transformer::try_create_storage_transformer(metadata, path)

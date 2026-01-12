@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, bitround_codec_partial, round_bytes,
@@ -56,7 +56,7 @@ impl CodecTraits for BitroundCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         if options.codec_store_metadata_if_encode_only() {

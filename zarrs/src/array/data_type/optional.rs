@@ -5,7 +5,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, ConfigurationSerialize};
 use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
 use zarrs_plugin::{
-    ExtensionName, PluginConfigurationInvalidError, PluginCreateError, ZarrVersions,
+    ExtensionName, PluginConfigurationInvalidError, PluginCreateError, ZarrVersion,
 };
 
 /// The `optional` data type.
@@ -91,7 +91,7 @@ impl OptionalDataType {
 
     /// Returns the configuration for this optional data type.
     #[must_use]
-    pub fn configuration(&self, version: ZarrVersions) -> Configuration {
+    pub fn configuration(&self, version: ZarrVersion) -> Configuration {
         let inner_name = self
             .0
             .name(version)
@@ -151,7 +151,7 @@ impl OptionalDataType {
     pub fn fill_value_from_metadata(
         &self,
         fill_value: &zarrs_metadata::FillValueMetadata,
-        version: zarrs_plugin::ZarrVersions,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
         self.0.fill_value(fill_value, version)
     }
@@ -159,7 +159,7 @@ impl OptionalDataType {
 
 // DataTypeTraits implementation for OptionalDataType
 impl zarrs_data_type::DataTypeTraits for OptionalDataType {
-    fn configuration(&self, version: ZarrVersions) -> Configuration {
+    fn configuration(&self, version: ZarrVersion) -> Configuration {
         // Use the existing configuration() method
         OptionalDataType::configuration(self, version)
     }
@@ -173,7 +173,7 @@ impl zarrs_data_type::DataTypeTraits for OptionalDataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        version: zarrs_plugin::ZarrVersions,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         if fill_value_metadata.is_null() {
             // Null fill value for optional type: single 0x00 byte

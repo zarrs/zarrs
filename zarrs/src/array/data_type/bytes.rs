@@ -14,7 +14,7 @@ zarrs_plugin::impl_extension_aliases!(BytesDataType,
 );
 
 impl zarrs_data_type::DataTypeTraits for BytesDataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -25,7 +25,7 @@ impl zarrs_data_type::DataTypeTraits for BytesDataType {
     fn fill_value(
         &self,
         fill_value_metadata: &FillValueMetadata,
-        version: zarrs_plugin::ZarrVersions,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         use base64::Engine;
         use base64::prelude::BASE64_STANDARD;
@@ -45,7 +45,7 @@ impl zarrs_data_type::DataTypeTraits for BytesDataType {
                 })
                 .collect();
             Ok(zarrs_data_type::FillValue::from(bytes?))
-        } else if matches!(version, zarrs_plugin::ZarrVersions::V2) && fill_value_metadata.is_null()
+        } else if matches!(version, zarrs_plugin::ZarrVersion::V2) && fill_value_metadata.is_null()
         {
             // V2: null -> empty bytes
             Ok(zarrs_data_type::FillValue::from(Vec::<u8>::new()))

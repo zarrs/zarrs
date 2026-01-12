@@ -52,7 +52,7 @@ pub use regex::Regex;
 pub use paste;
 
 mod zarr_version;
-pub use zarr_version::{ZarrVersion, ZarrVersion2, ZarrVersion3, ZarrVersions};
+pub use zarr_version::{ZarrVersion, ZarrVersion2, ZarrVersion3, ZarrVersionTraits};
 
 /// An unsupported plugin error
 #[derive(Clone, Debug, Error)]

@@ -8,7 +8,7 @@ macro_rules! impl_complex_subfloat_data_type {
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(
                 &self,
-                _version: zarrs_plugin::ZarrVersions,
+                _version: zarrs_plugin::ZarrVersion,
             ) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
@@ -20,7 +20,7 @@ macro_rules! impl_complex_subfloat_data_type {
             fn fill_value(
                 &self,
                 fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-                _version: zarrs_plugin::ZarrVersions,
+                _version: zarrs_plugin::ZarrVersion,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError>
             {
                 // Complex subfloats use array of two hex strings like ["0x00", "0x00"]

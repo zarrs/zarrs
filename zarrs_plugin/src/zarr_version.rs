@@ -6,7 +6,7 @@
 use std::fmt::Debug;
 
 /// Marker trait for Zarr versions.
-pub trait ZarrVersion: Debug + Default {}
+pub trait ZarrVersionTraits: Debug + Default {}
 
 /// Zarr Version 3.
 #[derive(Debug, Copy, Clone, Default)]
@@ -16,26 +16,26 @@ pub struct ZarrVersion3;
 #[derive(Debug, Copy, Clone, Default)]
 pub struct ZarrVersion2;
 
-impl ZarrVersion for ZarrVersion3 {}
-impl ZarrVersion for ZarrVersion2 {}
+impl ZarrVersionTraits for ZarrVersion3 {}
+impl ZarrVersionTraits for ZarrVersion2 {}
 
 /// Zarr versions.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum ZarrVersions {
+pub enum ZarrVersion {
     /// Zarr Version 2.
     V2,
     /// Zarr Version 3.
     V3,
 }
 
-impl From<ZarrVersion2> for ZarrVersions {
+impl From<ZarrVersion2> for ZarrVersion {
     fn from(_: ZarrVersion2) -> Self {
-        ZarrVersions::V2
+        ZarrVersion::V2
     }
 }
 
-impl From<ZarrVersion3> for ZarrVersions {
+impl From<ZarrVersion3> for ZarrVersion {
     fn from(_: ZarrVersion3) -> Self {
-        ZarrVersions::V3
+        ZarrVersion::V3
     }
 }

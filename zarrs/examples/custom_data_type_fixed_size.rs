@@ -30,7 +30,7 @@ use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersions};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -175,14 +175,14 @@ fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateEr
 
 /// Implement the core data type extension methods
 impl DataTypeTraits for CustomDataTypeFixedSize {
-    fn configuration(&self, _version: ZarrVersions) -> Configuration {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
         fill_value_metadata: &FillValueMetadata,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
         let element_metadata: CustomDataTypeFixedSizeMetadata = fill_value_metadata
             .as_custom()

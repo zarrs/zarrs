@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_data_type::FillValue;
-use zarrs_plugin::{PluginCreateError, ZarrVersions};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::array_bytes::ArrayBytesVariableLength;
@@ -277,7 +277,7 @@ impl CodecTraits for OptionalCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = OptionalCodecConfiguration::V1(OptionalCodecConfigurationV1 {

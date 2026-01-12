@@ -3,7 +3,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionName, ZarrVersions};
+use zarrs_plugin::{ExtensionName, ZarrVersion};
 
 use crate::array::codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
@@ -244,7 +244,7 @@ impl CodecChain {
 }
 
 impl zarrs_plugin::ExtensionName for CodecChain {
-    fn name(&self, _version: zarrs_plugin::ZarrVersions) -> Option<std::borrow::Cow<'static, str>> {
+    fn name(&self, _version: zarrs_plugin::ZarrVersion) -> Option<std::borrow::Cow<'static, str>> {
         // CodecChain is an internal type and does not have a serialization name
         None
     }
@@ -260,7 +260,7 @@ impl CodecTraits for CodecChain {
     /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None

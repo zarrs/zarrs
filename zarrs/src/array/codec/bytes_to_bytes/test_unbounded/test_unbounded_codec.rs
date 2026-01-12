@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
 #[cfg(feature = "async")]
@@ -37,7 +37,7 @@ impl CodecTraits for TestUnboundedCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None

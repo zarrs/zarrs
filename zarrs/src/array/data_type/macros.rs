@@ -10,7 +10,7 @@
 macro_rules! impl_data_type_extension_numeric {
     ($marker:ty, $size:tt, $rust_type:tt) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
-            fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+            fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
 
@@ -21,10 +21,10 @@ macro_rules! impl_data_type_extension_numeric {
             fn fill_value(
                 &self,
                 fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-                version: zarrs_plugin::ZarrVersions,
+                version: zarrs_plugin::ZarrVersion,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
                 // V2: null fill value means default (0 for numeric types)
-                if matches!(version, zarrs_plugin::ZarrVersions::V2)
+                if matches!(version, zarrs_plugin::ZarrVersion::V2)
                     && fill_value_metadata.is_null()
                 {
                     return impl_data_type_extension_numeric!(@fill_value_default $rust_type);

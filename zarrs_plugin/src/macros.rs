@@ -235,9 +235,9 @@ macro_rules! impl_extension_aliases {
     (@name_static $type:ident) => {
         $crate::paste::paste! {
             impl $crate::ExtensionNameStatic for $type {
-                const DEFAULT_NAME_FN: fn($crate::ZarrVersions) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
+                const DEFAULT_NAME_FN: fn($crate::ZarrVersion) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
                     match version {
-                        $crate::ZarrVersions::V2 => {
+                        $crate::ZarrVersion::V2 => {
                             let aliases = [<$type:upper _ALIASES_V2>].read().unwrap();
                             if aliases.default_name.is_empty() {
                                 ::core::option::Option::None
@@ -245,7 +245,7 @@ macro_rules! impl_extension_aliases {
                                 ::core::option::Option::Some(aliases.default_name.clone())
                             }
                         }
-                        $crate::ZarrVersions::V3 => {
+                        $crate::ZarrVersion::V3 => {
                             let aliases = [<$type:upper _ALIASES_V3>].read().unwrap();
                             if aliases.default_name.is_empty() {
                                 ::core::option::Option::None

@@ -16,10 +16,10 @@ mod impl_default {
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersions;
+    use zarrs_plugin::ZarrVersion;
 
     impl DataTypeTraits for ComplexFloat8E4M3DataType {
-        fn configuration(&self, _version: ZarrVersions) -> Configuration {
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
             Configuration::default()
         }
 
@@ -30,7 +30,7 @@ mod impl_default {
         fn fill_value(
             &self,
             fill_value_metadata: &FillValueMetadata,
-            _version: ZarrVersions,
+            _version: ZarrVersion,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
             // Complex subfloats use array of two hex strings like ["0x00", "0x00"]
             if let Some([re, im]) = fill_value_metadata.as_array() {
@@ -81,10 +81,10 @@ mod impl_float8 {
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersions;
+    use zarrs_plugin::ZarrVersion;
 
     impl DataTypeTraits for ComplexFloat8E4M3DataType {
-        fn configuration(&self, _version: ZarrVersions) -> Configuration {
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
             Configuration::default()
         }
 
@@ -95,7 +95,7 @@ mod impl_float8 {
         fn fill_value(
             &self,
             fill_value_metadata: &FillValueMetadata,
-            _version: ZarrVersions,
+            _version: ZarrVersion,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
             // Complex fill values are arrays of two elements [re, im]
             if let Some([re, im]) = fill_value_metadata.as_array() {

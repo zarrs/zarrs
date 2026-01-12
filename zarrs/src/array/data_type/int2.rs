@@ -9,7 +9,7 @@ register_data_type_plugin!(Int2DataType);
 zarrs_plugin::impl_extension_aliases!(Int2DataType, v3: "int2");
 
 impl zarrs_data_type::DataTypeTraits for Int2DataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -20,7 +20,7 @@ impl zarrs_data_type::DataTypeTraits for Int2DataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersions,
+        _version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         let int = fill_value_metadata
             .as_i64()

@@ -14,7 +14,7 @@ zarrs_plugin::impl_extension_aliases!(BoolDataType,
 );
 
 impl zarrs_data_type::DataTypeTraits for BoolDataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -25,12 +25,12 @@ impl zarrs_data_type::DataTypeTraits for BoolDataType {
     fn fill_value(
         &self,
         fill_value_metadata: &FillValueMetadata,
-        version: zarrs_plugin::ZarrVersions,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         // V2 compatibility: 0/1 integers are accepted as false/true, null -> false
         if let Some(b) = fill_value_metadata.as_bool() {
             Ok(zarrs_data_type::FillValue::from(b))
-        } else if matches!(version, zarrs_plugin::ZarrVersions::V2) {
+        } else if matches!(version, zarrs_plugin::ZarrVersion::V2) {
             // V2: accept 0/1 as false/true, null -> false
             if fill_value_metadata.is_null() {
                 Ok(zarrs_data_type::FillValue::from(false))

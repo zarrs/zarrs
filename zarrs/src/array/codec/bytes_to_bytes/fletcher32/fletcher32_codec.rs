@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use num::Integer;
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1};
 #[cfg(feature = "async")]
@@ -43,7 +43,7 @@ impl CodecTraits for Fletcher32Codec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = Fletcher32CodecConfiguration::V1(Fletcher32CodecConfigurationV1 {});

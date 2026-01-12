@@ -53,7 +53,7 @@ impl NumpyDateTime64DataType {
 }
 
 impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::from(NumpyDateTime64DataTypeConfigurationV1 {
             unit: self.unit,
             scale_factor: self.scale_factor,
@@ -67,7 +67,7 @@ impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersions,
+        _version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         // Handle "NaT" (Not a Time) as i64::MIN
         if let Some("NaT") = fill_value_metadata.as_str() {

@@ -93,7 +93,7 @@ macro_rules! vlen_v2_codec {
 
             fn configuration(
                 &self,
-                version: zarrs_plugin::ZarrVersions,
+                version: zarrs_plugin::ZarrVersion,
                 options: &CodecMetadataOptions,
             ) -> Option<Configuration> {
                 self.inner.configuration(version, options)
@@ -240,9 +240,9 @@ macro_rules! vlen_v2_codec {
             }
 
             impl zarrs_plugin::ExtensionNameStatic for $struct {
-                const DEFAULT_NAME_FN: fn(zarrs_plugin::ZarrVersions) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
+                const DEFAULT_NAME_FN: fn(zarrs_plugin::ZarrVersion) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
                     match version {
-                        zarrs_plugin::ZarrVersions::V2 => {
+                        zarrs_plugin::ZarrVersion::V2 => {
                             let aliases = [<$struct:upper _ALIASES_V2>].read().unwrap();
                             if aliases.default_name.is_empty() {
                                 ::core::option::Option::None
@@ -250,7 +250,7 @@ macro_rules! vlen_v2_codec {
                                 ::core::option::Option::Some(aliases.default_name.clone())
                             }
                         }
-                        zarrs_plugin::ZarrVersions::V3 => {
+                        zarrs_plugin::ZarrVersion::V3 => {
                             let aliases = [<$struct:upper _ALIASES_V3>].read().unwrap();
                             if aliases.default_name.is_empty() {
                                 ::core::option::Option::None

@@ -33,7 +33,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersions};
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -99,7 +99,7 @@ impl CodecTraits for ShardingCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = ShardingCodecConfiguration::V1(ShardingCodecConfigurationV1 {

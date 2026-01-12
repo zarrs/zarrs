@@ -12,7 +12,7 @@ zarrs_plugin::impl_extension_aliases!(StringDataType,
 );
 
 impl zarrs_data_type::DataTypeTraits for StringDataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -23,11 +23,11 @@ impl zarrs_data_type::DataTypeTraits for StringDataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        version: zarrs_plugin::ZarrVersions,
+        version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         let s = if let Some(s) = fill_value_metadata.as_str() {
             s.to_string()
-        } else if matches!(version, zarrs_plugin::ZarrVersions::V2) {
+        } else if matches!(version, zarrs_plugin::ZarrVersion::V2) {
             // V2: null -> empty string, 0 -> empty string (zarr-python compatibility)
             if fill_value_metadata.is_null() || fill_value_metadata.as_u64() == Some(0) {
                 String::new()

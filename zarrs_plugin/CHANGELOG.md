@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `PluginConfigurationInvalidError` replacing `PluginMetadataInvalidError`
 
 ### Changed
+- **Breaking**: Rename `ZarrVersion` to `ZarrVersionTraits`
+- **Breaking**: Rename `ZarrVersions` to `ZarrVersion`
 - **Breaking**: Remove simple form  `impl_extension_aliases!`, explicitly use `v3:` and `v2:` prefixes
 - **Breaking** Revise `PluginCreateError::NameInvalid` enum
   - Add `NameInvalid` variant

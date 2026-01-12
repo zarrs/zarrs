@@ -3,13 +3,13 @@ use std::ffi::c_char;
 use std::sync::Arc;
 
 use blosc_src::{BLOSC_MAX_OVERHEAD, blosc_get_complib_info};
-use zarrs_plugin::ZarrVersions;
+use zarrs_plugin::ZarrVersion;
 
 use super::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscError, BloscShuffleMode,
-    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes,
-    blosc_partial_decoder, blosc_validate, compressor_as_cstr,
+    BloscShuffleModeNumcodecs, blosc_compress_bytes, blosc_decompress_bytes, blosc_partial_decoder,
+    blosc_validate, compressor_as_cstr,
 };
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -146,7 +146,7 @@ impl CodecTraits for BloscCodec {
 
     fn configuration(
         &self,
-        version: ZarrVersions,
+        version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let shuffle = self.shuffle_mode.unwrap_or_else(|| {
@@ -157,7 +157,7 @@ impl CodecTraits for BloscCodec {
             }
         });
         match version {
-            ZarrVersions::V2 => {
+            ZarrVersion::V2 => {
                 let shuffle = match shuffle {
                     BloscShuffleMode::NoShuffle => BloscShuffleModeNumcodecs::NoShuffle,
                     BloscShuffleMode::Shuffle => BloscShuffleModeNumcodecs::Shuffle,
@@ -172,7 +172,7 @@ impl CodecTraits for BloscCodec {
                     });
                 Some(configuration.into())
             }
-            ZarrVersions::V3 => {
+            ZarrVersion::V3 => {
                 let configuration = BloscCodecConfiguration::V1(BloscCodecConfigurationV1 {
                     cname: self.cname,
                     clevel: self.clevel,

@@ -118,7 +118,7 @@ mod tests {
 
     use zarrs_metadata::v3::MetadataV3;
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersions;
+    use zarrs_plugin::ZarrVersion;
 
     use super::*;
     use crate::{
@@ -143,14 +143,14 @@ mod tests {
             DataTypeSize::Fixed(0)
         }
 
-        fn configuration(&self, _version: ZarrVersions) -> Configuration {
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
             Configuration::default()
         }
 
         fn fill_value(
             &self,
             _fill_value_metadata: &FillValueMetadata,
-            _version: ZarrVersions,
+            _version: ZarrVersion,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
             Ok(FillValue::new(vec![]))
         }

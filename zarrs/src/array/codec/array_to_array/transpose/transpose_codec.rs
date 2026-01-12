@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersions};
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
@@ -74,7 +74,7 @@ impl CodecTraits for TransposeCodec {
 
     fn configuration(
         &self,
-        _version: ZarrVersions,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = TransposeCodecConfiguration::V1(TransposeCodecConfigurationV1 {

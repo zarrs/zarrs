@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
-    ExtensionAliases, PluginConfigurationInvalidError, PluginCreateError, Regex, ZarrVersions,
+    ExtensionAliases, PluginConfigurationInvalidError, PluginCreateError, Regex, ZarrVersion,
 };
 
 /// The `r*` data type.
@@ -117,13 +117,13 @@ impl ExtensionAliases<ZarrVersion2> for RawBitsDataType {
 
 // Instance-specific ExtensionName implementation
 impl zarrs_plugin::ExtensionName for RawBitsDataType {
-    fn name(&self, version: ZarrVersions) -> Option<Cow<'static, str>> {
+    fn name(&self, version: ZarrVersion) -> Option<Cow<'static, str>> {
         Some(match version {
-            ZarrVersions::V3 => {
+            ZarrVersion::V3 => {
                 // Return "r{bits}" where bits = size_bytes * 8
                 Cow::Owned(format!("r{}", self.size_bytes * 8))
             }
-            ZarrVersions::V2 => {
+            ZarrVersion::V2 => {
                 // Return "|V{bytes}"
                 Cow::Owned(format!("|V{}", self.size_bytes))
             }
@@ -149,7 +149,7 @@ impl RawBitsDataType {
 }
 
 impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 
@@ -160,7 +160,7 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     fn fill_value(
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersions,
+        _version: zarrs_plugin::ZarrVersion,
     ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
         use base64::Engine;
         use base64::prelude::BASE64_STANDARD;

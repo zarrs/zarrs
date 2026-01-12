@@ -16,10 +16,10 @@ mod impl_default {
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersions;
+    use zarrs_plugin::ZarrVersion;
 
     impl DataTypeTraits for Float8E5M2DataType {
-        fn configuration(&self, _version: ZarrVersions) -> Configuration {
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
             Configuration::default()
         }
 
@@ -30,7 +30,7 @@ mod impl_default {
         fn fill_value(
             &self,
             fill_value_metadata: &FillValueMetadata,
-            _version: ZarrVersions,
+            _version: ZarrVersion,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
             // Subfloats use hex string representation like "0x00"
             if let Some(s) = fill_value_metadata.as_str() {
@@ -75,10 +75,10 @@ mod impl_float8 {
         DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypeTraits, FillValue,
     };
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersions;
+    use zarrs_plugin::ZarrVersion;
 
     impl DataTypeTraits for Float8E5M2DataType {
-        fn configuration(&self, _version: ZarrVersions) -> Configuration {
+        fn configuration(&self, _version: ZarrVersion) -> Configuration {
             Configuration::default()
         }
 
@@ -89,7 +89,7 @@ mod impl_float8 {
         fn fill_value(
             &self,
             fill_value_metadata: &FillValueMetadata,
-            _version: ZarrVersions,
+            _version: ZarrVersion,
         ) -> Result<FillValue, DataTypeFillValueMetadataError> {
             // Handle hex string like "0xaa"
             if let Some(s) = fill_value_metadata.as_str() {
