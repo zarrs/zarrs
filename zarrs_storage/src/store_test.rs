@@ -357,6 +357,7 @@ pub async fn async_store_list<T: AsyncListableStorageTraits>(
     Ok(())
 }
 
+#[cfg(feature = "async")]
 /// Check that size aggregation methods return the expected number of bytes after [`store_write`].
 ///
 /// This test is not applicable to stores that perform compression or transformation of values.
