@@ -25,7 +25,7 @@ enum ArrayBuilderDataTypeImpl {
 impl PartialEq for ArrayBuilderDataTypeImpl {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::DataType(a), Self::DataType(b)) => a.eq(b.as_ref()),
+            (Self::DataType(a), Self::DataType(b)) => a == b,
             (Self::Metadata(a), Self::Metadata(b)) => a == b,
             (Self::MetadataString(a), Self::MetadataString(b)) => a == b,
             _ => false,

@@ -10,7 +10,7 @@ use zarrs::storage::store::MemoryStore;
 
 #[rustfmt::skip]
 fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
-    assert!(array.data_type().eq(data_type::uint8().as_ref()));
+    assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);

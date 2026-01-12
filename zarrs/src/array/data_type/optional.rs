@@ -20,9 +20,7 @@ pub struct OptionalDataType(DataType);
 
 impl PartialEq for OptionalDataType {
     fn eq(&self, other: &Self) -> bool {
-        // DataType derefs to Arc<dyn DataTypeTraits>, which has as_ref() -> &dyn DataTypeTraits
-        // Use the eq method from DataTypeTraits through the deref chain
-        self.0.eq(other.0.as_ref())
+        self.0 == other.0
     }
 }
 

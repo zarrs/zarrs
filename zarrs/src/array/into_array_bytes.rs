@@ -74,7 +74,7 @@ impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static> for ndarray::Arr
 impl IntoArrayBytes<'static> for super::Tensor {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'static>, ArrayError> {
         let (bytes, tensor_data_type, _) = self.into_parts();
-        if !tensor_data_type.eq(data_type.as_ref()) {
+        if tensor_data_type != *data_type {
             return Err(ArrayError::IncompatibleElementType);
         }
         Ok(ArrayBytes::from(bytes))
@@ -84,7 +84,7 @@ impl IntoArrayBytes<'static> for super::Tensor {
 impl<'a> IntoArrayBytes<'a> for &'a super::Tensor {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ArrayError> {
         let (bytes, tensor_data_type, _) = self.as_parts();
-        if !tensor_data_type.eq(data_type.as_ref()) {
+        if tensor_data_type != data_type {
             return Err(ArrayError::IncompatibleElementType);
         }
         Ok(ArrayBytes::from(bytes))

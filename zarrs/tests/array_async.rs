@@ -33,7 +33,7 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     }
     let array = builder.build(store, array_path).unwrap();
 
-    assert!(array.data_type().eq(data_type::uint8().as_ref()));
+    assert_eq!(*array.data_type(), data_type::uint8());
     assert_eq!(array.fill_value().as_ne_bytes(), &[0u8]);
     assert_eq!(array.shape(), &[4, 4]);
     assert_eq!(array.chunk_shape(&[0, 0]).unwrap(), [NonZeroU64::new(2).unwrap(); 2]);

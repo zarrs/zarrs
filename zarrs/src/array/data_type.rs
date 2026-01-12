@@ -1749,7 +1749,7 @@ mod tests {
             json,
             serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
         );
-        assert!(data_type.eq(raw_bits(2).as_ref()));
+        assert_eq!(data_type, raw_bits(2));
 
         let metadata = serde_json::from_str::<FillValueMetadata>("[123]").unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), "[123]");
@@ -1988,7 +1988,7 @@ mod tests {
         // Test metadata roundtrip
         let expected_metadata = data_type_metadata(&data_type);
         let roundtrip_data_type = DataType::from_metadata(&expected_metadata).unwrap();
-        assert!(data_type.eq(roundtrip_data_type.as_ref()));
+        assert_eq!(data_type, roundtrip_data_type);
     }
 
     #[test]
@@ -2017,27 +2017,27 @@ mod tests {
         // Single level optional
         let opt_u8 = uint8().to_optional();
         let expected = optional(uint8());
-        assert!(opt_u8.eq(expected.as_ref()));
+        assert_eq!(opt_u8, expected);
         assert!(opt_u8.is_optional());
 
         // Nested optional (2 levels)
         let nested_2 = uint8().to_optional().to_optional();
         let expected_2 = optional(optional(uint8()));
-        assert!(nested_2.eq(expected_2.as_ref()));
+        assert_eq!(nested_2, expected_2);
 
         // Nested optional (3 levels)
         let nested_3 = uint16().to_optional().to_optional().to_optional();
         let expected_3 = optional(optional(optional(uint16())));
-        assert!(nested_3.eq(expected_3.as_ref()));
+        assert_eq!(nested_3, expected_3);
 
         // Works with various inner types
         let opt_string = string().to_optional();
         let expected_string = optional(string());
-        assert!(opt_string.eq(expected_string.as_ref()));
+        assert_eq!(opt_string, expected_string);
 
         let opt_f64 = float64().to_optional();
         let expected_f64 = optional(float64());
-        assert!(opt_f64.eq(expected_f64.as_ref()));
+        assert_eq!(opt_f64, expected_f64);
     }
 
     #[test]

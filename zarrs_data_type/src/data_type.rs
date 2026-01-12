@@ -20,6 +20,14 @@ use crate::{
 #[derive(Debug, Clone, Deref, From)]
 pub struct DataType(Arc<dyn DataTypeTraits>);
 
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(other.0.as_ref())
+    }
+}
+
+impl Eq for DataType {}
+
 impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
     fn from(data_type: Arc<T>) -> Self {
         Self(data_type)

@@ -420,7 +420,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.eq(data_type.as_ref()) {
+        if self.dtype != *data_type {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
                 FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
@@ -444,7 +444,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        if !self.dtype.eq(data_type.as_ref()) {
+        if self.dtype != *data_type {
             return Err(CodecError::UnsupportedDataType(
                 data_type.clone(),
                 FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
