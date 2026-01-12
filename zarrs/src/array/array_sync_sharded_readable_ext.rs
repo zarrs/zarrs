@@ -130,7 +130,7 @@ impl ArrayShardedReadableExtCache {
             let sharding_codec_configuration = array
                 .codecs()
                 .array_to_bytes_codec()
-                .configuration(array.metadata_options.codec_metadata_options())
+                .configuration_v3(array.metadata_options.codec_metadata_options())
                 .expect("valid sharding metadata");
             let sharding_codec_configuration =
                 ShardingCodecConfiguration::try_from_configuration(sharding_codec_configuration)

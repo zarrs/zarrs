@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::codec::{
@@ -47,7 +47,11 @@ impl CodecTraits for ShuffleCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ShuffleCodecConfiguration::V1(ShuffleCodecConfigurationV1 {
             elementsize: self.elementsize,
         });

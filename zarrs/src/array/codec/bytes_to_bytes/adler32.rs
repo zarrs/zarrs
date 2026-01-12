@@ -97,7 +97,7 @@ mod tests {
         let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }

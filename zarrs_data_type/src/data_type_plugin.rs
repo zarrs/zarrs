@@ -143,7 +143,7 @@ mod tests {
             DataTypeSize::Fixed(0)
         }
 
-        fn configuration(&self) -> Configuration {
+        fn configuration(&self, _version: ZarrVersions) -> Configuration {
             Configuration::default()
         }
 
@@ -176,7 +176,7 @@ mod tests {
                 let data_type = plugin.create(&metadata).unwrap();
                 assert!(data_type.as_any().is::<TestVoidDataType>());
                 assert_eq!(data_type.size(), DataTypeSize::Fixed(0));
-                assert!(data_type.configuration().is_empty());
+                assert!(data_type.configuration_v3().is_empty());
                 assert!(data_type.fill_value_v3(&FillValueMetadata::Null).is_ok());
                 assert_eq!(
                     data_type

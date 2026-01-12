@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersions};
 
 use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
@@ -95,7 +95,11 @@ impl CodecTraits for PcodecCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let mode_spec = mode_spec_pco_to_config(&self.chunk_config.mode_spec);
         let (delta_spec, delta_encoding_order) = match self.chunk_config.delta_spec {
             DeltaSpec::Auto => (PcodecDeltaSpecConfiguration::Auto, None),

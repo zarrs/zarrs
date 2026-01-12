@@ -49,7 +49,7 @@ fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateEr
 
 /// Implement the core data type extension methods
 impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
-    fn configuration(&self) -> Configuration {
+    fn configuration(&self, _version: ZarrVersions) -> Configuration {
         Configuration::default()
     }
 

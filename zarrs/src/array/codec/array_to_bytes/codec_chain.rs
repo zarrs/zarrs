@@ -3,7 +3,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_plugin::ExtensionName;
+use zarrs_plugin::{ExtensionName, ZarrVersions};
 
 use crate::array::codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
@@ -161,7 +161,7 @@ impl CodecChain {
         let mut metadatas =
             Vec::with_capacity(self.array_to_array.len() + 1 + self.bytes_to_bytes.len());
         for codec in &self.array_to_array {
-            if let Some(configuration) = codec.configuration(options) {
+            if let Some(configuration) = codec.configuration_v3(options) {
                 let name = codec
                     .name_v3()
                     .expect("codec must have a V3 name")
@@ -171,7 +171,7 @@ impl CodecChain {
         }
         {
             let codec = &self.array_to_bytes;
-            if let Some(configuration) = codec.configuration(options) {
+            if let Some(configuration) = codec.configuration_v3(options) {
                 let name = codec
                     .name_v3()
                     .expect("codec must have a V3 name")
@@ -180,7 +180,7 @@ impl CodecChain {
             }
         }
         for codec in &self.bytes_to_bytes {
-            if let Some(configuration) = codec.configuration(options) {
+            if let Some(configuration) = codec.configuration_v3(options) {
                 let name = codec
                     .name_v3()
                     .expect("codec must have a V3 name")
@@ -258,7 +258,11 @@ impl CodecTraits for CodecChain {
     /// Returns [`None`] since a codec chain does not have standard codec metadata.
     ///
     /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         None
     }
 

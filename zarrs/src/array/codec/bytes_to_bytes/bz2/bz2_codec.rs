@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
 use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
 use crate::array::codec::{
@@ -47,7 +47,11 @@ impl CodecTraits for Bz2Codec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = Bz2CodecConfiguration::V1(Bz2CodecConfigurationV1 {
             level: Bz2CompressionLevel::try_from(self.compression.level())
                 .expect("checked on init"),

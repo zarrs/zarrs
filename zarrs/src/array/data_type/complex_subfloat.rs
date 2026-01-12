@@ -6,7 +6,10 @@ use super::macros::register_data_type_plugin;
 macro_rules! impl_complex_subfloat_data_type {
     ($marker:ty) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
-            fn configuration(&self) -> zarrs_metadata::Configuration {
+            fn configuration(
+                &self,
+                _version: zarrs_plugin::ZarrVersions,
+            ) -> zarrs_metadata::Configuration {
                 zarrs_metadata::Configuration::default()
             }
 

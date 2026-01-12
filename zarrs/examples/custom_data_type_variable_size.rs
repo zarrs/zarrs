@@ -111,7 +111,7 @@ fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateEr
 }
 
 impl DataTypeTraits for CustomDataTypeVariableSize {
-    fn configuration(&self) -> Configuration {
+    fn configuration(&self, _version: ZarrVersions) -> Configuration {
         Configuration::default()
     }
 

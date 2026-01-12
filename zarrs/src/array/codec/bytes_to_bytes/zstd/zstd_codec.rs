@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersions};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
@@ -57,7 +57,11 @@ impl CodecTraits for ZstdCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ZstdCodecConfiguration::V1(ZstdCodecConfigurationV1 {
             level: self.compression.into(),
             checksum: self.checksum,

@@ -93,9 +93,10 @@ macro_rules! vlen_v2_codec {
 
             fn configuration(
                 &self,
+                version: zarrs_plugin::ZarrVersions,
                 options: &CodecMetadataOptions,
             ) -> Option<Configuration> {
-                self.inner.configuration(options)
+                self.inner.configuration(version, options)
             }
 
             fn partial_decoder_capability(&self) -> PartialDecoderCapability {

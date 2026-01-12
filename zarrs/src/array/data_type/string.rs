@@ -12,7 +12,7 @@ zarrs_plugin::impl_extension_aliases!(StringDataType,
 );
 
 impl zarrs_data_type::DataTypeTraits for StringDataType {
-    fn configuration(&self) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 

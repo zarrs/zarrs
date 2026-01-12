@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersions};
 use zfp_sys::{
     zfp_compress,
     zfp_stream_maximum_size,
@@ -133,7 +133,11 @@ impl CodecTraits for ZfpCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         Some(ZfpCodecConfiguration::V1(ZfpCodecConfigurationV1 { mode: self.mode }).into())
     }
 

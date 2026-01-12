@@ -384,12 +384,28 @@ impl Codec {
 
     /// Create the codec configuration.
     #[must_use]
-    pub fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+    pub fn configuration(
+        &self,
+        version: ZarrVersions,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         match self {
-            Self::ArrayToArray(codec) => codec.configuration(options),
-            Self::ArrayToBytes(codec) => codec.configuration(options),
-            Self::BytesToBytes(codec) => codec.configuration(options),
+            Self::ArrayToArray(codec) => codec.configuration(version, options),
+            Self::ArrayToBytes(codec) => codec.configuration(version, options),
+            Self::BytesToBytes(codec) => codec.configuration(version, options),
         }
+    }
+
+    /// Create the Zarr V3 codec configuration.
+    #[must_use]
+    pub fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersions::V3, options)
+    }
+
+    /// Create the Zarr V2 codec configuration.
+    #[must_use]
+    pub fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersions::V2, options)
     }
 }
 
@@ -411,7 +427,21 @@ pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
     /// Create the codec configuration.
     ///
     /// A hidden codec (e.g. a cache) will return [`None`], since it will not have any associated metadata.
-    fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration>;
+    fn configuration(
+        &self,
+        version: ZarrVersions,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration>;
+
+    /// Create the Zarr V3 codec configuration.
+    fn configuration_v3(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersions::V3, options)
+    }
+
+    /// Create the Zarr V2 codec configuration.
+    fn configuration_v2(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        self.configuration(ZarrVersions::V2, options)
+    }
 
     /// Returns the partial decoder capability of this codec.
     fn partial_decoder_capability(&self) -> PartialDecoderCapability;

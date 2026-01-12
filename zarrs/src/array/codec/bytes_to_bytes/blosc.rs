@@ -58,8 +58,8 @@ use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::blosc::{
-    BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
-    BloscShuffleMode,
+    BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
+    BloscCompressionLevel, BloscCompressor, BloscShuffleMode, BloscShuffleModeNumcodecs,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 

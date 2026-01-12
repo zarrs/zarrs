@@ -4,7 +4,9 @@ use zarrs_data_type::{DataType, DataTypeFillValueMetadataError, FillValue};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, ConfigurationSerialize};
 use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
-use zarrs_plugin::{ExtensionName, PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::{
+    ExtensionName, PluginConfigurationInvalidError, PluginCreateError, ZarrVersions,
+};
 
 /// The `optional` data type.
 ///
@@ -89,11 +91,14 @@ impl OptionalDataType {
 
     /// Returns the configuration for this optional data type.
     #[must_use]
-    pub fn configuration(&self) -> Configuration {
-        let inner_name = self.0.name_v3().map_or_else(String::new, Cow::into_owned);
+    pub fn configuration(&self, version: ZarrVersions) -> Configuration {
+        let inner_name = self
+            .0
+            .name(version)
+            .map_or_else(String::new, Cow::into_owned);
         Configuration::from(OptionalDataTypeConfigurationV1 {
             name: inner_name,
-            configuration: self.0.configuration(),
+            configuration: self.0.configuration(version),
         })
     }
 }
@@ -154,9 +159,9 @@ impl OptionalDataType {
 
 // DataTypeTraits implementation for OptionalDataType
 impl zarrs_data_type::DataTypeTraits for OptionalDataType {
-    fn configuration(&self) -> Configuration {
+    fn configuration(&self, version: ZarrVersions) -> Configuration {
         // Use the existing configuration() method
-        OptionalDataType::configuration(self)
+        OptionalDataType::configuration(self, version)
     }
 
     fn size(&self) -> zarrs_metadata::DataTypeSize {

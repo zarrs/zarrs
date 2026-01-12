@@ -74,7 +74,7 @@ mod tests {
         let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
         let metadata = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&metadata).unwrap(), r"{}");
     }

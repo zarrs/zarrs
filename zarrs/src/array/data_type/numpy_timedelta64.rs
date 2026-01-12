@@ -57,7 +57,7 @@ impl NumpyTimeDelta64DataType {
 }
 
 impl zarrs_data_type::DataTypeTraits for NumpyTimeDelta64DataType {
-    fn configuration(&self) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::from(NumpyTimeDelta64DataTypeConfigurationV1 {
             unit: self.unit,
             scale_factor: self.scale_factor,

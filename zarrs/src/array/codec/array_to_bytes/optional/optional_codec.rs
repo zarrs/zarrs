@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_data_type::FillValue;
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::array_bytes::ArrayBytesVariableLength;
@@ -275,7 +275,11 @@ impl CodecTraits for OptionalCodec {
         self
     }
 
-    fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = OptionalCodecConfiguration::V1(OptionalCodecConfigurationV1 {
             mask_codecs: self.mask_codecs.create_metadatas(options),
             data_codecs: self.data_codecs.create_metadatas(options),
@@ -516,7 +520,7 @@ mod tests {
         )
         .unwrap();
         let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration(&CodecMetadataOptions::default());
+        let configuration = codec.configuration_v3(&CodecMetadataOptions::default());
         assert!(configuration.is_some());
     }
 

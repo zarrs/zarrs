@@ -149,7 +149,17 @@ impl DataType {
 /// A custom data type must also directly handle conversion of fill value metadata to fill value bytes, and vice versa.
 pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// The configuration of the data type.
-    fn configuration(&self) -> Configuration;
+    fn configuration(&self, version: ZarrVersions) -> Configuration;
+
+    /// The Zarr V3 configuration of the data type.
+    fn configuration_v3(&self) -> Configuration {
+        self.configuration(ZarrVersions::V3)
+    }
+
+    /// The Zarr V2 configuration of the data type.
+    fn configuration_v2(&self) -> Configuration {
+        self.configuration(ZarrVersions::V2)
+    }
 
     /// The size of the data type.
     ///
@@ -204,7 +214,7 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     /// Custom data types may override this for more efficient comparison.
     fn eq(&self, other: &dyn DataTypeTraits) -> bool {
         self.as_any().type_id() == other.as_any().type_id()
-            && self.configuration() == other.configuration()
+            && self.configuration(ZarrVersions::V3) == other.configuration(ZarrVersions::V3)
     }
 
     /// Returns self as `Any` for downcasting.

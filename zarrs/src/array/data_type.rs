@@ -476,7 +476,7 @@ mod tests {
         let name = data_type
             .name_v3()
             .map_or_else(String::new, |n| n.into_owned());
-        let configuration = data_type.configuration();
+        let configuration = data_type.configuration_v3();
         if configuration.is_empty() {
             MetadataV3::new(name)
         } else {

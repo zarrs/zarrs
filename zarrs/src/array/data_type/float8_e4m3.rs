@@ -19,7 +19,7 @@ mod impl_default {
     use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for Float8E4M3DataType {
-        fn configuration(&self) -> Configuration {
+        fn configuration(&self, _version: ZarrVersions) -> Configuration {
             Configuration::default()
         }
 
@@ -78,7 +78,7 @@ mod impl_float8 {
     use zarrs_plugin::ZarrVersions;
 
     impl DataTypeTraits for Float8E4M3DataType {
-        fn configuration(&self) -> Configuration {
+        fn configuration(&self, _version: ZarrVersions) -> Configuration {
             Configuration::default()
         }
 

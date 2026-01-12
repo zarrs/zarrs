@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use zarrs_plugin::ZarrVersions;
+
 use super::test_unbounded_partial_decoder;
 #[cfg(feature = "async")]
 use crate::array::codec::AsyncBytesPartialDecoderTraits;
@@ -33,7 +35,11 @@ impl CodecTraits for TestUnboundedCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         None
     }
 

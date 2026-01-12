@@ -525,7 +525,7 @@ impl ArrayBuilder {
         let data_type_name = data_type
             .name_v3()
             .map_or_else(String::new, Cow::into_owned);
-        let data_type_configuration = data_type.configuration();
+        let data_type_configuration = data_type.configuration_v3();
         let data_type_metadata = if data_type_configuration.is_empty() {
             MetadataV3::new(data_type_name.clone())
         } else {

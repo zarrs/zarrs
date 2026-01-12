@@ -201,7 +201,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"big"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -215,7 +215,7 @@ mod tests {
             serde_json::from_str(r#"{"endian":"little"}"#).unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(
             serde_json::to_string(&configuration).unwrap(),
@@ -228,7 +228,7 @@ mod tests {
         let codec_configuration: BytesCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = BytesCodec::new_with_configuration(&codec_configuration).unwrap();
         let configuration = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }

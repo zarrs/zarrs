@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use num::Integer;
-use zarrs_plugin::PluginCreateError;
+use zarrs_plugin::{PluginCreateError, ZarrVersions};
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
@@ -105,7 +105,11 @@ impl CodecTraits for PackBitsCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = PackBitsCodecConfiguration::V1(PackBitsCodecConfigurationV1 {
             padding_encoding: Some(self.padding_encoding),
             first_bit: self.first_bit,

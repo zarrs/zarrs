@@ -155,6 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remove `CodecOptionsBuilder`, `CodecOptions::builder()`, `CodecOptions::into_builder()`
   - Rename `ArrayMetadataOptions::codec_options[_mut]()` to `codec_metadata_options[_mut]()`
   - Rename `CodecTraits::configuration_opt()` to `configuration()`
+  - **Breaking**: Add `ZarrVersions` parameter to `CodecTraits::configuration()`
   - Rename `CodecChain::create_metadatas_opt()` to `create_metadatas()` (now requires `&CodecMetadataOptions`)
   - Remove `CodecTraits::default_name()`
 - **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `ExtensionName` trait implementation

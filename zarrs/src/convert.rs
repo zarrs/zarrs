@@ -89,7 +89,7 @@ fn codec_v2_to_v3(v2_metadata: &MetadataV2) -> Result<MetadataV3, ArrayMetadataV
             && let Ok(codec) = plugin.create(v2_metadata)
             && let Some(v3_name) = codec.name_v3()
         {
-            let configuration = codec.configuration(&CodecMetadataOptions::default());
+            let configuration = codec.configuration_v3(&CodecMetadataOptions::default());
             if let Some(configuration) = configuration {
                 return Ok(MetadataV3::new_with_configuration(
                     v3_name.into_owned(),

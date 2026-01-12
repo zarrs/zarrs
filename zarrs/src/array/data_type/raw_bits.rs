@@ -149,7 +149,7 @@ impl RawBitsDataType {
 }
 
 impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
-    fn configuration(&self) -> zarrs_metadata::Configuration {
+    fn configuration(&self, _version: zarrs_plugin::ZarrVersions) -> zarrs_metadata::Configuration {
         zarrs_metadata::Configuration::default()
     }
 

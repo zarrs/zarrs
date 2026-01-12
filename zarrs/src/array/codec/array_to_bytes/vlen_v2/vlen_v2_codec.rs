@@ -16,7 +16,7 @@ use crate::array::{
     FillValue,
 };
 use crate::metadata::Configuration;
-use zarrs_plugin::ExtensionAliasesV3;
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersions};
 
 /// The `vlen_v2` codec implementation.
 #[derive(Debug, Clone, Default)]
@@ -35,7 +35,11 @@ impl CodecTraits for VlenV2Codec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         Some(Configuration::default())
     }
 

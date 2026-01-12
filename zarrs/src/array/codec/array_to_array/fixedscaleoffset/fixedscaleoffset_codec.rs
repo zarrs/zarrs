@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersions};
 
 use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
@@ -101,7 +101,11 @@ impl CodecTraits for FixedScaleOffsetCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = FixedScaleOffsetCodecConfiguration::Numcodecs(
             FixedScaleOffsetCodecConfigurationNumcodecs {
                 offset: self.offset,

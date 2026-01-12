@@ -135,6 +135,7 @@ impl ChunkGrid {
     /// # Panics
     ///
     /// Panics if the chunk grid has no name for V3.
+    // TODO: Remove this method
     #[must_use]
     pub fn metadata(&self) -> MetadataV3 {
         let name = self.name_v3().expect("chunk grid must have a V3 name");

@@ -13,7 +13,7 @@ use zarrs::array::{Array, ArrayBuilder, ArrayBytesRaw, BytesRepresentation, data
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
-use zarrs_plugin::RuntimePlugin;
+use zarrs_plugin::{RuntimePlugin, ZarrVersions};
 
 /// A simple passthrough codec for testing runtime registration.
 #[derive(Clone, Debug)]
@@ -26,7 +26,11 @@ impl CodecTraits for TestPassthroughCodec {
         self
     }
 
-    fn configuration(&self, _options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        _options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         Some(Configuration::default())
     }
 

@@ -102,7 +102,7 @@ mod tests {
             serde_json::from_str(r"{}").unwrap();
         let codec = Fletcher32Codec::new_with_configuration(&codec_configuration);
         let configuration = codec
-            .configuration(&CodecMetadataOptions::default())
+            .configuration_v3(&CodecMetadataOptions::default())
             .unwrap();
         assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }

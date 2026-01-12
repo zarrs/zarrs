@@ -33,7 +33,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
-use zarrs_plugin::ExtensionAliasesV3;
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersions};
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
@@ -97,7 +97,11 @@ impl CodecTraits for ShardingCodec {
         self
     }
 
-    fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+    fn configuration(
+        &self,
+        _version: ZarrVersions,
+        options: &CodecMetadataOptions,
+    ) -> Option<Configuration> {
         let configuration = ShardingCodecConfiguration::V1(ShardingCodecConfigurationV1 {
             chunk_shape: self.subchunk_shape.clone(),
             codecs: self.inner_codecs.create_metadatas(options),
