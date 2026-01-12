@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-01-13
+
 ### Added
 - Add `ExtensionName` and `ExtensionNameStatic` traits
 - Add `ExtensionAliases{V2,V3}` traits with blanket implementations
@@ -96,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Split from the `plugin` module of `zarrs` 0.20.0-dev
 
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_plugin-v0.3.1...HEAD
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.4.0
 [0.3.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.3.1
 [0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.3.0
 [0.2.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.2.3

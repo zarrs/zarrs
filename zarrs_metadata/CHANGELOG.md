@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-01-13
+
 ### Added
 - Re-export `FillValueMetadataV3` as `FillValueMetadata`
 
@@ -215,7 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `metadata` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata-v0.7.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata-v0.7.1...HEAD
+[0.7.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.7.1
 [0.7.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.7.0
 [0.6.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.6.2
 [0.6.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.6.1

@@ -202,6 +202,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 
+## [0.23.0-beta.5] - 2026-01-13
+
 ## [0.23.0-beta.4] - 2026-01-09
 
 ## [0.23.0-beta.3] - 2025-12-31
@@ -2060,6 +2062,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release
 
 [unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.10...HEAD
+[0.23.0-beta.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.5
 [0.23.0-beta.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.4
 [0.23.0-beta.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.3
 [0.23.0-beta.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.2
