@@ -40,7 +40,8 @@ pub use zstd_codec::ZstdCodec;
 
 use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::zstd::{
-    ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
+    ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
+    ZstdCompressionLevel,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
@@ -57,19 +58,19 @@ inventory::submit! {
 }
 
 pub(crate) fn create_codec_zstd_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfiguration = metadata
+    let configuration: ZstdCodecConfigurationV1 = metadata
         .to_configuration()
         .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+    let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
+    Ok(Codec::BytesToBytes(Arc::new(codec)))
 }
 
 pub(crate) fn create_codec_zstd_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfiguration =
+    let configuration: ZstdCodecConfigurationNumcodecs =
         serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
             .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
-    let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+    let codec = ZstdCodec::new(configuration.level.into(), false);
+    Ok(Codec::BytesToBytes(Arc::new(codec)))
 }
 
 #[cfg(test)]

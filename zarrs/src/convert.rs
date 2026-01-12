@@ -14,7 +14,9 @@ use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-use crate::array::codec::{BytesCodec, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec};
+use crate::array::codec::{
+    BytesCodec, CodecMetadataOptions, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec,
+};
 use crate::array::data_type;
 use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
@@ -39,12 +41,6 @@ use crate::{
 
 #[cfg(feature = "zfp")]
 use crate::array::codec::{ZfpCodec, ZfpyCodec};
-
-#[cfg(feature = "zstd")]
-use crate::{
-    array::codec::ZstdCodec,
-    metadata_ext::codec::zstd::{ZstdCodecConfiguration, codec_zstd_v2_numcodecs_to_v3},
-};
 
 /// Try to find a V3 default name for a V2 data type name by creating an instance.
 ///
@@ -80,26 +76,33 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
 
 /// Try to convert V2 codec metadata to V3 metadata.
 ///
-/// Returns `Some(MetadataV3)` if conversion succeeded, `None` otherwise.
-#[must_use]
-fn codec_v2_to_v3(v2_metadata: &MetadataV2) -> Option<MetadataV3> {
+/// # Errors
+/// Returns [`ArrayMetadataV2ToV3Error::UnsupportedCodec`] if the codec is not supported.
+fn codec_v2_to_v3(v2_metadata: &MetadataV2) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
     use crate::array::codec::CodecPluginV2;
 
     let v2_name = v2_metadata.id();
 
-    // Try to instantiate the codec via V2 plugin to get the V3 name
+    // Try to instantiate the codec via V2 plugin to get the V3 name and configuration
     for plugin in inventory::iter::<CodecPluginV2> {
         if plugin.match_name(v2_name)
             && let Ok(codec) = plugin.create(v2_metadata)
             && let Some(v3_name) = codec.name_v3()
         {
-            return Some(MetadataV3::new_with_configuration(
-                v3_name.into_owned(),
-                v2_metadata.configuration().clone(),
-            ));
+            let configuration = codec.configuration(&CodecMetadataOptions::default());
+            if let Some(configuration) = configuration {
+                return Ok(MetadataV3::new_with_configuration(
+                    v3_name.into_owned(),
+                    configuration,
+                ));
+            }
+            return Ok(MetadataV3::new(v3_name.into_owned()));
         }
     }
-    None
+    Err(ArrayMetadataV2ToV3Error::UnsupportedCodec(
+        v2_name.to_string(),
+        v2_metadata.configuration().clone().into(),
+    ))
 }
 
 /// Convert Zarr V2 group metadata to Zarr V3.
@@ -208,13 +211,8 @@ pub fn codec_metadata_v2_to_v3(
                 );
                 codecs.push(vlen_v2_metadata);
             } else {
-                // Generic filter - convert to V3 or pass through with V2 id as name
-                codecs.push(codec_v2_to_v3(filter).unwrap_or_else(|| {
-                    MetadataV3::new_with_configuration(
-                        id.to_string(),
-                        filter.configuration().clone(),
-                    )
-                }));
+                // Generic filter - convert to V3
+                codecs.push(codec_v2_to_v3(filter)?);
             }
         }
     }
@@ -301,27 +299,9 @@ pub fn codec_metadata_v2_to_v3(
             handled = true;
         }
 
-        #[cfg(feature = "zstd")]
-        if !handled && ZstdCodec::matches_name_v2(id) {
-            let zstd = serde_json::from_value::<ZstdCodecConfiguration>(serde_json::to_value(
-                compressor.configuration(),
-            )?)?;
-            let configuration = codec_zstd_v2_numcodecs_to_v3(&zstd);
-            codecs.push(MetadataV3::new_with_serializable_configuration(
-                ZstdCodec::aliases_v3().default_name.clone().to_string(),
-                &configuration,
-            )?);
-            handled = true;
-        }
-
         if !handled {
-            // Generic compressor - convert to V3 or pass through
-            codecs.push(codec_v2_to_v3(compressor).unwrap_or_else(|| {
-                MetadataV3::new_with_configuration(
-                    id.to_string(),
-                    compressor.configuration().clone(),
-                )
-            }));
+            // Generic compressor - convert to V3
+            codecs.push(codec_v2_to_v3(compressor)?);
         }
     }
 
@@ -506,9 +486,7 @@ mod tests {
                 },
                 "dtype": "<f8",
                 "fill_value": "NaN",
-                "filters": [
-                    {"id": "delta", "dtype": "<f8", "astype": "<f4"}
-                ],
+                "filters": null,
                 "order": "F",
                 "shape": [
                     10000,

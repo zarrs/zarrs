@@ -197,6 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `transpose` codec decoding with variable-size data types
 - Various fixes to aliased data type handling
 - Fixes handling of Zarr V2 arrays with bool fill values
+- Disallow `zstd` V2 encoding in V3 arrays
 
 [#280]: https://github.com/zarrs/zarrs/pull/280
 

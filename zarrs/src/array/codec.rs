@@ -381,6 +381,16 @@ impl Codec {
         }
         Err(PluginUnsupportedError::new(metadata.id().to_string(), "codec".to_string()).into())
     }
+
+    /// Create the codec configuration.
+    #[must_use]
+    pub fn configuration(&self, options: &CodecMetadataOptions) -> Option<Configuration> {
+        match self {
+            Self::ArrayToArray(codec) => codec.configuration(options),
+            Self::ArrayToBytes(codec) => codec.configuration(options),
+            Self::BytesToBytes(codec) => codec.configuration(options),
+        }
+    }
 }
 
 impl ExtensionName for Codec {
