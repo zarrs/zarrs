@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-01-14
+
 ### Added
 - Split from the `zarrs::array::codec` module of `zarrs` 0.23.0-beta.5
 
