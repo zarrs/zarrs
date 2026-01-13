@@ -3,7 +3,7 @@ use std::sync::Arc;
 use zarrs_data_type::DataTypeTraits;
 
 use crate::array::{ArrayCreateError, DataType};
-use crate::metadata::v3::MetadataV3;
+use zarrs_metadata::v3::MetadataV3;
 
 /// An input that can be mapped to a data type.
 #[derive(Debug, Clone)]

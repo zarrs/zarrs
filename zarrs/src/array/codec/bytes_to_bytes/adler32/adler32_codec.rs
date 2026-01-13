@@ -12,8 +12,6 @@ use crate::array::codec::bytes_to_bytes::{
     strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -21,6 +19,8 @@ use zarrs_codec::{
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
 
 /// A `adler32` codec implementation.
 #[derive(Clone, Debug, Default)]

@@ -6,10 +6,10 @@ macro_rules! vlen_v2_module {
 
         pub use $module_codec::$struct;
 
-        use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
         use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
         use zarrs_metadata::v2::MetadataV2;
         use zarrs_metadata::v3::MetadataV3;
+        use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
         // Register the V3 codec.
         inventory::submit! {
@@ -59,7 +59,7 @@ macro_rules! vlen_v2_codec {
             ArrayBytes, ArrayBytesRaw, BytesRepresentation,
             RecommendedConcurrency,
         };
-        use crate::metadata::Configuration;
+        use zarrs_metadata::Configuration;
         use zarrs_plugin::{
             ExtensionAliasesConfig, ExtensionAliases,
             ZarrVersion2, ZarrVersion3,

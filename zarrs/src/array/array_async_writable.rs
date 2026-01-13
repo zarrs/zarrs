@@ -10,10 +10,10 @@ use super::{
 use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use crate::storage::{
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
+use zarrs_storage::{
     AsyncWritableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
 };
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
 impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`store_metadata`](Array::store_metadata).

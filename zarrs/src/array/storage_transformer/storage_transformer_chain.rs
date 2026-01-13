@@ -3,14 +3,14 @@
 use derive_more::From;
 
 use super::{StorageTransformer, try_create_storage_transformer};
-use crate::metadata::v3::MetadataV3;
 use crate::node::NodePath;
-use crate::plugin::PluginCreateError;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::PluginCreateError;
 #[cfg(feature = "async")]
-use crate::storage::{
+use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
-use crate::storage::{
+use zarrs_storage::{
     ListableStorage, ReadableStorage, ReadableWritableStorage, StorageError, WritableStorage,
 };
 

@@ -37,12 +37,6 @@ pub mod concurrency;
 pub mod data_type;
 pub mod storage_transformer;
 
-pub use zarrs_chunk_grid::{
-    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
-    ArraySubsetTraits, ChunkShape, ChunkShapeTraits, IncompatibleDimensionalityError, Indexer,
-    IndexerError, iterators,
-};
-
 #[cfg(feature = "dlpack")]
 mod array_dlpack_ext;
 #[cfg(feature = "sharding")]
@@ -54,6 +48,53 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+pub use self::array_builder::{
+    ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
+    ArrayBuilderFillValue,
+};
+use self::chunk_grid::RegularBoundedChunkGridConfiguration;
+use self::chunk_key_encoding::V2ChunkKeyEncoding;
+use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
+use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
+use crate::node::{NodePath, data_key};
+pub use zarrs_chunk_grid::{
+    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
+    ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkShape, ChunkShapeTraits,
+    IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
+};
+pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
+pub use zarrs_codec::{
+    ArrayBytes, ArrayBytesError, ArrayBytesFixedDisjointView,
+    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesVariableLength, ArrayCodecTraits, ArrayRawBytesOffsetsCreateError,
+    ArrayRawBytesOffsetsOutOfBoundsError, ArrayToBytesCodecTraits, BytesRepresentation, Codec,
+    CodecMetadataOptions, CodecOptions, RecommendedConcurrency, copy_fill_value_into,
+    update_array_bytes,
+};
+pub use zarrs_data_type::{DataType, DataTypeTraits, FillValue};
+pub use zarrs_metadata::v2::ArrayMetadataV2;
+use zarrs_metadata::v2::DataTypeMetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+pub use zarrs_metadata::v3::{
+    ArrayMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
+};
+pub use zarrs_metadata::{
+    ArrayMetadata, ChunkKeySeparator, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
+};
+use zarrs_plugin::{
+    ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName, PluginCreateError, ZarrVersion,
+};
+use zarrs_storage::StoreKey;
+
+pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
+pub use self::array_metadata_options::ArrayMetadataOptions;
+use self::chunk_grid::RegularChunkGrid;
+pub use self::codec::CodecChain;
+pub use self::element::{Element, ElementFixedLength, ElementOwned};
+pub use self::from_array_bytes::FromArrayBytes;
+pub use self::into_array_bytes::IntoArrayBytes;
+pub use self::storage_transformer::StorageTransformerChain;
+pub use self::tensor::{Tensor, TensorError};
 #[cfg(all(feature = "sharding", feature = "async"))]
 pub use array_async_sharded_readable_ext::{
     AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
@@ -67,56 +108,6 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
-pub use zarrs_data_type::{DataType, FillValue};
-use zarrs_plugin::ZarrVersion;
-
-pub use self::array_builder::{
-    ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
-    ArrayBuilderFillValue,
-};
-pub use zarrs_codec::{
-    ArrayBytes, ArrayBytesError, ArrayBytesFixedDisjointView,
-    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesVariableLength, ArrayRawBytesOffsetsCreateError,
-    ArrayRawBytesOffsetsOutOfBoundsError, BytesRepresentation, Codec, CodecOptions,
-    RecommendedConcurrency, copy_fill_value_into, update_array_bytes,
-};
-
-pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
-pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::codec::CodecChain;
-pub use self::element::{Element, ElementFixedLength, ElementOwned};
-pub use self::from_array_bytes::FromArrayBytes;
-pub use self::into_array_bytes::IntoArrayBytes;
-pub use self::storage_transformer::StorageTransformerChain;
-pub use self::tensor::{Tensor, TensorError};
-use crate::array::chunk_grid::RegularChunkGrid;
-pub use zarrs_chunk_grid::ChunkGrid;
-pub use zarrs_chunk_key_encoding::ChunkKeyEncoding;
-pub use zarrs_metadata::ChunkKeySeparator;
-// use crate::array::codec::ArrayCodecTraits;
-use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
-use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
-use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
-pub use crate::metadata::v2::ArrayMetadataV2;
-use crate::metadata::v2::DataTypeMetadataV2;
-use crate::metadata::v3::MetadataV3;
-pub use crate::metadata::v3::{
-    ArrayMetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
-};
-pub use crate::metadata::{
-    ArrayMetadata, DataTypeSize, DimensionName, Endianness, FillValueMetadata,
-};
-use crate::node::{NodePath, data_key};
-use crate::plugin::PluginCreateError;
-use crate::storage::StoreKey;
-#[deprecated(
-    since = "0.23.0",
-    note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
-)]
-pub use zarrs_codec::ArrayCodecTraits;
-use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -1359,8 +1350,8 @@ fn create_codec_chain_from_v2(
     // Insert transpose for F-order arrays
     #[cfg(feature = "transpose")]
     if order == zarrs_metadata::v2::ArrayMetadataV2Order::F {
-        use crate::array::codec::TransposeCodec;
-        use crate::metadata_ext::codec::transpose::TransposeOrder;
+        use self::codec::TransposeCodec;
+        use zarrs_metadata_ext::codec::transpose::TransposeOrder;
         let f_order: Vec<usize> = (0..dimensionality).rev().collect();
         let transpose_order = unsafe {
             // SAFETY: f_order is valid (sequential indices in reverse)
@@ -1403,9 +1394,9 @@ fn create_codec_chain_from_v2(
     if let Some(compressor) = compressor {
         // Special handling for blosc to pass data type size
         #[cfg(feature = "blosc")]
-        if crate::array::codec::BloscCodec::matches_name_v2(compressor.id()) {
-            use crate::array::codec::BloscCodec;
-            use crate::metadata_ext::codec::blosc::{
+        if self::codec::BloscCodec::matches_name_v2(compressor.id()) {
+            use self::codec::BloscCodec;
+            use zarrs_metadata_ext::codec::blosc::{
                 BloscCodecConfigurationNumcodecs, BloscShuffleModeNumcodecs,
                 codec_blosc_v2_numcodecs_to_v3,
             };
@@ -1467,7 +1458,7 @@ fn create_codec_chain_from_v2(
 
     // If no array-to-bytes codec, insert the bytes codec with endianness
     if array_to_bytes.is_none() {
-        use crate::array::codec::BytesCodec;
+        use self::codec::BytesCodec;
         let bytes_codec = Arc::new(BytesCodec::new(endianness));
         array_to_bytes = Some(bytes_codec);
     }
@@ -1488,8 +1479,8 @@ mod tests {
     use zarrs_filesystem::FilesystemStore;
 
     use super::*;
-    use crate::metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
-    use crate::storage::store::MemoryStore;
+    use zarrs_metadata::v3::{AdditionalFieldV3, AdditionalFieldsV3};
+    use zarrs_storage::store::MemoryStore;
 
     #[test]
     fn test_array_metadata_write_read() {
@@ -1540,8 +1531,8 @@ mod tests {
 
     #[test]
     fn array_set_shape_and_chunk_grid() {
-        use crate::array::chunk_grid::RectangularChunkGridConfiguration;
-        use crate::metadata::v3::MetadataV3;
+        use self::chunk_grid::RectangularChunkGridConfiguration;
+        use zarrs_metadata::v3::MetadataV3;
 
         let store = MemoryStore::new();
         let array_path = "/group/array";
@@ -1803,7 +1794,7 @@ mod tests {
     fn array_v2_invalid_fill_value() {
         use std::num::NonZeroU64;
 
-        use crate::metadata::v2::{ArrayMetadataV2, DataTypeMetadataV2};
+        use zarrs_metadata::v2::{ArrayMetadataV2, DataTypeMetadataV2};
 
         let store = Arc::new(MemoryStore::new());
 

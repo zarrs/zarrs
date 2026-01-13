@@ -6,8 +6,8 @@ use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkCache,
     ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
-use crate::storage::{ReadableStorageTraits, StorageError};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
+use zarrs_storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;
 
@@ -423,12 +423,12 @@ mod tests {
         ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
         ChunkCacheEncodedLruSizeLimit, data_type,
     };
-    use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
-    use crate::storage::store::MemoryStore;
-    use crate::storage::{
+    use zarrs_codec::CodecOptions;
+    use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
     };
-    use zarrs_codec::CodecOptions;
 
     fn create_store_array() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,

@@ -22,8 +22,6 @@ use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
 };
-use crate::metadata::{Configuration, Endianness};
-use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -33,6 +31,8 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata::{Configuration, Endianness};
+use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]

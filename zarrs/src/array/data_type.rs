@@ -385,10 +385,8 @@ mod tests {
 
     use super::*;
     use crate::array::Element;
-    use crate::metadata::FillValueMetadata;
-    use crate::metadata::v3::{
-        MetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
-    };
+    use zarrs_metadata::FillValueMetadata;
+    use zarrs_metadata::v3::{MetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
 
     /// Helper to create metadata from a data type
     fn data_type_metadata(data_type: &DataType) -> MetadataV3 {

@@ -14,13 +14,13 @@ use super::{
 use crate::array::ArraySubsetTraits;
 use crate::config::MetadataRetrieveVersion;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use crate::storage::{
-    AsyncReadableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
-};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
     AsyncStoragePartialDecoder, CodecError, CodecOptions, build_nested_optional_target,
     copy_fill_value_into, merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
+};
+use zarrs_storage::{
+    AsyncReadableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
 };
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {

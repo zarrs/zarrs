@@ -5,15 +5,15 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::zfp::ZfpMode;
-use crate::metadata_ext::codec::zfpy::{
-    ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
-};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
     CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::zfp::ZfpMode;
+use zarrs_metadata_ext::codec::zfpy::{
+    ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
 };
 
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};

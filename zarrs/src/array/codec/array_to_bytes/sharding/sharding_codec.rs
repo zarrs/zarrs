@@ -21,8 +21,6 @@ use crate::array::{
     ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
     transmute_to_bytes_vec, unravel_index,
 };
-use crate::metadata::Configuration;
-use crate::plugin::PluginCreateError;
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -31,7 +29,8 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
+use zarrs_metadata::Configuration;
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]

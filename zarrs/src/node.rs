@@ -37,15 +37,13 @@ use thiserror::Error;
 use crate::array::{ArrayCreateError, ArrayMetadata};
 use crate::config::MetadataRetrieveVersion;
 use crate::group::GroupCreateError;
-use crate::metadata::GroupMetadata;
-pub use crate::metadata::NodeMetadata;
-use crate::metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
-use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
+use zarrs_metadata::GroupMetadata;
+pub use zarrs_metadata::NodeMetadata;
+use zarrs_metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
+use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
 #[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
-use crate::storage::{
-    ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefixError,
-};
+use zarrs_storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
+use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefixError};
 
 /// A Zarr hierarchy node.
 ///
@@ -466,8 +464,8 @@ mod tests {
     use super::*;
     use crate::array::{ArrayBuilder, ArrayMetadataOptions};
     use crate::group::{GroupMetadata, GroupMetadataV3};
-    use crate::storage::store::MemoryStore;
-    use crate::storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{StoreKey, WritableStorageTraits};
 
     #[test]
     fn node_metadata_array() {

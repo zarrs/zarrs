@@ -43,11 +43,11 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-pub use crate::metadata_ext::codec::bitround::{
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]

@@ -38,11 +38,11 @@ pub use self::zlib_codec::ZlibCodec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-pub use crate::metadata_ext::codec::zlib::{
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(ZlibCodec,
     v3: "numcodecs.zlib", [],
@@ -83,8 +83,8 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use crate::storage::byte_range::ByteRange;
     use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
 {

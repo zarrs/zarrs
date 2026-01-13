@@ -11,12 +11,12 @@ use std::num::NonZeroU64;
 use super::PackBitsCodecComponents;
 use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, pack_bits_components};
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
-use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use crate::storage::StorageError;
-use crate::storage::byte_range::ByteRange;
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::ByteRange;
 
 // https://github.com/scouten/async-generic/pull/17
 #[allow(clippy::too_many_lines)]

@@ -106,11 +106,6 @@ use crate::array::{
     ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
     data_type,
 };
-use crate::metadata_ext::codec::vlen::VlenIndexLocation;
-pub use crate::metadata_ext::codec::vlen::{
-    VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
-};
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
@@ -119,7 +114,11 @@ use zarrs_codec::{
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;
+pub use zarrs_metadata_ext::codec::vlen::{
+    VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
+};
+use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(VlenCodec,
     v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]

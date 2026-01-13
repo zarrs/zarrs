@@ -4,9 +4,6 @@ use std::sync::Arc;
 use zarrs_plugin::ZarrVersion;
 
 use crate::array::{ChunkShape, DataType, FillValue};
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
-use crate::plugin::PluginCreateError;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -14,6 +11,9 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::squeeze::{SqueezeCodecConfiguration, SqueezeCodecConfigurationV0};
+use zarrs_plugin::PluginCreateError;
 
 /// A Squeeze codec implementation.
 #[derive(Clone, Debug)]

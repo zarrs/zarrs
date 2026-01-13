@@ -12,8 +12,8 @@ use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use crate::storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits};
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
+use zarrs_storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits};
 
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     /// Store metadata with default [`ArrayMetadataOptions`].

@@ -2,8 +2,8 @@ use half::{bf16, f16};
 use serde_json::Number;
 use zarrs_data_type::FillValue;
 
-use crate::metadata::FillValueMetadata;
-use crate::metadata::v3::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
+use zarrs_metadata::FillValueMetadata;
+use zarrs_metadata::v3::{ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64};
 
 /// An input that can be mapped to a fill value.
 #[derive(Debug, PartialEq, Clone)]

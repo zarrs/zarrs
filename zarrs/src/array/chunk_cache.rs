@@ -12,11 +12,11 @@ use crate::array::{
     IncompatibleDimensionalityError,
 };
 use crate::iter_concurrent_limit;
-use crate::storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 use zarrs_codec::{
     ArrayPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth,
 };
+use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;

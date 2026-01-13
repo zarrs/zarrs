@@ -37,11 +37,11 @@ pub use adler32_codec::Adler32Codec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-pub use crate::metadata_ext::codec::adler32::{
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(Adler32Codec,
     v3: "numcodecs.adler32", [],
@@ -82,11 +82,11 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::storage::byte_range::ByteRange;
     use zarrs_codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
         CodecTraits,
     };
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
     const JSON2: &str = r#"{"location":"start"}"#;

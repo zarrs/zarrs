@@ -8,11 +8,11 @@ use super::{
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
-use crate::metadata::Configuration;
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability,
 };
+use zarrs_metadata::Configuration;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]

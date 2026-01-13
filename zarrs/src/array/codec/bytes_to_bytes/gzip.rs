@@ -33,12 +33,12 @@ pub use gzip_codec::GzipCodec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-pub use crate::metadata_ext::codec::gzip::{
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(GzipCodec, v3: "gzip", v2: "gzip");
 
@@ -75,8 +75,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::storage::byte_range::ByteRange;
     use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
         "level": 1

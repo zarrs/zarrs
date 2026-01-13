@@ -68,11 +68,6 @@ use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
     RecommendedConcurrency, ravel_indices,
 };
-pub use crate::metadata_ext::codec::sharding::{
-    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
-};
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use crate::storage::byte_range::ByteRange;
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 #[cfg(feature = "async")]
@@ -83,6 +78,11 @@ use zarrs_codec::{
     CodecOptions, CodecPluginV3,
 };
 use zarrs_metadata::v3::MetadataV3;
+pub use zarrs_metadata_ext::codec::sharding::{
+    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
+};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_storage::byte_range::ByteRange;
 
 zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
 

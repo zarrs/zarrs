@@ -9,7 +9,6 @@ use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
     FillValue,
 };
-use crate::metadata::Configuration;
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -22,6 +21,7 @@ use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
+use zarrs_metadata::Configuration;
 
 /// A `bytes` codec implementation.
 #[derive(Debug, Clone)]

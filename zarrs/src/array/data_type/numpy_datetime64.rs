@@ -7,8 +7,8 @@ use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-use crate::metadata_ext::data_type::NumpyTimeUnit;
-use crate::metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
+use zarrs_metadata_ext::data_type::NumpyTimeUnit;
+use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
 
 /// The `numpy.datetime64` data type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

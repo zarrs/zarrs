@@ -23,8 +23,8 @@ pub use zarrs_chunk_grid as api;
 
 #[cfg(test)]
 mod tests {
-    use crate::metadata::v3::MetadataV3;
     use zarrs_chunk_grid::ChunkGrid;
+    use zarrs_metadata::v3::MetadataV3;
 
     #[test]
     fn chunk_grid_configuration_regular() {

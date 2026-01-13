@@ -7,9 +7,6 @@ use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, DataType,
     DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
 };
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
-use crate::plugin::PluginCreateError;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -17,7 +14,9 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
+use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 /// A `vlen` codec implementation.
 #[derive(Debug, Clone)]

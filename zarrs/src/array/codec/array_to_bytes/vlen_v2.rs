@@ -37,9 +37,9 @@ pub use vlen_v2_codec::VlenV2Codec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::ArrayBytesRaw;
-use crate::metadata_ext::codec::vlen_v2::{self};
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
+use zarrs_metadata_ext::codec::vlen_v2::{self};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]

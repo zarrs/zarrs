@@ -38,24 +38,24 @@ use crate::config::{
     MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
 };
 use crate::convert::group_metadata_v2_to_v3;
-pub use crate::metadata::GroupMetadata;
-use crate::metadata::NodeMetadata;
-use crate::metadata::v2::GroupMetadataV2;
-use crate::metadata::v3::AdditionalFieldV3;
-pub use crate::metadata::v3::GroupMetadataV3;
-use crate::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use crate::node::{
     Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
     meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
-};
-use crate::storage::{
-    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
-    WritableStorageTraits,
 };
 #[cfg(feature = "async")]
 use crate::{
     node::{async_get_all_nodes_of, async_get_child_nodes},
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits},
+};
+pub use zarrs_metadata::GroupMetadata;
+use zarrs_metadata::NodeMetadata;
+use zarrs_metadata::v2::GroupMetadataV2;
+use zarrs_metadata::v3::AdditionalFieldV3;
+pub use zarrs_metadata::v3::GroupMetadataV3;
+use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
+use zarrs_storage::{
+    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
+    WritableStorageTraits,
 };
 
 /// A group.
@@ -820,8 +820,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::StoreKey;
-    use crate::storage::store::MemoryStore;
+    use zarrs_storage::StoreKey;
+    use zarrs_storage::store::MemoryStore;
 
     const JSON_VALID1: &str = r#"{
     "zarr_format": 3,
@@ -1055,7 +1055,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn group_async_traverse() {
-        use crate::storage::AsyncReadableWritableListableStorage;
+        use zarrs_storage::AsyncReadableWritableListableStorage;
 
         let store: AsyncReadableWritableListableStorage = std::sync::Arc::new(
             zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),

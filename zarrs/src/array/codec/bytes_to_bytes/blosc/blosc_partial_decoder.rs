@@ -4,11 +4,11 @@ use std::sync::Arc;
 use super::{blosc_decompress_bytes_partial, blosc_typesize, blosc_validate};
 use crate::array::ArrayBytesRaw;
 use crate::array::codec::bytes_to_bytes::blosc::blosc_nbytes;
-use crate::storage::StorageError;
-use crate::storage::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::ByteRangeIterator;
 
 /// Partial decoder for the `blosc` codec.
 pub(crate) struct BloscPartialDecoder {

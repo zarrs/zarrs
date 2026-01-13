@@ -4,12 +4,12 @@ use zarrs_plugin::ExtensionAliasesV3;
 
 use super::{BitroundCodec, round_bytes};
 use crate::array::DataType;
-use crate::storage::StorageError;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {

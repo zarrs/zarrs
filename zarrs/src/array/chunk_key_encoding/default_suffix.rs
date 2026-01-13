@@ -4,12 +4,11 @@ use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::metadata::v3::MetadataV3;
-use crate::metadata::{Configuration, ConfigurationSerialize};
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use crate::storage::StoreKey;
 use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
-use zarrs_metadata::ChunkKeySeparator;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkKeySeparator, Configuration, ConfigurationSerialize};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_storage::StoreKey;
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
 // TODO: move to zarrs_metadata_ex on stabilisation

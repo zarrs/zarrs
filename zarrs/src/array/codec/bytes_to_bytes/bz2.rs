@@ -39,11 +39,11 @@ pub use self::bz2_codec::Bz2Codec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-pub use crate::metadata_ext::codec::bz2::{
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(Bz2Codec,
     v3: "numcodecs.bz2", [],
@@ -84,8 +84,8 @@ mod tests {
 
     use super::*;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
-    use crate::storage::byte_range::ByteRange;
     use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
 {
