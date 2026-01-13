@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Highlights
+### Highlights and Major Breaking Changes
+- Improved performance!
+- **Major Breaking**: split `zarrs` into more crates, add `zarrs_codec`, `zarrs_chunk_grid`, and `zarrs_chunk_key_encoding`
+  - Many types that were previously accessible in these modules are not individually re-exported, but are accessible via `api` submodules
+  - Various types are now only re-exported higher in `zarrs::array`, e.g. ~~`zarrs::array::data_type::DataType`~~ -> `zarrs::array::DataType`
+- **Major Breaking**: `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
+  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
+
+  ```diff
+  - let data_type = DataType::Float32;
+  + let data_type: DataType = data_type::float32();
+  ```
 - Generic `Array` `store_*` and `retrieve_*` methods
 
   ```diff
@@ -32,14 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + array.retrieve_array_subset(&[0..3, 10..20])?;
   ```
 
-- `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
-  - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
-
-  ```diff
-  - let data_type = DataType::Float32;
-  + let data_type: DataType = data_type::float32();
-  ```
-
 - Add `ArrayBuilder::subchunk_shape()`. Recommended over `ShardingCodecBuilder` for most use cases
 
   ```diff
@@ -54,145 +57,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 - Add the `zarrs.optional` data type and codec (spec proposal https://github.com/zarr-developers/zarr-extensions/pull/33)
-- Revised extension point alias handling for codecs, chunk grids, chunk key encodings, and data types
-- Add runtime extension registration
-- Add `zarrs_chunk_grid` crate for the chunk grid API
-- Improved performance
+- Much improved API for Zarr extension point registration and aliasing, with runtime extension registration support
 
 ### Added
 - Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
 - Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
-- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type`
-  - These implement `ExtensionAliases` for per-data-type alias management
-- Add `ArrayBytesVariableLength`
-- Add `ArrayBytesDecodeIntoTarget`
-- Add support for the `optional` data type and codec:
-  - Add `OptionalCodec`
-  - Add `ArrayBytesOptional`
-  - Add `OptionalDataType`
-  - Implement `Element` for `Option<T>` where `T: Element`
-  - Implement `ElementOwned` for `Option<T>` where `T: ElementOwned`
-  - Implement `ElementFixedLength` for `Option<T>` where `T: ElementFixedLength`
-  - Add examples:
-    - `data_type_optional`
-    - `data_type_optional_nested`
-- Add chunk compaction API to remove extraneous bytes from encoded chunks
-  - Add `Array::[async_]compact_chunk()`
-  - Add `ArrayToBytesCodecTraits::compact()` with a default implementation
-  - Implement `ArrayToBytesCodecTraits` for `ShardingCodec` and `CodecChain`
+- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type` (implementing `ExtensionAliases` for per-data-type alias management)
+- Add `ArrayBytesVariableLength`, `ArrayBytesDecodeIntoTarget`, and `ArrayBytesOptional` types
+- Add support for the `optional` data type and codec (`OptionalCodec`, `OptionalDataType`, `Element[Owned|FixedLength]` for `Option<T>`, examples)
+- Add chunk compaction API (`Array::[async_]compact_chunk()`, `ArrayToBytesCodecTraits::compact()`)
 - Add `zarrs::array::codec::default_array_to_bytes_codec()`
-- Add `ArrayBuilder::subchunk_shape()`
-- Add `InvalidSubchunkShape` variant to `ArrayCreateError`
-- Add `Tensor` type representing raw bytes with a data type and shape intended for interop with tensor libraries
-  - Implements `dlpack::traits::TensorLike`
-- Add `TensorError` type and `ArrayError::TensorError` variant
-- Add `array::ChunkShapeTraits` (supersedes `ChunkShape` newtype)
+- Add `ArrayBuilder::subchunk_shape()` and `InvalidSubchunkShape` variant to `ArrayCreateError`
+- Add `Tensor` type for tensor library interop (implements `dlpack::traits::TensorLike`) and `TensorError`/`ArrayError::TensorError`
 - Add `Config::{codec_options,codec_metadata_options,array_metadata_options,group_metadata_options}()` methods
 - Add `Default` implementation for `MetadataConvertVersion` and `MetadataEraseVersion`
-- Add runtime extension registration
-  - Add `[un]register_{codec,chunk_key_encoding,storage_transformer}`
-  - Add `{Codec,ChunkKeyEncoding,StorageTransformer}Runtime{Plugin,RegistryHandle}`
-- Add `ArrayError::ArraySubsetError` variant
-- Add `CodecOptions::[{set_,with_}]chunk_concurrent_minimum()`
-- Add `register_data_type_extension_codec!` macro
-- Add `DataTypeExt` trait
+- Add runtime extension registration for codecs, data types, chunk grids, chunk key encodings, and storage transformers
+- Add `ArrayError::ArraySubsetError` variant and `CodecOptions::[{set_,with_}]chunk_concurrent_minimum()`
+- Add `register_data_type_extension_codec!` macro and `DataTypeExt` trait
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
-- **Breaking**: Bump `zarrs_metadata` (public) to 0.7.0
-- **Breaking**: Bump `zarrs_data_type` (public) to 0.8.0
-- **Breaking**: Bump `zarrs_metadata_ext` (public) to 0.4.0
-- **Breaking**: Bump `zarrs_plugin` (public) to 0.4.0
-- **Breaking**: Bump `float8` (public) to 0.5.0
-- **Breaking**: Bump `dlpark` (public) to 0.6.0
-- **Breaking**: Bump `ndarray` (public) to 0.17.1
-- Bump `zarrs_filesystem` to 0.3.8
-- Bump `zarrs_storage` to 0.4.2
-- Bump `zfp-sys` to 0.4.2
-- Bump `pco` to 0.4.9
-- Bump `criterion` (dev) to 0.8.1
+- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.0, `zarrs_data_type` 0.8.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.0, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
+- Bump internal dependencies: `zarrs_filesystem` 0.3.8, `zarrs_storage` 0.4.2, `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
   - Extensions now implement `ExtensionAliases<V>` trait for per-extension alias management
   - Remove `ExtensionAliasesCodecV3` parameter from `Codec::from_metadata()`, `CodecChain::from_metadata()`, `default_array_to_bytes_codec()`, and codec constructor methods
 - **Breaking**: Change `StorageTransformerPlugin` to the new `Plugin` system from `zarrs_plugin`
 - **Breaking**: Add node to `NodeCreateError::MissingMetadata` message ([#280] by [@mannreis])
-- **Breaking**: `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
-- **Breaking**: The `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets
-- **Breaking**: Change various methods to take a `ArrayBytesDecodeIntoTarget` instead of a `ArrayBytesFixedDisjointView`
-  - `[Async]ArrayPartialDecoderTraits::partial_decode_into()`
-  - `ArrayToBytesCodecTraits::decode_into()`
-  - `[Async]Array::retrieve_chunk[_subset]_into()`
-  - `copy_fill_value_into()`
-- **Breaking**: `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
-- **Breaking**: Mark `ArrayBytes` as non-exhaustive
-- **Breaking**: Rename `RawBytes` to `ArrayBytesRaw`
-- **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets`
-- **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
-- **Breaking**: `{Array,Chunk}Representation::shape_u64()` now returns `&[u64]` instead of `Vec<u64>`
-- **Breaking**: Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export
+- **Breaking**: Refactor `ArrayBytes` and related types:
+  - `ArrayBytes::new_fill_value()` now takes a `data_type` and `num_elements` and is fallible
+  - `ArrayBytes::Variable` variant now holds `ArrayBytesVariableLength` rather than bytes and offsets
+  - `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
+  - `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
+  - Rename `RawBytes` to `ArrayBytesRaw`, `RawBytesOffsets` to `ArrayBytesOffsets`
+- **Breaking**: Change various methods to take `ArrayBytesDecodeIntoTarget` instead of `ArrayBytesFixedDisjointView` (`[Async]ArrayPartialDecoderTraits::partial_decode_into()`, `ArrayToBytesCodecTraits::decode_into()`, `[Async]Array::retrieve_chunk[_subset]_into()`, `copy_fill_value_into()`)
+- **Breaking**: Return borrowed references instead of owned collections: `{Array,Chunk}Representation::shape_u64()` returns `&[u64]}`, `Array::chunk_grid_shape()` returns `&[u64]`
+- **Breaking**: Move modules into `zarrs_chunk_grid` and re-export; `ArraySubset` moves from `array_subset` to `array` module
 - **Breaking**: Add `DataType` parameter to `ShardingCodecBuilder::new()` so that it can choose an appropriate default array-to-bytes codec
-- **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` to avoid unnecessary copies with some element types
-  - Added `Element::to_array_bytes()` matching the old signature
+- **Breaking**: `Element::into_array_bytes()` now takes an owned `Vec<T>` instead of a slice `&[T]` (added `Element::to_array_bytes()` matching the old signature)
 - **Breaking**: Refactor array store and retrieve methods to be generic over input and output types
-  - **Breaking**: `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type
-    - Retrieve any array type implementing `FromArrayBytes`, e.g. `ArrayBytes`, `Vec<T>`, `Tensor`, or `ndarray::Array<T>` where `T: ElementOwned`
-    - This is a breaking change for existing code relying on type inference for `ArrayBytes`
-  - `Array::store_*` methods are now generic over the input type
-    - Store any array type implementing `IntoArrayBytes`, e.g. `ArrayBytes`, `&[T]`, `Vec<T>`, or `&ndarray::Array<T>` where `T: Element`
-  - **Breaking**: Deprecate `Array::retrieve_*_{ndarray,elements}` in favour of the generic methods
-  - **Breaking**: Deprecate `Array::{store,retrieve}*_{ndarray,elements}` in favour of the generic methods
-  - **Breaking**: Remove `Array::store_*_dlpark` and `Array::retrieve_*_dlpark` methods
-    - Use the generic `Array::store_*` and `Array::retrieve_*` methods with the `Tensor` type instead, which implements `dlpark::traits::TensorLike`
-  - Added `ChunkCache::retrieve_*_bytes` methods that return `ChunkCacheTypeDecoded` (`Arc<ArrayBytes<'static>>`) directly
-- **Breaking**: Change various methods to take a `ChunkShape`, `DataType`, and `FillValue` (or a subset of those) instead of a `ChunkRepresentation`
-  - `CodecPartialDefault::new()`
-  - Various `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, `ArrayCodecTraits` methods
-- **Breaking**: Replace `ChunkShape` newtype with `Vec<NonZeroU64>`
-- **Breaking**: Change return type of `Array::chunk_grid_shape()` to `&[u64]` instead of `&ArrayShape`
+  - `{Array,ArrayShardedReadableExt,ChunkCache}::retrieve_*` methods are now generic over the return type (any type implementing `FromArrayBytes`)
+  - `Array::store_*` methods are now generic over the input type (any type implementing `IntoArrayBytes`)
+  - Deprecate `Array::retrieve_*_{ndarray,elements}` and `Array::{store,retrieve}*_{ndarray,elements}` in favour of the generic methods
+  - Remove `Array::store_*_dlpark` and `Array::retrieve_*_dlpark` methods (use `Tensor` type instead)
+  - Added `ChunkCache::retrieve_*_bytes` methods that return `ChunkCacheTypeDecoded` directly
+- **Breaking**: Change various methods to take `ChunkShape`, `DataType`, and `FillValue` instead of `ChunkRepresentation` (`CodecPartialDefault::new()`, various codec trait methods)
+- **Breaking**: Replace `ChunkShape` newtype with `Vec<NonZeroU64>`, use `ChunkShapeTraits` instead
 - **Breaking**: Refactor low-level codec API to reduce global config retrieval
   - `CodecOptions` and `CodecMetadataOptions` now implement `Copy` with hardcoded defaults; use `Config::codec_options()` / `Config::codec_metadata_options()` to get options from global config
   - Remove `CodecOptionsBuilder`, `CodecOptions::builder()`, `CodecOptions::into_builder()`
-  - Rename `ArrayMetadataOptions::codec_options[_mut]()` to `codec_metadata_options[_mut]()`
-  - Rename `CodecTraits::configuration_opt()` to `configuration()`
-  - **Breaking**: Add `ZarrVersion` parameter to `CodecTraits::configuration()`
-  - Rename `CodecChain::create_metadatas_opt()` to `create_metadatas()` (now requires `&CodecMetadataOptions`)
+  - Rename `ArrayMetadataOptions::codec_options[_mut]()` to `codec_metadata_options[_mut]()`, `CodecTraits::configuration_opt()` to `configuration()`, `CodecChain::create_metadatas_opt()` to `create_metadatas()`
+  - Add `ZarrVersion` parameter to `CodecTraits::configuration()`
   - Remove `CodecTraits::default_name()`
-- **Breaking**: Replace `{DataType,DataTypeExtension}::name()` with `ExtensionName` trait implementation
-- **Breaking**: Replace `DataType::metadata()` with `configuration()` (`MetadataV3` -> `Configuration`)
-- **Breaking**: Deprecate the `array::ArrayCodecTraits` re-export in favour of using `zarrs::array::codec::ArrayCodecTraits` directly
-- Performance improvements:
-  - Avoid an unnecessary copy in `Array::store_*_ndarray` when arrays are in standard layout
-  - Avoid unnecessary allocations in `Array` methods and some codecs
-  - Improve index iterator performance
-- **Breaking**: Move `ArraySubset` from the `array_subset` to `array` module
-- **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `ArrayBytesFixedDisjointViewCreateError::IndexerError`
+- **Breaking**: Refactor `DataType` API: replace `{DataType,DataTypeExtension}::name()` with `ExtensionName` trait, replace `DataType::metadata()` with `configuration()`
+- Performance improvements: avoid unnecessary copies/allocations in `Array` methods and codecs, improve index iterator performance
 - `Array`, `ChunkCache`, and `ArrayShardedReadableExt` methods take `&dyn ArraySubsetTraits` instead of `&ArraySubset`
+- **Breaking**: `CodecTraits` changes: require `ExtensionName` implementation, add `is_any()` method, remove `name` parameter from `configuration`
 - **Breaking**: Change `Codec::from_metadata` parameter to `&CodecMetadata` instead of `&MetadataV3`
 - **Breaking**: Change the representation of the `ArrayError::{InvalidFillValue,InvalidFillValueMetadata}` variants
-- **Breaking**: Require `CodecTraits` to implement `ExtensionName`
-- **Breaking**: Add `CodecTraits::is_any()` method
-- **Breaking**: Remove `name` parameter from `CodecTraits::configuration`
+- **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `IndexerError`
 - **Breaking**: Do not re-export `array::FillValueMetadata{V3,V3}`, use `FillValueMetadata` instead
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency
 - **Breaking**: Remove `Config::codec_aliases_{v2,v3}()` and `Config::data_type_aliases_{v2,v3}()` methods
 - **Breaking**: Remove `ZfpCodec::new_with_configuration_zfpy()` (use `ZfpyCodec` instead)
-- **Breaking**: Remove `ArraySize`
-- **Breaking**: Remove `{Array,Chunk}Representation::size()`
-  - Use `num_elements()` and `element_size()` instead
-- **Breaking**: Remove `RawBytesDlPack`, `ArrayDlPackExtError`, `AsyncArrayDlPackExt`, and `ArrayError::DlPackError`
-- **Breaking**: Remove `array::ArrayRepresentationBase`
-- **Breaking**: Remove `Array::chunk_array_representation()`, use `chunk_shape()`, `data_type()`, and `fill_value()` instead
-- **Breaking**: Remove `CodecError::DataTypeExtension` variant
-- **Breaking**: Remove `ArrayError::IncompatibleStartEndIndicesError` and `IncompatibleStartEndIndicesError` variants
-- **Breaking**: Remove `indexer` and `array_subset` modules, types are re-exported under in the `array` module
-- **Breaking**: Remove `Named[{ArrayToArray,ArrayToBytes,BytesToBytes}]Codec`
-- **Breaking**: Remove `NamedDataType`
-- **Breaking**: Remove `ShardingCodecBuilder::*_named()` methods
-- **Breaking**: Remove `DataType::into_named()`
-- **Breaking**: Rename `codec_v2_to_v3_name()`, replaced by `codec_v2_to_v3()`
+- **Breaking**: Remove `ArraySize` and `{Array,Chunk}Representation::size()` (use `num_elements()` and `element_size()` instead)
+- **Breaking**: Remove DLPack legacy API: `RawBytesDlPack`, `ArrayDlPackExtError`, `AsyncArrayDlPackExt`, `ArrayError::DlPackError`
+- **Breaking**: Remove `array::ArrayRepresentationBase` and `Array::chunk_array_representation()` (use `chunk_shape()`, `data_type()`, `fill_value()`)
+- **Breaking**: Remove `CodecError::DataTypeExtension`, `ArrayError::IncompatibleStartEndIndicesError`, and `IncompatibleStartEndIndicesError`
+- **Breaking**: Remove `indexer` and `array_subset` modules (types re-exported in `array` module)
+- **Breaking**: Remove `Named*` types and methods: `Named[{ArrayToArray,ArrayToBytes,BytesToBytes}]Codec`, `NamedDataType`, `ShardingCodecBuilder::*_named()`, `DataType::into_named()`
+- **Breaking**: Rename `codec_v2_to_v3_name()` to `codec_v2_to_v3()` and change parameter to metadata from name
 
 ### Fixed
 - Fix `transpose` codec decoding with variable-size data types

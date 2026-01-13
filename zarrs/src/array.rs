@@ -67,9 +67,9 @@ pub use zarrs_codec::{
     ArrayBytes, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayRawBytesOffsetsCreateError,
-    ArrayRawBytesOffsetsOutOfBoundsError, ArrayToBytesCodecTraits, BytesRepresentation, Codec,
-    CodecMetadataOptions, CodecOptions, RecommendedConcurrency, copy_fill_value_into,
-    update_array_bytes,
+    ArrayRawBytesOffsetsOutOfBoundsError, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesRepresentation, BytesToBytesCodecTraits, Codec, CodecMetadataOptions, CodecOptions,
+    CodecTraits, RecommendedConcurrency, copy_fill_value_into, update_array_bytes,
 };
 pub use zarrs_data_type::{DataType, DataTypeTraits, FillValue};
 pub use zarrs_metadata::v2::ArrayMetadataV2;
