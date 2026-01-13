@@ -275,7 +275,6 @@ mod tests {
 
     use super::*;
     use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
     use crate::storage::byte_range::ByteRange;
 

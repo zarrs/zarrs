@@ -40,7 +40,6 @@ use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
 use crate::array::codec::{Codec, CodecError, CodecPluginV3};
-use crate::array::data_type::DataTypeExt;
 use crate::metadata::Endianness;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
@@ -97,7 +96,7 @@ pub trait BytesCodecDataTypeTraits {
 }
 
 // Generate the codec support infrastructure using the generic macro
-crate::array::codec::define_data_type_support!(Bytes, BytesCodecDataTypeTraits);
+zarrs_codec::define_data_type_support!(Bytes, BytesCodecDataTypeTraits);
 
 /// Macro to implement a passthrough `BytesCodecDataTypeTraits` for data types and register support.
 ///
@@ -131,7 +130,7 @@ macro_rules! _impl_bytes_codec_passthrough {
                 Ok(bytes)
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::BytesPlugin,
             $crate::array::codec::BytesCodecDataTypeTraits
@@ -190,7 +189,6 @@ mod tests {
         ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions,
         CodecTraits,
     };
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
     };

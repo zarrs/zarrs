@@ -9,20 +9,19 @@ use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder, PcodecElementType, get_pcodec_support,
 };
-use crate::array::codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
-};
 use crate::array::{
-    BytesRepresentation, ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice,
-    transmute_to_bytes_vec,
+    ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
 };
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::pcodec::{
     PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
+};
 
 /// A `pcodec` codec implementation.
 #[derive(Debug, Clone)]

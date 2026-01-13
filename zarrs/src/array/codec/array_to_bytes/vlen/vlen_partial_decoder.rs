@@ -3,7 +3,6 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use crate::array::array_bytes::extract_decoded_regions_vlen;
 use crate::array::codec::{
     ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
 };
@@ -12,6 +11,7 @@ use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecod
 use crate::array::{ArrayBytes, ArrayBytesRaw, CodecChain, DataType, FillValue};
 use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::storage::StorageError;
+use zarrs_codec::extract_decoded_regions_vlen;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenPartialDecoder {
@@ -74,7 +74,9 @@ fn decode_vlen_bytes<'a>(
             index_location,
             options,
         )?;
-        extract_decoded_regions_vlen(&data, &index, indexer, shape)
+        Ok(ArrayBytes::Variable(extract_decoded_regions_vlen(
+            &data, &index, indexer, shape,
+        )?))
     } else {
         // Chunk is empty, all decoded regions are empty
         ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)

@@ -93,6 +93,7 @@ itoa = "1.0.15"
 log = "0.4.28"
 base64 = "0.22.1"
 zarrs_chunk_grid.workspace = true
+zarrs_codec.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 quick_cache = { version = "0.6.16" }

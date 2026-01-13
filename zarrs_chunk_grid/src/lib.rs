@@ -532,7 +532,7 @@ impl<T> ChunkGridTraitsIterators for T where T: ChunkGridTraits {}
 ///
 /// Returns [`None`] if any `indices` are out-of-bounds of `shape`.
 #[must_use]
-fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
+pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
     let mut index: u64 = 0;
     let mut count = 1;
     for (i, s) in std::iter::zip(indices, shape).rev() {

@@ -2,7 +2,7 @@
 
 use crate::array::data_type::NumpyDateTime64DataType;
 use crate::array::{
-    ArrayBytes, ArrayError, DataType, DataTypeExt, Element, ElementOwned, convert_from_bytes_slice,
+    ArrayBytes, ArrayError, DataType, Element, ElementOwned, convert_from_bytes_slice,
 };
 
 #[cfg(feature = "chrono")]

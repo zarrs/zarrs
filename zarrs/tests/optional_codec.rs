@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use zarrs::array::{Array, ArrayBuilder, ArraySubset, DataType, DataTypeExt, FillValue, data_type};
+use zarrs::array::{Array, ArrayBuilder, ArraySubset, DataType, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 
 /// Test helper to create an array with optional codec

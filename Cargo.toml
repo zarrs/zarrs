@@ -5,6 +5,7 @@ resolver = "2"
 members = [
     "zarrs",
     "zarrs_chunk_grid",
+    "zarrs_codec",
     "zarrs_data_type",
     "zarrs_metadata",
     "zarrs_metadata_ext",
@@ -32,6 +33,11 @@ missing_errors_doc = "warn"
 [workspace.dependencies.zarrs_chunk_grid]
 version = "0.4.0"
 path = "zarrs_chunk_grid"
+
+[workspace.dependencies.zarrs_codec]
+version = "0.1.0"
+path = "zarrs_codec"
+
 
 [workspace.dependencies.zarrs_data_type]
 version = "0.8.0"

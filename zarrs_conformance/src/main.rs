@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use zarrs::array::{Array, ArrayBytes, DataType, DataTypeExt, FillValue};
+use zarrs::array::{Array, ArrayBytes, DataType, FillValue};
 use zarrs::filesystem::FilesystemStore;
 
 /// Command-line arguments for the conformance test binary.
@@ -44,9 +44,6 @@ fn print_elements_as_fill_value_metadata(
         }
         ArrayBytes::Optional(..) => {
             anyhow::bail!("Optional data types are not yet supported in conformance testing");
-        }
-        _ => {
-            anyhow::bail!("Unsupported ArrayBytes variant in conformance testing");
         }
     }
 }

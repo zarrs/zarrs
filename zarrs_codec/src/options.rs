@@ -2,7 +2,12 @@
 
 /// Codec options for encoding/decoding.
 ///
-/// Default values for these options are set by the global [`Config`](crate::config::Config).
+/// The default values are:
+/// - `validate_checksums`: `true`
+/// - `store_empty_chunks`: `false`
+/// - `concurrent_target`: number of threads available to Rayon
+/// - `chunk_concurrent_minimum`: `4`
+/// - `experimental_partial_encoding`: `false`
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     validate_checksums: bool,
@@ -146,20 +151,20 @@ impl Default for CodecMetadataOptions {
 }
 
 impl CodecMetadataOptions {
-    /// Return the [codec store metadata if encode only](crate::config::Config#codec-store-metadata-if-encode-only) setting.
+    /// Return the store metadata if encode only setting.
     #[must_use]
     pub fn codec_store_metadata_if_encode_only(&self) -> bool {
         self.codec_store_metadata_if_encode_only
     }
 
-    /// Set the [codec store metadata if encode only](crate::config::Config#codec-store-metadata-if-encode-only) setting.
+    /// Set the store metadata if encode only setting.
     #[must_use]
     pub fn with_codec_store_metadata_if_encode_only(mut self, enabled: bool) -> Self {
         self.codec_store_metadata_if_encode_only = enabled;
         self
     }
 
-    /// Set the [codec store metadata if encode only](crate::config::Config#codec-store-metadata-if-encode-only) setting.
+    /// Set the codec store metadata if encode only setting.
     pub fn set_codec_store_metadata_if_encode_only(&mut self, enabled: bool) -> &mut Self {
         self.codec_store_metadata_if_encode_only = enabled;
         self

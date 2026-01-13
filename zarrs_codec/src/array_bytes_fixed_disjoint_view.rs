@@ -1,10 +1,10 @@
 use derive_more::derive::Display;
 use thiserror::Error;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_chunk_grid::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
+use zarrs_chunk_grid::{ArraySubset, IndexerError};
 
-use super::codec::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
-use crate::array::iterators::{ContiguousIndices, ContiguousLinearisedIndices};
-use crate::array::{ArraySubset, IndexerError};
+use crate::{CodecError, InvalidBytesLengthError, SubsetOutOfBoundsError};
 
 /// A disjoint view of the bytes in an array with a fixed-length data type.
 ///

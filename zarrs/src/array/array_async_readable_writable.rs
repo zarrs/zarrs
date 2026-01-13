@@ -1,15 +1,14 @@
 use futures::{StreamExt, TryStreamExt};
 
-use super::array_bytes::update_array_bytes;
-use super::codec::{
-    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
-    StoragePartialEncoder,
-};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
 use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
+};
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
+    StoragePartialEncoder, update_array_bytes,
 };
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::array_bytes::merge_chunks_vlen;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
 use super::codec::{CodecError, CodecOptions, ShardingCodec};
 use super::concurrency::concurrency_chunks_and_codec;
@@ -22,6 +21,7 @@ use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::byte_range::ByteRange;
 use crate::storage::{ReadableStorageTraits, StorageHandle};
+use zarrs_codec::{ArrayBytesVariableLength, merge_chunks_vlen};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]
@@ -562,7 +562,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                 match self.data_type().size() {
                     DataTypeSize::Variable => {
                         let retrieve_inner_chunk = |shard_indices: ArrayIndicesTinyVec| -> Result<
-                            (ArrayBytes<'_>, ArraySubset),
+                            (ArrayBytesVariableLength<'_>, ArraySubset),
                             ArrayError,
                         > {
                             let shard_subset = self.chunk_subset(&shard_indices)?;
@@ -573,7 +573,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                                     &shard_subset_overlap.relative_to(shard_subset.start())?,
                                     &options,
                                 )?
-                                .into_owned();
+                                .into_owned()
+                                .into_variable()?;
                             Ok((
                                 bytes,
                                 shard_subset_overlap.relative_to(&array_subset_start)?,
@@ -589,7 +590,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt
                         )
                         .collect::<Result<Vec<_>, _>>()?;
 
-                        merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset_shape)?
+                        ArrayBytes::Variable(merge_chunks_vlen(
+                            chunk_bytes_and_subsets,
+                            &array_subset_shape,
+                        )?)
                     }
                     DataTypeSize::Fixed(data_type_size) => {
                         let size_output = array_subset.num_elements_usize() * data_type_size;

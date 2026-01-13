@@ -130,7 +130,7 @@ pub trait PcodecCodecDataTypeTraits {
 }
 
 // Generate the codec support infrastructure using the generic macro
-crate::array::codec::define_data_type_support!(Pcodec, PcodecCodecDataTypeTraits);
+zarrs_codec::define_data_type_support!(Pcodec, PcodecCodecDataTypeTraits);
 
 /// Macro to implement `PcodecCodecDataTypeTraits` for data types and register support.
 ///
@@ -152,7 +152,7 @@ macro_rules! _impl_pcodec_codec {
                 $elements_per_element
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PcodecPlugin,
             $crate::array::codec::PcodecCodecDataTypeTraits
@@ -170,7 +170,6 @@ mod tests {
 
     use super::*;
     use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
         transmute_to_bytes_vec,

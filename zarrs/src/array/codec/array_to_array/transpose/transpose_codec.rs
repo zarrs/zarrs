@@ -13,7 +13,6 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;

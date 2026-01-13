@@ -9,13 +9,11 @@ use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
-use crate::array::array_bytes::ArrayBytesVariableLength;
 use crate::array::codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency,
 };
-use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use crate::metadata::{Configuration, DataTypeSize};
 
@@ -76,7 +74,10 @@ impl OptionalCodec {
                 }
                 Ok(ArrayBytes::new_flen(sparse_bytes))
             }
-            ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }) => {
+            ArrayBytes::Variable(vlen_bytes) => {
+                let bytes = vlen_bytes.bytes();
+                let offsets = vlen_bytes.offsets();
+
                 // Variable-length: Extract only valid elements based on mask
                 let mut sparse_bytes = Vec::new();
                 let mut sparse_offsets = Vec::new();
@@ -152,10 +153,10 @@ impl OptionalCodec {
 
                 Ok(ArrayBytes::new_flen(dense_bytes))
             }
-            ArrayBytes::Variable(ArrayBytesVariableLength {
-                bytes: sparse_bytes,
-                offsets: sparse_offsets,
-            }) => {
+            ArrayBytes::Variable(vlen_bytes) => {
+                let sparse_bytes = vlen_bytes.bytes();
+                let sparse_offsets = vlen_bytes.offsets();
+
                 // Variable-length: Create dense array with placeholders for invalid elements
                 let num_elements = mask.len();
                 let mut dense_bytes = Vec::new();
@@ -507,7 +508,6 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 mod tests {
     use super::*;
     use crate::array::codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits};
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
 
     #[test]

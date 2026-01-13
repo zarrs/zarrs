@@ -9,7 +9,6 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use crate::array::data_type::DataTypeExt;
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, DataType,
     DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,

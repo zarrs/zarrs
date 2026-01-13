@@ -13,7 +13,7 @@ use zarrs_plugin::{
 
 use crate::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV2, DataTypePluginV3,
-    FillValue, DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
+    FillValue, OptionalDataType, DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
 };
 
 /// A data type implementing [`DataTypeTraits`].
@@ -141,6 +141,71 @@ impl DataType {
             }
         }
         Err(PluginUnsupportedError::new(name.to_string(), "data type".to_string()).into())
+    }
+
+    /// Returns true if this data type is of type `T`.
+    #[must_use]
+    pub fn is<T>(&self) -> bool
+    where
+        T: 'static,
+    {
+        self.as_ref().as_any().is::<T>()
+    }
+
+    /// Downcast this data type to type `T`.
+    #[must_use]
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: 'static,
+    {
+        self.as_ref().as_any().downcast_ref::<T>()
+    }
+
+    /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
+    #[must_use]
+    pub fn fixed_size(&self) -> Option<usize> {
+        match self.size() {
+            DataTypeSize::Fixed(size) => Some(size),
+            DataTypeSize::Variable => None,
+        }
+    }
+
+    /// Returns `true` if the data type has a fixed size.
+    #[must_use]
+    pub fn is_fixed(&self) -> bool {
+        matches!(self.size(), DataTypeSize::Fixed(_))
+    }
+
+    /// Returns `true` if the data type has a variable size.
+    #[must_use]
+    pub fn is_variable(&self) -> bool {
+        matches!(self.size(), DataTypeSize::Variable)
+    }
+
+    /// Returns true if this is an optional data type.
+    #[must_use]
+    pub fn is_optional(&self) -> bool {
+        self.as_ref().as_any().is::<OptionalDataType>()
+    }
+
+    /// Returns the optional type wrapper if this is an optional data type.
+    #[must_use]
+    pub fn as_optional(&self) -> Option<&OptionalDataType> {
+        self.downcast_ref::<OptionalDataType>()
+    }
+
+    /// For optional types: returns the inner data type.
+    ///
+    /// Returns `None` if this is not an optional type.
+    #[must_use]
+    pub fn optional_inner(&self) -> Option<&DataType> {
+        self.as_optional().map(OptionalDataType::data_type)
+    }
+
+    /// Wrap this data type in an optional type.
+    #[must_use]
+    pub fn to_optional(&self) -> DataType {
+        Arc::new(OptionalDataType::new(self.clone())).into()
     }
 }
 

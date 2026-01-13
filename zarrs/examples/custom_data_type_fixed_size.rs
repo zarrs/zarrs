@@ -20,8 +20,8 @@ use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeExt, DataTypeSize, Element,
-    ElementOwned, FillValueMetadata,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
+    FillValueMetadata,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
@@ -276,7 +276,7 @@ impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
 }
 
 // Register codec support
-zarrs::array::codec::register_data_type_extension_codec!(
+zarrs_codec::register_data_type_extension_codec!(
     CustomDataTypeFixedSize,
     zarrs::array::codec::BytesPlugin,
     zarrs::array::codec::BytesCodecDataTypeTraits

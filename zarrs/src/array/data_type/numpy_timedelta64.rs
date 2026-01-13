@@ -134,7 +134,7 @@ impl crate::array::codec::BytesCodecDataTypeTraits for NumpyTimeDelta64DataType 
     }
 }
 
-crate::array::codec::register_data_type_extension_codec!(
+zarrs_codec::register_data_type_extension_codec!(
     NumpyTimeDelta64DataType,
     crate::array::codec::BytesPlugin,
     crate::array::codec::BytesCodecDataTypeTraits

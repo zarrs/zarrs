@@ -12,7 +12,6 @@ use crate::array::codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;

@@ -1,12 +1,28 @@
 use std::borrow::Cow;
 
-use zarrs_data_type::{DataType, DataTypeFillValueMetadataError, FillValue};
+use crate::{DataType, DataTypeFillValueMetadataError, FillValue};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, ConfigurationSerialize};
-use zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1;
 use zarrs_plugin::{
     ExtensionName, PluginConfigurationInvalidError, PluginCreateError, ZarrVersion,
 };
+
+/// The `optional` data type configuration (version 1.0).
+///
+/// Matches `zarrs_metadata_ext::data_type::optional::OptionalDataTypeConfigurationV1`.
+#[derive(
+    Clone, Eq, PartialEq, Debug, serde::Serialize, serde::Deserialize, derive_more::Display,
+)]
+#[serde(deny_unknown_fields)]
+#[display("{}", serde_json::to_string(self).unwrap_or_default())]
+struct OptionalDataTypeConfigurationV1 {
+    /// The inner data type name.
+    pub name: String,
+    /// The configuration of the inner data type.
+    pub configuration: Configuration,
+}
+
+impl ConfigurationSerialize for OptionalDataTypeConfigurationV1 {}
 
 /// The `optional` data type.
 ///
@@ -33,7 +49,7 @@ zarrs_plugin::impl_extension_aliases!(OptionalDataType,
 
 // Register as V3-only data type.
 inventory::submit! {
-    zarrs_data_type::DataTypePluginV3::new::<OptionalDataType>(create_optional_data_type_v3)
+    crate::DataTypePluginV3::new::<OptionalDataType>(create_optional_data_type_v3)
 }
 
 fn create_optional_data_type_v3(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
@@ -118,7 +134,7 @@ impl OptionalDataType {
 
     /// The underlying inner data type.
     #[must_use]
-    pub fn data_type(&self) -> &crate::array::DataType {
+    pub fn data_type(&self) -> &crate::DataType {
         &self.0
     }
 
@@ -131,14 +147,12 @@ impl OptionalDataType {
     /// Returns true if the inner data type is fixed size.
     #[must_use]
     pub fn is_fixed(&self) -> bool {
-        use crate::array::data_type::DataTypeExt;
         self.0.is_fixed()
     }
 
     /// Returns the fixed size of the inner data type if it's fixed size.
     #[must_use]
     pub fn fixed_size(&self) -> Option<usize> {
-        use crate::array::data_type::DataTypeExt;
         self.0.fixed_size()
     }
 
@@ -156,7 +170,7 @@ impl OptionalDataType {
 }
 
 // DataTypeTraits implementation for OptionalDataType
-impl zarrs_data_type::DataTypeTraits for OptionalDataType {
+impl crate::DataTypeTraits for OptionalDataType {
     fn configuration(&self, version: ZarrVersion) -> Configuration {
         // Use the existing configuration() method
         OptionalDataType::configuration(self, version)
@@ -172,7 +186,7 @@ impl zarrs_data_type::DataTypeTraits for OptionalDataType {
         &self,
         fill_value_metadata: &zarrs_metadata::FillValueMetadata,
         version: zarrs_plugin::ZarrVersion,
-    ) -> Result<FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
+    ) -> Result<FillValue, crate::DataTypeFillValueMetadataError> {
         if fill_value_metadata.is_null() {
             // Null fill value for optional type: single 0x00 byte
             Ok(FillValue::new_optional_null())
@@ -189,7 +203,7 @@ impl zarrs_data_type::DataTypeTraits for OptionalDataType {
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
+    ) -> Result<zarrs_metadata::FillValueMetadata, crate::DataTypeFillValueError> {
         if self.is_fill_value_null(fill_value) {
             Ok(zarrs_metadata::FillValueMetadata::Null)
         } else {

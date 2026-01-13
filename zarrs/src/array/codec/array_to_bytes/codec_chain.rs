@@ -5,26 +5,25 @@ use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionName, ZarrVersion};
 
-use crate::array::codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderCache,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderCache, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-};
-#[cfg(feature = "async")]
-use crate::array::codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits,
-};
-use crate::array::concurrency::RecommendedConcurrency;
-use crate::array::data_type::DataTypeExt;
+use crate::array::codec::{ArrayPartialDecoderCache, BytesPartialDecoderCache};
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShape, DataType, FillValue,
 };
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 use crate::plugin::PluginCreateError;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, decode_into_array_bytes_target,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
@@ -460,7 +459,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
 
-        crate::array::array_bytes::decode_into_array_bytes_target(&bytes, output_target)
+        decode_into_array_bytes_target(&bytes, output_target)
     }
 
     fn compact<'a>(

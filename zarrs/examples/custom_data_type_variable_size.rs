@@ -6,8 +6,8 @@ use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeExt, DataTypeSize,
-    Element, ElementOwned,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
+    ElementOwned,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, FillValueMetadata};

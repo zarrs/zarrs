@@ -136,10 +136,7 @@ pub trait FixedScaleOffsetCodecDataTypeTraits {
 }
 
 // Generate the codec support infrastructure using the generic macro
-crate::array::codec::define_data_type_support!(
-    FixedScaleOffset,
-    FixedScaleOffsetCodecDataTypeTraits
-);
+zarrs_codec::define_data_type_support!(FixedScaleOffset, FixedScaleOffsetCodecDataTypeTraits);
 
 /// Macro to implement `FixedScaleOffsetCodecDataTypeTraits` for data types and register support.
 ///
@@ -159,7 +156,7 @@ macro_rules! _impl_fixedscaleoffset_codec {
                 $crate::array::codec::FixedScaleOffsetElementType::$element_type
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::FixedScaleOffsetPlugin,
             $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits

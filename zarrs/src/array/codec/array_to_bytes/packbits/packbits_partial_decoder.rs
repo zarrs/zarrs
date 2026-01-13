@@ -15,7 +15,6 @@ use crate::array::codec::{
 };
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use crate::array::data_type::DataTypeExt;
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 use crate::storage::StorageError;

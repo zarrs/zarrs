@@ -188,7 +188,7 @@ pub trait ZfpCodecDataTypeTraits {
 }
 
 // Generate the codec support infrastructure using the generic macro
-crate::array::codec::define_data_type_support!(Zfp, ZfpCodecDataTypeTraits);
+zarrs_codec::define_data_type_support!(Zfp, ZfpCodecDataTypeTraits);
 
 /// Macro to implement `ZfpCodecDataTypeTraits` for data types and register support.
 ///
@@ -215,7 +215,7 @@ macro_rules! _impl_zfp_codec {
                 None
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -231,7 +231,7 @@ macro_rules! _impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::None
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -247,7 +247,7 @@ macro_rules! _impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::$promotion
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits

@@ -28,7 +28,6 @@ mod int2;
 mod int4;
 mod numpy_datetime64;
 mod numpy_timedelta64;
-mod optional;
 mod raw_bits;
 mod string;
 mod subfloat;
@@ -40,7 +39,6 @@ use std::borrow::Cow;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use zarrs_metadata::DataTypeSize;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionName;
 
@@ -72,7 +70,6 @@ pub use int2::Int2DataType;
 pub use int4::Int4DataType;
 pub use numpy_datetime64::NumpyDateTime64DataType;
 pub use numpy_timedelta64::NumpyTimeDelta64DataType;
-pub use optional::OptionalDataType;
 pub use raw_bits::RawBitsDataType;
 pub use subfloat::{
     Float4E2M1FNDataType, Float6E2M3FNDataType, Float6E3M2FNDataType, Float8E3M4DataType,
@@ -82,6 +79,7 @@ pub use subfloat::{
 pub use uint::{UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType};
 pub use uint2::UInt2DataType;
 pub use uint4::UInt4DataType;
+pub use zarrs_data_type::OptionalDataType;
 
 // Integers
 /// Create a `bool` data type.
@@ -344,92 +342,6 @@ pub fn optional(inner: DataType) -> DataType {
     Arc::new(OptionalDataType::new(inner)).into()
 }
 
-/// Extension trait providing convenience methods for [`DataType`].
-///
-/// This trait adds methods that are not part of [`DataTypeTraits`] but are
-/// useful when working with data types in the context of zarrs.
-pub trait DataTypeExt {
-    /// Returns true if this data type is of type `T`.
-    fn is<T>(&self) -> bool
-    where
-        T: 'static;
-
-    /// Downcast this data type to type `T`.
-    fn downcast_ref<T>(&self) -> Option<&T>
-    where
-        T: 'static;
-
-    /// Returns true if this is an optional data type.
-    fn is_optional(&self) -> bool;
-
-    /// Returns the optional type wrapper if this is an optional data type.
-    fn as_optional(&self) -> Option<&OptionalDataType>;
-
-    /// For optional types: returns the inner data type.
-    ///
-    /// Returns `None` if this is not an optional type.
-    fn optional_inner(&self) -> Option<&DataType>;
-
-    /// Returns the size in bytes of a fixed-size data type, otherwise returns [`None`].
-    fn fixed_size(&self) -> Option<usize>;
-
-    /// Returns `true` if the data type has a fixed size.
-    fn is_fixed(&self) -> bool;
-
-    /// Returns `true` if the data type has a variable size.
-    fn is_variable(&self) -> bool;
-
-    /// Wrap this data type in an optional type.
-    fn to_optional(&self) -> DataType;
-}
-
-impl DataTypeExt for DataType {
-    fn is<T>(&self) -> bool
-    where
-        T: 'static,
-    {
-        self.as_ref().as_any().is::<T>()
-    }
-
-    fn downcast_ref<T>(&self) -> Option<&T>
-    where
-        T: 'static,
-    {
-        self.as_ref().as_any().downcast_ref::<T>()
-    }
-
-    fn is_optional(&self) -> bool {
-        self.as_ref().as_any().is::<OptionalDataType>()
-    }
-
-    fn as_optional(&self) -> Option<&OptionalDataType> {
-        self.downcast_ref::<OptionalDataType>()
-    }
-
-    fn optional_inner(&self) -> Option<&DataType> {
-        self.as_optional().map(OptionalDataType::data_type)
-    }
-
-    fn fixed_size(&self) -> Option<usize> {
-        match self.size() {
-            DataTypeSize::Fixed(size) => Some(size),
-            DataTypeSize::Variable => None,
-        }
-    }
-
-    fn is_fixed(&self) -> bool {
-        matches!(self.size(), DataTypeSize::Fixed(_))
-    }
-
-    fn is_variable(&self) -> bool {
-        matches!(self.size(), DataTypeSize::Variable)
-    }
-
-    fn to_optional(&self) -> DataType {
-        optional(self.clone())
-    }
-}
-
 /// Get the default V3 name for a V3 data type name.
 ///
 /// This checks registered data type plugins (which include both built-in types and extensions).
@@ -464,8 +376,11 @@ pub(crate) fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
 #[cfg(test)]
 mod tests {
     use half::bf16;
+    use zarrs_codec::ArrayBytes;
+    use zarrs_metadata::DataTypeSize;
 
     use super::*;
+    use crate::array::Element;
     use crate::metadata::FillValueMetadata;
     use crate::metadata::v3::{
         MetadataV3, ZARR_NAN_BF16, ZARR_NAN_F16, ZARR_NAN_F32, ZARR_NAN_F64,
@@ -2119,5 +2034,25 @@ mod tests {
         );
         let roundtrip = triple_nested.fill_value_v3(&metadata).unwrap();
         assert_eq!(fill_value, roundtrip);
+    }
+
+    #[test]
+    fn array_bytes_u32() {
+        let data = vec![0u32, 1, 2, 3, 4];
+        let n_elements = data.len();
+        let bytes = Element::into_array_bytes(&uint32(), data).unwrap();
+        let ArrayBytes::Fixed(bytes) = bytes else {
+            panic!()
+        };
+        assert_eq!(bytes.len(), size_of::<u32>() * n_elements);
+    }
+
+    #[test]
+    fn array_bytes_str() {
+        let data = vec!["a", "bb", "ccc"];
+        let bytes = Element::into_array_bytes(&string(), data).unwrap();
+        let (bytes, offsets) = bytes.into_variable().unwrap().into_parts();
+        assert_eq!(bytes, "abbccc".as_bytes());
+        assert_eq!(*offsets, [0, 1, 3, 6]);
     }
 }
