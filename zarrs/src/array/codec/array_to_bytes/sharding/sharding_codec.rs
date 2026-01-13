@@ -11,18 +11,10 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
-    ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
+    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
     sharding_index_shape, sharding_partial_encoder,
 };
-use crate::array::codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecChain, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-};
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
@@ -31,7 +23,14 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
-use zarrs_codec::merge_chunks_vlen;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, merge_chunks_vlen,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `sharding` codec implementation.

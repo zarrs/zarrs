@@ -39,11 +39,11 @@ pub use fletcher32_codec::Fletcher32Codec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::fletcher32::{
     Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(Fletcher32Codec,
     v3: "numcodecs.fletcher32", ["numcodecs.fletcher32", "https://codec.zarrs.dev/bytes_to_bytes/fletcher32"],
@@ -88,11 +88,11 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{
+    use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
         CodecTraits,
     };
-    use crate::storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
 

@@ -40,11 +40,11 @@ use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
 use crate::array::ChunkShape;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -116,8 +116,8 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::codec::{ArrayToArrayCodecTraits, CodecOptions};
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
 
     fn codec_reshape_round_trip_impl(
         json: &str,

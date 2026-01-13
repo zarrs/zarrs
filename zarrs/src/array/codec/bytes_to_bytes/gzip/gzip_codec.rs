@@ -8,12 +8,12 @@ use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use crate::array::codec::{
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::metadata::Configuration;
+use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 /// A `gzip` codec implementation.

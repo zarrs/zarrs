@@ -1,9 +1,9 @@
 use serde_json::Value;
 use thiserror::Error;
+use zarrs_codec::CodecError;
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
-use super::codec::CodecError;
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;

@@ -41,11 +41,11 @@ use std::sync::Arc;
 pub use shuffle_codec::ShuffleCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPluginV3};
 pub use crate::metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(ShuffleCodec,
     v3: "numcodecs.shuffle", []
@@ -71,8 +71,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
     use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
 

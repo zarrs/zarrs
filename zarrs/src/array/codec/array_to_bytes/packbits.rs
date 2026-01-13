@@ -36,11 +36,11 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(PackBitsCodec, v3: "packbits");
 
@@ -187,12 +187,11 @@ mod tests {
     use num::Integer;
     use zarrs_data_type::FillValue;
 
-    use crate::array::codec::{
-        ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions,
-    };
+    use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{ArrayBytes, ArraySubset, data_type};
     use crate::metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+    use zarrs_codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
 
     #[test]
     fn div_rem_8bit() {

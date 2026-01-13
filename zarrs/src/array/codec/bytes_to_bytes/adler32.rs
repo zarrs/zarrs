@@ -37,11 +37,11 @@ pub use adler32_codec::Adler32Codec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(Adler32Codec,
     v3: "numcodecs.adler32", [],

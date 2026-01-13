@@ -68,10 +68,10 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
 };
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use zfpy_codec::ZfpyCodec;
 
 zarrs_plugin::impl_extension_aliases!(ZfpyCodec,

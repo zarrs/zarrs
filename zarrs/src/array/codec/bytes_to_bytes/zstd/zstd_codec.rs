@@ -5,12 +5,12 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zstd::zstd_safe;
 
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
-use crate::array::codec::{
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::metadata::Configuration;
+use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]

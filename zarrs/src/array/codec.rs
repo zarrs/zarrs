@@ -71,41 +71,18 @@ mod bytes_partial_decoder_cache;
 pub(crate) use array_partial_decoder_cache::ArrayPartialDecoderCache;
 pub(crate) use bytes_partial_decoder_cache::BytesPartialDecoderCache;
 
-mod byte_interval_partial_decoder;
-#[cfg(feature = "async")]
-pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
-pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
-use zarrs_data_type::DataType;
-
-use crate::array::ArraySubset;
-use crate::array::data_type::{BytesDataType, StringDataType};
-
-pub use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecPartialDefault, CodecPluginV2,
-    CodecPluginV3, CodecRuntimePluginV2, CodecRuntimePluginV3, CodecTraits, InvalidArrayShapeError,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, StoragePartialDecoder, register_codec_v2, register_codec_v3,
-    unregister_codec_v2, unregister_codec_v3,
-};
-#[cfg(feature = "async")]
-pub use zarrs_codec::{
-    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
-    AsyncBytesPartialEncoderTraits, AsyncStoragePartialDecoder,
-};
-
 /// Returns the default array-to-bytes codec for a given data type.
 ///
 /// The default codec is dependent on the data type:
 ///  - [`bytes`](array_to_bytes::bytes) for fixed-length data types,
-///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`StringDataType`] variable-length data type,
-///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`BytesDataType`] variable-length data type,
+///  - [`vlen-utf8`](array_to_bytes::vlen_utf8) for the [`StringDataType`](crate::array::data_type::StringDataType) variable-length data type,
+///  - [`vlen-bytes`](array_to_bytes::vlen_bytes) for the [`BytesDataType`](crate::array::data_type::BytesDataType) variable-length data type,
 ///  - [`vlen`](array_to_bytes::vlen) for any other variable-length data type, and
 ///  - [`optional`](array_to_bytes::optional) wrapping the appropriate inner codec for optional data types.
 #[must_use]
-pub fn default_array_to_bytes_codec(data_type: &DataType) -> Arc<dyn ArrayToBytesCodecTraits> {
+pub fn default_array_to_bytes_codec(
+    data_type: &zarrs_data_type::DataType,
+) -> Arc<dyn zarrs_codec::ArrayToBytesCodecTraits> {
     // Special handling for optional types
     if let Some(opt) = data_type.as_optional() {
         // Create mask codec chain using PackBitsCodec
@@ -136,9 +113,9 @@ pub fn default_array_to_bytes_codec(data_type: &DataType) -> Arc<dyn ArrayToByte
         // Variable-sized types
         use std::any::TypeId;
         let type_id = data_type.as_any().type_id();
-        if type_id == TypeId::of::<StringDataType>() {
+        if type_id == TypeId::of::<crate::array::data_type::StringDataType>() {
             Arc::new(VlenUtf8Codec::new())
-        } else if type_id == TypeId::of::<BytesDataType>() {
+        } else if type_id == TypeId::of::<crate::array::data_type::BytesDataType>() {
             Arc::new(VlenBytesCodec::new())
         } else {
             Arc::new(VlenCodec::default())

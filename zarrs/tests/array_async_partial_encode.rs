@@ -4,9 +4,7 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::codec::{
-    ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim,
-};
+use zarrs::array::codec::ReshapeDim;
 use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
 use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -14,6 +12,7 @@ use zarrs::storage::storage_adapter::sync_to_async::{
     SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
 };
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions};
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {

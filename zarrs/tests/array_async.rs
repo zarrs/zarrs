@@ -5,11 +5,12 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use object_store::memory::InMemory;
+use zarrs::array::codec::TransposeCodec;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
-use zarrs::array::codec::{CodecOptions, TransposeCodec};
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
+use zarrs_codec::CodecOptions;
 
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {

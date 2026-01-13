@@ -3,7 +3,6 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::codec::{ArrayToBytesCodecTraits, CodecOptions};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
@@ -14,6 +13,7 @@ use crate::config::MetadataEraseVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
     /// Store metadata with default [`ArrayMetadataOptions`].

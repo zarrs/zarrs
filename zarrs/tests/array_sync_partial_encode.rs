@@ -3,13 +3,12 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::codec::{
-    ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions, ReshapeDim,
-};
+use zarrs::array::codec::ReshapeDim;
 use zarrs::array::{ArrayBuilder, ArraySubset, ChunkShapeTraits, data_type};
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions};
 
 /// Test sync partial encoding for array-to-array codecs in isolation
 fn test_array_to_array_codec_sync_partial_encoding<

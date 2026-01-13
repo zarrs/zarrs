@@ -50,7 +50,7 @@ macro_rules! impl_data_type_extension_numeric {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
                 impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
 
@@ -58,7 +58,7 @@ macro_rules! impl_data_type_extension_numeric {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, crate::array::codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
                 impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
         }
@@ -218,7 +218,7 @@ macro_rules! impl_data_type_extension_numeric {
     }};
     // Encode/decode for multi-byte types (endianness swap if needed)
     (@bytes_codec $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
-        let endianness = $endianness.ok_or(crate::array::codec::CodecError::from("endianness must be specified for multi-byte data types"))?;
+        let endianness = $endianness.ok_or(zarrs_codec::CodecError::from("endianness must be specified for multi-byte data types"))?;
         if endianness == zarrs_metadata::Endianness::native() {
             Ok($bytes)
         } else {

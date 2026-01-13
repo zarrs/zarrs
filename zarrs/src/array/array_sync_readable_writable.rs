@@ -5,11 +5,11 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes, update_array_bytes};
-use crate::array::codec::CodecTraits;
 use crate::array::{ArrayBytes, ArraySubset, ArraySubsetTraits};
 use crate::storage::{ReadableStorageTraits, ReadableWritableStorageTraits, StorageHandle};
 use zarrs_codec::{
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, StoragePartialEncoder,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits,
+    StoragePartialEncoder,
 };
 
 impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> Array<TStorage> {

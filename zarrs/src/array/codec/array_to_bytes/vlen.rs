@@ -102,10 +102,6 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::bytes::reverse_endianness;
-use crate::array::codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
-    InvalidBytesLengthError,
-};
 use crate::array::{
     ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
     data_type,
@@ -117,6 +113,10 @@ pub use crate::metadata_ext::codec::vlen::{
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    InvalidBytesLengthError,
+};
 use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata_ext::codec::vlen::VlenIndexDataType;

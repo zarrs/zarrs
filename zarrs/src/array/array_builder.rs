@@ -6,18 +6,19 @@ use derive_more::From;
 use zarrs_plugin::ExtensionName;
 
 use super::chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding};
-use super::codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
 use crate::array::array_builder::array_builder_fill_value::ArrayBuilderFillValueImpl;
-use crate::array::codec::CodecOptions;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use crate::metadata::{ChunkKeySeparator, IntoDimensionName};
 use crate::node::NodePath;
+use zarrs_codec::{
+    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
+};
 
 mod array_builder_chunk_grid;
 pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;

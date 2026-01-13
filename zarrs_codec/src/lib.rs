@@ -39,6 +39,11 @@ pub use array_bytes::{
     merge_chunks_vlen_optional, optional_nesting_depth, update_array_bytes,
 };
 
+mod byte_interval_partial_decoder;
+#[cfg(feature = "async")]
+pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
+pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
+
 use derive_more::derive::Display;
 pub use options::{CodecMetadataOptions, CodecOptions};
 use thiserror::Error;

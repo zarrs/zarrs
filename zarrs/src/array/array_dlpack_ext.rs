@@ -78,9 +78,9 @@ impl TensorLike<RowMajorCompactLayout> for Tensor {
 mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
-    use crate::array::codec::CodecOptions;
     use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type, transmute_to_bytes};
     use crate::storage::store::MemoryStore;
+    use zarrs_codec::CodecOptions;
 
     #[test]
     fn array_dlpack_ext_sync() {

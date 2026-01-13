@@ -5,19 +5,19 @@ use std::sync::Arc;
 
 use zarrs_plugin::ZarrVersion;
 
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncArrayPartialDecoderTraits;
-use crate::array::codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-};
 use crate::array::{ChunkShape, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
 };
 use crate::plugin::PluginCreateError;
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncArrayPartialDecoderTraits;
+use zarrs_codec::{
+    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
 
 /// A `reshape` codec implementation.
 #[derive(Clone, Debug)]

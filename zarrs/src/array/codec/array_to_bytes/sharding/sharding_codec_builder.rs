@@ -1,13 +1,9 @@
 use std::sync::Arc;
 
-use codec::CodecChain;
-
 use super::{ShardingCodec, ShardingIndexLocation};
-use crate::array::codec::{
-    self, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-    default_array_to_bytes_codec,
-};
+use crate::array::codec::{BytesCodec, CodecChain, Crc32cCodec, default_array_to_bytes_codec};
 use crate::array::{ChunkShape, DataType};
+use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 
 /// A [`ShardingCodec`] builder.
 ///
@@ -35,10 +31,10 @@ impl ShardingCodecBuilder {
     pub fn new(subchunk_shape: ChunkShape, data_type: &DataType) -> Self {
         Self {
             subchunk_shape,
-            index_array_to_bytes_codec: Arc::<codec::BytesCodec>::default(),
+            index_array_to_bytes_codec: Arc::<BytesCodec>::default(),
             index_bytes_to_bytes_codecs: vec![
                 #[cfg(feature = "crc32c")]
-                Arc::new(codec::Crc32cCodec::new()),
+                Arc::new(Crc32cCodec::new()),
             ],
             array_to_array_codecs: Vec::default(),
             array_to_bytes_codec: default_array_to_bytes_codec(data_type),

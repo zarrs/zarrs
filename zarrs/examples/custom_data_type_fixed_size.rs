@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
-use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError};
+use zarrs::array::codec::BytesCodecDataTypeTraits;
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadata,
@@ -26,6 +26,7 @@ use zarrs::array::{
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::CodecError;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,

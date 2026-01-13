@@ -3,15 +3,15 @@ use std::sync::Arc;
 use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::metadata::Configuration;
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-use crate::array::codec::{
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{
     BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 
 zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
 

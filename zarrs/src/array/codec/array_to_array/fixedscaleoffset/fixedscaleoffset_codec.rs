@@ -6,16 +6,16 @@ use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
     FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
 };
-use crate::array::codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
-};
 use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use crate::metadata::Configuration;
 use crate::metadata::v2::DataTypeMetadataV2;
 use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayBytes, ArrayCodecTraits, ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
 
 /// A `fixedscaleoffset` codec implementation.
 #[derive(Clone, Debug)]

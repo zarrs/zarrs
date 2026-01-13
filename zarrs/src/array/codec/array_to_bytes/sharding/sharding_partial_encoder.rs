@@ -13,17 +13,16 @@ use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
-use crate::array::codec::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
-    BytesPartialEncoderTraits, CodecError, CodecOptions,
-};
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
     DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;
-use zarrs_codec::update_array_bytes;
+use zarrs_codec::{
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
+};
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,

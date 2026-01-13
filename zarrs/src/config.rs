@@ -7,8 +7,8 @@ use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::array::ArrayMetadataOptions;
-use crate::array::codec::{CodecMetadataOptions, CodecOptions};
 use crate::group::GroupMetadataOptions;
+use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 
 /// Global configuration options for the `zarrs` crate.
 ///

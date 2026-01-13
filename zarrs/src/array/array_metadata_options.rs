@@ -1,5 +1,5 @@
-use super::codec::CodecMetadataOptions;
 use crate::config::MetadataConvertVersion;
+use zarrs_codec::CodecMetadataOptions;
 
 /// Options for writing array metadata.
 #[derive(Debug, Clone, Copy)]

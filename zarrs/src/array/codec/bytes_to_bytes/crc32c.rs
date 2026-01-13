@@ -31,11 +31,11 @@ use std::sync::Arc;
 pub use crc32c_codec::Crc32cCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPluginV3};
 pub use crate::metadata_ext::codec::crc32c::{
     Crc32cCodecConfiguration, Crc32cCodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c");
 
@@ -61,11 +61,11 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{
+    use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
         CodecTraits,
     };
-    use crate::storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
 

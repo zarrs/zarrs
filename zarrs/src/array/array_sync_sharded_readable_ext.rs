@@ -5,8 +5,8 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::codec::ShardingCodec;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
-use super::codec::{CodecError, CodecOptions, ShardingCodec};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
@@ -14,14 +14,16 @@ use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
-use crate::array::codec::{ArrayPartialDecoderTraits, StoragePartialDecoder};
 use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::iter_concurrent_limit;
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::byte_range::ByteRange;
 use crate::storage::{ReadableStorageTraits, StorageHandle};
-use zarrs_codec::{ArrayBytesVariableLength, merge_chunks_vlen};
+use zarrs_codec::{
+    ArrayBytesVariableLength, ArrayPartialDecoderTraits, CodecError, CodecOptions,
+    StoragePartialDecoder, merge_chunks_vlen,
+};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]

@@ -4,9 +4,9 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs::array::codec::{ArrayCodecTraits, CodecOptions};
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::{ArrayCodecTraits, CodecOptions};
 
 #[rustfmt::skip]
 fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
