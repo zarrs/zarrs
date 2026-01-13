@@ -594,7 +594,7 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
-    use crate::array::chunk_grid::{ChunkGridTraits, RegularChunkGrid};
+    use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::{ChunkGrid, data_type};
     use crate::metadata::FillValueMetadata;
@@ -602,6 +602,7 @@ mod tests {
     use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
     use crate::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
     use crate::storage::store::MemoryStore;
+    use zarrs_chunk_grid::ChunkGridTraits;
 
     #[test]
     fn array_builder() {

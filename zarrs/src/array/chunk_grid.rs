@@ -2,8 +2,8 @@
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#chunk-grids>.
 //!
-//! A [`ChunkGrid`] is an [`Arc`](std::sync::Arc) wrapped [`ChunkGridTraits`] implementation.
-//! Chunk grids are Zarr extension points and they can be registered through [`inventory`] as a [`ChunkGridPlugin`].
+//! A [`ChunkGrid`](zarrs_chunk_grid::ChunkGrid) is an [`Arc`](std::sync::Arc) wrapped [`ChunkGridTraits`](zarrs_chunk_grid::ChunkGridTraits) implementation.
+//! Chunk grids are Zarr extension points and they can be registered through [`inventory`] as a [`ChunkGridPlugin`](zarrs_chunk_grid::ChunkGridPlugin).
 //!
 #![doc = include_str!("../../doc/status/chunk_grids.md")]
 
@@ -15,16 +15,10 @@ pub use rectangular::*;
 pub use regular::*;
 pub use regular_bounded::*;
 
-pub use zarrs_chunk_grid::{
-    CHUNK_GRID_RUNTIME_REGISTRY, ChunkGrid, ChunkGridPlugin, ChunkGridRuntimePlugin,
-    ChunkGridRuntimeRegistryHandle, ChunkGridTraits, ChunkGridTraitsIterators, register_chunk_grid,
-    unregister_chunk_grid,
-};
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::metadata::v3::MetadataV3;
+    use zarrs_chunk_grid::ChunkGrid;
 
     #[test]
     fn chunk_grid_configuration_regular() {

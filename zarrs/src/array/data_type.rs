@@ -42,11 +42,11 @@ use std::sync::Arc;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionName;
 
-use crate::metadata_ext::data_type::NumpyTimeUnit;
 pub use zarrs_data_type::{
     DataType, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV2,
     DataTypePluginV3, DataTypeTraits, FillValue,
 };
+pub use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
 pub use self::bool::BoolDataType;
 pub use self::string::StringDataType;

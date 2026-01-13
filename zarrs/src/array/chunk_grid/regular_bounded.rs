@@ -33,13 +33,13 @@ use itertools::izip;
 /// Configuration parameters for a `regular_bounded` chunk grid.
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
 
-use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
 };
 use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
   v3: "zarrs.regular_bounded", [],
