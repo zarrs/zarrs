@@ -39,13 +39,10 @@ use std::borrow::Cow;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionName;
 
-pub use zarrs_data_type::{
-    DataType, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV2,
-    DataTypePluginV3, DataTypeTraits, FillValue,
-};
 pub use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
 pub use self::bool::BoolDataType;
@@ -377,6 +374,7 @@ pub(crate) fn data_type_v2_default_name(v2_name: &str) -> Cow<'static, str> {
 mod tests {
     use half::bf16;
     use zarrs_codec::ArrayBytes;
+    use zarrs_data_type::FillValue;
     use zarrs_metadata::DataTypeSize;
 
     use super::*;
@@ -1756,7 +1754,7 @@ mod tests {
 
     #[test]
     fn incompatible_fill_value() {
-        let err = DataTypeFillValueError;
+        let err = zarrs_data_type::DataTypeFillValueError;
         assert_eq!(err.to_string(), "fill value is incompatible with data type");
     }
 

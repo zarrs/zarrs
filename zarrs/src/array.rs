@@ -67,7 +67,7 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
-pub use data_type::{DataType, FillValue};
+pub use zarrs_data_type::{DataType, FillValue};
 use zarrs_plugin::ZarrVersion;
 
 pub use self::array_builder::{
