@@ -74,6 +74,7 @@ serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_orde
 thiserror.workspace = true
 thread_local = "1.1.8"
 unsafe_cell_slice = "0.2.0"
+zarrs_chunk_key_encoding.workspace = true
 zarrs_filesystem = { workspace = true, optional = true }
 zarrs_data_type.workspace = true
 zarrs_metadata.workspace = true

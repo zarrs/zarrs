@@ -84,7 +84,6 @@ pub use zarrs_codec::{
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator};
 pub use self::codec::CodecChain;
 pub use self::element::{Element, ElementFixedLength, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
@@ -93,6 +92,8 @@ pub use self::storage_transformer::StorageTransformerChain;
 pub use self::tensor::{Tensor, TensorError};
 use crate::array::chunk_grid::RegularChunkGrid;
 pub use zarrs_chunk_grid::ChunkGrid;
+pub use zarrs_chunk_key_encoding::ChunkKeyEncoding;
+pub use zarrs_metadata::ChunkKeySeparator;
 // use crate::array::codec::ArrayCodecTraits;
 use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
@@ -1201,7 +1202,7 @@ fn chunk_key_encoding_default_name(
     version: impl Into<ZarrVersion>,
 ) -> Cow<'static, str> {
     let version = version.into();
-    if let Ok(chunk_key_encoding) = chunk_key_encoding::ChunkKeyEncoding::from_metadata(metadata)
+    if let Ok(chunk_key_encoding) = ChunkKeyEncoding::from_metadata(metadata)
         && let Some(name) = chunk_key_encoding.name(version)
     {
         return name;
