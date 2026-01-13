@@ -15,6 +15,12 @@ pub use rectangular::*;
 pub use regular::*;
 pub use regular_bounded::*;
 
+/// Re-export the `zarrs_chunk_grid` API.
+///
+/// The API is mostly useful to implementors of custom chunk grids.
+/// Users can import less used types (e.g. errors) from this crate if needed.
+pub use zarrs_chunk_grid as api;
+
 #[cfg(test)]
 mod tests {
     use crate::metadata::v3::MetadataV3;

@@ -11,3 +11,9 @@ pub mod v2;
 pub use default::*;
 pub use default_suffix::*;
 pub use v2::*;
+
+/// Re-export the `zarrs_chunk_key_encoding` API.
+///
+/// The API is mostly useful to implementors of custom chunk key encodings.
+/// Users can import less used types (e.g. errors) from this crate if needed.
+pub use zarrs_chunk_key_encoding as api;

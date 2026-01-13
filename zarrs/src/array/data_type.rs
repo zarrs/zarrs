@@ -43,6 +43,12 @@ use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionName;
 
+/// Re-export the `zarrs_data_type` API.
+///
+/// The API is mostly useful to implementors of custom data types.
+/// Users can import less used types (e.g. errors) from this crate if needed.
+pub use zarrs_data_type as api;
+
 pub use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
 pub use self::bool::BoolDataType;
