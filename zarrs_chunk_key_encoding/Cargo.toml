@@ -1,0 +1,23 @@
+[package]
+name = "zarrs_chunk_key_encoding"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2024"
+rust-version = "1.91"
+description = "The chunk key encoding API for the zarrs crate"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_chunk_key_encoding"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_chunk_key_encoding"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs"]
+categories = ["encoding"]
+
+[dependencies]
+derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
+inventory.workspace = true
+zarrs_metadata.workspace = true
+zarrs_plugin.workspace = true
+zarrs_storage.workspace = true
+
+[lints]
+workspace = true

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use derive_more::From;
 use zarrs_plugin::ExtensionName;
 
-use super::chunk_key_encoding::{ChunkKeyEncoding, DefaultChunkKeyEncoding};
+use super::chunk_key_encoding::DefaultChunkKeyEncoding;
 use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
@@ -16,6 +16,7 @@ use crate::config::global_config;
 use crate::metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use crate::metadata::{ChunkKeySeparator, IntoDimensionName};
 use crate::node::NodePath;
+use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
 };
