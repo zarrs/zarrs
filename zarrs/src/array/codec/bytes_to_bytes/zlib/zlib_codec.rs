@@ -5,12 +5,12 @@ use std::sync::Arc;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel};
-use crate::array::codec::{
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use crate::metadata::Configuration;
+use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 
 /// A `zlib` codec implementation.
 #[derive(Clone, Debug)]

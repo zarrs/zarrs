@@ -4,10 +4,6 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::codec::{
-    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    AsyncStoragePartialDecoder, CodecError, CodecOptions,
-};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::element::ElementOwned;
 use super::{
@@ -22,8 +18,9 @@ use crate::storage::{
     AsyncReadableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
 };
 use zarrs_codec::{
-    build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
-    merge_chunks_vlen_optional, optional_nesting_depth,
+    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+    AsyncStoragePartialDecoder, CodecError, CodecOptions, build_nested_optional_target,
+    copy_fill_value_into, merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {

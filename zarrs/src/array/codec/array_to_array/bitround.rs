@@ -43,11 +43,11 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 pub use crate::metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
@@ -428,10 +428,9 @@ mod tests {
     use zarrs_data_type::FillValue;
 
     use super::*;
-    use crate::array::codec::{
-        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
-    };
+    use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
 
     #[test]
     fn codec_bitround_float() {

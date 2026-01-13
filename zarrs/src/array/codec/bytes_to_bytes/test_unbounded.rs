@@ -14,8 +14,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
     use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
 
     #[test]
     fn codec_test_unbounded_round_trip1() {
@@ -82,7 +82,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_test_unbounded_async_partial_decode() {
-        use crate::array::codec::CodecOptions;
+        use zarrs_codec::CodecOptions;
 
         let elements: Vec<u16> = (0..8).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 
-use super::codec::{ArrayToBytesCodecTraits, CodecOptions};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
@@ -14,6 +13,7 @@ use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{
     AsyncWritableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
 };
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 
 impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`store_metadata`](Array::store_metadata).

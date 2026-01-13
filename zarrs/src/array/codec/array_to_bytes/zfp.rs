@@ -112,12 +112,12 @@ use self::zfp_array::ZfpArray;
 use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
 pub use crate::metadata_ext::codec::zfp::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(ZfpCodec,
     v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
@@ -511,11 +511,11 @@ mod tests {
 
     use super::*;
     use crate::array::codec::array_to_array::squeeze::SqueezeCodec;
-    use crate::array::codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
     use crate::array::element::ElementOwned;
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
+    use zarrs_codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"

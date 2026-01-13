@@ -4,9 +4,7 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::codec::CodecOptions;
 use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
-use crate::array::codec::{ArrayPartialDecoderTraits, CodecError};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::from_array_bytes::FromArrayBytes;
 use crate::array::{
@@ -15,7 +13,10 @@ use crate::array::{
 };
 use crate::iter_concurrent_limit;
 use crate::storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
-use zarrs_codec::{merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth};
+use zarrs_codec::{
+    ArrayPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
+    merge_chunks_vlen_optional, optional_nesting_depth,
+};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;

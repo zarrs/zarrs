@@ -3,18 +3,18 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::{BytesCodec, Endianness, reverse_endianness};
-use crate::array::codec::{
+use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
+use crate::storage::StorageError;
+use crate::storage::byte_range::ByteRange;
+use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions,
 };
 #[cfg(feature = "async")]
-use crate::array::codec::{
+use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
-use crate::storage::StorageError;
-use crate::storage::byte_range::ByteRange;
 use zarrs_plugin::ExtensionAliasesV3;
 
 /// Partial decoder for the `bytes` codec.

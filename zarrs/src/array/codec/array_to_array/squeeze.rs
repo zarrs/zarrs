@@ -37,12 +37,12 @@ use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
 pub use crate::metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(SqueezeCodec,
   v3: "zarrs.squeeze", []
@@ -121,10 +121,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::codec::{
-        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
-    };
+    use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
 
     fn codec_squeeze_round_trip_impl(
         json: &str,

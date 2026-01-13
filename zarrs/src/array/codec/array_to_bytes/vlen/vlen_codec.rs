@@ -2,13 +2,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
-use crate::array::codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
-    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-};
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use crate::array::codec::BytesCodec;
 use crate::array::{
     ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, DataType,
     DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
@@ -16,6 +10,13 @@ use crate::array::{
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
 use crate::plugin::PluginCreateError;
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `vlen` codec implementation.

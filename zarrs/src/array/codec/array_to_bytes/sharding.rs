@@ -63,10 +63,6 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use crate::array::codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
-    CodecOptions, CodecPluginV3,
-};
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, DataType, FillValue,
@@ -82,6 +78,10 @@ pub use sharding_codec_builder::ShardingCodecBuilder;
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
+    CodecOptions, CodecPluginV3,
+};
 use zarrs_metadata::v3::MetadataV3;
 
 zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
@@ -258,7 +258,7 @@ fn decode_shard_index_partial_decoder(
 #[cfg(feature = "async")]
 /// Returns `None` if there is no shard.
 async fn decode_shard_index_async_partial_decoder(
-    input_handle: &dyn crate::array::codec::AsyncBytesPartialDecoderTraits,
+    input_handle: &dyn zarrs_codec::AsyncBytesPartialDecoderTraits,
     index_codecs: &CodecChain,
     index_location: ShardingIndexLocation,
     shard_shape: &[NonZeroU64],
@@ -287,9 +287,9 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use crate::array::codec::BytesToBytesCodecTraits;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use zarrs_codec::BytesToBytesCodecTraits;
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {

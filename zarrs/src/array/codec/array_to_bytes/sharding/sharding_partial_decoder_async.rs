@@ -8,19 +8,18 @@ use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::array::chunk_grid::RegularChunkGrid;
-use crate::array::codec::{
-    ArraySubset, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    AsyncByteIntervalPartialDecoder, AsyncBytesPartialDecoderTraits, CodecChain, CodecError,
-    CodecOptions,
-};
+use crate::array::codec::CodecChain;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
-    IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
+    ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType,
+    DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange};
-use zarrs_codec::merge_chunks_vlen;
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
+    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
+};
 use zarrs_plugin::ExtensionAliasesV3;
 
 /// Asynchronous partial decoder for the sharding codec.

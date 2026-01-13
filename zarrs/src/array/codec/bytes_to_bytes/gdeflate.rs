@@ -49,12 +49,12 @@ pub use gdeflate_codec::GDeflateCodec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::ArrayBytesRaw;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
 pub use crate::metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
 
 zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
 
@@ -266,8 +266,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
     use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
 
     const JSON_VALID: &str = r#"{
         "level": 1

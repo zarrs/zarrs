@@ -5,10 +5,6 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use super::codec::{
-    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecOptions, StoragePartialDecoder,
-};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::element::ElementOwned;
 use super::{
@@ -21,8 +17,10 @@ use crate::iter_concurrent_limit;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use crate::storage::{ReadableStorageTraits, StorageError, StorageHandle};
 use zarrs_codec::{
-    ArrayBytesOptional, ArrayBytesVariableLength, build_nested_optional_target,
-    copy_fill_value_into, merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
+    ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
+    StoragePartialDecoder, build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
+    merge_chunks_vlen_optional, optional_nesting_depth,
 };
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {

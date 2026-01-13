@@ -2,11 +2,11 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::array::ArrayBytesRaw;
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-use crate::array::codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use crate::storage::StorageError;
 use crate::storage::byte_range::{ByteRange, ByteRangeIterator};
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 
 /// Partial decoder for stripping a suffix (e.g. checksum).
 pub(crate) struct StripSuffixPartialDecoder {

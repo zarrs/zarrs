@@ -78,8 +78,8 @@ pub use zarrs_codec::{
     ArrayBytes, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesVariableLength, ArrayRawBytesOffsetsCreateError,
-    ArrayRawBytesOffsetsOutOfBoundsError, BytesRepresentation, RecommendedConcurrency,
-    copy_fill_value_into, update_array_bytes,
+    ArrayRawBytesOffsetsOutOfBoundsError, BytesRepresentation, Codec, CodecOptions,
+    RecommendedConcurrency, copy_fill_value_into, update_array_bytes,
 };
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
@@ -96,7 +96,6 @@ use crate::array::chunk_grid::RegularChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
 use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-use crate::array::codec::CodecOptions;
 use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
 use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 pub use crate::metadata::v2::ArrayMetadataV2;
@@ -295,7 +294,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
 /// For this reason, retrieving multiple subsets in a chunk with [`retrieve_chunk_subset`](Array::store_chunk_subset) is very inefficient and strongly discouraged.
 /// For example, consider that a compressed chunk may need to be retrieved and decoded in its entirety even if only a small part of the data is needed.
-/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](codec::ArrayPartialDecoderTraits::partial_decode).
+/// In such situations, prefer to initialise a partial decoder for a chunk with [`partial_decoder`](Array::partial_decoder) and then retrieve multiple chunk subsets with [`partial_decode`](zarrs_codec::ArrayPartialDecoderTraits::partial_decode).
 /// The underlying codec chain will use a cache where efficient to optimise multiple partial decoding requests (see [`CodecChain`]).
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
@@ -308,7 +307,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
 ///   - Preferred where chunks are repeatedly *partially retrieved*.
 ///   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
-///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](crate::array::codec::PartialDecoderCapability).
+///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 ///
 /// `zarrs` implements the following Least Recently Used (LRU) chunk caches:
 ///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
@@ -360,7 +359,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// `zarrs` will automatically choose where to prioritise parallelism between codecs/chunks based on the codecs and number of chunks.
 ///
 /// By default, all available CPU cores will be used (where possible/efficient).
-/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`] manipulated with [`CodecOptions::set_concurrent_target`](crate::array::codec::CodecOptions::set_concurrent_target).
+/// Concurrency can be limited globally with [`Config::set_codec_concurrent_target`](crate::config::Config::set_codec_concurrent_target) or as required using `_opt` methods with [`CodecOptions`] manipulated with [`CodecOptions::set_concurrent_target`](CodecOptions::set_concurrent_target).
 ///
 /// ### Async API
 /// This crate is async runtime-agnostic.
@@ -370,7 +369,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Due the lack of parallelism, methods like [`async_retrieve_array_subset`](Array::async_retrieve_array_subset) or [`async_retrieve_chunks`](Array::async_retrieve_chunks) do not parallelise over chunks and can be slow compared to the sync API.
 /// Parallelism over chunks can be achieved by spawning tasks outside of `zarrs`.
 /// A crate like [`async-scoped`](https://crates.io/crates/async-scoped) can enable spawning non-`'static` futures.
-/// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](crate::array::codec::CodecOptions::set_concurrent_target).
+/// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](CodecOptions::set_concurrent_target).
 ///
 /// ## Extension Point Registration and Aliases
 /// `zarrs` uses a plugin system to create extension point implementations (e.g. data types, codecs, chunk grids, chunk key encodings, and storage transformers) from metadata.
@@ -1167,7 +1166,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
 #[must_use]
 fn codec_default_name(metadata: &MetadataV3, version: impl Into<ZarrVersion>) -> Cow<'static, str> {
     let version: ZarrVersion = version.into();
-    if let Ok(codec) = codec::Codec::from_metadata(metadata)
+    if let Ok(codec) = Codec::from_metadata(metadata)
         && let Some(name) = codec.name(version)
     {
         return name;
@@ -1313,7 +1312,9 @@ pub fn elements_to_ndarray<T>(
 ) -> Result<ndarray::ArrayD<T>, ArrayError> {
     let length = elements.len();
     ndarray::ArrayD::<T>::from_shape_vec(iter_u64_to_usize(shape.iter()), elements).map_err(|_| {
-        ArrayError::CodecError(codec::InvalidArrayShapeError::new(shape.to_vec(), length).into())
+        ArrayError::CodecError(
+            zarrs_codec::InvalidArrayShapeError::new(shape.to_vec(), length).into(),
+        )
     })
 }
 
@@ -1347,10 +1348,8 @@ fn create_codec_chain_from_v2(
     filters: Option<&Vec<zarrs_metadata::v2::MetadataV2>>,
     compressor: Option<&zarrs_metadata::v2::MetadataV2>,
 ) -> Result<CodecChain, crate::convert::ArrayMetadataV2ToV3Error> {
-    use crate::array::codec::{
-        ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-    };
     use crate::convert::ArrayMetadataV2ToV3Error;
+    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 
     let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
     let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
@@ -1379,20 +1378,20 @@ fn create_codec_chain_from_v2(
     // Process filters
     if let Some(filters) = filters {
         for filter in filters {
-            let codec = crate::array::codec::Codec::from_metadata(filter)
+            let codec = Codec::from_metadata(filter)
                 .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
-                crate::array::codec::Codec::ArrayToArray(c) => {
+                Codec::ArrayToArray(c) => {
                     array_to_array.push(c);
                 }
-                crate::array::codec::Codec::ArrayToBytes(c) => {
+                Codec::ArrayToBytes(c) => {
                     if array_to_bytes.is_some() {
                         return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
                     }
                     array_to_bytes = Some(c);
                 }
-                crate::array::codec::Codec::BytesToBytes(c) => {
+                Codec::BytesToBytes(c) => {
                     bytes_to_bytes.push(c);
                 }
             }
@@ -1425,40 +1424,40 @@ fn create_codec_chain_from_v2(
                 .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
             bytes_to_bytes.push(Arc::new(blosc));
         } else {
-            let codec = crate::array::codec::Codec::from_metadata(compressor)
+            let codec = Codec::from_metadata(compressor)
                 .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
-                crate::array::codec::Codec::ArrayToArray(c) => {
+                Codec::ArrayToArray(c) => {
                     array_to_array.push(c);
                 }
-                crate::array::codec::Codec::ArrayToBytes(c) => {
+                Codec::ArrayToBytes(c) => {
                     if array_to_bytes.is_some() {
                         return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
                     }
                     array_to_bytes = Some(c);
                 }
-                crate::array::codec::Codec::BytesToBytes(c) => {
+                Codec::BytesToBytes(c) => {
                     bytes_to_bytes.push(c);
                 }
             }
         }
         #[cfg(not(feature = "blosc"))]
         {
-            let codec = crate::array::codec::Codec::from_metadata(compressor)
+            let codec = Codec::from_metadata(compressor)
                 .map_err(|e: PluginCreateError| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
 
             match codec {
-                crate::array::codec::Codec::ArrayToArray(c) => {
+                Codec::ArrayToArray(c) => {
                     array_to_array.push(c);
                 }
-                crate::array::codec::Codec::ArrayToBytes(c) => {
+                Codec::ArrayToBytes(c) => {
                     if array_to_bytes.is_some() {
                         return Err(ArrayMetadataV2ToV3Error::MultipleArrayToBytesCodecs);
                     }
                     array_to_bytes = Some(c);
                 }
-                crate::array::codec::Codec::BytesToBytes(c) => {
+                Codec::BytesToBytes(c) => {
                     bytes_to_bytes.push(c);
                 }
             }

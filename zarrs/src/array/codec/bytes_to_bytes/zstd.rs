@@ -38,12 +38,12 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 pub use zstd_codec::ZstdCodec;
 
-use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
 pub use crate::metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
     ZstdCompressionLevel,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(ZstdCodec, v3: "zstd", v2: "zstd");
 
@@ -80,8 +80,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
     use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
 
     const JSON_VALID: &str = r#"{
     "level": 22,

@@ -5,12 +5,12 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
-use zarrs::array::codec::{BytesToBytesCodecTraits, CodecOptions};
 use zarrs::array::{ArrayBuilder, data_type};
 use zarrs::metadata_ext::codec::sharding::ShardingIndexLocation;
 use zarrs::storage::ReadableStorageTraits;
 use zarrs::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions};
 
 fn array_partial_encode_sharding(
     sharding_index_location: ShardingIndexLocation,

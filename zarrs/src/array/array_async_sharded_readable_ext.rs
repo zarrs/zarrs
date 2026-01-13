@@ -4,8 +4,8 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::codec::ShardingCodec;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
-use super::codec::{CodecError, CodecOptions, ShardingCodec};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
@@ -13,15 +13,15 @@ use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
-use crate::array::codec::{
-    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
-};
 use crate::array::{ArraySubset, ArraySubsetTraits};
 use crate::metadata::ConfigurationSerialize;
 use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use crate::storage::byte_range::ByteRange;
 use crate::storage::{AsyncReadableStorageTraits, MaybeSend, MaybeSync, StorageHandle};
-use zarrs_codec::merge_chunks_vlen;
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
+    CodecError, CodecOptions, merge_chunks_vlen,
+};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]

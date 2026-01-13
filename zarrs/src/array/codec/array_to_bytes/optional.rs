@@ -91,11 +91,11 @@ use std::sync::Arc;
 pub use optional_codec::OptionalCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use crate::array::codec::{Codec, CodecPluginV3};
 pub use crate::metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(OptionalCodec,
   v3: "zarrs.optional", []

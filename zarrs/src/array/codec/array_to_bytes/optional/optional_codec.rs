@@ -9,13 +9,14 @@ use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
-use crate::array::codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecChain, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, InvalidBytesLengthError, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
-};
+use crate::array::codec::CodecChain;
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use crate::metadata::{Configuration, DataTypeSize};
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
@@ -507,8 +508,8 @@ impl ArrayToBytesCodecTraits for OptionalCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits};
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
+    use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions, CodecTraits};
 
     #[test]
     fn codec_optional_configuration() {

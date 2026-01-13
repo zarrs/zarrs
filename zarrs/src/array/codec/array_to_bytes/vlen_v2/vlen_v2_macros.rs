@@ -6,8 +6,8 @@ macro_rules! vlen_v2_module {
 
         pub use $module_codec::$struct;
 
-        use crate::array::codec::{Codec, CodecPluginV2, CodecPluginV3};
         use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+        use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
         use zarrs_metadata::v2::MetadataV2;
         use zarrs_metadata::v3::MetadataV3;
 
@@ -46,17 +46,18 @@ macro_rules! vlen_v2_codec {
         use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
         #[cfg(feature = "async")]
-        use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use zarrs_codec::{
+            ArrayCodecTraits,
+            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+            BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+            CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+            PartialEncoderCapability,
+        };
         use crate::array::{
+            codec::VlenV2Codec,
             ArrayBytes, ArrayBytesRaw, BytesRepresentation,
             RecommendedConcurrency,
-            codec::{
-                ArrayCodecTraits,
-                ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
-                BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
-                CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-                PartialEncoderCapability, array_to_bytes::vlen_v2::VlenV2Codec,
-            },
         };
         use crate::metadata::Configuration;
         use zarrs_plugin::{

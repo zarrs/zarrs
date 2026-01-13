@@ -39,10 +39,10 @@ pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
-use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::metadata::Endianness;
 pub use crate::metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
 
 zarrs_plugin::impl_extension_aliases!(BytesCodec,
     v3: "bytes", ["endian"]
@@ -118,7 +118,7 @@ macro_rules! _impl_bytes_codec_passthrough {
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
-            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
                 Ok(bytes)
             }
 
@@ -126,7 +126,7 @@ macro_rules! _impl_bytes_codec_passthrough {
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
-            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::codec::CodecError> {
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
                 Ok(bytes)
             }
         }
@@ -185,12 +185,12 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::codec::{
-        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions,
-        CodecTraits,
-    };
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
+    };
+    use zarrs_codec::{
+        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions,
+        CodecTraits,
     };
 
     #[test]

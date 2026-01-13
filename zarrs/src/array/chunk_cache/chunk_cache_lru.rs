@@ -2,12 +2,12 @@ use std::borrow::Cow;
 use std::sync::{Arc, atomic};
 
 use super::ChunkCacheType;
-use crate::array::codec::{ArrayToBytesCodecTraits, CodecError};
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkCache,
     ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
 };
 use crate::storage::{ReadableStorageTraits, StorageError};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 
 type ChunkIndices = ArrayIndices;
 
@@ -116,7 +116,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded = self
                 .cache
@@ -166,7 +166,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk_encoded: ChunkCacheTypeEncoded = self
                 .cache
@@ -218,7 +218,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             self.cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -239,7 +239,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let chunk = self
                 .cache
@@ -273,7 +273,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .cache
@@ -298,7 +298,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             &self,
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
-            options: &$crate::array::codec::CodecOptions,
+            options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
             let partial_decoder = self
                 .cache
@@ -418,7 +418,6 @@ mod tests {
 
     use super::*;
     use crate::array::chunk_cache::ChunkCache;
-    use crate::array::codec::CodecOptions;
     use crate::array::{
         Array, ArrayBuilder, ArraySubset, ChunkCacheDecodedLruChunkLimit,
         ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
@@ -429,6 +428,7 @@ mod tests {
     use crate::storage::{
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
     };
+    use zarrs_codec::CodecOptions;
 
     fn create_store_array() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,

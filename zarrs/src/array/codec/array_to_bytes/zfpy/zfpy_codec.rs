@@ -16,9 +16,9 @@ use zarrs_codec::{
     PartialEncoderCapability, RecommendedConcurrency,
 };
 
-use crate::array::codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};
+use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};
 #[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 
 /// A `zfpy` codec implementation.
 ///

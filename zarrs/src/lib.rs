@@ -173,7 +173,7 @@
 //! let array_inner_chunk = array.retrieve_inner_chunk_ndarray_opt::<f32>(
 //!     &shard_index_cache,
 //!     &[0, 3], // inner chunk index
-//!     &zarrs::array::codec::CodecOptions::default(),
+//!     &zarrs::array::CodecOptions::default(),
 //! )?;
 //! println!("{array_inner_chunk:4}");
 //! // [[ 0.3],

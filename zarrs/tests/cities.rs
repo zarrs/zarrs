@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
 use zarrs::array::codec::array_to_bytes::vlen_utf8::VlenUtf8Codec;
-use zarrs::array::codec::{ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec};
+use zarrs::array::codec::{VlenCodecConfiguration, ZstdCodec};
 use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::store::MemoryStore;
+use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_filesystem::FilesystemStore;
 
 fn read_cities() -> std::io::Result<Vec<String>> {

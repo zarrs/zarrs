@@ -3,9 +3,9 @@
 use itertools::Itertools;
 use ndarray::ArrayD;
 use zarrs::array::bytes_to_ndarray;
-use zarrs::array::codec::CodecOptions;
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
+use zarrs_codec::CodecOptions;
 
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;

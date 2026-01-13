@@ -22,14 +22,12 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use zarrs::array::codec::array_to_bytes::optional::OptionalCodec;
-use zarrs::array::codec::{
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
-};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
     data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
 

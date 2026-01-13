@@ -7,12 +7,12 @@ use super::{
     GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
     GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
-use crate::array::codec::{
+use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
+use crate::metadata::Configuration;
+use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability,
 };
-use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
-use crate::metadata::Configuration;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]

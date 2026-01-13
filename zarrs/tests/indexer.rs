@@ -5,15 +5,15 @@ use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
-use zarrs::array::codec::{
-    ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    CodecOptions, ShardingCodecBuilder, SqueezeCodec, VlenCodec,
-};
+use zarrs::array::codec::{BytesCodec, ShardingCodecBuilder, SqueezeCodec, VlenCodec};
 #[cfg(feature = "transpose")]
 use zarrs::array::codec::{TransposeCodec, TransposeOrder};
 use zarrs::array::{
     ArrayIndices, ArrayIndicesTinyVec, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain,
     DataType, ElementOwned, Indexer, IndexerError, data_type,
+};
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions,
 };
 use zarrs_data_type::FillValue;
 

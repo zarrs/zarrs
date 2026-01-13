@@ -14,13 +14,12 @@ use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-use crate::array::codec::{
-    BytesCodec, CodecMetadataOptions, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec,
-};
+use crate::array::codec::{BytesCodec, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec};
 use crate::array::data_type;
 use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
 use crate::metadata_ext::codec::bytes::BytesCodecConfigurationV1;
+use zarrs_codec::CodecMetadataOptions;
 
 #[cfg(feature = "blosc")]
 use crate::{
@@ -79,7 +78,7 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
 /// # Errors
 /// Returns [`ArrayMetadataV2ToV3Error::UnsupportedCodec`] if the codec is not supported.
 fn codec_v2_to_v3(v2_metadata: &MetadataV2) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
-    use crate::array::codec::CodecPluginV2;
+    use zarrs_codec::CodecPluginV2;
 
     let v2_name = v2_metadata.id();
 
