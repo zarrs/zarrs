@@ -67,11 +67,14 @@ pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayRawBytesOffsetsCreateError, ArrayRawBytesOffsetsOutOfBoundsError, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesRepresentation, BytesToBytesCodecTraits, Codec, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, RecommendedConcurrency, StoragePartialDecoder,
-    copy_fill_value_into, update_array_bytes,
+    ArrayPartialEncoderTraits, ArrayRawBytesOffsetsCreateError,
+    ArrayRawBytesOffsetsOutOfBoundsError, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesRepresentation, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, RecommendedConcurrency, StoragePartialDecoder, copy_fill_value_into,
+    update_array_bytes,
 };
+#[cfg(feature = "async")]
+pub use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 pub use zarrs_data_type::{DataType, DataTypeTraits, FillValue};
 pub use zarrs_metadata::v2::ArrayMetadataV2;
 use zarrs_metadata::v2::DataTypeMetadataV2;
