@@ -155,7 +155,17 @@ jobs:
           toolchain: "1.91"
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --all-features -p zarrs -p zarrs_chunk_grid -p zarrs_data_type
+      - run: cargo minimal-versions check --all-features -p zarrs -p zarrs_chunk_key_encoding -p zarrs_codec
+  msrv-1-88:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --all-features -p zarrs_plugin -p zarrs_chunk_grid -p zarrs_data_type
   # msrv-1-85:
   #   runs-on: ubuntu-latest
   #   steps:
