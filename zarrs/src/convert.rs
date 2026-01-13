@@ -285,7 +285,7 @@ pub fn codec_metadata_v2_to_v3(
                 // If the data type has an unknown size
                 //  - the metadata will not match how the data is encoded, but it can still be decoded just fine
                 //  - resaving the array metadata as v3 will not have optimal blosc encoding parameters
-                data_type::DataType::from_metadata(data_type)
+                zarrs_data_type::DataType::from_metadata(data_type)
                     .ok()
                     .map(|dt| dt.size())
             };
