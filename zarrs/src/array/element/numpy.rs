@@ -1,5 +1,5 @@
 #[allow(unused)]
-use crate::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
 mod datetime64;
 mod timedelta64;

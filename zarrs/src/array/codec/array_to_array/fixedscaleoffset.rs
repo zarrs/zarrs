@@ -39,11 +39,11 @@ use std::sync::Arc;
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-pub use crate::metadata_ext::codec::fixedscaleoffset::{
+use zarrs_codec::{Codec, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
     v3: "numcodecs.fixedscaleoffset", []
@@ -175,8 +175,8 @@ mod tests {
 
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
-    use crate::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
     use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
     fn codec_fixedscaleoffset() {

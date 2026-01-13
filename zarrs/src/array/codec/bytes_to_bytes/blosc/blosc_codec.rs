@@ -12,8 +12,6 @@ use super::{
     blosc_validate, compressor_as_cstr,
 };
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
-use crate::plugin::PluginCreateError;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -21,6 +19,8 @@ use zarrs_codec::{
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
+use zarrs_metadata::Configuration;
+use zarrs_plugin::PluginCreateError;
 
 /// A `blosc` codec implementation.
 #[derive(Clone, Debug)]

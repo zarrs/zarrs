@@ -3,11 +3,11 @@
 use std::borrow::Cow;
 
 use crate::array::ArrayBytesRaw;
-use crate::storage::StorageError;
-use crate::storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator, extract_byte_ranges};
 
 /// A cache for a [`BytesPartialDecoderTraits`] partial decoder.
 pub(crate) struct BytesPartialDecoderCache {

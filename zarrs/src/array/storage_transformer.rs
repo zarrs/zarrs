@@ -17,14 +17,14 @@ use zarrs_plugin::{
     ZarrVersion3,
 };
 
-use crate::metadata::v3::MetadataV3;
 use crate::node::NodePath;
-use crate::plugin::{ExtensionName, PluginCreateError};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::{ExtensionName, PluginCreateError};
 #[cfg(feature = "async")]
-use crate::storage::{
+use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
-use crate::storage::{
+use zarrs_storage::{
     ListableStorage, MaybeSend, MaybeSync, ReadableStorage, ReadableWritableStorage, StorageError,
     WritableStorage,
 };

@@ -5,11 +5,11 @@ use super::{
     permute,
 };
 use crate::array::{ArrayBytes, DataType, FillValue};
-use crate::storage::StorageError;
 use std::num::NonZeroU64;
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_storage::StorageError;
 
 /// Generic partial codec for the Transpose codec.
 pub(crate) struct TransposeCodecPartial<T: ?Sized> {

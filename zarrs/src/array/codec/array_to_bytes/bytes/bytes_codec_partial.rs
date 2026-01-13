@@ -4,8 +4,6 @@ use std::sync::Arc;
 
 use super::{BytesCodec, Endianness, reverse_endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
-use crate::storage::StorageError;
-use crate::storage::byte_range::ByteRange;
 use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions,
@@ -16,6 +14,8 @@ use zarrs_codec::{
     AsyncBytesPartialEncoderTraits,
 };
 use zarrs_plugin::ExtensionAliasesV3;
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::ByteRange;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct BytesCodecPartial<T: ?Sized> {

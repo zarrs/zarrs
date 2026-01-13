@@ -12,15 +12,15 @@ use super::{
 use crate::array::{
     ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
 };
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::pcodec::{
-    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
-};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
     CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::pcodec::{
+    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 
 /// A `pcodec` codec implementation.

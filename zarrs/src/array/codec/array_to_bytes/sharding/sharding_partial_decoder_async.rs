@@ -14,13 +14,13 @@ use crate::array::{
     ArrayIndicesTinyVec, ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType,
     DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
-use crate::storage::StorageError;
-use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
     AsyncBytesPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
 };
 use zarrs_plugin::ExtensionAliasesV3;
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::{ByteLength, ByteOffset, ByteRange};
 
 /// Asynchronous partial decoder for the sharding codec.
 pub(crate) struct AsyncShardingPartialDecoder {

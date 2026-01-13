@@ -4,7 +4,6 @@ use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -12,6 +11,7 @@ use zarrs_codec::{
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
+use zarrs_metadata::Configuration;
 
 zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
 

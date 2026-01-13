@@ -8,7 +8,6 @@ use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1}
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncBytesPartialDecoderTraits;
 use zarrs_codec::{
@@ -16,6 +15,7 @@ use zarrs_codec::{
     CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
+use zarrs_metadata::Configuration;
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]

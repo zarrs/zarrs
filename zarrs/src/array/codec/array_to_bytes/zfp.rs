@@ -113,11 +113,9 @@ use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
 use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
-pub use crate::metadata_ext::codec::zfp::{
-    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode,
-};
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(ZfpCodec,
     v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]

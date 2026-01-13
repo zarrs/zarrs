@@ -5,11 +5,11 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
 use crate::array::{ArrayBytesRaw, BytesRepresentation};
-use crate::metadata::Configuration;
 use zarrs_codec::{
     BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+use zarrs_metadata::Configuration;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]

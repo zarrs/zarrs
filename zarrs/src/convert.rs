@@ -16,10 +16,10 @@ use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
 use crate::array::codec::{BytesCodec, VlenArrayCodec, VlenBytesCodec, VlenUtf8Codec};
 use crate::array::data_type;
-use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
-use crate::metadata_ext::codec::bytes::BytesCodecConfigurationV1;
 use zarrs_codec::CodecMetadataOptions;
+use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+use zarrs_metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
+use zarrs_metadata_ext::codec::bytes::BytesCodecConfigurationV1;
 
 #[cfg(feature = "blosc")]
 use crate::{
@@ -464,7 +464,7 @@ mod tests {
     use crate::array::ChunkShape;
 
     #[cfg(all(feature = "blosc", feature = "transpose"))]
-    use crate::metadata_ext::codec::{
+    use zarrs_metadata_ext::codec::{
         blosc::BloscCodecConfigurationV1, transpose::TransposeCodecConfigurationV1,
     };
 

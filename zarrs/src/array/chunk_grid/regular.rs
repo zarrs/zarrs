@@ -28,11 +28,11 @@ use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
     IncompatibleDimensionalityError,
 };
-use crate::metadata::Configuration;
-use crate::metadata::v3::MetadataV3;
-pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
+pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 

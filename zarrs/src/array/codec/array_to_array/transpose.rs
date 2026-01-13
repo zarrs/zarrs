@@ -38,12 +38,12 @@ use zarrs_plugin::ExtensionAliasesV3;
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
 };
-use crate::metadata::DataTypeSize;
-pub use crate::metadata_ext::codec::transpose::{
+use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3};
+use zarrs_metadata::DataTypeSize;
+pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
 

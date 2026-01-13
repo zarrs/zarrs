@@ -14,15 +14,15 @@ use std::sync::Arc;
 use crate::array::{Array, ArrayMetadata};
 use crate::config::MetadataRetrieveVersion;
 use crate::group::Group;
-pub use crate::metadata::NodeMetadata;
 use crate::node::get_all_nodes_of;
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
-use crate::storage::{ListableStorageTraits, ReadableStorageTraits};
 #[cfg(feature = "async")]
 use crate::{
     node::async_get_all_nodes_of,
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits},
 };
+pub use zarrs_metadata::NodeMetadata;
+use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits};
 
 /// A Zarr hierarchy.
 #[derive(Debug, Clone)]
@@ -267,13 +267,13 @@ mod tests {
     use super::*;
     use crate::array::ArrayBuilder;
     use crate::group::GroupBuilder;
-    use crate::metadata::GroupMetadata;
-    use crate::metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
-    use crate::metadata::v3::GroupMetadataV3;
+    use zarrs_metadata::GroupMetadata;
+    use zarrs_metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
+    use zarrs_metadata::v3::GroupMetadataV3;
     #[cfg(feature = "async")]
-    use crate::storage::AsyncReadableWritableListableStorageTraits;
-    use crate::storage::store::MemoryStore;
-    use crate::storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::AsyncReadableWritableListableStorageTraits;
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{StoreKey, WritableStorageTraits};
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
 
@@ -405,7 +405,7 @@ mod tests {
 
         assert!(Hierarchy::try_from_async_group(&root).await.is_ok());
 
-        use crate::storage::AsyncWritableStorageTraits;
+        use zarrs_storage::AsyncWritableStorageTraits;
         // Inject fauly subgroup
         store
             .set(
@@ -562,7 +562,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn hierarchy_async_open() {
-        use crate::storage::AsyncReadableWritableListableStorage;
+        use zarrs_storage::AsyncReadableWritableListableStorage;
 
         let store: AsyncReadableWritableListableStorage = Arc::new(
             zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),

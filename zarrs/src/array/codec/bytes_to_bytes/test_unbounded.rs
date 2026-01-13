@@ -14,8 +14,8 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::storage::byte_range::ByteRange;
     use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     #[test]
     fn codec_test_unbounded_round_trip1() {

@@ -79,8 +79,8 @@ mod tests {
     // use dlpark::{IntoDLPack, ManagedTensor};
 
     use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type, transmute_to_bytes};
-    use crate::storage::store::MemoryStore;
     use zarrs_codec::CodecOptions;
+    use zarrs_storage::store::MemoryStore;
 
     #[test]
     fn array_dlpack_ext_sync() {

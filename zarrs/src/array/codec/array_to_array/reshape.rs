@@ -40,11 +40,11 @@ use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
 use crate::array::ChunkShape;
-pub use crate::metadata_ext::codec::reshape::{
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,

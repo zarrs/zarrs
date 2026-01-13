@@ -19,7 +19,7 @@
 //! ```
 
 use crate::array::codec::array_to_bytes::vlen_v2::vlen_v2_macros;
-pub use crate::metadata_ext::codec::vlen_utf8::{
+pub use zarrs_metadata_ext::codec::vlen_utf8::{
     VlenUtf8CodecConfiguration, VlenUtf8CodecConfigurationV1,
 };
 

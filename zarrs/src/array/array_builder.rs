@@ -13,13 +13,13 @@ use super::{
 use crate::array::array_builder::array_builder_fill_value::ArrayBuilderFillValueImpl;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
-use crate::metadata::v3::{AdditionalFieldsV3, MetadataV3};
-use crate::metadata::{ChunkKeySeparator, IntoDimensionName};
 use crate::node::NodePath;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
 };
+use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
+use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
 
 mod array_builder_chunk_grid;
 pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
@@ -598,12 +598,12 @@ mod tests {
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
     use crate::array::{ChunkGrid, data_type};
-    use crate::metadata::FillValueMetadata;
-    use crate::metadata::v3::MetadataV3;
-    use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-    use crate::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
-    use crate::storage::store::MemoryStore;
     use zarrs_chunk_grid::ChunkGridTraits;
+    use zarrs_metadata::FillValueMetadata;
+    use zarrs_metadata::v3::MetadataV3;
+    use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+    use zarrs_storage::storage_adapter::usage_log::UsageLogStorageAdapter;
+    use zarrs_storage::store::MemoryStore;
 
     #[test]
     fn array_builder() {

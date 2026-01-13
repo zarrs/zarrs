@@ -2,13 +2,12 @@
 
 use itertools::Itertools;
 
-use crate::metadata::Configuration;
-use crate::metadata::v3::MetadataV3;
-pub use crate::metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use crate::storage::StoreKey;
 use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
-use zarrs_metadata::ChunkKeySeparator;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkKeySeparator, Configuration};
+pub use zarrs_metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_storage::StoreKey;
 
 zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, v3: "v2");
 

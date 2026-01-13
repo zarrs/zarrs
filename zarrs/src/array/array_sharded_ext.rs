@@ -1,7 +1,7 @@
 use super::codec::ShardingCodecConfiguration;
 use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
-use crate::metadata::ConfigurationSerialize;
+use zarrs_metadata::ConfigurationSerialize;
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
 pub trait ArrayShardedExt: private::Sealed {

@@ -7,8 +7,8 @@ use zarrs_metadata::FillValueMetadata;
 use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
 use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
 use crate::node::NodePathError;
-use crate::plugin::PluginCreateError;
-use crate::storage::StorageError;
+use zarrs_plugin::PluginCreateError;
+use zarrs_storage::StorageError;
 
 /// An array creation error.
 #[derive(Clone, Debug, Error)]

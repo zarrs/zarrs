@@ -1,10 +1,10 @@
 //! A cache for partial decoders.
 
 use crate::array::{ArrayBytes, ArraySubset, ChunkShape, DataType};
-use crate::storage::StorageError;
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
 
 /// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
 pub(crate) struct ArrayPartialDecoderCache {

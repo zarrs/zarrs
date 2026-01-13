@@ -5,7 +5,7 @@ use super::{
     meta_key_v2_group, meta_key_v3,
 };
 use crate::config::MetadataRetrieveVersion;
-use crate::storage::{
+use zarrs_storage::{
     ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefix, discover_children,
 };
 
@@ -115,8 +115,8 @@ pub fn node_exists_listable<TStorage: ?Sized + ListableStorageTraits>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::store::MemoryStore;
-    use crate::storage::{StoreKey, WritableStorageTraits};
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{StoreKey, WritableStorageTraits};
 
     #[test]
     fn warning_get_child_nodes() {

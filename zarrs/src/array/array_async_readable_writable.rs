@@ -3,12 +3,12 @@ use futures::{StreamExt, TryStreamExt};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
 use crate::array::{ArraySubset, ArraySubsetTraits};
-use crate::storage::{
-    AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
-};
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
     StoragePartialEncoder, update_array_bytes,
+};
+use zarrs_storage::{
+    AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
 };
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
@@ -439,7 +439,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     ) -> Result<std::sync::Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
         use std::sync::Arc;
 
-        use crate::storage::StorageHandle;
+        use zarrs_storage::StorageHandle;
 
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 

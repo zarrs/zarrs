@@ -17,12 +17,12 @@ use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
     DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
-use crate::storage::StorageError;
-use crate::storage::byte_range::ByteRange;
 use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
 };
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::ByteRange;
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,

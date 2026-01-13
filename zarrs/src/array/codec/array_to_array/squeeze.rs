@@ -38,11 +38,11 @@ pub use squeeze_codec::SqueezeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
-pub use crate::metadata_ext::codec::squeeze::{
+use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(SqueezeCodec,
   v3: "zarrs.squeeze", []

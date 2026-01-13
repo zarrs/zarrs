@@ -15,13 +15,13 @@ use crate::array::{ArrayBytes, ArrayMetadataV2, ArraySubset, ArraySubsetTraits};
 use crate::config::MetadataRetrieveVersion;
 use crate::iter_concurrent_limit;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use crate::storage::{ReadableStorageTraits, StorageError, StorageHandle};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
     StoragePartialDecoder, build_nested_optional_target, copy_fill_value_into, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth,
 };
+use zarrs_storage::{ReadableStorageTraits, StorageError, StorageHandle};
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
     /// Open an existing array in `storage` at `path` with default [`MetadataRetrieveVersion`].

@@ -32,13 +32,13 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
-use crate::metadata::Configuration;
-use crate::metadata::v3::MetadataV3;
-pub use crate::metadata_ext::chunk_grid::rectangular::{
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
+pub use zarrs_metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
-use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 

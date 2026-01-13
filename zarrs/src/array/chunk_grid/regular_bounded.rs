@@ -36,10 +36,10 @@ pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfigura
 use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
 };
-use crate::metadata::Configuration;
-use crate::metadata::v3::MetadataV3;
-use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
   v3: "zarrs.regular_bounded", [],

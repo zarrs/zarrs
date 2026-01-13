@@ -5,7 +5,7 @@ use super::{
     meta_key_v2_group, meta_key_v3,
 };
 use crate::config::MetadataRetrieveVersion;
-use crate::storage::{
+use zarrs_storage::{
     AsyncListableStorageTraits, AsyncReadableStorageTraits, StorageError, StorePrefix,
     async_discover_children,
 };

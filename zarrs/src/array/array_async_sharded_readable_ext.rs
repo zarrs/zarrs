@@ -14,14 +14,14 @@ use super::{
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
 use crate::array::{ArraySubset, ArraySubsetTraits};
-use crate::metadata::ConfigurationSerialize;
-use crate::metadata_ext::codec::sharding::ShardingCodecConfiguration;
-use crate::storage::byte_range::ByteRange;
-use crate::storage::{AsyncReadableStorageTraits, MaybeSend, MaybeSync, StorageHandle};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
     CodecError, CodecOptions, merge_chunks_vlen,
 };
+use zarrs_metadata::ConfigurationSerialize;
+use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
+use zarrs_storage::byte_range::ByteRange;
+use zarrs_storage::{AsyncReadableStorageTraits, MaybeSend, MaybeSync, StorageHandle};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]
@@ -738,8 +738,8 @@ mod tests {
     use crate::array::codec::TransposeCodec;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
-    use crate::metadata_ext::codec::transpose::TransposeOrder;
-    use crate::storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
+    use zarrs_metadata_ext::codec::transpose::TransposeOrder;
+    use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
 
     async fn array_sharded_ext_impl(sharded: bool) -> Result<(), Box<dyn std::error::Error>> {
         let store = object_store::memory::InMemory::new();

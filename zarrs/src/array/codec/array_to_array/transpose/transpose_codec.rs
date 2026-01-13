@@ -7,9 +7,6 @@ use super::{
     TransposeCodecConfiguration, TransposeOrder, apply_permutation, inverse_permutation, permute,
 };
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
-use crate::metadata::Configuration;
-use crate::metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
-use crate::plugin::PluginCreateError;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
@@ -17,6 +14,9 @@ use zarrs_codec::{
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::transpose::TransposeCodecConfigurationV1;
+use zarrs_plugin::PluginCreateError;
 
 /// A Transpose codec implementation.
 #[derive(Clone, Debug)]

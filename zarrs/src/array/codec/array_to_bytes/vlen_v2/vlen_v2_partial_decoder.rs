@@ -4,13 +4,13 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
-use crate::storage::StorageError;
 use zarrs_codec::{
     ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
     extract_decoded_regions_vlen,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenV2PartialDecoder {

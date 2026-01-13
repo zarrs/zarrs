@@ -11,12 +11,12 @@ use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::CodecChain;
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
-use crate::metadata::{Configuration, DataTypeSize};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
     CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency,
 };
+use zarrs_metadata::{Configuration, DataTypeSize};
 
 /// An `optional` codec implementation.
 #[derive(Debug, Clone)]
