@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-01-13
+## [0.8.1] - 2026-01-14
+
+### Added
+- Add `OptionalDataType`
+- Add `DataType::{is,downcast_ref,fixed_size,is_fixed,is_variable,is_optional,as_optional,optional_inner,to_optional}()`
+
+## [0.8.0] - 2026-01-13
 
 ### Added
 - Add `DataType::fill_value_{v2,v3}()`
@@ -131,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.8.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.8.1...HEAD
+[0.8.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.1
 [0.8.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.0
 [0.7.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.7.0
 [0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.6.0
