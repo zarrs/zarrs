@@ -84,7 +84,6 @@ pub use zarrs_codec::{
 
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::chunk_grid::ChunkGrid;
 pub use self::chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator};
 pub use self::codec::CodecChain;
 pub use self::element::{Element, ElementFixedLength, ElementOwned};
@@ -93,6 +92,7 @@ pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::StorageTransformerChain;
 pub use self::tensor::{Tensor, TensorError};
 use crate::array::chunk_grid::RegularChunkGrid;
+pub use zarrs_chunk_grid::ChunkGrid;
 // use crate::array::codec::ArrayCodecTraits;
 use crate::array::chunk_grid::RegularBoundedChunkGridConfiguration;
 use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
@@ -1184,7 +1184,7 @@ fn chunk_grid_default_name(
     version: impl Into<ZarrVersion>,
 ) -> Cow<'static, str> {
     let version = version.into();
-    if let Ok(chunk_grid) = chunk_grid::ChunkGrid::from_metadata(metadata, array_shape)
+    if let Ok(chunk_grid) = zarrs_chunk_grid::ChunkGrid::from_metadata(metadata, array_shape)
         && let Some(name) = chunk_grid.name(version)
     {
         return name;

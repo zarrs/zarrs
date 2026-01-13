@@ -1,5 +1,5 @@
 use crate::array::ChunkGrid;
-use crate::array::chunk_grid::ChunkGridTraits;
+use zarrs_chunk_grid::ChunkGridTraits;
 
 /// An input that can be mapped to a chunk grid.
 #[derive(Debug)]

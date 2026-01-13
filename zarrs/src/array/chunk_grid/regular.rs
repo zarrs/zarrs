@@ -24,7 +24,6 @@ use std::num::NonZeroU64;
 
 use thiserror::Error;
 
-use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use crate::array::{
     ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
     IncompatibleDimensionalityError,
@@ -33,6 +32,7 @@ use crate::metadata::Configuration;
 use crate::metadata::v3::MetadataV3;
 pub use crate::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
@@ -292,8 +292,8 @@ mod tests {
     use rayon::iter::ParallelIterator;
 
     use super::*;
-    use crate::array::chunk_grid::ChunkGridTraitsIterators;
     use crate::array::{ArrayIndicesTinyVec, ArraySubset};
+    use zarrs_chunk_grid::ChunkGridTraitsIterators;
 
     #[test]
     fn chunk_grid_regular_configuration() {
