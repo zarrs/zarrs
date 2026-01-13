@@ -29,7 +29,7 @@ zarrs_plugin.workspace = true
 zarrs_storage.workspace = true
 
 [features]
-async = []
+async = ["zarrs_storage/async"]
 
 [lints]
 workspace = true
