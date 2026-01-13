@@ -26,8 +26,8 @@ use zarrs::array::codec::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits,
 };
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, DataTypeExt,
-    FillValue, data_type,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
+    data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_filesystem::FilesystemStore;

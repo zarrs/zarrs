@@ -4,16 +4,16 @@ use std::sync::Arc;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::super::zfp::ZfpCodec;
-use crate::array::codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
-};
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::zfp::ZfpMode;
 use crate::metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationMode, ZfpyCodecConfigurationNumcodecs,
+};
+use zarrs_codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 
 use crate::array::codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits};

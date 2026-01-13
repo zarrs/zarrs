@@ -117,7 +117,6 @@ mod tests {
 
     use super::*;
     use crate::array::codec::{ArrayToArrayCodecTraits, CodecOptions};
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_reshape_round_trip_impl(

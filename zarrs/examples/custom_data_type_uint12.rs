@@ -8,8 +8,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use zarrs::array::codec::{BytesCodecDataTypeTraits, CodecError, PackBitsCodecDataTypeTraits};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeExt, DataTypeSize, Element,
-    ElementOwned,
+    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, FillValueMetadata};
@@ -122,12 +121,12 @@ impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt12 {
 }
 
 // Register codec support
-zarrs::array::codec::register_data_type_extension_codec!(
+zarrs_codec::register_data_type_extension_codec!(
     CustomDataTypeUInt12,
     zarrs::array::codec::BytesPlugin,
     zarrs::array::codec::BytesCodecDataTypeTraits
 );
-zarrs::array::codec::register_data_type_extension_codec!(
+zarrs_codec::register_data_type_extension_codec!(
     CustomDataTypeUInt12,
     zarrs::array::codec::PackBitsPlugin,
     zarrs::array::codec::PackBitsCodecDataTypeTraits

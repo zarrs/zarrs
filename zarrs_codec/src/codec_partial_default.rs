@@ -2,25 +2,24 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use zarrs_chunk_grid::Indexer;
 use zarrs_data_type::FillValue;
 
 use super::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArraySubset, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
 };
-use crate::array::array_bytes::update_array_bytes;
+use crate::array_bytes::update_array_bytes;
 #[cfg(feature = "async")]
-use crate::array::codec::{
+use crate::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, ArraySubset, BytesRepresentation,
-};
-use crate::metadata::DataTypeSize;
-use crate::storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
-use crate::storage::{OffsetBytesIterator, StorageError};
+use zarrs_metadata::DataTypeSize;
+use zarrs_storage::byte_range::{ByteRangeIterator, extract_byte_ranges};
+use zarrs_storage::{OffsetBytesIterator, StorageError};
 
 /// Decoded representation for array codecs shape, data type, and fill value.
 pub(super) struct ArrayDecodedRepresentation {
@@ -141,7 +140,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
@@ -195,7 +194,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -274,7 +273,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'_>, super::CodecError> {
         // Read the entire chunk
@@ -329,7 +328,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -455,7 +454,7 @@ where
 
     fn partial_encode_many(
         &self,
-        offset_values: OffsetBytesIterator<crate::array::ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<ArrayBytesRaw<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let encoded_value = self
@@ -519,7 +518,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         let output_shape: Result<Vec<NonZeroU64>, _> = indexer
@@ -579,7 +578,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -663,7 +662,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         options: &super::CodecOptions,
     ) -> Result<ArrayBytes<'a>, super::CodecError> {
         // Read the entire chunk
@@ -721,7 +720,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::array::Indexer,
+        indexer: &dyn Indexer,
         bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
@@ -854,7 +853,7 @@ where
 
     async fn partial_encode_many<'a>(
         &'a self,
-        offset_values: OffsetBytesIterator<'a, crate::array::ArrayBytesRaw<'_>>,
+        offset_values: OffsetBytesIterator<'a, ArrayBytesRaw<'_>>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
         let encoded_value = self

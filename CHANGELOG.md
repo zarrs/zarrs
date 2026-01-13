@@ -126,8 +126,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `copy_fill_value_into()`
 - **Breaking**: `ArrayBytes::validate()` now takes a `DataType` instead of a `DataTypeSize`
 - **Breaking**: Mark `ArrayBytes` as non-exhaustive
-- **Breaking**: Rename `RawBytes` to `ArrayBytesRaw` and add deprecated alias
-- **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets` and add deprecated alias
+- **Breaking**: Rename `RawBytes` to `ArrayBytesRaw`
+- **Breaking**: Rename `RawBytesOffsets` to `ArrayBytesOffsets`
 - **Breaking**: `ArrayBytes::into_variable()` now returns `ArrayBytesVariableLength` instead of a bytes and offsets tuple
 - **Breaking**: `{Array,Chunk}Representation::shape_u64()` now returns `&[u64]` instead of `Vec<u64>`
 - **Breaking**: Move the `array::chunk_grid`, `array_subset`, and `indexer` submodules into `zarrs_chunk_grid`, and re-export

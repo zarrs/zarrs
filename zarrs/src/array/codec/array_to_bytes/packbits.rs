@@ -72,7 +72,7 @@ pub trait PackBitsCodecDataTypeTraits {
 }
 
 // Generate the codec support infrastructure using the generic macro
-crate::array::codec::define_data_type_support!(PackBits, PackBitsCodecDataTypeTraits);
+zarrs_codec::define_data_type_support!(PackBits, PackBitsCodecDataTypeTraits);
 
 /// Macro to implement `PackBitsCodecDataTypeTraits` for data types and register support.
 ///
@@ -102,7 +102,7 @@ macro_rules! _impl_packbits_codec {
                 true
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -121,7 +121,7 @@ macro_rules! _impl_packbits_codec {
                 false
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -140,7 +140,7 @@ macro_rules! _impl_packbits_codec {
                 false
             }
         }
-        $crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits

@@ -130,7 +130,7 @@ impl crate::array::codec::BytesCodecDataTypeTraits for NumpyDateTime64DataType {
     }
 }
 
-crate::array::codec::register_data_type_extension_codec!(
+zarrs_codec::register_data_type_extension_codec!(
     NumpyDateTime64DataType,
     crate::array::codec::BytesPlugin,
     crate::array::codec::BytesCodecDataTypeTraits

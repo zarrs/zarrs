@@ -18,15 +18,15 @@ use super::{
     ZfpCodecConfiguration, ZfpCodecConfigurationV1, promote_before_zfp_encoding,
     zarr_to_zfp_data_type, zfp_decode,
 };
-use crate::array::codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency,
-};
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use crate::metadata::Configuration;
 use crate::metadata_ext::codec::zfp::ZfpMode;
 use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
+};
 
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]

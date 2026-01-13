@@ -1,0 +1,35 @@
+[package]
+name = "zarrs_codec"
+version = "0.1.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2024"
+rust-version = "1.91"
+description = "The codec API for the zarrs crate"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_codec"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_codec"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs"]
+categories = ["encoding"]
+
+[dependencies]
+async-trait = "0.1.74"
+bytemuck = { version = "1.14.0", features = ["must_cast"] }
+derive_more = { version = "2.0.0", features = ["deref", "display", "from"] }
+futures = "0.3.29"
+inventory.workspace = true
+itertools = "0.14.0"
+rayon = "1.10.0"
+thiserror.workspace = true
+unsafe_cell_slice = "0.2.0"
+zarrs_chunk_grid.workspace = true
+zarrs_data_type.workspace = true
+zarrs_metadata.workspace = true
+zarrs_plugin.workspace = true
+zarrs_storage.workspace = true
+
+[features]
+async = []
+
+[lints]
+workspace = true

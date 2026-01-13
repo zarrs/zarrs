@@ -10,6 +10,7 @@
 mod data_type;
 mod data_type_plugin;
 mod fill_value;
+mod optional;
 
 pub use data_type::{DataType, DataTypeTraits};
 pub use data_type_plugin::{
@@ -19,3 +20,4 @@ pub use data_type_plugin::{
     DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
 };
 pub use fill_value::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};
+pub use optional::OptionalDataType;

@@ -22,11 +22,8 @@
 //! The documentation for [`Array`] details how to interact with arrays.
 
 mod array_builder;
-mod array_bytes;
-mod array_bytes_fixed_disjoint_view;
 mod array_errors;
 mod array_metadata_options;
-mod bytes_representation;
 mod chunk_cache;
 mod element;
 mod from_array_bytes;
@@ -70,30 +67,26 @@ pub use chunk_cache::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
-pub use data_type::{DataType, DataTypeExt, FillValue};
+pub use data_type::{DataType, FillValue};
 use zarrs_plugin::ZarrVersion;
 
 pub use self::array_builder::{
     ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
     ArrayBuilderFillValue,
 };
-pub use self::array_bytes::{
-    ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesVariableLength, RawBytesOffsetsCreateError, RawBytesOffsetsOutOfBoundsError,
+pub use zarrs_codec::{
+    ArrayBytes, ArrayBytesError, ArrayBytesFixedDisjointView,
+    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesVariableLength, ArrayRawBytesOffsetsCreateError,
+    ArrayRawBytesOffsetsOutOfBoundsError, BytesRepresentation, RecommendedConcurrency,
     copy_fill_value_into, update_array_bytes,
 };
-#[expect(deprecated)]
-pub use self::array_bytes::{RawBytes, RawBytesOffsets};
-pub use self::array_bytes_fixed_disjoint_view::{
-    ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError,
-};
+
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
-pub use self::bytes_representation::BytesRepresentation;
 pub use self::chunk_grid::ChunkGrid;
 pub use self::chunk_key_encoding::{ChunkKeyEncoding, ChunkKeySeparator};
 pub use self::codec::CodecChain;
-pub use self::concurrency::RecommendedConcurrency;
 pub use self::element::{Element, ElementFixedLength, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
@@ -122,7 +115,7 @@ use crate::storage::StoreKey;
     since = "0.23.0",
     note = "Use zarrs::array::codec::ArrayCodecTraits directly instead"
 )]
-pub use codec::ArrayCodecTraits;
+pub use zarrs_codec::ArrayCodecTraits;
 use zarrs_plugin::{ExtensionAliasesV2, ExtensionAliasesV3, ExtensionName};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
@@ -1301,22 +1294,7 @@ pub fn unravel_index(mut index: u64, shape: &[u64]) -> Option<ArrayIndices> {
     if index == 0 { Some(indices) } else { None }
 }
 
-/// Ravel ND indices to a linearised index.
-///
-/// Returns [`None`] if any `indices` are out-of-bounds of `shape`.
-#[must_use]
-pub fn ravel_indices(indices: &[u64], shape: &[u64]) -> Option<u64> {
-    let mut index: u64 = 0;
-    let mut count = 1;
-    for (i, s) in std::iter::zip(indices, shape).rev() {
-        if i >= s {
-            return None;
-        }
-        index += i * count;
-        count *= s;
-    }
-    Some(index)
-}
+pub use zarrs_chunk_grid::ravel_indices;
 
 #[cfg(feature = "ndarray")]
 fn iter_u64_to_usize<'a, I: Iterator<Item = &'a u64>>(iter: I) -> Vec<usize> {

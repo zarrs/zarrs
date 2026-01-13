@@ -124,7 +124,6 @@ mod tests {
     use crate::array::codec::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_squeeze_round_trip_impl(

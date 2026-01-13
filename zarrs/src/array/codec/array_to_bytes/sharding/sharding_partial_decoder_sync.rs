@@ -7,13 +7,11 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
-use crate::array::array_bytes::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::{
     ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
     BytesPartialDecoderTraits, CodecChain, CodecError, CodecOptions,
 };
-use crate::array::data_type::DataTypeExt;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
     ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
@@ -21,6 +19,7 @@ use crate::array::{
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange};
+use zarrs_codec::merge_chunks_vlen;
 use zarrs_plugin::ExtensionAliasesV3;
 
 /// Partial decoder for the sharding codec.
@@ -407,6 +406,7 @@ fn partial_decode_variable_array_subset(
 
         let chunk_subset_bytes = if offset == u64::MAX && size == u64::MAX {
             ArrayBytes::new_fill_value(data_type, chunk_subset_overlap.num_elements(), fill_value)?
+                .into_variable()?
         } else {
             // Partially decode the inner chunk
             let inner_partial_decoder = get_inner_chunk_partial_decoder(
@@ -427,6 +427,7 @@ fn partial_decode_variable_array_subset(
                     options,
                 )?
                 .into_owned()
+                .into_variable()?
         };
         Ok::<_, CodecError>((
             chunk_subset_bytes,
@@ -447,7 +448,7 @@ fn partial_decode_variable_array_subset(
 
     // Convert into an array
     let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape())?;
-    Ok(out_array_subset)
+    Ok(ArrayBytes::Variable(out_array_subset))
 }
 
 #[expect(clippy::too_many_arguments)]

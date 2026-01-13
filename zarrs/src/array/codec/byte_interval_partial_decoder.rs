@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use super::AsyncBytesPartialDecoderTraits;
-use super::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 use crate::array::ArrayBytesRaw;
 use crate::storage::StorageError;
 use crate::storage::byte_range::{ByteLength, ByteOffset, ByteRange, ByteRangeIterator};
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
 
 /// A partial decoder for a byte interval of a [`BytesPartialDecoderTraits`] partial decoder.
 ///

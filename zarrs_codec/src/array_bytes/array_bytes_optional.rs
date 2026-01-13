@@ -1,4 +1,4 @@
-use crate::array::{ArrayBytes, ArrayBytesRaw};
+use crate::{ArrayBytes, ArrayBytesRaw};
 
 /// Optional array bytes composed of data and a validity mask.
 ///

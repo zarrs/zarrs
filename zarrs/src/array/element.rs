@@ -6,7 +6,7 @@ use itertools::Itertools;
 use crate::array::data_type;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeExt, convert_from_bytes_slice,
+    ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, convert_from_bytes_slice,
     transmute_to_bytes, transmute_to_bytes_vec,
 };
 

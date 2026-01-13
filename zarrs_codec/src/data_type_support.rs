@@ -59,7 +59,7 @@ macro_rules! _define_data_type_support {
         ::paste::paste! {
             /// Plugin for registering codec support for a data type.
             ///
-            /// Use [`register_data_type_extension_codec!`](crate::array::codec::register_data_type_extension_codec) to register.
+            /// Use [`register_data_type_extension_codec!`](zarrs_codec::register_data_type_extension_codec) to register.
             pub struct [<$name Plugin>] {
                 /// The data type's [`TypeId`](std::any::TypeId).
                 pub type_id: ::std::any::TypeId,
@@ -113,7 +113,7 @@ pub use _define_data_type_support as define_data_type_support;
 ///     // ...
 /// }
 ///
-/// crate::array::codec::register_data_type_extension_codec!(
+/// zarrs_codec::register_data_type_extension_codec!(
 ///     Float32DataType,
 ///     $crate::array::codec::BitroundPlugin,
 ///     $crate::array::codec::BitroundCodecDataTypeTraits

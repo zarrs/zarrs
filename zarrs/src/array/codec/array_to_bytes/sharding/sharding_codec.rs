@@ -15,7 +15,6 @@ use super::{
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
     sharding_index_shape, sharding_partial_encoder,
 };
-use crate::array::array_bytes::merge_chunks_vlen;
 use crate::array::codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
@@ -25,7 +24,6 @@ use crate::array::codec::{
 #[cfg(feature = "async")]
 use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use crate::array::concurrency::calc_concurrency_outer_inner;
-use crate::array::data_type::DataTypeExt;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
     ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
@@ -33,6 +31,7 @@ use crate::array::{
 };
 use crate::metadata::Configuration;
 use crate::plugin::PluginCreateError;
+use zarrs_codec::merge_chunks_vlen;
 use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// A `sharding` codec implementation.
@@ -245,6 +244,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                             self.subchunk_shape.num_elements_u64(),
                             fill_value,
                         )?
+                        .into_variable()?
                     } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
                         return Err(CodecError::Other(
                             "The shard index references out-of-bounds bytes. The chunk may be corrupted."
@@ -254,13 +254,15 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         let offset: usize = offset.try_into().unwrap();
                         let size: usize = size.try_into().unwrap();
                         let encoded_chunk = &encoded_shard[offset..offset + size];
-                        self.inner_codecs.decode(
-                            Cow::Borrowed(encoded_chunk),
-                            &self.subchunk_shape,
-                            data_type,
-                            fill_value,
-                            &options,
-                        )?
+                        self.inner_codecs
+                            .decode(
+                                Cow::Borrowed(encoded_chunk),
+                                &self.subchunk_shape,
+                                data_type,
+                                fill_value,
+                                &options,
+                            )?
+                            .into_variable()?
                     };
                     Ok((chunk_bytes, chunk_subset))
                 };
@@ -275,7 +277,10 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 .collect::<Result<Vec<_>, _>>()?;
 
                 // Convert into an array
-                merge_chunks_vlen(chunk_bytes_and_subsets, shard_shape_u64)
+                Ok(ArrayBytes::Variable(merge_chunks_vlen(
+                    chunk_bytes_and_subsets,
+                    shard_shape_u64,
+                )?))
             }
             DataTypeSize::Fixed(data_type_size) => {
                 // Allocate an array for the output

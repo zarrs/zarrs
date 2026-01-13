@@ -82,11 +82,11 @@ mod tests {
 
     use super::*;
     use crate::array::BytesRepresentation;
-    use crate::array::codec::{
+    use crate::storage::byte_range::ByteRange;
+    use zarrs_codec::{
         BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
         CodecTraits,
     };
-    use crate::storage::byte_range::ByteRange;
 
     const JSON1: &str = r"{}";
     const JSON2: &str = r#"{"location":"start"}"#;

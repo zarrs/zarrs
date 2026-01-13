@@ -63,7 +63,7 @@ macro_rules! impl_data_type_extension_numeric {
             }
         }
 
-        crate::array::codec::register_data_type_extension_codec!(
+        zarrs_codec::register_data_type_extension_codec!(
             $marker,
             crate::array::codec::BytesPlugin,
             crate::array::codec::BytesCodecDataTypeTraits

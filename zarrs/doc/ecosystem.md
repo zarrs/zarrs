@@ -21,6 +21,8 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
   - Re-exports [`zarrs::storage`](crate::storage).
 - [`zarrs_chunk_grid`]: The chunk grid extension API.
   - Re-exports items under [`zarrs::array`](crate::array) and [`zarrs::array::chunk_grid`](crate::array::chunk_grid).
+- [`zarrs_codec`]: The codec extension API.
+  - Re-exports items under [`zarrs::array`](crate::array) and [`zarrs::array::codec`](crate::array::codec).
 - [`zarrs_data_type`]: The data type extension API.
   - Re-exports items under [`zarrs::array`](crate::array) and [`zarrs::array::data_type`](crate::array::data_type).
 
@@ -55,6 +57,7 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 
 [`zarrs`]: https://docs.rs/zarrs/latest/zarrs/
 [`zarrs_chunk_grid`]: https://docs.rs/zarrs_data_type/latest/zarrs_chunk_grid/
+[`zarrs_codec`]: https://docs.rs/zarrs_data_type/latest/zarrs_codec/
 [`zarrs_data_type`]: https://docs.rs/zarrs_data_type/latest/zarrs_data_type/
 [`zarrs_metadata`]: https://docs.rs/zarrs_metadata/latest/zarrs_metadata/
 [`zarrs_metadata_ext`]: https://docs.rs/zarrs_metadata_ext/latest/zarrs_metadata_ext/

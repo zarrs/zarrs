@@ -9,7 +9,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, sharding_index_shape};
-use crate::array::array_bytes::update_array_bytes;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
@@ -24,6 +23,7 @@ use crate::array::{
 };
 use crate::storage::StorageError;
 use crate::storage::byte_range::ByteRange;
+use zarrs_codec::update_array_bytes;
 
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,

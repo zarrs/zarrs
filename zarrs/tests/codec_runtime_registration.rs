@@ -6,9 +6,9 @@ use std::sync::Arc;
 use serial_test::serial;
 use zarrs::array::codec::{
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, register_codec_v3, unregister_codec_v3,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, register_codec_v3,
+    unregister_codec_v3,
 };
-use zarrs::array::concurrency::RecommendedConcurrency;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytesRaw, BytesRepresentation, data_type};
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;

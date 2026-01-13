@@ -35,7 +35,6 @@ pub use transpose_codec::TransposeCodec;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
-use crate::array::array_bytes::{ArrayBytesOffsets, ArrayBytesVariableLength};
 use crate::array::codec::{Codec, CodecError, CodecPluginV3};
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
@@ -45,6 +44,7 @@ pub use crate::metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
 use crate::plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_codec::ArrayBytesOffsets;
 
 zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
 
@@ -204,10 +204,9 @@ pub(crate) fn apply_permutation<'a>(
     bytes.validate(num_elements, data_type)?;
 
     match (bytes, data_type.size()) {
-        (
-            ArrayBytes::Variable(ArrayBytesVariableLength { bytes, offsets }),
-            DataTypeSize::Variable,
-        ) => {
+        (ArrayBytes::Variable(vlen_bytes), DataTypeSize::Variable) => {
+            let bytes = vlen_bytes.bytes();
+            let offsets = vlen_bytes.offsets();
             let shape: Vec<usize> = input_shape
                 .iter()
                 .map(|s| usize::try_from(*s).unwrap())
@@ -241,7 +240,6 @@ mod tests {
     use crate::array::codec::{
         ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions,
     };
-    use crate::array::data_type::DataTypeExt;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
 
     fn codec_transpose_round_trip_impl(

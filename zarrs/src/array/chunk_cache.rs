@@ -6,18 +6,16 @@ use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::codec::CodecOptions;
 use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
-use crate::array::array_bytes::{
-    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
-};
 use crate::array::codec::{ArrayPartialDecoderTraits, CodecError};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::from_array_bytes::FromArrayBytes;
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits, DataTypeExt,
-    ElementOwned, IncompatibleDimensionalityError,
+    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits, ElementOwned,
+    IncompatibleDimensionalityError,
 };
 use crate::iter_concurrent_limit;
 use crate::storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
+use zarrs_codec::{merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth};
 
 pub(crate) mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;
@@ -418,21 +416,41 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
 
-    // Arc<ArrayBytes> -> ArrayBytes (not copied, but a bit wasteful, change merge_chunks_vlen?)
-    let chunk_bytes_and_subsets = chunk_bytes_and_subsets
-        .iter()
-        .map(|(chunk_bytes, chunk_subset)| (ArrayBytes::clone(chunk_bytes), chunk_subset.clone()))
-        .collect();
-
     if nesting_depth > 0 {
-        Ok(merge_chunks_vlen_optional(
+        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+            .iter()
+            .map(|(chunk_bytes, chunk_subset)| {
+                (
+                    ArrayBytes::clone(chunk_bytes)
+                        .into_optional()
+                        .expect("run on vlen data"),
+                    chunk_subset.clone(),
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
             chunk_bytes_and_subsets,
             &array_subset.shape(),
             nesting_depth,
-        )?
+        )?)
         .into())
     } else {
-        Ok(merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape())?.into())
+        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
+            .iter()
+            .map(|(chunk_bytes, chunk_subset)| {
+                (
+                    ArrayBytes::clone(chunk_bytes)
+                        .into_variable()
+                        .expect("run on vlen data"),
+                    chunk_subset.clone(),
+                )
+            })
+            .collect();
+        Ok(ArrayBytes::Variable(merge_chunks_vlen(
+            chunk_bytes_and_subsets,
+            &array_subset.shape(),
+        )?)
+        .into())
     }
 }
 

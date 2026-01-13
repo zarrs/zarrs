@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use ndarray::ArrayD;
-use zarrs::array::{ArrayBuilder, DataTypeExt, FillValue, data_type};
+use zarrs::array::{ArrayBuilder, FillValue, data_type};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
