@@ -71,6 +71,12 @@ mod bytes_partial_decoder_cache;
 pub(crate) use array_partial_decoder_cache::ArrayPartialDecoderCache;
 pub(crate) use bytes_partial_decoder_cache::BytesPartialDecoderCache;
 
+/// Re-export the `zarrs_codec` API.
+///
+/// The API is mostly useful to implementors of custom codecs.
+/// Users can import less used types (e.g. errors) from this crate if needed.
+pub use zarrs_codec as api;
+
 /// Returns the default array-to-bytes codec for a given data type.
 ///
 /// The default codec is dependent on the data type:
