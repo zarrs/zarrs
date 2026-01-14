@@ -9,7 +9,7 @@
 //! - `packbits`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `packbits`
+//! None
 //!
 //! ### Codec `configuration` Example - [`PackBitsCodecConfiguration`]:
 //! ```rust
