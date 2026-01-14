@@ -20,7 +20,7 @@ impl DataTypePluginV3 {
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion3> + DataTypeTraitsV3>() -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), T::create))
+        Self(Plugin::new(T::matches_name, T::create))
     }
 }
 
@@ -35,7 +35,7 @@ impl DataTypePluginV2 {
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion2> + DataTypeTraitsV2>() -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), T::create))
+        Self(Plugin::new(T::matches_name, T::create))
     }
 }
 

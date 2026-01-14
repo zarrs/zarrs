@@ -36,7 +36,7 @@ inventory::collect!(ChunkKeyEncodingPlugin);
 impl ChunkKeyEncodingPlugin {
     /// Create a new [`ChunkKeyEncodingPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
     pub const fn new<T: ExtensionAliases<ZarrVersion3> + ChunkKeyEncodingTraits>() -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), T::create))
+        Self(Plugin::new(T::matches_name, T::create))
     }
 }
 

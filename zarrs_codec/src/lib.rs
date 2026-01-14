@@ -149,7 +149,7 @@ impl CodecPluginV3 {
     pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+        Self(Plugin::new(T::matches_name, create_fn))
     }
 }
 
@@ -165,7 +165,7 @@ impl CodecPluginV2 {
     pub const fn new<T: ExtensionAliases<ZarrVersion2>>(
         create_fn: fn(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>,
     ) -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+        Self(Plugin::new(T::matches_name, create_fn))
     }
 }
 

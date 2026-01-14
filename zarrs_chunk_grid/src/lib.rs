@@ -91,7 +91,7 @@ impl ChunkGridPlugin {
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion3> + ChunkGridTraits>() -> Self {
-        Self(Plugin2::new(|name| T::matches_name(name), T::create))
+        Self(Plugin2::new(T::matches_name, T::create))
     }
 }
 

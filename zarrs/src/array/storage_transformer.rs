@@ -41,7 +41,7 @@ inventory::collect!(StorageTransformerPlugin);
 impl StorageTransformerPlugin {
     /// Create a new [`StorageTransformerPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`] and [`StorageTransformerTraits`].
     pub const fn new<T: ExtensionAliases<ZarrVersion3> + StorageTransformerTraits>() -> Self {
-        Self(Plugin2::new(|name| T::matches_name(name), T::create))
+        Self(Plugin2::new(T::matches_name, T::create))
     }
 }
 
