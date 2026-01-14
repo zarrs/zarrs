@@ -213,7 +213,7 @@ macro_rules! _impl_zfp_codec {
                 None
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -229,7 +229,7 @@ macro_rules! _impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::None
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits
@@ -245,7 +245,7 @@ macro_rules! _impl_zfp_codec {
                 $crate::array::codec::ZfpPromotion::$promotion
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::ZfpPlugin,
             $crate::array::codec::ZfpCodecDataTypeTraits

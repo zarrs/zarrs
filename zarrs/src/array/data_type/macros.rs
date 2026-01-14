@@ -50,7 +50,7 @@ macro_rules! impl_data_type_extension_numeric {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
 
@@ -58,12 +58,12 @@ macro_rules! impl_data_type_extension_numeric {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
             }
         }
 
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             crate::array::codec::BytesPlugin,
             crate::array::codec::BytesCodecDataTypeTraits
@@ -218,7 +218,7 @@ macro_rules! impl_data_type_extension_numeric {
     }};
     // Encode/decode for multi-byte types (endianness swap if needed)
     (@bytes_codec $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
-        let endianness = $endianness.ok_or(zarrs_codec::CodecError::from("endianness must be specified for multi-byte data types"))?;
+        let endianness = $endianness.ok_or($crate::array::CodecError::from("endianness must be specified for multi-byte data types"))?;
         if endianness == zarrs_metadata::Endianness::native() {
             Ok($bytes)
         } else {
@@ -237,7 +237,9 @@ pub(crate) use impl_data_type_extension_numeric;
 /// Macro to register a configuration free data type as `DataTypePluginV3` and `DataTypePluginV2`.
 ///
 /// These data types must be a marker type (i.e. unit struct).
-macro_rules! register_data_type_plugin {
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _register_data_type_plugin {
     ($marker:ident) => {
         // Register V3 plugin
         inventory::submit! {
@@ -259,4 +261,5 @@ macro_rules! register_data_type_plugin {
     };
 }
 
-pub(crate) use register_data_type_plugin;
+#[doc(inline)]
+pub(crate) use _register_data_type_plugin as register_data_type_plugin;

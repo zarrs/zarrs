@@ -118,7 +118,7 @@ macro_rules! _impl_bytes_codec_passthrough {
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
-            ) -> Result<::std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 Ok(bytes)
             }
 
@@ -126,11 +126,11 @@ macro_rules! _impl_bytes_codec_passthrough {
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
-            ) -> Result<::std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<::std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 Ok(bytes)
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::BytesPlugin,
             $crate::array::codec::BytesCodecDataTypeTraits

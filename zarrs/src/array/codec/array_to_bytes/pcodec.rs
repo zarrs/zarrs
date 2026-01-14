@@ -152,7 +152,7 @@ macro_rules! _impl_pcodec_codec {
                 $elements_per_element
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PcodecPlugin,
             $crate::array::codec::PcodecCodecDataTypeTraits

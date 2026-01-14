@@ -43,12 +43,12 @@ macro_rules! impl_complex_data_type {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 let component_size = $size / 2;
                 if component_size == 1 {
                     Ok(bytes)
                 } else {
-                    let endianness = endianness.ok_or(zarrs_codec::CodecError::from(
+                    let endianness = endianness.ok_or($crate::array::CodecError::from(
                         "`bytes` codec `endianness` not specified for a multi-byte data type".to_string()
                     ))?;
                     if endianness == zarrs_metadata::Endianness::native() {
@@ -67,12 +67,12 @@ macro_rules! impl_complex_data_type {
                 &self,
                 bytes: std::borrow::Cow<'a, [u8]>,
                 endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
                 self.encode(bytes, endianness)
             }
         }
 
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             crate::array::codec::BytesPlugin,
             crate::array::codec::BytesCodecDataTypeTraits

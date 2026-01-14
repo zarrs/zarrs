@@ -156,7 +156,7 @@ macro_rules! _impl_fixedscaleoffset_codec {
                 $crate::array::codec::FixedScaleOffsetElementType::$element_type
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::FixedScaleOffsetPlugin,
             $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits

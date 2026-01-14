@@ -59,23 +59,25 @@ use crate::convert::{ArrayMetadataV2ToV3Error, array_metadata_v2_to_v3};
 use crate::node::{NodePath, data_key};
 pub use zarrs_chunk_grid::{
     ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
-    ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape, ChunkShapeTraits,
-    IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
+    ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape,
+    ChunkShapeTraits, IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 pub use zarrs_codec::{
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits,
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayRawBytesOffsetsCreateError,
     ArrayRawBytesOffsetsOutOfBoundsError, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, RecommendedConcurrency, StoragePartialDecoder, copy_fill_value_into,
-    update_array_bytes,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
+    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    RecommendedConcurrency, StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
-pub use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits, AsyncBytesPartialEncoderTraits};
+pub use zarrs_codec::{
+    AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
+    AsyncBytesPartialEncoderTraits,
+};
 pub use zarrs_data_type::{DataType, DataTypeTraits, FillValue};
 pub use zarrs_metadata::v2::ArrayMetadataV2;
 use zarrs_metadata::v2::DataTypeMetadataV2;

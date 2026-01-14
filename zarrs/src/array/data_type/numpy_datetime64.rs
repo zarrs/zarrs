@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU32;
 
+use zarrs_codec::CodecError;
 use zarrs_data_type::DataType;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v3::MetadataV3;
@@ -106,8 +107,8 @@ impl crate::array::codec::BytesCodecDataTypeTraits for NumpyDateTime64DataType {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
-        let endianness = endianness.ok_or(zarrs_codec::CodecError::from(
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
+        let endianness = endianness.ok_or(CodecError::from(
             "endianness must be specified for multi-byte data types",
         ))?;
         if endianness == zarrs_metadata::Endianness::native() {
@@ -125,7 +126,7 @@ impl crate::array::codec::BytesCodecDataTypeTraits for NumpyDateTime64DataType {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, zarrs_codec::CodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
         self.encode(bytes, endianness)
     }
 }

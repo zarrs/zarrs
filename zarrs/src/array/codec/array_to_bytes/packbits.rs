@@ -102,7 +102,7 @@ macro_rules! _impl_packbits_codec {
                 true
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -121,7 +121,7 @@ macro_rules! _impl_packbits_codec {
                 false
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
@@ -140,7 +140,7 @@ macro_rules! _impl_packbits_codec {
                 false
             }
         }
-        zarrs_codec::register_data_type_extension_codec!(
+        $crate::array::codec::api::register_data_type_extension_codec!(
             $marker,
             $crate::array::codec::PackBitsPlugin,
             $crate::array::codec::PackBitsCodecDataTypeTraits
