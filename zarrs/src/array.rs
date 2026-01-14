@@ -369,7 +369,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// A crate like [`async-scoped`](https://crates.io/crates/async-scoped) can enable spawning non-`'static` futures.
 /// If executing many tasks concurrently, consider reducing the codec [`concurrent_target`](CodecOptions::set_concurrent_target).
 ///
-/// ## Extension Point Registration and Aliases
+/// ## Custom Extensions
+/// `zarrs` can be extended with custom data types, codecs, chunk grids, chunk key encodings, and storage transformers.
+/// The best way to learn how to create extensions is to study the source code of existing extensions in the `zarrs` crate.
+/// [The `zarrs` book](https://book.zarrs.dev) also has a chapter on creating custom extensions.
+///
 /// `zarrs` uses a plugin system to create extension point implementations (e.g. data types, codecs, chunk grids, chunk key encodings, and storage transformers) from metadata.
 /// Plugins are registered at compile time using the [`inventory`] crate.
 /// Runtime plugins are also supported, which take precedence over compile-time plugins.
@@ -379,7 +383,28 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// This allows experimental codecs (e.g. `zarrs.zfp`) to be later promoted to registered Zarr codecs (e.g. `zfp`) without breaking support for older arrays.
 /// The aliasing system allows matching against string aliases or regex patterns.
 ///
-/// See the [`zarrs_plugin`] crate documentation for details on implementing custom extensions.
+/// The key traits for each extension type are:
+/// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`]
+/// - Codecs ([`zarrs_codec`]): [`CodecTraits`]
+///   - Array-to-array codecs: [`ArrayCodecTraits`] + [`ArrayToArrayCodecTraits`]
+///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
+///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
+///   - Array-to-bytes codecs: [`ArrayCodecTraits`] + [`ArrayToBytesCodecTraits`]
+///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
+///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
+///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
+///   - Chunk grids ([`zarrs_chunk_grid`]): [`ChunkGridTraits`]
+///   - Chunk key encodings ([`zarrs_chunk_key_encoding`]): [`ChunkKeyEncodingTraits`]
+///   - Storage transformers ([`crate::array::storage_transformer`]): [`StorageTransformerTraits`]
+///
+/// Extensions are registered via the following:
+/// - Data types: [`DataTypePluginV2`](zarrs_data_type::DataTypePluginV2), [`DataTypePluginV3`](zarrs_data_type::DataTypePluginV3) [`DataTypeRuntimePluginV2`](zarrs_data_type::DataTypeRuntimePluginV2), [`DataTypeRuntimePluginV3`](zarrs_data_type::DataTypeRuntimePluginV3)
+/// - Codecs: [`CodecPluginV3`](zarrs_codec::CodecPluginV3), [`CodecRuntimePluginV2`](zarrs_codec::CodecRuntimePluginV2), [`CodecRuntimePluginV3`](zarrs_codec::CodecRuntimePluginV3)
+/// - Chunk grids: [`ChunkGridPlugin`](zarrs_chunk_grid::ChunkGridPlugin), [`ChunkGridRuntimePlugin`](zarrs_chunk_grid::ChunkGridRuntimePlugin)
+/// - Chunk key encodings: [`ChunkKeyEncodingPlugin`](zarrs_chunk_key_encoding::ChunkKeyEncodingPlugin), [`ChunkKeyEncodingRuntimePlugin`](zarrs_chunk_key_encoding::ChunkKeyEncodingRuntimePlugin)
+/// - Storage transformers: [`StorageTransformerPlugin`](crate::array::storage_transformer::StorageTransformerPlugin), [`StorageTransformerRuntimePlugin`](crate::array::storage_transformer::StorageTransformerRuntimePlugin)
 #[derive(Debug)]
 pub struct Array<TStorage: ?Sized> {
     /// The storage (including storage transformers).

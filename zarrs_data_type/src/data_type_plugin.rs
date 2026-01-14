@@ -17,8 +17,6 @@ inventory::collect!(DataTypePluginV3);
 
 impl DataTypePluginV3 {
     /// Create a new [`DataTypePluginV3`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion3> + DataTypeTraitsV3>() -> Self {
         Self(Plugin::new(T::matches_name, T::create))
     }
@@ -32,8 +30,6 @@ inventory::collect!(DataTypePluginV2);
 
 impl DataTypePluginV2 {
     /// Create a new [`DataTypePluginV2`] for a type implementing [`ExtensionAliases<ZarrVersion2>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion2> + DataTypeTraitsV2>() -> Self {
         Self(Plugin::new(T::matches_name, T::create))
     }

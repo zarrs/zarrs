@@ -144,8 +144,6 @@ inventory::collect!(CodecPluginV3);
 
 impl CodecPluginV3 {
     /// Create a new [`CodecPluginV3`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
         create_fn: fn(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>,
     ) -> Self {
@@ -160,8 +158,6 @@ inventory::collect!(CodecPluginV2);
 
 impl CodecPluginV2 {
     /// Create a new [`CodecPluginV2`] for a type implementing [`ExtensionAliases<ZarrVersion2>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
     pub const fn new<T: ExtensionAliases<ZarrVersion2>>(
         create_fn: fn(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>,
     ) -> Self {
