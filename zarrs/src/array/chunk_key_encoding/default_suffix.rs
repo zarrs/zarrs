@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{ChunkKeySeparator, Configuration, ConfigurationSerialize};
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 use zarrs_storage::StoreKey;
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
@@ -62,9 +62,8 @@ impl DefaultSuffixChunkKeyEncoding {
 impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
     fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
         crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
-        let configuration: DefaultSuffixChunkKeyEncodingConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
+            metadata.to_typed_configuration()?;
         let default =
             DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
         Ok(default.into())

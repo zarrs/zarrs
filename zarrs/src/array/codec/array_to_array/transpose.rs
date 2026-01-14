@@ -43,7 +43,7 @@ use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
 
@@ -54,9 +54,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for TransposeCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: TransposeCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: TransposeCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
     }

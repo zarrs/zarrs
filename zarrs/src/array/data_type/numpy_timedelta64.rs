@@ -4,9 +4,8 @@ use std::num::NonZeroU32;
 
 use zarrs_codec::CodecError;
 use zarrs_data_type::DataType;
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_metadata_ext::data_type::numpy_timedelta64::NumpyTimeDelta64DataTypeConfigurationV1;
@@ -24,18 +23,7 @@ zarrs_plugin::impl_extension_aliases!(NumpyTimeDelta64DataType, v3: "numpy.timed
 
 impl zarrs_data_type::DataTypeTraitsV3 for NumpyTimeDelta64DataType {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        let configuration = metadata.configuration().ok_or_else(|| {
-            PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                "missing configuration".to_string(),
-            ))
-        })?;
-        let config =
-            NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
-                .map_err(|_| {
-                    PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                        metadata.to_string(),
-                    ))
-                })?;
+        let config: NumpyTimeDelta64DataTypeConfigurationV1 = metadata.to_typed_configuration()?;
         Ok(std::sync::Arc::new(NumpyTimeDelta64DataType::new(
             config.unit,
             config.scale_factor,

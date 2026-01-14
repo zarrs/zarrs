@@ -32,7 +32,7 @@ use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
@@ -184,9 +184,7 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
     ) -> Result<ChunkGrid, PluginCreateError> {
-        let configuration: RegularChunkGridConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: RegularChunkGridConfiguration = metadata.to_typed_configuration()?;
         let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
             .map_err(|_| {
                 PluginCreateError::from(
@@ -327,7 +325,7 @@ mod tests {
             RegularChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"configuration is unsupported: regular {"invalid":[1,2,3]}"#
+            r#"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"#
         );
     }
 

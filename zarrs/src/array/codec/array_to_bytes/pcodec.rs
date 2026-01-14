@@ -50,7 +50,7 @@ pub use zarrs_metadata_ext::codec::pcodec::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
     PcodecDeltaEncodingOrder,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(PcodecCodec,
     v3: "numcodecs.pcodec", ["https://codec.zarrs.dev/array_to_bytes/pcodec"],
@@ -68,9 +68,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for PcodecCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }
@@ -78,9 +76,7 @@ impl CodecTraitsV3 for PcodecCodec {
 
 impl CodecTraitsV2 for PcodecCodec {
     fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-        let configuration: PcodecCodecConfiguration =
-            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let configuration: PcodecCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PcodecCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

@@ -40,7 +40,7 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(PackBitsCodec, v3: "packbits");
 
@@ -51,9 +51,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for PackBitsCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: PackBitsCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: PackBitsCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

@@ -39,7 +39,7 @@ use crate::array::{
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
   v3: "zarrs.regular_bounded", []
@@ -95,9 +95,8 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
         array_shape: &ArrayShape,
     ) -> Result<ChunkGrid, PluginCreateError> {
         crate::warn_experimental_extension(metadata.name(), "chunk grid");
-        let configuration: RegularBoundedChunkGridConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: RegularBoundedChunkGridConfiguration =
+            metadata.to_typed_configuration()?;
         let chunk_grid = RegularBoundedChunkGrid::new(
             array_shape.clone(),
             configuration.chunk_shape,
@@ -313,7 +312,7 @@ mod tests {
             RegularBoundedChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"configuration is unsupported: zarrs.regular_bounded {"invalid":[1,2,3]}"#
+            r#"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"#
         );
     }
 

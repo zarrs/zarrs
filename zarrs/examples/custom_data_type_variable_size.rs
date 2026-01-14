@@ -16,7 +16,7 @@ use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, Deref)]
 struct CustomDataTypeVariableSizeElement(Option<f32>);
@@ -100,11 +100,8 @@ zarrs_plugin::impl_extension_aliases!(CustomDataTypeVariableSize, v3: CUSTOM_NAM
 
 impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeVariableSize {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        if metadata.configuration_is_none_or_empty() {
-            Ok(Arc::new(CustomDataTypeVariableSize).into())
-        } else {
-            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
-        }
+        metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
+        Ok(Arc::new(CustomDataTypeVariableSize).into())
     }
 }
 

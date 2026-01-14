@@ -39,7 +39,7 @@ use zarrs_metadata::v3::MetadataV3;
 use crate::array::ArrayBytesRaw;
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
     v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
@@ -58,7 +58,7 @@ impl CodecTraitsV3 for VlenV2Codec {
             let codec = Arc::new(VlenV2Codec::new());
             Ok(Codec::ArrayToBytes(codec))
         } else {
-            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+            Err(metadata.to_string().into())
         }
     }
 }

@@ -81,7 +81,7 @@ use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
     ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 use zarrs_storage::byte_range::ByteRange;
 
 zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
@@ -93,9 +93,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ShardingCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: ShardingCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: ShardingCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

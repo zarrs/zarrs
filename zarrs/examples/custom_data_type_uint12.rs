@@ -18,7 +18,7 @@ use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 /// A name for  the custom data type.
 const UINT12: &str = "zarrs.test.uint12";
@@ -31,11 +31,8 @@ zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt12, v3: UINT12);
 
 impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeUInt12 {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        if metadata.configuration_is_none_or_empty() {
-            Ok(Arc::new(CustomDataTypeUInt12).into())
-        } else {
-            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
-        }
+        metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
+        Ok(Arc::new(CustomDataTypeUInt12).into())
     }
 }
 

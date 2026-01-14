@@ -758,7 +758,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     return Err(err());
                 }
                 let regular_chunk_grid_configuration = chunk_grid_metadata
-                    .to_configuration::<RegularBoundedChunkGridConfiguration>()
+                    .to_typed_configuration::<RegularBoundedChunkGridConfiguration>()
                     .map_err(|_| err())?;
                 let regular_chunk_grid = RegularChunkGrid::new(
                     array_shape.clone(),

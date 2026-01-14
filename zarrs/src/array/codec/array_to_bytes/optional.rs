@@ -95,7 +95,7 @@ use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(OptionalCodec,
   v3: "zarrs.optional", []
@@ -109,9 +109,7 @@ inventory::submit! {
 impl CodecTraitsV3 for OptionalCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
-        let configuration: OptionalCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: OptionalCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(OptionalCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

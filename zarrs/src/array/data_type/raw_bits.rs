@@ -4,9 +4,7 @@ use std::borrow::Cow;
 
 use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{
-    ExtensionAliases, PluginConfigurationInvalidError, PluginCreateError, Regex, ZarrVersion,
-};
+use zarrs_plugin::{ExtensionAliases, PluginCreateError, Regex, ZarrVersion};
 
 /// The `r*` data type.
 ///
@@ -34,10 +32,9 @@ impl zarrs_data_type::DataTypeTraitsV3 for RawBitsDataType {
                         name: name.to_string(),
                     })?;
             if size_bits % 8 != 0 {
-                return Err(PluginConfigurationInvalidError::new(format!(
+                return Err(PluginCreateError::Other(format!(
                     "raw bits size must be a multiple of 8: {size_bits}"
-                ))
-                .into());
+                )));
             }
             size_bits / 8
         } else {

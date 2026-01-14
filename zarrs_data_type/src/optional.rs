@@ -3,9 +3,7 @@ use std::borrow::Cow;
 use crate::{DataType, DataTypeFillValueMetadataError, FillValue};
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, ConfigurationSerialize};
-use zarrs_plugin::{
-    ExtensionName, PluginConfigurationInvalidError, PluginCreateError, ZarrVersion,
-};
+use zarrs_plugin::{ExtensionName, PluginCreateError, ZarrVersion};
 
 /// The `optional` data type configuration (version 1.0).
 ///
@@ -49,17 +47,7 @@ zarrs_plugin::impl_extension_aliases!(OptionalDataType,
 
 impl crate::DataTypeTraitsV3 for OptionalDataType {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        let configuration = metadata.configuration().ok_or_else(|| {
-            PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                "missing configuration".to_string(),
-            ))
-        })?;
-        let config = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
-            .map_err(|_| {
-                PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                    metadata.to_string(),
-                ))
-            })?;
+        let config: OptionalDataTypeConfigurationV1 = metadata.to_typed_configuration()?;
 
         // Create metadata for the inner data type
         let inner_metadata = if config.configuration.is_empty() {

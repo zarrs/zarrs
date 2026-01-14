@@ -44,7 +44,7 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -105,9 +105,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ReshapeCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: ReshapeCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: ReshapeCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
     }

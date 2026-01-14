@@ -115,7 +115,7 @@ use self::zfp_stream::ZfpStream;
 use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZfpCodec,
     v3: "zfp", ["zarrs.zfp", "https://codec.zarrs.dev/array_to_bytes/zfp"]
@@ -128,9 +128,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ZfpCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: ZfpCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: ZfpCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

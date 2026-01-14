@@ -45,7 +45,7 @@ use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ShuffleCodec,
     v3: "numcodecs.shuffle", []
@@ -58,9 +58,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ShuffleCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
     }

@@ -523,7 +523,7 @@ mod tests {
             TransposeCodec::aliases_v3().default_name.clone()
         );
         let configuration = first_codec
-            .to_configuration::<TransposeCodecConfigurationV1>()
+            .to_typed_configuration::<TransposeCodecConfigurationV1>()
             .unwrap();
         assert_eq!(configuration.order.0, vec![1, 0]);
 
@@ -533,7 +533,7 @@ mod tests {
             BloscCodec::aliases_v3().default_name.clone()
         );
         let configuration = last_codec
-            .to_configuration::<BloscCodecConfigurationV1>()
+            .to_typed_configuration::<BloscCodecConfigurationV1>()
             .unwrap();
         assert_eq!(configuration.typesize, Some(8));
 

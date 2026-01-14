@@ -243,8 +243,9 @@ macro_rules! _register_data_type_plugin_v3 {
     ($marker:ident) => {
         impl zarrs_data_type::DataTypeTraitsV3 for $marker {
             fn create(
-                _metadata: &zarrs_metadata::v3::MetadataV3,
+                metadata: &zarrs_metadata::v3::MetadataV3,
             ) -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
+                metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
                 Ok(std::sync::Arc::new($marker).into())
             }
         }

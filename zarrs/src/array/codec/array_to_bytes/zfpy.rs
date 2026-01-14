@@ -66,7 +66,7 @@ use std::sync::Arc;
 
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfpy::{
@@ -90,9 +90,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ZfpyCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: ZfpyCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }
@@ -100,9 +98,7 @@ impl CodecTraitsV3 for ZfpyCodec {
 
 impl CodecTraitsV2 for ZfpyCodec {
     fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-        let configuration: ZfpyCodecConfiguration =
-            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToBytes(codec))
     }

@@ -61,7 +61,7 @@ pub use zarrs_metadata_ext::codec::blosc::{
     BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
     BloscCompressionLevel, BloscCompressor, BloscShuffleMode, BloscShuffleModeNumcodecs,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(BloscCodec, v3: "blosc", v2: "blosc");
 
@@ -77,9 +77,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for BloscCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: BloscCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
     }
@@ -87,9 +85,7 @@ impl CodecTraitsV3 for BloscCodec {
 
 impl CodecTraitsV2 for BloscCodec {
     fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-        let configuration: BloscCodecConfiguration =
-            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
     }

@@ -4,9 +4,8 @@ use std::num::NonZeroU32;
 
 use zarrs_codec::CodecError;
 use zarrs_data_type::DataType;
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_metadata_ext::data_type::numpy_datetime64::NumpyDateTime64DataTypeConfigurationV1;
@@ -24,12 +23,7 @@ zarrs_plugin::impl_extension_aliases!(NumpyDateTime64DataType, v3: "numpy.dateti
 
 impl zarrs_data_type::DataTypeTraitsV3 for NumpyDateTime64DataType {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        let configuration = metadata
-            .configuration()
-            .ok_or_else(|| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-        let config =
-            NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
-                .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let config: NumpyDateTime64DataTypeConfigurationV1 = metadata.to_typed_configuration()?;
         Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(
             config.unit,
             config.scale_factor,

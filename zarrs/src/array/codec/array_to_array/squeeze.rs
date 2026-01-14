@@ -42,7 +42,7 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(SqueezeCodec,
   v3: "zarrs.squeeze", []
@@ -56,9 +56,7 @@ inventory::submit! {
 impl CodecTraitsV3 for SqueezeCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
         crate::warn_experimental_extension(metadata.name(), "codec");
-        let configuration: SqueezeCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: SqueezeCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
     }

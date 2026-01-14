@@ -47,7 +47,7 @@ use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(BitroundCodec,
     v3: "bitround", ["numcodecs.bitround", "https://codec.zarrs.dev/array_to_bytes/bitround"]
@@ -60,9 +60,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for BitroundCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: BitroundCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: BitroundCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
         Ok(Codec::ArrayToArray(codec))
     }

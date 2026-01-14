@@ -38,7 +38,7 @@ use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 
@@ -153,9 +153,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         array_shape: &ArrayShape,
     ) -> Result<ChunkGrid, PluginCreateError> {
         crate::warn_experimental_extension(metadata.name(), "chunk grid");
-        let configuration: RectangularChunkGridConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: RectangularChunkGridConfiguration = metadata.to_typed_configuration()?;
         let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
             .map_err(|err| PluginCreateError::Other(err.to_string()))?;
         Ok(ChunkGrid::new(chunk_grid))

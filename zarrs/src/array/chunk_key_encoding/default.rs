@@ -6,7 +6,7 @@ use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKe
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{ChunkKeySeparator, Configuration};
 pub use zarrs_metadata_ext::chunk_key_encoding::default::DefaultChunkKeyEncodingConfiguration;
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 use zarrs_storage::StoreKey;
 
 zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, v3: "default");
@@ -63,9 +63,8 @@ impl Default for DefaultChunkKeyEncoding {
 
 impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
     fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
-        let configuration: DefaultChunkKeyEncodingConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: DefaultChunkKeyEncodingConfiguration =
+            metadata.to_typed_configuration()?;
         let default = DefaultChunkKeyEncoding::new(configuration.separator);
         Ok(default.into())
     }

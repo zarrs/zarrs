@@ -42,7 +42,7 @@ use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTrait
 pub use zarrs_metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
-use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
+use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ZlibCodec,
     v3: "numcodecs.zlib", [],
@@ -61,9 +61,7 @@ inventory::submit! {
 
 impl CodecTraitsV3 for ZlibCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-        let configuration: ZlibCodecConfiguration = metadata
-            .to_configuration()
-            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let configuration: ZlibCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
     }
@@ -71,9 +69,7 @@ impl CodecTraitsV3 for ZlibCodec {
 
 impl CodecTraitsV2 for ZlibCodec {
     fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-        let configuration: ZlibCodecConfiguration =
-            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let configuration: ZlibCodecConfiguration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
     }
