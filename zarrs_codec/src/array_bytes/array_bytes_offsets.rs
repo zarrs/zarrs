@@ -20,7 +20,7 @@ impl Deref for ArrayBytesOffsets<'_> {
 
 /// An error creating [`ArrayBytesOffsets`].
 #[derive(Clone, Debug, Display, Error)]
-pub enum ArrayRawBytesOffsetsCreateError {
+pub enum ArrayBytesRawOffsetsCreateError {
     /// The offsets length must be greater than zero.
     #[display("offsets length must be greater than zero")]
     ZeroLength,
@@ -36,14 +36,14 @@ impl<'a> ArrayBytesOffsets<'a> {
     /// Returns an error if the offsets are not monotonically increasing.
     pub fn new(
         offsets: impl Into<Cow<'a, [usize]>>,
-    ) -> Result<Self, ArrayRawBytesOffsetsCreateError> {
+    ) -> Result<Self, ArrayBytesRawOffsetsCreateError> {
         let offsets = offsets.into();
         if offsets.is_empty() {
-            Err(ArrayRawBytesOffsetsCreateError::ZeroLength)
+            Err(ArrayBytesRawOffsetsCreateError::ZeroLength)
         } else if offsets.windows(2).all(|w| w[1] >= w[0]) {
             Ok(Self(offsets))
         } else {
-            Err(ArrayRawBytesOffsetsCreateError::NotMonotonicallyIncreasing)
+            Err(ArrayBytesRawOffsetsCreateError::NotMonotonicallyIncreasing)
         }
     }
 
@@ -76,7 +76,7 @@ impl<'a> ArrayBytesOffsets<'a> {
 }
 
 impl<'a> TryFrom<Cow<'a, [usize]>> for ArrayBytesOffsets<'a> {
-    type Error = ArrayRawBytesOffsetsCreateError;
+    type Error = ArrayBytesRawOffsetsCreateError;
 
     fn try_from(value: Cow<'a, [usize]>) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -84,7 +84,7 @@ impl<'a> TryFrom<Cow<'a, [usize]>> for ArrayBytesOffsets<'a> {
 }
 
 impl<'a> TryFrom<&'a [usize]> for ArrayBytesOffsets<'a> {
-    type Error = ArrayRawBytesOffsetsCreateError;
+    type Error = ArrayBytesRawOffsetsCreateError;
 
     fn try_from(value: &'a [usize]) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -92,7 +92,7 @@ impl<'a> TryFrom<&'a [usize]> for ArrayBytesOffsets<'a> {
 }
 
 impl<'a, const N: usize> TryFrom<&'a [usize; N]> for ArrayBytesOffsets<'a> {
-    type Error = ArrayRawBytesOffsetsCreateError;
+    type Error = ArrayBytesRawOffsetsCreateError;
 
     fn try_from(value: &'a [usize; N]) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -100,7 +100,7 @@ impl<'a, const N: usize> TryFrom<&'a [usize; N]> for ArrayBytesOffsets<'a> {
 }
 
 impl TryFrom<Vec<usize>> for ArrayBytesOffsets<'_> {
-    type Error = ArrayRawBytesOffsetsCreateError;
+    type Error = ArrayBytesRawOffsetsCreateError;
 
     fn try_from(value: Vec<usize>) -> Result<Self, Self::Error> {
         Self::new(value)

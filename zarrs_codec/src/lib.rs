@@ -33,8 +33,8 @@ pub use bytes_representation::BytesRepresentation;
 mod array_bytes;
 pub use array_bytes::{
     ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesVariableLength, ArrayRawBytesOffsetsCreateError,
-    ArrayRawBytesOffsetsOutOfBoundsError, build_nested_optional_target, copy_fill_value_into,
+    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
+    ArrayBytesVariableLength, build_nested_optional_target, copy_fill_value_into,
     decode_into_array_bytes_target, extract_decoded_regions_vlen, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth, update_array_bytes,
 };
@@ -1936,10 +1936,10 @@ pub enum CodecError {
     SubsetOutOfBounds(#[from] SubsetOutOfBoundsError),
     /// Invalid byte offsets for variable length data.
     #[error(transparent)]
-    RawBytesOffsetsCreate(#[from] ArrayRawBytesOffsetsCreateError),
+    RawBytesOffsetsCreate(#[from] ArrayBytesRawOffsetsCreateError),
     /// Variable length array bytes offsets are out of bounds.
     #[error(transparent)]
-    RawBytesOffsetsOutOfBounds(#[from] ArrayRawBytesOffsetsOutOfBoundsError),
+    RawBytesOffsetsOutOfBounds(#[from] ArrayBytesRawOffsetsOutOfBoundsError),
     /// An incompatible fill value error
     #[error(transparent)]
     DataTypeFillValueError(#[from] DataTypeFillValueError),

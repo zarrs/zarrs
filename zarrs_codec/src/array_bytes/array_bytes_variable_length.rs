@@ -1,4 +1,4 @@
-use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayRawBytesOffsetsOutOfBoundsError};
+use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsError};
 
 /// Variable length array bytes composed of bytes and element bytes offsets.
 ///
@@ -16,16 +16,16 @@ impl<'a> ArrayBytesVariableLength<'a> {
     /// Create a new variable length bytes from `bytes` and `offsets`.
     ///
     /// # Errors
-    /// Returns a [`ArrayRawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
+    /// Returns a [`ArrayBytesRawOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes or if the offsets are not monotonically increasing.
     pub fn new(
         bytes: impl Into<ArrayBytesRaw<'a>>,
         offsets: ArrayBytesOffsets<'a>,
-    ) -> Result<Self, ArrayRawBytesOffsetsOutOfBoundsError> {
+    ) -> Result<Self, ArrayBytesRawOffsetsOutOfBoundsError> {
         let bytes = bytes.into();
         if offsets.last() <= bytes.len() {
             Ok(ArrayBytesVariableLength { bytes, offsets })
         } else {
-            Err(ArrayRawBytesOffsetsOutOfBoundsError {
+            Err(ArrayBytesRawOffsetsOutOfBoundsError {
                 offset: offsets.last(),
                 len: bytes.len(),
             })

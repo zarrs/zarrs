@@ -43,7 +43,7 @@ pub fn build_nested_optional_target<'a>(
 }
 
 mod array_bytes_offsets;
-pub use array_bytes_offsets::{ArrayBytesOffsets, ArrayRawBytesOffsetsCreateError};
+pub use array_bytes_offsets::{ArrayBytesOffsets, ArrayBytesRawOffsetsCreateError};
 
 mod array_bytes_raw;
 pub use array_bytes_raw::ArrayBytesRaw;
@@ -74,7 +74,7 @@ pub enum ArrayBytes<'a> {
 /// An error raised if variable length array bytes offsets are out of bounds.
 #[derive(Clone, Debug, Display, Error)]
 #[display("Offset {offset} is out of bounds for bytes of length {len}")]
-pub struct ArrayRawBytesOffsetsOutOfBoundsError {
+pub struct ArrayBytesRawOffsetsOutOfBoundsError {
     offset: usize,
     len: usize,
 }
@@ -98,11 +98,11 @@ impl<'a> ArrayBytes<'a> {
     /// Create a new variable length array bytes from `bytes` and `offsets`.
     ///
     /// # Errors
-    /// Returns a [`ArrayRawBytesOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
+    /// Returns a [`ArrayBytesRawOffsetsOutOfBoundsError`] if the last offset is out of bounds of the bytes.
     pub fn new_vlen(
         bytes: impl Into<ArrayBytesRaw<'a>>,
         offsets: ArrayBytesOffsets<'a>,
-    ) -> Result<Self, ArrayRawBytesOffsetsOutOfBoundsError> {
+    ) -> Result<Self, ArrayBytesRawOffsetsOutOfBoundsError> {
         ArrayBytesVariableLength::new(bytes, offsets).map(Self::Variable)
     }
 

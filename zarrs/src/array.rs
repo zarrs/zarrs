@@ -65,9 +65,9 @@ pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 pub use zarrs_codec::{
     ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
     ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayRawBytesOffsetsCreateError,
-    ArrayRawBytesOffsetsOutOfBoundsError, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     RecommendedConcurrency, StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
