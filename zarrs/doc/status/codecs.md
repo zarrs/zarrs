@@ -67,7 +67,7 @@
 [`gzip`]: crate::array::codec::bytes_to_bytes::gzip
 [`zstd`]: crate::array::codec::bytes_to_bytes::zstd
 [`numcodecs.adler32`]: crate::array::codec::bytes_to_bytes::adler32
-[`numcodecs.bz2`]: crate::array::codec::bytes_to_bytes::gzip
+[`numcodecs.bz2`]: crate::array::codec::bytes_to_bytes::bz2
 [`numcodecs.fletcher32`]: crate::array::codec::bytes_to_bytes::fletcher32
 [`numcodecs.shuffle`]: crate::array::codec::bytes_to_bytes::shuffle
 [`numcodecs.zlib`]: crate::array::codec::bytes_to_bytes::zlib
