@@ -37,25 +37,41 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
-use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{v2::MetadataV2, v3::MetadataV3};
 
-use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
-    v3: "numcodecs.fixedscaleoffset", []
+    v3: "numcodecs.fixedscaleoffset", [],
+    v2: "fixedscaleoffset", []
 );
 
 // Register the V3 codec.
 inventory::submit! {
     CodecPluginV3::new::<FixedScaleOffsetCodec>()
 }
+inventory::submit! {
+    CodecPluginV2::new::<FixedScaleOffsetCodec>()
+}
 
 impl CodecTraitsV3 for FixedScaleOffsetCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: FixedScaleOffsetCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
+            &configuration,
+        )?);
+        Ok(Codec::ArrayToArray(codec))
+    }
+}
+
+impl CodecTraitsV2 for FixedScaleOffsetCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
         let configuration: FixedScaleOffsetCodecConfiguration = metadata
             .to_configuration()
             .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
