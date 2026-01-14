@@ -1,3 +1,4 @@
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::Configuration;
@@ -37,5 +38,15 @@ impl MetadataV2 {
     #[must_use]
     pub fn configuration(&self) -> &Configuration {
         &self.configuration
+    }
+
+    /// Try and convert [`Configuration`] to a specific serializable configuration.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    pub fn to_typed_configuration<TConfiguration: DeserializeOwned>(
+        &self,
+    ) -> Result<TConfiguration, std::sync::Arc<serde_json::Error>> {
+        self.configuration.to_typed()
     }
 }

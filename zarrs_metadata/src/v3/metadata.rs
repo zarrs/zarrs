@@ -197,11 +197,25 @@ impl MetadataV3 {
         }
     }
 
+    /// Try and convert [`Configuration`] to a specific serializable configuration.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    pub fn to_typed_configuration<TConfiguration: DeserializeOwned>(
+        &self,
+    ) -> Result<TConfiguration, std::sync::Arc<serde_json::Error>> {
+        if let Some(configuration) = &self.configuration {
+            configuration.to_typed()
+        } else {
+            Configuration::default().to_typed()
+        }
+    }
+
     /// Try and convert [`MetadataV3`] to a serializable configuration.
     ///
     /// # Errors
-    /// Returns a [`ConfigurationError`] if the metadata cannot be converted.
-    // FIXME: return the serde_json error
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    // TODO: #[deprecated(since = "0.8.0", note = "Use .to_typed() instead")]
     pub fn to_configuration<TConfiguration: DeserializeOwned>(
         &self,
     ) -> Result<TConfiguration, ConfigurationError> {

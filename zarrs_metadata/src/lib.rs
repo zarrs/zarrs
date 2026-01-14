@@ -126,6 +126,26 @@ pub enum DataTypeSize {
 #[derive(Default, Serialize, Deserialize, Debug, Clone, Deref, From, Into, Eq, PartialEq)]
 pub struct Configuration(serde_json::Map<String, serde_json::Value>);
 
+/// An empty configuration that does not allow any fields.
+///
+/// For use in validating that a configuration is empty with [`Configuration::to_typed`] etc.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmptyConfiguration {}
+
+impl Configuration {
+    /// Try and convert [`Configuration`] to a specific serializable configuration.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    pub fn to_typed<TConfiguration: DeserializeOwned>(
+        &self,
+    ) -> Result<TConfiguration, std::sync::Arc<serde_json::Error>> {
+        serde_json::from_value(serde_json::Value::Object(self.0.clone()))
+            .map_err(std::sync::Arc::new)
+    }
+}
+
 impl<T: ConfigurationSerialize> From<T> for Configuration {
     fn from(value: T) -> Self {
         match serde_json::to_value(value) {
