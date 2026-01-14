@@ -39,25 +39,37 @@ mod shuffle_codec;
 use std::sync::Arc;
 
 pub use shuffle_codec::ShuffleCodec;
-use zarrs_metadata::v3::MetadataV3;
-
-use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
+
+use zarrs_codec::Codec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(ShuffleCodec,
-    v3: "numcodecs.shuffle", []
+    v3: "numcodecs.shuffle", [],
+    v2: "shuffle", []
 );
 
-// Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ShuffleCodec>()
+    zarrs_codec::CodecPluginV3::new::<ShuffleCodec>()
+}
+inventory::submit! {
+    zarrs_codec::CodecPluginV2::new::<ShuffleCodec>()
 }
 
-impl CodecTraitsV3 for ShuffleCodec {
+impl zarrs_codec::CodecTraitsV3 for ShuffleCodec {
     fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
+}
+
+impl zarrs_codec::CodecTraitsV2 for ShuffleCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
         let configuration = metadata.to_typed_configuration()?;
         let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
         Ok(Codec::BytesToBytes(codec))
