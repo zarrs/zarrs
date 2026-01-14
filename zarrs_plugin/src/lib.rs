@@ -73,6 +73,7 @@ impl PluginUnsupportedError {
 /// An invalid plugin metadata error.
 #[derive(Clone, Debug, Error)]
 #[error("configuration is unsupported: {reason}")]
+// FIXME: Remove on next major release
 pub struct PluginConfigurationInvalidError {
     reason: String,
 }
@@ -95,12 +96,19 @@ pub enum PluginCreateError {
     /// Invalid name.
     #[error("invalid name: {name}")]
     NameInvalid { name: String },
-    /// Invalid metadata.
+    /// Invalid configuration.
     #[error(transparent)]
     ConfigurationInvalid(#[from] PluginConfigurationInvalidError),
+    // ConfigurationInvalid(#[from] std::sync::Arc<serde_json::Error>), // FIXME: Remove on next major release
     /// Other
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<std::sync::Arc<serde_json::Error>> for PluginCreateError {
+    fn from(err: std::sync::Arc<serde_json::Error>) -> Self {
+        Self::ConfigurationInvalid(PluginConfigurationInvalidError::new(err.to_string()))
+    }
 }
 
 impl From<&str> for PluginCreateError {
