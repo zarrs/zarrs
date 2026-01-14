@@ -1,9 +1,13 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfigurationLocation;
 use zarrs_plugin::ZarrVersion;
 
 use super::{CHECKSUM_SIZE, Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
+#[cfg(feature = "async")]
+use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder;
+use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
@@ -19,19 +23,24 @@ use zarrs_metadata::Configuration;
 
 /// A `crc32c` codec implementation.
 #[derive(Clone, Debug, Default)]
-pub struct Crc32cCodec;
+pub struct Crc32cCodec(Crc32cCodecConfigurationLocation);
 
 impl Crc32cCodec {
     /// Create a new `crc32c` codec.
     #[must_use]
     pub const fn new() -> Self {
-        Self {}
+        Self(Crc32cCodecConfigurationLocation::End)
     }
 
     /// Create a new `crc32c` codec.
     #[must_use]
-    pub const fn new_with_configuration(_configuration: &Crc32cCodecConfiguration) -> Self {
-        Self {}
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub const fn new_with_configuration(configuration: &Crc32cCodecConfiguration) -> Self {
+        let location = match configuration {
+            Crc32cCodecConfiguration::Numcodecs(cfg) => cfg.location,
+            Crc32cCodecConfiguration::V1(_) | _ => Crc32cCodecConfigurationLocation::End,
+        };
+        Self(location)
     }
 }
 
@@ -87,8 +96,16 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = crc32c::crc32c(&decoded_value).to_le_bytes();
         let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
-        encoded_value.extend_from_slice(&decoded_value);
-        encoded_value.extend_from_slice(&checksum);
+        match self.0 {
+            Crc32cCodecConfigurationLocation::End => {
+                encoded_value.extend_from_slice(&decoded_value);
+                encoded_value.extend_from_slice(&checksum);
+            }
+            Crc32cCodecConfigurationLocation::Start => {
+                encoded_value.extend_from_slice(&checksum);
+                encoded_value.extend_from_slice(&decoded_value);
+            }
+        }
         Ok(Cow::Owned(encoded_value))
     }
 
@@ -99,22 +116,27 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
+            let (data, checksum_stored): (&[u8], [u8; CHECKSUM_SIZE]) = match self.0 {
+                Crc32cCodecConfigurationLocation::End => (
+                    &encoded_value[..encoded_value.len() - CHECKSUM_SIZE],
+                    encoded_value[encoded_value.len() - CHECKSUM_SIZE..]
+                        .try_into()
+                        .unwrap(),
+                ),
+                Crc32cCodecConfigurationLocation::Start => (
+                    &encoded_value[CHECKSUM_SIZE..],
+                    encoded_value[..CHECKSUM_SIZE].try_into().unwrap(),
+                ),
+            };
+
             if options.validate_checksums() {
-                let checksum =
-                    crc32c::crc32c(&encoded_value[..encoded_value.len() - CHECKSUM_SIZE])
-                        .to_le_bytes();
-                let checksum_stored: [u8; CHECKSUM_SIZE] = encoded_value
-                    [encoded_value.len() - CHECKSUM_SIZE..]
-                    .try_into()
-                    .unwrap();
+                let checksum = crc32c::crc32c(data).to_le_bytes();
                 if checksum != checksum_stored {
                     return Err(CodecError::InvalidChecksum);
                 }
             }
 
-            let mut decoded_value = encoded_value.into_owned();
-            decoded_value.truncate(decoded_value.len() - CHECKSUM_SIZE);
-            Ok(Cow::Owned(decoded_value))
+            Ok(Cow::Owned(data.to_vec()))
         } else {
             Err(CodecError::Other(
                 "crc32c decoder expects a 32 bit input".to_string(),
@@ -128,10 +150,15 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn BytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(StripSuffixPartialDecoder::new(
-            input_handle,
-            CHECKSUM_SIZE,
-        )))
+        match self.0 {
+            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(StripSuffixPartialDecoder::new(
+                input_handle,
+                CHECKSUM_SIZE,
+            ))),
+            Crc32cCodecConfigurationLocation::Start => Ok(Arc::new(
+                StripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
+            )),
+        }
     }
 
     #[cfg(feature = "async")]
@@ -141,10 +168,14 @@ impl BytesToBytesCodecTraits for Crc32cCodec {
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncBytesPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(AsyncStripSuffixPartialDecoder::new(
-            input_handle,
-            CHECKSUM_SIZE,
-        )))
+        match self.0 {
+            Crc32cCodecConfigurationLocation::End => Ok(Arc::new(
+                AsyncStripSuffixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
+            )),
+            Crc32cCodecConfigurationLocation::Start => Ok(Arc::new(
+                AsyncStripPrefixPartialDecoder::new(input_handle, CHECKSUM_SIZE),
+            )),
+        }
     }
 
     fn encoded_representation(
