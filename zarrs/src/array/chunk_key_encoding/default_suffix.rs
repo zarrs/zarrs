@@ -30,8 +30,7 @@ const fn default_separator() -> ChunkKeySeparator {
 }
 
 zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding,
-    v3: "zarrs.default_suffix", [],
-    v2: "zarrs.default_suffix", []
+    v3: "zarrs.default_suffix", []
 );
 
 // Register the chunk key encoding.

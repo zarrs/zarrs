@@ -42,8 +42,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
 zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
-  v3: "zarrs.regular_bounded", [],
-  v2: "zarrs.regular_bounded", []
+  v3: "zarrs.regular_bounded", []
 );
 
 // Register the chunk grid.
