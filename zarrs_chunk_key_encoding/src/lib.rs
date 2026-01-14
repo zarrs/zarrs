@@ -35,12 +35,8 @@ inventory::collect!(ChunkKeyEncodingPlugin);
 
 impl ChunkKeyEncodingPlugin {
     /// Create a new [`ChunkKeyEncodingPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
-    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
-        create_fn: fn(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + ChunkKeyEncodingTraits>() -> Self {
+        Self(Plugin::new(|name| T::matches_name(name), T::create))
     }
 }
 
@@ -154,6 +150,14 @@ where
 
 /// Chunk key encoding traits.
 pub trait ChunkKeyEncodingTraits: ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync {
+    /// Create a chunk key encoding from Zarr V3 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError>
+    where
+        Self: Sized;
+
     /// The configuration of the chunk key encoding.
     fn configuration(&self) -> Configuration;
 

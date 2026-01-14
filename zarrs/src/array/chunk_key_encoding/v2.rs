@@ -13,17 +13,7 @@ zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, v3: "v2");
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new::<V2ChunkKeyEncoding>(create_chunk_key_encoding_v2)
-}
-
-pub(crate) fn create_chunk_key_encoding_v2(
-    metadata: &MetadataV3,
-) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    let configuration: V2ChunkKeyEncodingConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let v2 = V2ChunkKeyEncoding::new(configuration.separator);
-    Ok(v2.into())
+    ChunkKeyEncodingPlugin::new::<V2ChunkKeyEncoding>()
 }
 
 /// A `v2` chunk key encoding.
@@ -72,6 +62,14 @@ impl Default for V2ChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
+        let configuration: V2ChunkKeyEncodingConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let v2 = V2ChunkKeyEncoding::new(configuration.separator);
+        Ok(v2.into())
+    }
+
     fn configuration(&self) -> Configuration {
         V2ChunkKeyEncodingConfiguration {
             separator: self.separator,

@@ -36,18 +36,7 @@ zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding,
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new::<DefaultSuffixChunkKeyEncoding>(create_chunk_key_encoding_default_suffix)
-}
-
-pub(crate) fn create_chunk_key_encoding_default_suffix(
-    metadata: &MetadataV3,
-) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
-    let configuration: DefaultSuffixChunkKeyEncodingConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let default = DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
-    Ok(default.into())
+    ChunkKeyEncodingPlugin::new::<DefaultSuffixChunkKeyEncoding>()
 }
 
 /// A `default_suffix` chunk key encoding.
@@ -72,6 +61,16 @@ impl DefaultSuffixChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
+        let configuration: DefaultSuffixChunkKeyEncodingConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let default =
+            DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
+        Ok(default.into())
+    }
+
     fn configuration(&self) -> Configuration {
         DefaultSuffixChunkKeyEncodingConfiguration {
             separator: self.separator,

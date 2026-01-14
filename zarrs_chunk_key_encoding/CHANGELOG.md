@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: Add `create()` method to `ChunkKeyEncodingTraits` trait
+- **Breaking**: Remove `create_fn` parameter from `ChunkKeyEncodingPlugin::create()` and add `T: ChunkKeyEncodingTraits` bound
+
+
 ## [0.1.0] - 2026-01-14
 
 ### Added

@@ -13,17 +13,7 @@ zarrs_plugin::impl_extension_aliases!(DefaultChunkKeyEncoding, v3: "default");
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new::<DefaultChunkKeyEncoding>(create_chunk_key_encoding_default)
-}
-
-pub(crate) fn create_chunk_key_encoding_default(
-    metadata: &MetadataV3,
-) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    let configuration: DefaultChunkKeyEncodingConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let default = DefaultChunkKeyEncoding::new(configuration.separator);
-    Ok(default.into())
+    ChunkKeyEncodingPlugin::new::<DefaultChunkKeyEncoding>()
 }
 
 /// A `default` chunk key encoding.
@@ -72,6 +62,14 @@ impl Default for DefaultChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for DefaultChunkKeyEncoding {
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
+        let configuration: DefaultChunkKeyEncodingConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let default = DefaultChunkKeyEncoding::new(configuration.separator);
+        Ok(default.into())
+    }
+
     fn configuration(&self) -> Configuration {
         DefaultChunkKeyEncodingConfiguration {
             separator: self.separator,
