@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `DataTypeTraitsV2` and `DataTypeTraitsV3` traits
+
+### Changed
+- **Breaking**: Remove `create_fn` parameter from `DataTypePluginV2::create()` and add `T: DataTypeTraitsV2` bound
+- **Breaking**: Remove `create_fn` parameter from `DataTypePluginV3::create()` and add `T: DataTypeTraitsV3` bound
+- **Breaking**: Bump the MSRV to 1.91
+
 ## [0.8.1] - 2026-01-14
 
 ### Added

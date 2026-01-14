@@ -98,16 +98,18 @@ const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
 
 zarrs_plugin::impl_extension_aliases!(CustomDataTypeVariableSize, v3: CUSTOM_NAME);
 
-inventory::submit! {
-    DataTypePluginV3::new::<CustomDataTypeVariableSize>(create_custom_dtype)
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeVariableSize {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        if metadata.configuration_is_none_or_empty() {
+            Ok(Arc::new(CustomDataTypeVariableSize).into())
+        } else {
+            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+        }
+    }
 }
 
-fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeVariableSize).into())
-    } else {
-        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
-    }
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeVariableSize>()
 }
 
 impl DataTypeTraits for CustomDataTypeVariableSize {

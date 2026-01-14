@@ -3,10 +3,10 @@ use std::sync::LazyLock;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
-    ExtensionAliases, Plugin, PluginCreateError, RuntimePlugin, RuntimeRegistry, ZarrVersion2,
-    ZarrVersion3,
+    ExtensionAliases, Plugin, RuntimePlugin, RuntimeRegistry, ZarrVersion2, ZarrVersion3,
 };
 
+use crate::data_type::{DataTypeTraitsV2, DataTypeTraitsV3};
 use crate::DataType;
 
 /// A Zarr V3 data type plugin.
@@ -19,10 +19,8 @@ impl DataTypePluginV3 {
     /// Create a new [`DataTypePluginV3`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
-    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
-        create_fn: fn(metadata: &MetadataV3) -> Result<DataType, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + DataTypeTraitsV3>() -> Self {
+        Self(Plugin::new(|name| T::matches_name(name), T::create))
     }
 }
 
@@ -36,10 +34,8 @@ impl DataTypePluginV2 {
     /// Create a new [`DataTypePluginV2`] for a type implementing [`ExtensionAliases<ZarrVersion2>`].
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
-    pub const fn new<T: ExtensionAliases<ZarrVersion2>>(
-        create_fn: fn(metadata: &DataTypeMetadataV2) -> Result<DataType, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(|name| T::matches_name(name), create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion2> + DataTypeTraitsV2>() -> Self {
+        Self(Plugin::new(|name| T::matches_name(name), T::create))
     }
 }
 
@@ -118,7 +114,7 @@ mod tests {
 
     use zarrs_metadata::v3::MetadataV3;
     use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
-    use zarrs_plugin::ZarrVersion;
+    use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
     use super::*;
     use crate::{
@@ -128,15 +124,17 @@ mod tests {
     zarrs_plugin::impl_extension_aliases!(TestVoidDataType, v3: "zarrs.test_void");
 
     inventory::submit! {
-        DataTypePluginV3::new::<TestVoidDataType>(create_test_void)
-    }
-
-    fn create_test_void(_metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-        Ok(Arc::new(TestVoidDataType).into())
+        DataTypePluginV3::new::<TestVoidDataType>()
     }
 
     #[derive(Debug)]
     struct TestVoidDataType;
+
+    impl DataTypeTraitsV3 for TestVoidDataType {
+        fn create(_metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+            Ok(Arc::new(TestVoidDataType).into())
+        }
+    }
 
     impl DataTypeTraits for TestVoidDataType {
         fn size(&self) -> DataTypeSize {

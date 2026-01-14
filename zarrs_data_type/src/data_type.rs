@@ -209,6 +209,32 @@ impl DataType {
     }
 }
 
+/// Trait for creating a data type from Zarr V3 metadata.
+///
+/// Types implementing this trait can be registered as V3 data type plugins via [`DataTypePluginV3`](crate::DataTypePluginV3).
+pub trait DataTypeTraitsV3 {
+    /// Create a data type from Zarr V3 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError>
+    where
+        Self: Sized;
+}
+
+/// Trait for creating a data type from Zarr V2 metadata.
+///
+/// Types implementing this trait can be registered as V2 data type plugins via [`DataTypePluginV2`](crate::DataTypePluginV2).
+pub trait DataTypeTraitsV2 {
+    /// Create a data type from Zarr V2 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(metadata: &DataTypeMetadataV2) -> Result<DataType, PluginCreateError>
+    where
+        Self: Sized;
+}
+
 /// Traits for a data type extension.
 ///
 /// The in-memory size of a data type can differ between its associated Rust structure and the *serialised* [`ArrayBytes`](https://docs.rs/zarrs/latest/zarrs/array/enum.ArrayBytes.html) passed into the codec pipeline.

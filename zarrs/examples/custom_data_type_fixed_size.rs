@@ -161,17 +161,19 @@ const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeFixedSize";
 
 zarrs_plugin::impl_extension_aliases!(CustomDataTypeFixedSize, v3: CUSTOM_NAME);
 
-// Register the data type so that it can be recognised when opening arrays.
-inventory::submit! {
-    DataTypePluginV3::new::<CustomDataTypeFixedSize>(create_custom_dtype)
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeFixedSize {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        if metadata.configuration_is_none_or_empty() {
+            Ok(Arc::new(CustomDataTypeFixedSize).into())
+        } else {
+            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+        }
+    }
 }
 
-fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeFixedSize).into())
-    } else {
-        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
-    }
+// Register the data type so that it can be recognised when opening arrays.
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeFixedSize>()
 }
 
 /// Implement the core data type extension methods

@@ -234,32 +234,71 @@ macro_rules! impl_data_type_extension_numeric {
 
 pub(crate) use impl_data_type_extension_numeric;
 
-/// Macro to register a configuration free data type as `DataTypePluginV3` and `DataTypePluginV2`.
+/// Macro to register a configuration free data type a `DataTypePluginV3`.
 ///
 /// These data types must be a marker type (i.e. unit struct).
 #[doc(hidden)]
 #[macro_export]
-macro_rules! _register_data_type_plugin {
+macro_rules! _register_data_type_plugin_v3 {
     ($marker:ident) => {
-        // Register V3 plugin
-        inventory::submit! {
-            zarrs_data_type::DataTypePluginV3::new::<$marker>(
-                |_metadata: &zarrs_metadata::v3::MetadataV3| -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
-                    Ok(std::sync::Arc::new($marker).into())
-                },
-            )
+        impl zarrs_data_type::DataTypeTraitsV3 for $marker {
+            fn create(
+                _metadata: &zarrs_metadata::v3::MetadataV3,
+            ) -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
+                Ok(std::sync::Arc::new($marker).into())
+            }
         }
 
-        // Register V2 plugin
+        // Register V3 plugin
         inventory::submit! {
-            zarrs_data_type::DataTypePluginV2::new::<$marker>(
-                |_metadata: &zarrs_metadata::v2::DataTypeMetadataV2| -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
-                    Ok(std::sync::Arc::new($marker).into())
-                },
-            )
+            zarrs_data_type::DataTypePluginV3::new::<$marker>()
         }
     };
 }
 
+#[allow(unused_imports)]
+#[doc(inline)]
+pub(crate) use _register_data_type_plugin_v3 as register_data_type_plugin_v3;
+
+/// Macro to register a configuration free data type a `DataTypePluginV2`.
+///
+/// These data types must be a marker type (i.e. unit struct).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _register_data_type_plugin_v2 {
+    ($marker:ident) => {
+        impl zarrs_data_type::DataTypeTraitsV2 for $marker {
+            fn create(
+                _metadata: &zarrs_metadata::v2::DataTypeMetadataV2,
+            ) -> Result<zarrs_data_type::DataType, zarrs_plugin::PluginCreateError> {
+                Ok(std::sync::Arc::new($marker).into())
+            }
+        }
+
+        // Register V2 plugin
+        inventory::submit! {
+            zarrs_data_type::DataTypePluginV2::new::<$marker>()
+        }
+    };
+}
+
+#[allow(unused_imports)]
+#[doc(inline)]
+pub(crate) use _register_data_type_plugin_v2 as register_data_type_plugin_v2;
+
+/// Macro to register a configuration free data type as `DataTypePluginV3` and `DataTypePluginV2`.
+///
+/// These data types must be a marker type (i.e. unit struct) implementing
+/// `DataTypeTraitsV3` and `DataTypeTraitsV2`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! _register_data_type_plugin {
+    ($marker:ident) => {
+        $crate::_register_data_type_plugin_v3!($marker);
+        $crate::_register_data_type_plugin_v2!($marker);
+    };
+}
+
+#[allow(unused_imports)]
 #[doc(inline)]
 pub(crate) use _register_data_type_plugin as register_data_type_plugin;

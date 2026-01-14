@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_data_type"
-version = "0.8.1"
+version = "0.9.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.91"
 description = "The data type API for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_data_type"

@@ -47,34 +47,36 @@ zarrs_plugin::impl_extension_aliases!(OptionalDataType,
   v2: "zarrs.optional", []
 );
 
-// Register as V3-only data type.
-inventory::submit! {
-    crate::DataTypePluginV3::new::<OptionalDataType>(create_optional_data_type_v3)
-}
-
-fn create_optional_data_type_v3(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    let configuration = metadata.configuration().ok_or_else(|| {
-        PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-            "missing configuration".to_string(),
-        ))
-    })?;
-    let config = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
-        .map_err(|_| {
+impl crate::DataTypeTraitsV3 for OptionalDataType {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        let configuration = metadata.configuration().ok_or_else(|| {
             PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                metadata.to_string(),
+                "missing configuration".to_string(),
             ))
         })?;
+        let config = OptionalDataTypeConfigurationV1::try_from_configuration(configuration.clone())
+            .map_err(|_| {
+                PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
+                    metadata.to_string(),
+                ))
+            })?;
 
-    // Create metadata for the inner data type
-    let inner_metadata = if config.configuration.is_empty() {
-        MetadataV3::new(config.name)
-    } else {
-        MetadataV3::new_with_configuration(config.name, config.configuration)
-    };
+        // Create metadata for the inner data type
+        let inner_metadata = if config.configuration.is_empty() {
+            MetadataV3::new(config.name)
+        } else {
+            MetadataV3::new_with_configuration(config.name, config.configuration)
+        };
 
-    // Recursively parse the inner data type
-    let inner_data_type = DataType::from_metadata(&inner_metadata)?;
-    Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)).into())
+        // Recursively parse the inner data type
+        let inner_data_type = DataType::from_metadata(&inner_metadata)?;
+        Ok(std::sync::Arc::new(OptionalDataType::new(inner_data_type)).into())
+    }
+}
+
+// Register as V3-only data type.
+inventory::submit! {
+    crate::DataTypePluginV3::new::<OptionalDataType>()
 }
 
 impl OptionalDataType {

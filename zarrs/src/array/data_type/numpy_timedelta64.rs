@@ -22,24 +22,31 @@ pub struct NumpyTimeDelta64DataType {
 
 zarrs_plugin::impl_extension_aliases!(NumpyTimeDelta64DataType, v3: "numpy.timedelta64");
 
-// Register as V3-only data type.
-inventory::submit! {
-    zarrs_data_type::DataTypePluginV3::new::<NumpyTimeDelta64DataType>(
-        |metadata: &MetadataV3| -> Result<DataType, PluginCreateError> {
-            let configuration = metadata.configuration().ok_or_else(|| {
-                PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
-                    "missing configuration".to_string(),
-                ))
-            })?;
-            let config = NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
+impl zarrs_data_type::DataTypeTraitsV3 for NumpyTimeDelta64DataType {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        let configuration = metadata.configuration().ok_or_else(|| {
+            PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
+                "missing configuration".to_string(),
+            ))
+        })?;
+        let config =
+            NumpyTimeDelta64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
                 .map_err(|_| {
                     PluginCreateError::ConfigurationInvalid(PluginConfigurationInvalidError::new(
                         metadata.to_string(),
                     ))
                 })?;
-            Ok(std::sync::Arc::new(NumpyTimeDelta64DataType::new(config.unit, config.scale_factor)).into())
-        },
-    )
+        Ok(std::sync::Arc::new(NumpyTimeDelta64DataType::new(
+            config.unit,
+            config.scale_factor,
+        ))
+        .into())
+    }
+}
+
+// Register as V3-only data type.
+inventory::submit! {
+    zarrs_data_type::DataTypePluginV3::new::<NumpyTimeDelta64DataType>()
 }
 
 impl NumpyTimeDelta64DataType {

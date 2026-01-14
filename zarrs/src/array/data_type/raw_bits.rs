@@ -22,61 +22,66 @@ pub struct RawBitsDataType {
 use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zarrs_plugin::{ExtensionAliasesConfig, ZarrVersion2, ZarrVersion3};
 
+impl zarrs_data_type::DataTypeTraitsV3 for RawBitsDataType {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        let name = metadata.name();
+        // Parse size from name (e.g., "r8" -> 1 byte, "r16" -> 2 bytes)
+        let size_bytes = if let Some(stripped) = name.strip_prefix('r') {
+            let size_bits =
+                stripped
+                    .parse::<usize>()
+                    .map_err(|_| PluginCreateError::NameInvalid {
+                        name: name.to_string(),
+                    })?;
+            if size_bits % 8 != 0 {
+                return Err(PluginConfigurationInvalidError::new(format!(
+                    "raw bits size must be a multiple of 8: {size_bits}"
+                ))
+                .into());
+            }
+            size_bits / 8
+        } else {
+            return Err(PluginCreateError::NameInvalid {
+                name: name.to_string(),
+            });
+        };
+        Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)).into())
+    }
+}
+
+impl zarrs_data_type::DataTypeTraitsV2 for RawBitsDataType {
+    fn create(
+        metadata: &zarrs_metadata::v2::DataTypeMetadataV2,
+    ) -> Result<DataType, PluginCreateError> {
+        let size_bytes = match metadata {
+            zarrs_metadata::v2::DataTypeMetadataV2::Simple(name) => {
+                if let Some(stripped) = name.strip_prefix("|V") {
+                    // V2 format: |V{bytes}
+                    stripped
+                        .parse::<usize>()
+                        .map_err(|_| PluginCreateError::NameInvalid { name: name.clone() })?
+                } else {
+                    return Err(PluginCreateError::NameInvalid { name: name.clone() });
+                }
+            }
+            zarrs_metadata::v2::DataTypeMetadataV2::Structured(_) => {
+                return Err(PluginCreateError::Other(
+                    "raw bits does not support structured types".into(),
+                ));
+            }
+        };
+        Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)).into())
+    }
+}
+
 // Register V3 plugin.
 inventory::submit! {
-    zarrs_data_type::DataTypePluginV3::new::<RawBitsDataType>(create_rawbits_datatype_v3)
+    zarrs_data_type::DataTypePluginV3::new::<RawBitsDataType>()
 }
 
 // Register V2 plugin.
 inventory::submit! {
-    zarrs_data_type::DataTypePluginV2::new::<RawBitsDataType>(create_rawbits_datatype_v2)
-}
-
-fn create_rawbits_datatype_v3(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    let name = metadata.name();
-    // Parse size from name (e.g., "r8" -> 1 byte, "r16" -> 2 bytes)
-    let size_bytes = if let Some(stripped) = name.strip_prefix('r') {
-        let size_bits = stripped
-            .parse::<usize>()
-            .map_err(|_| PluginCreateError::NameInvalid {
-                name: name.to_string(),
-            })?;
-        if size_bits % 8 != 0 {
-            return Err(PluginConfigurationInvalidError::new(format!(
-                "raw bits size must be a multiple of 8: {size_bits}"
-            ))
-            .into());
-        }
-        size_bits / 8
-    } else {
-        return Err(PluginCreateError::NameInvalid {
-            name: name.to_string(),
-        });
-    };
-    Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)).into())
-}
-
-fn create_rawbits_datatype_v2(
-    metadata: &zarrs_metadata::v2::DataTypeMetadataV2,
-) -> Result<DataType, PluginCreateError> {
-    let size_bytes = match metadata {
-        zarrs_metadata::v2::DataTypeMetadataV2::Simple(name) => {
-            if let Some(stripped) = name.strip_prefix("|V") {
-                // V2 format: |V{bytes}
-                stripped
-                    .parse::<usize>()
-                    .map_err(|_| PluginCreateError::NameInvalid { name: name.clone() })?
-            } else {
-                return Err(PluginCreateError::NameInvalid { name: name.clone() });
-            }
-        }
-        zarrs_metadata::v2::DataTypeMetadataV2::Structured(_) => {
-            return Err(PluginCreateError::Other(
-                "raw bits does not support structured types".into(),
-            ));
-        }
-    };
-    Ok(std::sync::Arc::new(RawBitsDataType::new(size_bytes)).into())
+    zarrs_data_type::DataTypePluginV2::new::<RawBitsDataType>()
 }
 
 static RAWBITSDATATYPE_ALIASES_V3: LazyLock<RwLock<ExtensionAliasesConfig>> = LazyLock::new(|| {

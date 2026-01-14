@@ -31,22 +31,24 @@ struct CustomDataTypeUInt4;
 
 zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, v3: UINT4);
 
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeUInt4 {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        if metadata.configuration_is_none_or_empty() {
+            Ok(Arc::new(CustomDataTypeUInt4).into())
+        } else {
+            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+        }
+    }
+}
+
 // Register the data type so that it can be recognised when opening arrays.
 inventory::submit! {
-    DataTypePluginV3::new::<CustomDataTypeUInt4>(create_custom_dtype)
+    DataTypePluginV3::new::<CustomDataTypeUInt4>()
 }
 
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 struct CustomDataTypeUInt4Element(u8);
-
-fn create_custom_dtype(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeUInt4).into())
-    } else {
-        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
-    }
-}
 
 /// Implement the core data type extension methods
 impl DataTypeTraits for CustomDataTypeUInt4 {

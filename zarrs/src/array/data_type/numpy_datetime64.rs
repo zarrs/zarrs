@@ -22,20 +22,25 @@ pub struct NumpyDateTime64DataType {
 
 zarrs_plugin::impl_extension_aliases!(NumpyDateTime64DataType, v3: "numpy.datetime64");
 
+impl zarrs_data_type::DataTypeTraitsV3 for NumpyDateTime64DataType {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        let configuration = metadata
+            .configuration()
+            .ok_or_else(|| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let config =
+            NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
+                .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(
+            config.unit,
+            config.scale_factor,
+        ))
+        .into())
+    }
+}
+
 // Register as V3-only data type.
 inventory::submit! {
-    zarrs_data_type::DataTypePluginV3::new::<NumpyDateTime64DataType>(
-        |metadata: &MetadataV3| -> Result<DataType, PluginCreateError> {
-            let configuration = metadata.configuration().ok_or_else(|| {
-                PluginConfigurationInvalidError::new(metadata.to_string())
-            })?;
-            let config = NumpyDateTime64DataTypeConfigurationV1::try_from_configuration(configuration.clone())
-                .map_err(|_| {
-                    PluginConfigurationInvalidError::new(metadata.to_string())
-                })?;
-            Ok(std::sync::Arc::new(NumpyDateTime64DataType::new(config.unit, config.scale_factor)).into())
-        },
-    )
+    zarrs_data_type::DataTypePluginV3::new::<NumpyDateTime64DataType>()
 }
 
 impl NumpyDateTime64DataType {

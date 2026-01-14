@@ -12,7 +12,7 @@ mod data_type_plugin;
 mod fill_value;
 mod optional;
 
-pub use data_type::{DataType, DataTypeTraits};
+pub use data_type::{DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3};
 pub use data_type_plugin::{
     register_data_type_v2, register_data_type_v3, unregister_data_type_v2, unregister_data_type_v3,
     DataTypePluginV2, DataTypePluginV3, DataTypeRuntimePluginV2, DataTypeRuntimePluginV3,
