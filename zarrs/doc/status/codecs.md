@@ -1,17 +1,17 @@
 | Codec Type     | V3 `name`                          | V2 `id`                             | Feature Flag* |
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
-| Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
+| Array to Array | [`transpose`]                      | (implicit with `"order": "F"`)      | **transpose** |
 |                | 🚧[`reshape`]                      | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
-| Array to Bytes | [`bytes`]                          | -                                   |               |
+| Array to Bytes | [`bytes`]                          | (implicit array-to-bytes)           |               |
 |                | 🚧[`zarrs.optional`]               | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   | **sharding**  |
 |                | 🚧[`vlen-array`]                   | `vlen-array`                        |               |
 |                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
 |                | [`vlen-utf8`]                      | `vlen-utf8`                         |               |
-|                | [`packbits`]                       | `packbits`                          |               |
+|                | [`packbits`]                       | -                                   |               |
 |                | 🚧[`numcodecs.pcodec`]             | `pcodec`                            | pcodec        |
 |                | 🚧[`numcodecs.zfpy`]               | `zfpy`                              | zfp           |
 |                | 🚧[`zarrs.vlen`]                   | -                                   |               |
