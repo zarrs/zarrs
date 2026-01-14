@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::sync::{Arc, atomic};
 
-use super::ChunkCacheType;
+use super::{
+    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
+    ChunkCacheTypePartialDecoder,
+};
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkCache,
-    ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder, ChunkShapeTraits,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShapeTraits,
 };
 use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
@@ -417,12 +419,11 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::chunk_cache::ChunkCache;
-    use crate::array::{
-        Array, ArrayBuilder, ArraySubset, ChunkCacheDecodedLruChunkLimit,
-        ChunkCacheDecodedLruSizeLimit, ChunkCacheEncodedLruChunkLimit,
-        ChunkCacheEncodedLruSizeLimit, data_type,
+    use crate::array::chunk_cache::{
+        ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
+        ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
     };
+    use crate::array::{Array, ArrayBuilder, ArraySubset, data_type};
     use zarrs_codec::CodecOptions;
     use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
     use zarrs_storage::store::MemoryStore;

@@ -1,3 +1,43 @@
+//! Chunk caching.
+//!
+//! `zarrs` supports three types of chunk caches:
+//! - [`ChunkCacheTypeDecoded`]: caches decoded chunks.
+//!   - Preferred where decoding is expensive and memory is abundant.
+//! - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
+//!   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
+//! - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
+//!   - Preferred where chunks are repeatedly *partially retrieved*.
+//!   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
+//!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
+//!
+//! `zarrs` implements the following Least Recently Used (LRU) chunk caches:
+//!  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
+//!  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
+//!  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
+//!  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
+//!  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
+//!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
+//!
+//! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
+//! `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
+//!
+//! Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
+//!  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
+//!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
+//!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
+//!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
+//!
+//! `_elements` and `_ndarray` variants are also available.
+//!
+//! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
+//! Chunk caching may not outperform disk caching with a filesystem store.
+//! The above caches use internal locking to support multithreading, which has a performance overhead.
+//! **Prefer not to use a chunk cache if chunks are not accessed repeatedly**.
+//! Aside from [`ChunkCacheTypePartialDecoder`]-based caches, caches do not use partial decoders and any intersected chunk is fully retrieved if not present in the cache.
+//!
+//! For many access patterns, chunk caching may reduce performance.
+//! **Benchmark your algorithm/data.**
+
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -18,8 +58,9 @@ use zarrs_codec::{
 };
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
-pub(crate) mod chunk_cache_lru;
+mod chunk_cache_lru;
 // pub(crate) mod chunk_cache_lru_macros;
+pub use chunk_cache_lru::*;
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Arc<ArrayBytesRaw<'static>>>;

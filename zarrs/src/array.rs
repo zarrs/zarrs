@@ -24,12 +24,12 @@
 mod array_builder;
 mod array_errors;
 mod array_metadata_options;
-mod chunk_cache;
 mod element;
 mod from_array_bytes;
 mod into_array_bytes;
 mod tensor;
 
+pub mod chunk_cache;
 pub mod chunk_grid;
 pub mod chunk_key_encoding;
 pub mod codec;
@@ -109,11 +109,6 @@ pub use array_async_sharded_readable_ext::{
 pub use array_sharded_ext::ArrayShardedExt;
 #[cfg(feature = "sharding")]
 pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
-pub use chunk_cache::chunk_cache_lru::*;
-pub use chunk_cache::{
-    ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
-    ChunkCacheTypePartialDecoder,
-};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -205,7 +200,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Additional [`Array`] methods are offered by extension traits:
 ///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
 ///
-/// [`ChunkCache`] implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
+/// [`ChunkCache`](chunk_cache::ChunkCache) implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
 ///
 /// ### Chunks and Array Subsets
 /// Several convenience methods are available for querying the underlying chunk grid:
@@ -297,43 +292,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Another alternative is to use [Chunk Caching](#chunk-caching).
 ///
 /// ### Chunk Caching
-/// `zarrs` supports three types of chunk caches:
-/// - [`ChunkCacheTypeDecoded`]: caches decoded chunks.
-///   - Preferred where decoding is expensive and memory is abundant.
-/// - [`ChunkCacheTypeEncoded`]: caches encoded chunks.
-///   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
-/// - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
-///   - Preferred where chunks are repeatedly *partially retrieved*.
-///   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
-///   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
-///
-/// `zarrs` implements the following Least Recently Used (LRU) chunk caches:
-///  - [`ChunkCacheDecodedLruChunkLimit`]: a decoded chunk cache with a fixed chunk capacity..
-///  - [`ChunkCacheDecodedLruSizeLimit`]: a decoded chunk cache with a fixed size in bytes.
-///  - [`ChunkCacheEncodedLruChunkLimit`]: an encoded chunk cache with a fixed chunk capacity.
-///  - [`ChunkCacheEncodedLruSizeLimit`]: an encoded chunk cache with a fixed size in bytes.
-///  - [`ChunkCachePartialDecoderLruChunkLimit`]: a partial decoder chunk cache with a fixed chunk capacity
-///  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
-///
-/// There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
-/// `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
-///
-/// Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
-///  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
-///  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
-///  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
-///  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
-///
-/// `_elements` and `_ndarray` variants are also available.
-///
-/// Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
-/// Chunk caching may not outperform disk caching with a filesystem store.
-/// The above caches use internal locking to support multithreading, which has a performance overhead.
-/// **Prefer not to use a chunk cache if chunks are not accessed repeatedly**.
-/// Aside from [`ChunkCacheTypePartialDecoder`]-based caches, caches do not use partial decoders and any intersected chunk is fully retrieved if not present in the cache.
-///
-/// For many access patterns, chunk caching may reduce performance.
-/// **Benchmark your algorithm/data.**
+/// Refer to the [`chunk_cache`] module.
 ///
 /// ## Reading Sharded Arrays
 /// The `sharding_indexed` codec ([`ShardingCodec`](codec::array_to_bytes::sharding)) enables multiple sub-chunks ("inner chunks") to be stored in a single chunk ("shard").
