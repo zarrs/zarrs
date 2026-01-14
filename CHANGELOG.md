@@ -118,6 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change the representation of the `ArrayError::{InvalidFillValue,InvalidFillValueMetadata}` variants
 - **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `IndexerError`
 - **Breaking**: Do not re-export `array::FillValueMetadata{V3,V3}`, use `FillValueMetadata` instead
+- **Breaking**: Rename `StorageTransformerExtension` to `StorageTransformerTraits` for alignment with other extension traits
+  - add `create` and `configuration`methods, remove `metadata` method
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency

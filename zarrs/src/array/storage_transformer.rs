@@ -18,6 +18,7 @@ use zarrs_plugin::{
 };
 
 use crate::node::NodePath;
+use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{ExtensionName, PluginCreateError};
 #[cfg(feature = "async")]
@@ -30,7 +31,7 @@ use zarrs_storage::{
 };
 
 /// An [`Arc`] wrapped storage transformer.
-pub type StorageTransformer = Arc<dyn StorageTransformerExtension>;
+pub type StorageTransformer = Arc<dyn StorageTransformerTraits>;
 
 /// A storage transformer plugin.
 #[derive(derive_more::Deref)]
@@ -38,16 +39,9 @@ pub struct StorageTransformerPlugin(Plugin2<StorageTransformer, MetadataV3, Node
 inventory::collect!(StorageTransformerPlugin);
 
 impl StorageTransformerPlugin {
-    /// Create a new [`StorageTransformerPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
-    ///
-    /// The `match_name_fn` is automatically derived from `T::matches_name`.
-    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
-        create_fn: fn(
-            metadata: &MetadataV3,
-            path: &NodePath,
-        ) -> Result<StorageTransformer, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin2::new(|name| T::matches_name(name), create_fn))
+    /// Create a new [`StorageTransformerPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`] and [`StorageTransformerTraits`].
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + StorageTransformerTraits>() -> Self {
+        Self(Plugin2::new(|name| T::matches_name(name), T::create))
     }
 }
 
@@ -121,17 +115,28 @@ pub fn try_create_storage_transformer(
     .into())
 }
 
-/// A storage transformer extension.
+/// A storage transformer extension (Zarr V3 only).
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait StorageTransformerExtension:
+pub trait StorageTransformerTraits:
     ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
 {
-    /// Create metadata.
-    fn create_metadata(&self) -> MetadataV3;
+    /// Create a storage transformer from metadata and path.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(
+        metadata: &MetadataV3,
+        path: &NodePath,
+    ) -> Result<StorageTransformer, PluginCreateError>
+    where
+        Self: Sized;
+
+    /// Create configuration.
+    fn configuration(&self) -> Configuration;
 
     /// Create a readable transformer.
     ///

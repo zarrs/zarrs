@@ -28,7 +28,6 @@ impl StorageTransformerChain {
     /// Create a storage transformer chain from configurations.
     ///
     /// # Errors
-    ///
     /// Returns [`PluginCreateError`] if there is a configuration issue or attempt to create an unregistered storage transformer.
     pub fn from_metadata(
         metadatas: &[MetadataV3],
@@ -52,11 +51,20 @@ impl StorageTransformerChain {
     }
 
     /// Create storage transformer chain metadata.
+    ///
+    /// # Panics
+    /// Panics if any storage transformer does not have a V3 name.
     #[must_use]
     pub fn create_metadatas(&self) -> Vec<MetadataV3> {
         self.0
             .iter()
-            .map(|storage_transformer| storage_transformer.create_metadata())
+            .map(|storage_transformer| {
+                let name = storage_transformer
+                    .name_v3()
+                    .expect("storage transformer must have a V3 name")
+                    .into_owned();
+                MetadataV3::new_with_configuration(name, storage_transformer.configuration())
+            })
             .collect()
     }
 }

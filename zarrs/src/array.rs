@@ -100,7 +100,7 @@ pub use self::codec::CodecChain;
 pub use self::element::{Element, ElementFixedLength, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
-pub use self::storage_transformer::StorageTransformerChain;
+pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
 #[cfg(all(feature = "sharding", feature = "async"))]
 pub use array_async_sharded_readable_ext::{
