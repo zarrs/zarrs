@@ -26,7 +26,7 @@
 //! - `https://codec.zarrs.dev/array_to_bytes/zfp`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `zfp`
+//! None
 //!
 //! ### Codec `configuration` Examples - [`ZfpCodecConfiguration`]:
 //! #### Encode in fixed rate mode with 10.5 compressed bits per value

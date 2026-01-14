@@ -16,7 +16,7 @@
 //! - `reshape`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `reshape`
+//! None
 //!
 //! ### Codec `configuration` Example - [`ReshapeCodecConfiguration`]:
 //! ```rust

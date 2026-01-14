@@ -16,7 +16,7 @@
 //! - `zarrs.squeeze`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `zarrs.squeeze`
+//! None
 //!
 //! ### Codec `configuration` Example - [`SqueezeCodecConfiguration`]:
 //! ```rust
