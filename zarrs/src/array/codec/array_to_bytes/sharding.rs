@@ -75,7 +75,7 @@ pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
-    CodecOptions, CodecPluginV3,
+    CodecOptions, CodecPluginV3, CodecTraitsV3,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -88,15 +88,17 @@ zarrs_plugin::impl_extension_aliases!(ShardingCodec, v3: "sharding_indexed");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ShardingCodec>(create_codec_sharding_v3)
+    CodecPluginV3::new::<ShardingCodec>()
 }
 
-pub(crate) fn create_codec_sharding_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ShardingCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for ShardingCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ShardingCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ShardingCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
 fn calculate_chunks_per_shard(

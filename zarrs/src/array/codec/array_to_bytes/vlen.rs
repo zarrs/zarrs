@@ -109,7 +109,7 @@ use crate::array::{
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
     InvalidBytesLengthError,
 };
 use zarrs_data_type::FillValue;
@@ -126,16 +126,18 @@ zarrs_plugin::impl_extension_aliases!(VlenCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<VlenCodec>(create_codec_vlen_v3)
+    CodecPluginV3::new::<VlenCodec>()
 }
 
-pub(crate) fn create_codec_vlen_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: VlenCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for VlenCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: VlenCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
 fn get_vlen_bytes_and_offsets(

@@ -43,7 +43,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
@@ -55,15 +55,17 @@ zarrs_plugin::impl_extension_aliases!(BitroundCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<BitroundCodec>(create_codec_bitround_v3)
+    CodecPluginV3::new::<BitroundCodec>()
 }
 
-pub(crate) fn create_codec_bitround_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: BitroundCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for BitroundCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: BitroundCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(BitroundCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 /// Traits for a data type supporting the `bitround` codec.

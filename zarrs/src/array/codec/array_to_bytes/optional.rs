@@ -91,7 +91,7 @@ use std::sync::Arc;
 pub use optional_codec::OptionalCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use zarrs_codec::{Codec, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::optional::{
     OptionalCodecConfiguration, OptionalCodecConfigurationV1,
 };
@@ -103,14 +103,16 @@ zarrs_plugin::impl_extension_aliases!(OptionalCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<OptionalCodec>(create_codec_optional_v3)
+    CodecPluginV3::new::<OptionalCodec>()
 }
 
-pub(crate) fn create_codec_optional_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: OptionalCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(OptionalCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for OptionalCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: OptionalCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }

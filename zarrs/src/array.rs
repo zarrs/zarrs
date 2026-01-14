@@ -384,8 +384,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The aliasing system allows matching against string aliases or regex patterns.
 ///
 /// The key traits for each extension type are:
-/// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`]
-/// - Codecs ([`zarrs_codec`]): [`CodecTraits`]
+/// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`](zarrs_data_type::DataTypeTraitsV2), [`DataTypeTraitsV3`](zarrs_data_type::DataTypeTraitsV3)
+/// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`](zarrs_codec::CodecTraitsV2), [`CodecTraitsV3`](zarrs_codec::CodecTraitsV3)
 ///   - Array-to-array codecs: [`ArrayCodecTraits`] + [`ArrayToArrayCodecTraits`]
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]

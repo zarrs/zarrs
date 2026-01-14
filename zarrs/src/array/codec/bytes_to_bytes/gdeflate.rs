@@ -49,7 +49,7 @@ pub use gdeflate_codec::GDeflateCodec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::ArrayBytesRaw;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 pub use zarrs_metadata_ext::codec::gdeflate::{
     GDeflateCodecConfiguration, GDeflateCodecConfigurationV0, GDeflateCompressionLevel,
     GDeflateCompressionLevelError,
@@ -60,16 +60,18 @@ zarrs_plugin::impl_extension_aliases!(GDeflateCodec, v3: "zarrs.gdeflate");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<GDeflateCodec>(create_codec_gdeflate_v3)
+    CodecPluginV3::new::<GDeflateCodec>()
 }
 
-pub(crate) fn create_codec_gdeflate_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: GDeflateCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for GDeflateCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: GDeflateCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(GDeflateCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 const GDEFLATE_PAGE_SIZE_UNCOMPRESSED: usize = 65536;

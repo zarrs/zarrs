@@ -38,7 +38,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 pub use zstd_codec::ZstdCodec;
 
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zstd::{
     ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
     ZstdCompressionLevel,
@@ -49,28 +49,32 @@ zarrs_plugin::impl_extension_aliases!(ZstdCodec, v3: "zstd", v2: "zstd");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ZstdCodec>(create_codec_zstd_v3)
+    CodecPluginV3::new::<ZstdCodec>()
 }
 
 // Register the V2 codec.
 inventory::submit! {
-    CodecPluginV2::new::<ZstdCodec>(create_codec_zstd_v2)
+    CodecPluginV2::new::<ZstdCodec>()
 }
 
-pub(crate) fn create_codec_zstd_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfigurationV1 = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
-    Ok(Codec::BytesToBytes(Arc::new(codec)))
+impl CodecTraitsV3 for ZstdCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZstdCodecConfigurationV1 = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
+        Ok(Codec::BytesToBytes(Arc::new(codec)))
+    }
 }
 
-pub(crate) fn create_codec_zstd_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfigurationNumcodecs =
-        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
-    let codec = ZstdCodec::new(configuration.level.into(), false);
-    Ok(Codec::BytesToBytes(Arc::new(codec)))
+impl CodecTraitsV2 for ZstdCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: ZstdCodecConfigurationNumcodecs =
+            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let codec = ZstdCodec::new(configuration.level.into(), false);
+        Ok(Codec::BytesToBytes(Arc::new(codec)))
+    }
 }
 
 #[cfg(test)]

@@ -40,7 +40,7 @@ use zarrs_metadata::v3::MetadataV3;
 
 // use itertools::Itertools;
 use crate::array::ChunkShape;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
@@ -100,15 +100,17 @@ zarrs_plugin::impl_extension_aliases!(ReshapeCodec, v3: "reshape");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ReshapeCodec>(create_codec_reshape_v3)
+    CodecPluginV3::new::<ReshapeCodec>()
 }
 
-pub(crate) fn create_codec_reshape_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ReshapeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for ReshapeCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ReshapeCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 #[cfg(test)]

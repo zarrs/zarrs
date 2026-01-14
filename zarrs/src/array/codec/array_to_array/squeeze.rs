@@ -38,7 +38,7 @@ pub use squeeze_codec::SqueezeCodec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
@@ -50,16 +50,18 @@ zarrs_plugin::impl_extension_aliases!(SqueezeCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<SqueezeCodec>(create_codec_squeeze_v3)
+    CodecPluginV3::new::<SqueezeCodec>()
 }
 
-pub(crate) fn create_codec_squeeze_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: SqueezeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for SqueezeCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: SqueezeCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 fn get_squeezed_array_subset(

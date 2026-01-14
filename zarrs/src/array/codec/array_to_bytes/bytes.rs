@@ -39,7 +39,7 @@ pub(crate) use bytes_codec_partial::BytesCodecPartial;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::DataType;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::Endianness;
 pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
@@ -50,18 +50,20 @@ zarrs_plugin::impl_extension_aliases!(BytesCodec,
 
 // Register the V3 codec (bytes is V3-only).
 inventory::submit! {
-    CodecPluginV3::new::<BytesCodec>(create_codec_bytes_v3)
+    CodecPluginV3::new::<BytesCodec>()
 }
 
-pub(crate) fn create_codec_bytes_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    if metadata.name() == "binary" {
-        crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
+impl CodecTraitsV3 for BytesCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        if metadata.name() == "binary" {
+            crate::warn_deprecated_extension("binary", "codec", Some("bytes"));
+        }
+        let configuration: BytesCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(BytesCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
     }
-    let configuration: BytesCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(BytesCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
 }
 
 use std::borrow::Cow;

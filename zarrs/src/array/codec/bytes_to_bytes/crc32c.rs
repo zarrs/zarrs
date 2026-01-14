@@ -31,7 +31,7 @@ use std::sync::Arc;
 pub use crc32c_codec::Crc32cCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use zarrs_codec::{Codec, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::crc32c::{Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
@@ -39,15 +39,17 @@ zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<Crc32cCodec>(create_codec_crc32c_v3)
+    CodecPluginV3::new::<Crc32cCodec>()
 }
 
-pub(crate) fn create_codec_crc32c_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for Crc32cCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 const CHECKSUM_SIZE: usize = size_of::<u32>();

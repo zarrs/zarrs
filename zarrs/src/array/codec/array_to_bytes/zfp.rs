@@ -113,7 +113,7 @@ use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
 use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
@@ -123,15 +123,17 @@ zarrs_plugin::impl_extension_aliases!(ZfpCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ZfpCodec>(create_codec_zfp_v3)
+    CodecPluginV3::new::<ZfpCodec>()
 }
 
-pub(crate) fn create_codec_zfp_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for ZfpCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZfpCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
 /// The zfp data type for dispatching to the zfp library.

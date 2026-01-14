@@ -38,7 +38,7 @@ use zarrs_plugin::ExtensionAliasesV3;
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArraySubset, ArraySubsetTraits, DataType, Indexer, IndexerError,
 };
-use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{ArrayBytesOffsets, Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 use zarrs_metadata::DataTypeSize;
 pub use zarrs_metadata_ext::codec::transpose::{
     TransposeCodecConfiguration, TransposeCodecConfigurationV1, TransposeOrder, TransposeOrderError,
@@ -49,15 +49,17 @@ zarrs_plugin::impl_extension_aliases!(TransposeCodec, v3: "transpose");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<TransposeCodec>(create_codec_transpose_v3)
+    CodecPluginV3::new::<TransposeCodec>()
 }
 
-pub(crate) fn create_codec_transpose_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: TransposeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for TransposeCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: TransposeCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 /// Compute the inverse permutation order.

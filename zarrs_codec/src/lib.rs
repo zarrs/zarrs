@@ -144,10 +144,8 @@ inventory::collect!(CodecPluginV3);
 
 impl CodecPluginV3 {
     /// Create a new [`CodecPluginV3`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
-    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
-        create_fn: fn(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(T::matches_name, create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + CodecTraitsV3>() -> Self {
+        Self(Plugin::new(T::matches_name, T::create))
     }
 }
 
@@ -158,10 +156,8 @@ inventory::collect!(CodecPluginV2);
 
 impl CodecPluginV2 {
     /// Create a new [`CodecPluginV2`] for a type implementing [`ExtensionAliases<ZarrVersion2>`].
-    pub const fn new<T: ExtensionAliases<ZarrVersion2>>(
-        create_fn: fn(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(T::matches_name, create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion2> + CodecTraitsV2>() -> Self {
+        Self(Plugin::new(T::matches_name, T::create))
     }
 }
 
@@ -365,6 +361,32 @@ impl ExtensionName for Codec {
             Self::BytesToBytes(codec) => codec.name(version),
         }
     }
+}
+
+/// Trait for creating a codec from Zarr V2 metadata.
+///
+/// Types implementing this trait can be registered as V2 codec plugins via [`CodecPluginV2`].
+pub trait CodecTraitsV2 {
+    /// Create a codec from Zarr V2 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError>
+    where
+        Self: Sized;
+}
+
+/// Trait for creating a codec from Zarr V3 metadata.
+///
+/// Types implementing this trait can be registered as V3 codec plugins via [`CodecPluginV3`].
+pub trait CodecTraitsV3 {
+    /// Create a codec from Zarr V3 metadata.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError>
+    where
+        Self: Sized;
 }
 
 /// Codec traits.

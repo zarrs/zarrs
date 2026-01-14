@@ -41,7 +41,7 @@ use std::sync::Arc;
 pub use shuffle_codec::ShuffleCodec;
 use zarrs_metadata::v3::MetadataV3;
 
-use zarrs_codec::{Codec, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
@@ -53,15 +53,17 @@ zarrs_plugin::impl_extension_aliases!(ShuffleCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ShuffleCodec>(create_codec_shuffle_v3)
+    CodecPluginV3::new::<ShuffleCodec>()
 }
 
-pub(crate) fn create_codec_shuffle_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for ShuffleCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[cfg(test)]

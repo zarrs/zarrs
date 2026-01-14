@@ -37,7 +37,7 @@ pub use vlen_v2_codec::VlenV2Codec;
 use zarrs_metadata::v3::MetadataV3;
 
 use crate::array::ArrayBytesRaw;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3, InvalidBytesLengthError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
 use zarrs_metadata_ext::codec::vlen_v2::{self};
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
@@ -47,17 +47,19 @@ zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<VlenV2Codec>(create_codec_vlen_v2_v3)
+    CodecPluginV3::new::<VlenV2Codec>()
 }
 
-pub(crate) fn create_codec_vlen_v2_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
+impl CodecTraitsV3 for VlenV2Codec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
 
-    if metadata.configuration().is_none_or(|c| c.is_empty()) {
-        let codec = Arc::new(VlenV2Codec::new());
-        Ok(Codec::ArrayToBytes(codec))
-    } else {
-        Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+        if metadata.configuration().is_none_or(|c| c.is_empty()) {
+            let codec = Arc::new(VlenV2Codec::new());
+            Ok(Codec::ArrayToBytes(codec))
+        } else {
+            Err(PluginConfigurationInvalidError::new(metadata.to_string()).into())
+        }
     }
 }
 

@@ -68,7 +68,7 @@ use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{PluginConfigurationInvalidError, PluginCreateError};
 
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfpy::{
     ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
 };
@@ -81,25 +81,29 @@ zarrs_plugin::impl_extension_aliases!(ZfpyCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ZfpyCodec>(create_codec_zfpy_v3)
+    CodecPluginV3::new::<ZfpyCodec>()
 }
 // Register the V2 codec.
 inventory::submit! {
-    CodecPluginV2::new::<ZfpyCodec>(create_codec_zfpy_v2)
+    CodecPluginV2::new::<ZfpyCodec>()
 }
 
-pub(crate) fn create_codec_zfpy_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpyCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for ZfpyCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZfpyCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_zfpy_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpyCodecConfiguration =
-        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
-    let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV2 for ZfpyCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: ZfpyCodecConfiguration =
+            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }

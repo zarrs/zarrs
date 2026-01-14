@@ -36,7 +36,7 @@ use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
@@ -46,15 +46,17 @@ zarrs_plugin::impl_extension_aliases!(PackBitsCodec, v3: "packbits");
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<PackBitsCodec>(create_codec_packbits_v3)
+    CodecPluginV3::new::<PackBitsCodec>()
 }
 
-pub(crate) fn create_codec_packbits_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: PackBitsCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for PackBitsCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: PackBitsCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
 /// Traits for a data type supporting the `packbits` codec.

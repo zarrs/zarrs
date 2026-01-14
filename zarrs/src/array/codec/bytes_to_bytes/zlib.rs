@@ -38,7 +38,7 @@ pub use self::zlib_codec::ZlibCodec;
 use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 
-use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3};
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zlib::{
     ZlibCodecConfiguration, ZlibCodecConfigurationV1, ZlibCompressionLevel,
 };
@@ -51,28 +51,32 @@ zarrs_plugin::impl_extension_aliases!(ZlibCodec,
 
 // Register the V3 codec.
 inventory::submit! {
-    CodecPluginV3::new::<ZlibCodec>(create_codec_zlib_v3)
+    CodecPluginV3::new::<ZlibCodec>()
 }
 
 // Register the V2 codec.
 inventory::submit! {
-    CodecPluginV2::new::<ZlibCodec>(create_codec_zlib_v2)
+    CodecPluginV2::new::<ZlibCodec>()
 }
 
-pub(crate) fn create_codec_zlib_v3(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZlibCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for ZlibCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZlibCodecConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_zlib_v2(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
-    let configuration: ZlibCodecConfiguration =
-        serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
-            .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
-    let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV2 for ZlibCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: ZlibCodecConfiguration =
+            serde_json::from_value(serde_json::to_value(metadata.configuration()).unwrap())
+                .map_err(|_| PluginConfigurationInvalidError::new(format!("{metadata:?}")))?;
+        let codec = Arc::new(ZlibCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[cfg(test)]
