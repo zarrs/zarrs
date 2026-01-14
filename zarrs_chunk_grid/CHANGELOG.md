@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking**: Add `create()` method to `ChunkGridTraits` trait
+- **Breaking**: Remove `create_fn` parameter from `DataTypePluginV2::create()` and add `T: ChunkGridTraits` bound
+- **Breaking**: Bump the MSRV to 1.91
+
 ## [0.4.1] - 2026-01-14
 
 ### Added

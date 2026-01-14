@@ -32,7 +32,7 @@ missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
 
 [workspace.dependencies.zarrs_chunk_grid]
-version = "0.4.1"
+version = "0.5.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]

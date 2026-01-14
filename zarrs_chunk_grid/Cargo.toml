@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_chunk_grid"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.91"
 description = "The chunk grid API for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_chunk_grid"

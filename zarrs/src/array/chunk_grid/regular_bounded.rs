@@ -48,28 +48,7 @@ zarrs_plugin::impl_extension_aliases!(RegularBoundedChunkGrid,
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new::<RegularBoundedChunkGrid>(create_chunk_grid_regular_bounded)
-}
-
-/// Create a `regular_bounded` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a `regular_bounded` chunk grid.
-pub(crate) fn create_chunk_grid_regular_bounded(
-    metadata: &MetadataV3,
-    array_shape: &ArrayShape,
-) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "chunk grid");
-    let configuration: RegularBoundedChunkGridConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let chunk_grid = RegularBoundedChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
-        .map_err(|_| {
-        PluginCreateError::from(
-            "`regular_bounded` chunk shape and array shape have inconsistent dimensionality",
-        )
-    })?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RegularBoundedChunkGrid>()
 }
 
 /// A `regular_bounded` chunk grid.
@@ -112,6 +91,26 @@ impl RegularBoundedChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk grid");
+        let configuration: RegularBoundedChunkGridConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let chunk_grid = RegularBoundedChunkGrid::new(
+            array_shape.clone(),
+            configuration.chunk_shape,
+        )
+        .map_err(|_| {
+            PluginCreateError::from(
+                "`regular_bounded` chunk shape and array shape have inconsistent dimensionality",
+            )
+        })?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
     fn configuration(&self) -> Configuration {
         RegularBoundedChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
@@ -301,7 +300,7 @@ mod tests {
             r#"{"name":"zarrs.regular_bounded","configuration":{"chunk_shape":[1,2,3]}}"#,
         )
         .unwrap();
-        assert!(create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3]).is_ok());
+        assert!(RegularBoundedChunkGrid::create(&metadata, &vec![3, 3, 3]).is_ok());
     }
 
     #[test]
@@ -310,9 +309,9 @@ mod tests {
             r#"{"name":"zarrs.regular_bounded","configuration":{"invalid":[1,2,3]}}"#,
         )
         .unwrap();
-        assert!(create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3]).is_err());
+        assert!(RegularBoundedChunkGrid::create(&metadata, &vec![3, 3, 3]).is_err());
         assert_eq!(
-            create_chunk_grid_regular_bounded(&metadata, &vec![3, 3, 3])
+            RegularBoundedChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
             r#"configuration is unsupported: zarrs.regular_bounded {"invalid":[1,2,3]}"#

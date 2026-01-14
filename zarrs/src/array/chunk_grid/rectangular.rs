@@ -44,24 +44,7 @@ zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new::<RectangularChunkGrid>(create_chunk_grid_rectangular)
-}
-
-/// Create a `rectangular` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
-pub(crate) fn create_chunk_grid_rectangular(
-    metadata: &MetadataV3,
-    array_shape: &ArrayShape,
-) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "chunk grid");
-    let configuration: RectangularChunkGridConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
-        .map_err(|err| PluginCreateError::Other(err.to_string()))?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RectangularChunkGrid>()
 }
 
 /// A `rectangular` chunk grid.
@@ -165,6 +148,19 @@ impl RectangularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RectangularChunkGrid {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk grid");
+        let configuration: RectangularChunkGridConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
+            .map_err(|err| PluginCreateError::Other(err.to_string()))?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
     fn configuration(&self) -> Configuration {
         let chunk_shape = self
             .chunks

@@ -49,8 +49,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 pub use self::array_builder::{
-    ArrayBuilder, ArrayBuilderChunkGrid, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType,
-    ArrayBuilderFillValue,
+    ArrayBuilder, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType, ArrayBuilderFillValue,
 };
 use self::chunk_grid::RegularBoundedChunkGridConfiguration;
 use self::chunk_key_encoding::V2ChunkKeyEncoding;

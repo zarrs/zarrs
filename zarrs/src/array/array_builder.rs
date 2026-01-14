@@ -21,9 +21,6 @@ use zarrs_codec::{
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
 
-mod array_builder_chunk_grid;
-pub use array_builder_chunk_grid::ArrayBuilderChunkGrid;
-
 mod array_builder_chunk_grid_metadata;
 pub use array_builder_chunk_grid_metadata::ArrayBuilderChunkGridMetadata;
 
@@ -131,7 +128,7 @@ pub struct ArrayBuilder {
 
 #[derive(Debug, From)]
 enum ArrayBuilderChunkGridMaybe {
-    ChunkGrid(ArrayBuilderChunkGrid),
+    ChunkGrid(ChunkGrid),
     Metadata(ArrayShape, ArrayBuilderChunkGridMetadata),
 }
 
@@ -179,12 +176,12 @@ impl ArrayBuilder {
 
     /// Create a new array builder with a concrete chunk grid (with an associated array shape).
     pub fn new_with_chunk_grid(
-        chunk_grid: impl Into<ArrayBuilderChunkGrid>,
+        chunk_grid: impl Into<ChunkGrid>,
         data_type: impl Into<ArrayBuilderDataType>,
         fill_value: impl Into<ArrayBuilderFillValue>,
     ) -> Self {
         let data_type = data_type.into();
-        let chunk_grid: ArrayBuilderChunkGrid = chunk_grid.into();
+        let chunk_grid: ChunkGrid = chunk_grid.into();
         let chunk_grid: ArrayBuilderChunkGridMaybe = chunk_grid.into();
         let fill_value = fill_value.into();
         let (codec_options, metadata_options) = {
@@ -243,7 +240,7 @@ impl ArrayBuilder {
         let shape = shape.into();
         let chunk_grid_metadata = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => {
-                ArrayBuilderChunkGridMetadata::from(chunk_grid.as_chunk_grid().metadata())
+                ArrayBuilderChunkGridMetadata::from(chunk_grid.metadata())
             }
             ArrayBuilderChunkGridMaybe::Metadata(_array_shape, chunk_grid_metadata) => {
                 chunk_grid_metadata.clone()
@@ -265,9 +262,7 @@ impl ArrayBuilder {
         chunk_grid_metadata: impl Into<ArrayBuilderChunkGridMetadata>,
     ) -> &mut Self {
         let array_shape = match &self.chunk_grid {
-            ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => {
-                chunk_grid.as_chunk_grid().array_shape()
-            }
+            ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => chunk_grid.array_shape(),
             ArrayBuilderChunkGridMaybe::Metadata(array_shape, _chunk_grid_metadata) => array_shape,
         };
         let chunk_grid_metadata = chunk_grid_metadata.into();
@@ -276,8 +271,8 @@ impl ArrayBuilder {
     }
 
     /// Set the chunk grid. This may also change the array shape.
-    pub fn chunk_grid(&mut self, chunk_grid: impl Into<ArrayBuilderChunkGrid>) -> &mut Self {
-        let chunk_grid = chunk_grid.into();
+    pub fn chunk_grid(&mut self, chunk_grid: impl Into<ChunkGrid>) -> &mut Self {
+        let chunk_grid: ChunkGrid = chunk_grid.into();
         self.chunk_grid = chunk_grid.into();
         self
     }
@@ -453,7 +448,7 @@ impl ArrayBuilder {
     /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
     pub fn build_metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
         let chunk_grid = match &self.chunk_grid {
-            ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => chunk_grid.as_chunk_grid().clone(),
+            ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => chunk_grid.clone(),
             ArrayBuilderChunkGridMaybe::Metadata(array_shape, metadata) => {
                 ChunkGrid::from_metadata(&metadata.to_metadata()?, array_shape)
                     .map_err(ArrayCreateError::ChunkGridCreateError)?
@@ -597,8 +592,7 @@ mod tests {
     use super::*;
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
-    use crate::array::{ChunkGrid, data_type};
-    use zarrs_chunk_grid::ChunkGridTraits;
+    use crate::array::data_type;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
     use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
@@ -815,16 +809,14 @@ mod tests {
         )
         .build_metadata()
         .unwrap();
-        let chunk_grid: Arc<dyn ChunkGridTraits> = Arc::new(
+        let chunk_grid = Arc::new(
             RegularChunkGrid::new(vec![4, 4], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
         );
         ArrayBuilder::new_with_chunk_grid(chunk_grid, data_type::int8(), 0i8)
             .build_metadata()
             .unwrap();
         ArrayBuilder::new_with_chunk_grid(
-            ChunkGrid::new(
-                RegularChunkGrid::new(vec![8, 8], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
-            ),
+            RegularChunkGrid::new(vec![8, 8], vec![NonZeroU64::new(2).unwrap(); 2]).unwrap(),
             data_type::int8(),
             0i8,
         )

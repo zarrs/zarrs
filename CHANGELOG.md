@@ -132,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Remove `indexer` and `array_subset` modules (types re-exported in `array` module)
 - **Breaking**: Remove `Named*` types and methods: `Named[{ArrayToArray,ArrayToBytes,BytesToBytes}]Codec`, `NamedDataType`, `ShardingCodecBuilder::*_named()`, `DataType::into_named()`
 - **Breaking**: Rename `codec_v2_to_v3_name()` to `codec_v2_to_v3()` and change parameter to metadata from name
+- **Breaking**: Remove `ArrayBuilderChunkGrid` type
 
 ### Fixed
 - Fix `transpose` codec decoding with variable-size data types

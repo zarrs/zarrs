@@ -62,6 +62,13 @@ impl IncompatibleDimensionalityError {
 #[derive(Debug, Clone, Deref, From)]
 pub struct ChunkGrid(Arc<dyn ChunkGridTraits>);
 
+impl<T: ChunkGridTraits + 'static> From<T> for ChunkGrid {
+    fn from(chunk_grid: T) -> Self {
+        let chunk_grid: Arc<dyn ChunkGridTraits> = Arc::new(chunk_grid);
+        Self(chunk_grid)
+    }
+}
+
 impl<T: ChunkGridTraits + 'static> From<Arc<T>> for ChunkGrid {
     fn from(chunk_grid: Arc<T>) -> Self {
         Self(chunk_grid)
@@ -83,13 +90,8 @@ impl ChunkGridPlugin {
     /// Create a new [`ChunkGridPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`].
     ///
     /// The `match_name_fn` is automatically derived from `T::matches_name`.
-    pub const fn new<T: ExtensionAliases<ZarrVersion3>>(
-        create_fn: fn(
-            metadata: &MetadataV3,
-            array_shape: &ArrayShape,
-        ) -> Result<ChunkGrid, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin2::new(|name| T::matches_name(name), create_fn))
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + ChunkGridTraits>() -> Self {
+        Self(Plugin2::new(|name| T::matches_name(name), T::create))
     }
 }
 
@@ -194,6 +196,17 @@ impl ChunkGrid {
 pub unsafe trait ChunkGridTraits:
     ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
 {
+    /// Create a chunk grid from Zarr V3 metadata and an array shape.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError>
+    where
+        Self: Sized;
+
     /// The configuration of the chunk grid.
     fn configuration(&self) -> Configuration;
 
@@ -392,112 +405,6 @@ pub unsafe trait ChunkGridTraits:
             subset: ArraySubset::new_with_shape(shape),
             range: 0..n_chunks,
         }
-    }
-}
-
-unsafe impl ChunkGridTraits for ChunkGrid {
-    fn configuration(&self) -> Configuration {
-        self.0.configuration()
-    }
-
-    fn dimensionality(&self) -> usize {
-        self.0.dimensionality()
-    }
-
-    fn array_shape(&self) -> &[u64] {
-        self.0.array_shape()
-    }
-
-    fn grid_shape(&self) -> &[u64] {
-        self.0.grid_shape()
-    }
-
-    fn chunk_shape(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
-        self.0.chunk_shape(chunk_indices)
-    }
-
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        self.0.chunk_shape_u64(chunk_indices)
-    }
-
-    fn chunk_origin(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.0.chunk_origin(chunk_indices)
-    }
-
-    fn chunk_indices(
-        &self,
-        array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.0.chunk_indices(array_indices)
-    }
-
-    fn chunk_element_indices(
-        &self,
-        array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.0.chunk_element_indices(array_indices)
-    }
-}
-
-unsafe impl ChunkGridTraits for Arc<dyn ChunkGridTraits> {
-    fn configuration(&self) -> Configuration {
-        self.as_ref().configuration()
-    }
-
-    fn dimensionality(&self) -> usize {
-        self.as_ref().dimensionality()
-    }
-
-    fn array_shape(&self) -> &[u64] {
-        self.as_ref().array_shape()
-    }
-
-    fn grid_shape(&self) -> &[u64] {
-        self.as_ref().grid_shape()
-    }
-
-    fn chunk_shape(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
-        self.as_ref().chunk_shape(chunk_indices)
-    }
-
-    fn chunk_shape_u64(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
-        self.as_ref().chunk_shape_u64(chunk_indices)
-    }
-
-    fn chunk_origin(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.as_ref().chunk_origin(chunk_indices)
-    }
-
-    fn chunk_indices(
-        &self,
-        array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.as_ref().chunk_indices(array_indices)
-    }
-
-    fn chunk_element_indices(
-        &self,
-        array_indices: &[u64],
-    ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
-        self.as_ref().chunk_element_indices(array_indices)
     }
 }
 

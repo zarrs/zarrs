@@ -38,27 +38,7 @@ zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new::<RegularChunkGrid>(create_chunk_grid_regular)
-}
-
-/// Create a `regular` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
-pub(crate) fn create_chunk_grid_regular(
-    metadata: &MetadataV3,
-    array_shape: &ArrayShape,
-) -> Result<ChunkGrid, PluginCreateError> {
-    let configuration: RegularChunkGridConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
-    let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
-        .map_err(|_| {
-            PluginCreateError::from(
-                "regular chunk shape and array shape have inconsistent dimensionality",
-            )
-        })?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RegularChunkGrid>()
 }
 
 /// A `regular` chunk grid.
@@ -200,6 +180,22 @@ impl RegularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RegularChunkGrid {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        let configuration: RegularChunkGridConfiguration = metadata
+            .to_configuration()
+            .map_err(|_| PluginConfigurationInvalidError::new(metadata.to_string()))?;
+        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
+            .map_err(|_| {
+                PluginCreateError::from(
+                    "regular chunk shape and array shape have inconsistent dimensionality",
+                )
+            })?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
     fn configuration(&self) -> Configuration {
         RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
@@ -318,7 +314,7 @@ mod tests {
         let metadata: MetadataV3 =
             serde_json::from_str(r#"{"name":"regular","configuration":{"chunk_shape":[1,2,3]}}"#)
                 .unwrap();
-        assert!(create_chunk_grid_regular(&metadata, &vec![3, 3, 3]).is_ok());
+        assert!(RegularChunkGrid::create(&metadata, &vec![3, 3, 3]).is_ok());
     }
 
     #[test]
@@ -326,9 +322,9 @@ mod tests {
         let metadata: MetadataV3 =
             serde_json::from_str(r#"{"name":"regular","configuration":{"invalid":[1,2,3]}}"#)
                 .unwrap();
-        assert!(create_chunk_grid_regular(&metadata, &vec![3, 3, 3]).is_err());
+        assert!(RegularChunkGrid::create(&metadata, &vec![3, 3, 3]).is_err());
         assert_eq!(
-            create_chunk_grid_regular(&metadata, &vec![3, 3, 3])
+            RegularChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
             r#"configuration is unsupported: regular {"invalid":[1,2,3]}"#
