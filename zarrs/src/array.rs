@@ -21,7 +21,6 @@
 //!
 //! The documentation for [`Array`] details how to interact with arrays.
 
-mod array_builder;
 mod array_errors;
 mod array_metadata_options;
 mod element;
@@ -29,6 +28,7 @@ mod from_array_bytes;
 mod into_array_bytes;
 mod tensor;
 
+pub mod builder;
 pub mod chunk_cache;
 pub mod chunk_grid;
 pub mod chunk_key_encoding;
@@ -48,9 +48,7 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-pub use self::array_builder::{
-    ArrayBuilder, ArrayBuilderChunkGridMetadata, ArrayBuilderDataType, ArrayBuilderFillValue,
-};
+pub use self::builder::ArrayBuilder;
 use self::chunk_grid::RegularBoundedChunkGridConfiguration;
 use self::chunk_key_encoding::V2ChunkKeyEncoding;
 use crate::config::{MetadataConvertVersion, MetadataEraseVersion, global_config};
@@ -691,9 +689,10 @@ impl<TStorage: ?Sized> Array<TStorage> {
     pub unsafe fn set_shape_and_chunk_grid(
         &mut self,
         array_shape: ArrayShape,
-        chunk_grid_metadata: impl Into<ArrayBuilderChunkGridMetadata>,
+        chunk_grid_metadata: impl Into<builder::ArrayBuilderChunkGridMetadata>,
     ) -> Result<&mut Self, ArrayCreateError> {
-        let chunk_grid_metadata: ArrayBuilderChunkGridMetadata = chunk_grid_metadata.into();
+        let chunk_grid_metadata: builder::ArrayBuilderChunkGridMetadata =
+            chunk_grid_metadata.into();
         let chunk_grid_metadata = chunk_grid_metadata.to_metadata()?;
 
         // Create the new chunk grid

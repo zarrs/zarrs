@@ -1,3 +1,5 @@
+//! [`Array`] builders.
+
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -10,7 +12,6 @@ use super::{
     Array, ArrayCreateError, ArrayMetadata, ArrayMetadataV3, ArrayShape, ChunkShape, CodecChain,
     DimensionName, StorageTransformerChain,
 };
-use crate::array::array_builder::array_builder_fill_value::ArrayBuilderFillValueImpl;
 use crate::array::{ArrayMetadataOptions, ChunkGrid};
 use crate::config::global_config;
 use crate::node::NodePath;
@@ -29,6 +30,7 @@ pub use array_builder_data_type::ArrayBuilderDataType;
 
 mod array_builder_fill_value;
 pub use array_builder_fill_value::ArrayBuilderFillValue;
+use array_builder_fill_value::ArrayBuilderFillValueImpl;
 
 /// An [`Array`] builder.
 ///
