@@ -68,14 +68,17 @@ pub use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    RecommendedConcurrency, StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
+    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, StoragePartialDecoder,
+    copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,
     AsyncBytesPartialEncoderTraits,
 };
-pub use zarrs_data_type::{DataType, DataTypeTraits, FillValue};
+pub use zarrs_data_type::{
+    DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3, FillValue,
+};
 pub use zarrs_metadata::v2::ArrayMetadataV2;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
@@ -341,8 +344,8 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The aliasing system allows matching against string aliases or regex patterns.
 ///
 /// The key traits for each extension type are:
-/// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`](zarrs_data_type::DataTypeTraitsV2), [`DataTypeTraitsV3`](zarrs_data_type::DataTypeTraitsV3)
-/// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`](zarrs_codec::CodecTraitsV2), [`CodecTraitsV3`](zarrs_codec::CodecTraitsV3)
+/// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`], [`DataTypeTraitsV3`]
+/// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
 ///   - Array-to-array codecs: [`ArrayCodecTraits`] + [`ArrayToArrayCodecTraits`]
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
@@ -358,7 +361,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// Extensions are registered via the following:
 /// - Data types: [`DataTypePluginV2`](zarrs_data_type::DataTypePluginV2), [`DataTypePluginV3`](zarrs_data_type::DataTypePluginV3) [`DataTypeRuntimePluginV2`](zarrs_data_type::DataTypeRuntimePluginV2), [`DataTypeRuntimePluginV3`](zarrs_data_type::DataTypeRuntimePluginV3)
-/// - Codecs: [`CodecPluginV3`](zarrs_codec::CodecPluginV3), [`CodecRuntimePluginV2`](zarrs_codec::CodecRuntimePluginV2), [`CodecRuntimePluginV3`](zarrs_codec::CodecRuntimePluginV3)
+/// - Codecs: [`CodecPluginV3`](zarrs_codec::CodecPluginV3), [`CodecPluginV2`](zarrs_codec::CodecPluginV2), [`CodecRuntimePluginV2`](zarrs_codec::CodecRuntimePluginV2), [`CodecRuntimePluginV3`](zarrs_codec::CodecRuntimePluginV3)
 /// - Chunk grids: [`ChunkGridPlugin`](zarrs_chunk_grid::ChunkGridPlugin), [`ChunkGridRuntimePlugin`](zarrs_chunk_grid::ChunkGridRuntimePlugin)
 /// - Chunk key encodings: [`ChunkKeyEncodingPlugin`](zarrs_chunk_key_encoding::ChunkKeyEncodingPlugin), [`ChunkKeyEncodingRuntimePlugin`](zarrs_chunk_key_encoding::ChunkKeyEncodingRuntimePlugin)
 /// - Storage transformers: [`StorageTransformerPlugin`](crate::array::storage_transformer::StorageTransformerPlugin), [`StorageTransformerRuntimePlugin`](crate::array::storage_transformer::StorageTransformerRuntimePlugin)
@@ -1330,7 +1333,6 @@ fn create_codec_chain_from_v2(
     compressor: Option<&zarrs_metadata::v2::MetadataV2>,
 ) -> Result<CodecChain, crate::convert::ArrayMetadataV2ToV3Error> {
     use crate::convert::ArrayMetadataV2ToV3Error;
-    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 
     let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
     let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
