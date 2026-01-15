@@ -20,6 +20,7 @@ mod complex_float;
 mod complex_float8_e4m3;
 mod complex_float8_e5m2;
 mod complex_subfloat;
+mod fixed_length_utf32;
 mod float;
 mod float8_e4m3;
 mod float8_e5m2;
@@ -65,6 +66,7 @@ pub use complex_subfloat::{
     ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3FNUZDataType,
     ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType,
 };
+pub use fixed_length_utf32::FixedLengthUtf32DataType;
 pub use float::{BFloat16DataType, Float16DataType, Float32DataType, Float64DataType};
 pub use float8_e4m3::Float8E4M3DataType;
 pub use float8_e5m2::Float8E5M2DataType;
@@ -324,6 +326,14 @@ pub fn bytes() -> DataType {
 #[must_use]
 pub fn raw_bits(size_bytes: usize) -> DataType {
     Arc::new(RawBitsDataType::new(size_bytes)).into()
+}
+
+// Fixed-length string types
+/// Create a `fixed_length_utf32` data type with `num_characters` characters.
+#[must_use]
+pub fn fixed_length_utf32(num_characters: usize) -> DataType {
+    let length_bytes = num_characters * 4;
+    Arc::new(FixedLengthUtf32DataType::new(length_bytes)).into()
 }
 
 // NumPy time types

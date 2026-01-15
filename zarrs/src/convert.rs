@@ -60,6 +60,12 @@ fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
         return Some(Cow::Owned(v2_name.to_string()));
     }
 
+    // Special handling for fixed_length_utf32 V2 format (<U20, >U5, etc.)
+    // Returns the V3 name; configuration is handled in data_type_metadata_v2_to_v3
+    if data_type::FixedLengthUtf32DataType::matches_name_v2(v2_name) {
+        return Some(Cow::Borrowed("fixed_length_utf32"));
+    }
+
     // Check if any V2 plugin matches the name and create an instance to get the V3 name
     let metadata = DataTypeMetadataV2::Simple(v2_name.to_string());
     for plugin in inventory::iter::<DataTypePluginV2> {
@@ -368,6 +374,19 @@ pub fn data_type_metadata_v2_to_v3(
 ) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
     match data_type {
         DataTypeMetadataV2::Simple(name) => {
+            // Special handling for fixed_length_utf32 - needs configuration
+            if data_type::FixedLengthUtf32DataType::matches_name_v2(name) {
+                // Parse <U{n} or >U{n}
+                let num_chars_str = name.trim_start_matches(['<', '>']).trim_start_matches('U');
+                if let Ok(num_chars) = num_chars_str.parse::<u32>() {
+                    let length_bytes = num_chars * 4;
+                    return Ok(MetadataV3::new_with_serializable_configuration(
+                        "fixed_length_utf32".to_string(),
+                        &zarrs_metadata_ext::data_type::fixed_length_utf32::FixedLengthUtf32DataTypeConfigurationV1 { length_bytes },
+                    )?);
+                }
+            }
+
             // Look up the V3 name using the built-in data type registry
             if let Some(v3_name) = data_type_v2_to_v3_name(name) {
                 Ok(MetadataV3::new(v3_name.to_string()))

@@ -74,6 +74,8 @@ impl ElementFixedLength for num::complex::Complex<half::f16> {}
 impl ElementFixedLength for num::complex::Complex32 {}
 impl ElementFixedLength for num::complex::Complex64 {}
 impl<const N: usize> ElementFixedLength for [u8; N] {}
+impl ElementFixedLength for char {}
+impl<const N: usize> ElementFixedLength for [char; N] {}
 impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
@@ -279,59 +281,153 @@ impl<const N: usize> ElementOwned for [u8; N] {
     }
 }
 
-macro_rules! impl_element_string {
-    ($raw_type:ty) => {
-        impl Element for $raw_type {
-            fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-                data_type
-                    .is::<data_type::StringDataType>()
-                    .then_some(())
-                    .ok_or(IET)
-            }
-
-            fn to_array_bytes<'a>(
-                data_type: &DataType,
-                elements: &'a [Self],
-            ) -> Result<ArrayBytes<'a>, ArrayError> {
-                Self::validate_data_type(data_type)?;
-
-                // Calculate offsets
-                let mut len: usize = 0;
-                let mut offsets = Vec::with_capacity(elements.len());
-                for element in elements {
-                    offsets.push(len);
-                    len = len.checked_add(element.len()).unwrap();
-                }
-                offsets.push(len);
-                let offsets = unsafe {
-                    // SAFETY: The offsets are monotonically increasing.
-                    ArrayBytesOffsets::new_unchecked(offsets)
-                };
-
-                // Concatenate bytes
-                let mut bytes = Vec::with_capacity(usize::try_from(len).unwrap());
-                for element in elements {
-                    bytes.extend_from_slice(element.as_bytes());
-                }
-                let array_bytes = unsafe {
-                    // SAFETY: The last offset is the length of the bytes.
-                    ArrayBytes::new_vlen_unchecked(bytes, offsets)
-                };
-                Ok(array_bytes)
-            }
-
-            fn into_array_bytes(
-                data_type: &DataType,
-                elements: Vec<Self>,
-            ) -> Result<ArrayBytes<'static>, ArrayError> {
-                Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
-            }
+/// Helper function to convert strings to UTF-32 fixed-length bytes.
+fn strings_to_utf32_bytes<S: AsRef<str>>(
+    elements: &[S],
+    length_bytes: usize,
+) -> Result<Vec<u8>, ArrayError> {
+    let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
+    for element in elements {
+        let start = bytes.len();
+        for c in element.as_ref().chars() {
+            bytes.extend_from_slice(&(c as u32).to_ne_bytes());
         }
-    };
+        if bytes.len() - start > length_bytes {
+            return Err(ArrayError::InvalidElementValue);
+        }
+        bytes.resize(start + length_bytes, 0); // Pad with zeros
+    }
+    Ok(bytes)
 }
 
-impl_element_string!(&str);
-impl_element_string!(String);
+/// Helper function to convert UTF-32 fixed-length bytes to strings.
+fn utf32_bytes_to_strings(bytes: &[u8], length_bytes: usize) -> Result<Vec<String>, ArrayError> {
+    let mut elements = Vec::with_capacity(bytes.len() / length_bytes);
+    for chunk in bytes.chunks_exact(length_bytes) {
+        let mut chars = Vec::new();
+        for code_point_bytes in chunk.chunks_exact(4) {
+            let code_point = u32::from_ne_bytes(code_point_bytes.try_into().unwrap());
+            if code_point == 0 {
+                break; // Stop at null terminator
+            }
+            chars.push(
+                char::from_u32(code_point).ok_or(ArrayError::InvalidElementValue)?,
+            );
+        }
+        elements.push(chars.into_iter().collect());
+    }
+    Ok(elements)
+}
+
+impl Element for &str {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if data_type.is::<data_type::StringDataType>()
+            || data_type.is::<data_type::FixedLengthUtf32DataType>()
+        {
+            Ok(())
+        } else {
+            Err(IET)
+        }
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        if let Some(utf32) = data_type.downcast_ref::<data_type::FixedLengthUtf32DataType>() {
+            // UTF-32 fixed encoding
+            let bytes = strings_to_utf32_bytes(elements, utf32.length_bytes())?;
+            Ok(ArrayBytes::from(bytes))
+        } else {
+            // Variable-length string encoding
+            let mut len: usize = 0;
+            let mut offsets = Vec::with_capacity(elements.len());
+            for element in elements {
+                offsets.push(len);
+                len = len.checked_add(element.len()).unwrap();
+            }
+            offsets.push(len);
+            let offsets = unsafe {
+                // SAFETY: The offsets are monotonically increasing.
+                ArrayBytesOffsets::new_unchecked(offsets)
+            };
+
+            let mut bytes = Vec::with_capacity(len);
+            for element in elements {
+                bytes.extend_from_slice(element.as_bytes());
+            }
+            let array_bytes = unsafe {
+                // SAFETY: The last offset is the length of the bytes.
+                ArrayBytes::new_vlen_unchecked(bytes, offsets)
+            };
+            Ok(array_bytes)
+        }
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
+
+impl Element for String {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if data_type.is::<data_type::StringDataType>()
+            || data_type.is::<data_type::FixedLengthUtf32DataType>()
+        {
+            Ok(())
+        } else {
+            Err(IET)
+        }
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+
+        if let Some(utf32) = data_type.downcast_ref::<data_type::FixedLengthUtf32DataType>() {
+            // UTF-32 fixed encoding
+            let bytes = strings_to_utf32_bytes(elements, utf32.length_bytes())?;
+            Ok(ArrayBytes::from(bytes))
+        } else {
+            // Variable-length string encoding
+            let mut len: usize = 0;
+            let mut offsets = Vec::with_capacity(elements.len());
+            for element in elements {
+                offsets.push(len);
+                len = len.checked_add(element.len()).unwrap();
+            }
+            offsets.push(len);
+            let offsets = unsafe {
+                // SAFETY: The offsets are monotonically increasing.
+                ArrayBytesOffsets::new_unchecked(offsets)
+            };
+
+            let mut bytes = Vec::with_capacity(len);
+            for element in elements {
+                bytes.extend_from_slice(element.as_bytes());
+            }
+            let array_bytes = unsafe {
+                // SAFETY: The last offset is the length of the bytes.
+                ArrayBytes::new_vlen_unchecked(bytes, offsets)
+            };
+            Ok(array_bytes)
+        }
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
 
 impl ElementOwned for String {
     fn from_array_bytes(
@@ -339,15 +435,23 @@ impl ElementOwned for String {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ArrayError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?.into_parts();
-        let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
-        for (curr, next) in offsets.iter().tuple_windows() {
-            elements.push(
-                Self::from_utf8(bytes[*curr..*next].to_vec())
-                    .map_err(|_| ArrayError::InvalidElementValue)?,
-            );
+
+        if let Some(utf32) = data_type.downcast_ref::<data_type::FixedLengthUtf32DataType>() {
+            // UTF-32 fixed decoding
+            let bytes = bytes.into_fixed()?;
+            utf32_bytes_to_strings(&bytes, utf32.length_bytes())
+        } else {
+            // Variable-length string decoding
+            let (bytes, offsets) = bytes.into_variable()?.into_parts();
+            let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
+            for (curr, next) in offsets.iter().tuple_windows() {
+                elements.push(
+                    Self::from_utf8(bytes[*curr..*next].to_vec())
+                        .map_err(|_| ArrayError::InvalidElementValue)?,
+                );
+            }
+            Ok(elements)
         }
-        Ok(elements)
     }
 }
 
@@ -413,6 +517,193 @@ impl ElementOwned for Vec<u8> {
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
             elements.push(bytes[*curr..*next].to_vec());
+        }
+        Ok(elements)
+    }
+}
+
+/// Helper function to convert char slices to UTF-32 fixed-length bytes.
+fn chars_to_utf32_bytes<C: AsRef<[char]>>(
+    elements: &[C],
+    length_bytes: usize,
+) -> Result<Vec<u8>, ArrayError> {
+    let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
+    for element in elements {
+        let start = bytes.len();
+        for &c in element.as_ref() {
+            bytes.extend_from_slice(&(c as u32).to_ne_bytes());
+        }
+        if bytes.len() - start > length_bytes {
+            return Err(ArrayError::InvalidElementValue);
+        }
+        bytes.resize(start + length_bytes, 0); // Pad with zeros
+    }
+    Ok(bytes)
+}
+
+/// Helper function to convert UTF-32 fixed-length bytes to Vec<char>.
+fn utf32_bytes_to_chars(bytes: &[u8], length_bytes: usize) -> Result<Vec<Vec<char>>, ArrayError> {
+    let mut elements = Vec::with_capacity(bytes.len() / length_bytes);
+    for chunk in bytes.chunks_exact(length_bytes) {
+        let mut chars = Vec::new();
+        for code_point_bytes in chunk.chunks_exact(4) {
+            let code_point = u32::from_ne_bytes(code_point_bytes.try_into().unwrap());
+            if code_point == 0 {
+                break; // Stop at null terminator
+            }
+            chars.push(char::from_u32(code_point).ok_or(ArrayError::InvalidElementValue)?);
+        }
+        elements.push(chars);
+    }
+    Ok(elements)
+}
+
+impl Element for Vec<char> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        data_type
+            .is::<data_type::FixedLengthUtf32DataType>()
+            .then_some(())
+            .ok_or(IET)
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        let utf32 = data_type
+            .downcast_ref::<data_type::FixedLengthUtf32DataType>()
+            .ok_or(IET)?;
+        let bytes = chars_to_utf32_bytes(elements, utf32.length_bytes())?;
+        Ok(ArrayBytes::from(bytes))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
+
+impl ElementOwned for Vec<char> {
+    fn from_array_bytes(
+        data_type: &DataType,
+        bytes: ArrayBytes<'_>,
+    ) -> Result<Vec<Self>, ArrayError> {
+        let utf32 = data_type
+            .downcast_ref::<data_type::FixedLengthUtf32DataType>()
+            .ok_or(IET)?;
+        let bytes = bytes.into_fixed()?;
+        utf32_bytes_to_chars(&bytes, utf32.length_bytes())
+    }
+}
+
+impl Element for &[char] {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        data_type
+            .is::<data_type::FixedLengthUtf32DataType>()
+            .then_some(())
+            .ok_or(IET)
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        let utf32 = data_type
+            .downcast_ref::<data_type::FixedLengthUtf32DataType>()
+            .ok_or(IET)?;
+        let bytes = chars_to_utf32_bytes(elements, utf32.length_bytes())?;
+        Ok(ArrayBytes::from(bytes))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
+
+impl<const N: usize> Element for &[char; N] {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if let Some(utf32) = data_type.downcast_ref::<data_type::FixedLengthUtf32DataType>()
+            && utf32.num_chars() == N
+        {
+            return Ok(());
+        }
+        Err(IET)
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        let mut bytes = Vec::with_capacity(elements.len() * N * 4);
+        for element in elements {
+            for &c in *element {
+                bytes.extend_from_slice(&(c as u32).to_ne_bytes());
+            }
+        }
+        Ok(ArrayBytes::from(bytes))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
+
+impl<const N: usize> Element for [char; N] {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+        if let Some(utf32) = data_type.downcast_ref::<data_type::FixedLengthUtf32DataType>()
+            && utf32.num_chars() == N
+        {
+            return Ok(());
+        }
+        Err(IET)
+    }
+
+    fn to_array_bytes<'a>(
+        data_type: &DataType,
+        elements: &'a [Self],
+    ) -> Result<ArrayBytes<'a>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        let mut bytes = Vec::with_capacity(elements.len() * N * 4);
+        for element in elements {
+            for &c in element {
+                bytes.extend_from_slice(&(c as u32).to_ne_bytes());
+            }
+        }
+        Ok(ArrayBytes::from(bytes))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ArrayError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+}
+
+impl<const N: usize> ElementOwned for [char; N] {
+    fn from_array_bytes(
+        data_type: &DataType,
+        bytes: ArrayBytes<'_>,
+    ) -> Result<Vec<Self>, ArrayError> {
+        Self::validate_data_type(data_type)?;
+        let bytes = bytes.into_fixed()?;
+        let mut elements = Vec::with_capacity(bytes.len() / (N * 4));
+        for chunk in bytes.chunks_exact(N * 4) {
+            let mut chars = ['\0'; N];
+            for (i, code_point_bytes) in chunk.chunks_exact(4).enumerate() {
+                let code_point = u32::from_ne_bytes(code_point_bytes.try_into().unwrap());
+                chars[i] = char::from_u32(code_point).ok_or(ArrayError::InvalidElementValue)?;
+            }
+            elements.push(chars);
         }
         Ok(elements)
     }
