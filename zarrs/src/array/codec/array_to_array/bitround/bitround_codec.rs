@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
-    BitroundCodecConfiguration, BitroundCodecConfigurationV1, bitround_codec_partial, round_bytes,
+    BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
+    bitround_codec_partial, round_bytes,
 };
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
@@ -191,14 +192,7 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        // Use get_bitround_support() to check support
-        if super::get_bitround_support(decoded_data_type).is_some() {
-            Ok(decoded_data_type.clone())
-        } else {
-            Err(CodecError::UnsupportedDataType(
-                decoded_data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ))
-        }
+        decoded_data_type.codec_bitround()?;
+        Ok(decoded_data_type.clone())
     }
 }

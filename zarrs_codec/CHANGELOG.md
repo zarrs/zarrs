@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `CodecTraitsV2` and  `CodecTraitsV3` traits
+- Add `CodecError::UnsupportedDataTypeCodec` variant for data type codec support errors
 
 ### Changed
 - **Breaking**: Remove `create_fn` parameter from `CodecPluginV2::create()` and add `T: CodecTraitsV2` bound

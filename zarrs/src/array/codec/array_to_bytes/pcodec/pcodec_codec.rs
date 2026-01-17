@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use pco::standalone::guarantee::file_size;
 use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
-    PcodecDeltaEncodingOrder, PcodecElementType, get_pcodec_support,
+    PcodecDataTypeExt, PcodecDeltaEncodingOrder, PcodecElementType,
 };
 use crate::array::{
     ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
@@ -175,13 +175,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        // Use get_pcodec_support() to get element type
-        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            )
-        })?;
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         let bytes = bytes.into_fixed()?;
@@ -217,13 +212,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Use get_pcodec_support() to get element type
-        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            )
-        })?;
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         macro_rules! pcodec_decode {
@@ -254,13 +244,8 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        // Use get_pcodec_support() to get element type info
-        let pcodec = get_pcodec_support(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            )
-        })?;
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();

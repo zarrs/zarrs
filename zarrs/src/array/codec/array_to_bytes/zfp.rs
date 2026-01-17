@@ -100,7 +100,6 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::ExtensionAliasesV3;
 pub use zfp_codec::ZfpCodec;
 use zfp_sys::{
     zfp_decompress, zfp_exec_policy_zfp_exec_omp, zfp_field_alloc, zfp_field_free,
@@ -112,7 +111,7 @@ use self::zfp_array::ZfpArray;
 use self::zfp_bitstream::ZfpBitstream;
 use self::zfp_field::ZfpField;
 use self::zfp_stream::ZfpStream;
-use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice, transmute_to_bytes_vec};
+use crate::array::{ChunkShapeTraits, DataType, convert_from_bytes_slice};
 use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::zfp::{ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpMode};
 use zarrs_plugin::PluginCreateError;
@@ -134,315 +133,87 @@ impl CodecTraitsV3 for ZfpCodec {
     }
 }
 
-/// The zfp data type for dispatching to the zfp library.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ZfpType {
-    /// 32-bit integer (`zfp_type_int32`)
-    Int32,
-    /// 64-bit integer (`zfp_type_int64`)
-    Int64,
-    /// 32-bit float (`zfp_type_float`)
-    Float,
-    /// 64-bit float (`zfp_type_double`)
-    Double,
-}
+// Re-export the trait and types from zarrs_data_type
+pub use zarrs_data_type::codec_traits::{
+    ZfpDataTypeExt, ZfpDataTypePlugin, ZfpDataTypeTraits, ZfpEncoding, ZfpNativeType,
+    impl_zfp_data_type_traits,
+};
 
-/// Promotion strategy for types that need to be promoted before zfp encoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ZfpPromotion {
-    /// No promotion needed - use the type directly
-    None,
-    /// Promote i8 to i32 with left shift of 23 bits
-    I8ToI32,
-    /// Promote u8 to i32: (i32(u) - 0x80) << 23
-    U8ToI32,
-    /// Promote i16 to i32 with left shift of 15 bits
-    I16ToI32,
-    /// Promote u16 to i32: (i32(u) - 0x8000) << 15
-    U16ToI32,
-    /// Promote u32 to i32: min(u, `i32::MAX`) as i32
-    U32ToI32,
-    /// Promote u64 to i64: min(u, `i64::MAX`) as i64
-    U64ToI64,
-}
-
-/// Traits for a data type supporting the `zfp` codec.
-///
-/// The zfp codec provides lossy and lossless compression for floating point and integer data.
-pub trait ZfpCodecDataTypeTraits {
-    /// Returns the zfp type for this data type.
-    ///
-    /// Returns `None` if the data type is not supported by zfp.
-    fn zfp_type(&self) -> Option<ZfpType>;
-
-    /// Returns the promotion strategy for encoding.
-    ///
-    /// For types that don't need promotion, returns `ZfpPromotion::None`.
-    fn zfp_promotion(&self) -> ZfpPromotion {
-        ZfpPromotion::None
+fn zfp_native_type_to_sys(native_type: ZfpNativeType) -> zfp_sys::zfp_type {
+    match native_type {
+        ZfpNativeType::Int32 => zfp_sys::zfp_type_zfp_type_int32,
+        ZfpNativeType::Int64 => zfp_sys::zfp_type_zfp_type_int64,
+        ZfpNativeType::Float => zfp_sys::zfp_type_zfp_type_float,
+        ZfpNativeType::Double => zfp_sys::zfp_type_zfp_type_double,
     }
-}
-
-// Generate the codec support infrastructure using the generic macro
-zarrs_codec::define_data_type_support!(Zfp, ZfpCodecDataTypeTraits);
-
-/// Macro to implement `ZfpCodecDataTypeTraits` for data types and register support.
-///
-/// # Usage
-/// ```ignore
-/// // Unsupported type:
-/// impl_zfp_codec!(BFloat16DataType, None);
-///
-/// // Native ZFP type (no promotion):
-/// impl_zfp_codec!(Int32DataType, Int32);
-/// impl_zfp_codec!(Float32DataType, Float);
-///
-/// // Promoted type:
-/// impl_zfp_codec!(Int8DataType, Int32, I8ToI32);
-/// impl_zfp_codec!(Int16DataType, Int32, I16ToI32);
-/// ```
-#[doc(hidden)]
-#[macro_export]
-macro_rules! _impl_zfp_codec {
-    // Unsupported type - still implements the trait but returns None, and registers support
-    ($marker:ty, None) => {
-        impl $crate::array::codec::ZfpCodecDataTypeTraits for $marker {
-            fn zfp_type(&self) -> Option<$crate::array::codec::ZfpType> {
-                None
-            }
-        }
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            $crate::array::codec::ZfpPlugin,
-            $crate::array::codec::ZfpCodecDataTypeTraits
-        );
-    };
-    // Native type (no promotion needed)
-    ($marker:ty, $zfp_type:ident) => {
-        impl $crate::array::codec::ZfpCodecDataTypeTraits for $marker {
-            fn zfp_type(&self) -> Option<$crate::array::codec::ZfpType> {
-                Some($crate::array::codec::ZfpType::$zfp_type)
-            }
-            fn zfp_promotion(&self) -> $crate::array::codec::ZfpPromotion {
-                $crate::array::codec::ZfpPromotion::None
-            }
-        }
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            $crate::array::codec::ZfpPlugin,
-            $crate::array::codec::ZfpCodecDataTypeTraits
-        );
-    };
-    // Promoted type
-    ($marker:ty, $zfp_type:ident, $promotion:ident) => {
-        impl $crate::array::codec::ZfpCodecDataTypeTraits for $marker {
-            fn zfp_type(&self) -> Option<$crate::array::codec::ZfpType> {
-                Some($crate::array::codec::ZfpType::$zfp_type)
-            }
-            fn zfp_promotion(&self) -> $crate::array::codec::ZfpPromotion {
-                $crate::array::codec::ZfpPromotion::$promotion
-            }
-        }
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            $crate::array::codec::ZfpPlugin,
-            $crate::array::codec::ZfpCodecDataTypeTraits
-        );
-    };
-}
-
-#[doc(inline)]
-pub use _impl_zfp_codec as impl_zfp_codec;
-
-fn zfp_type_to_sys(zfp_type: ZfpType) -> zfp_sys::zfp_type {
-    match zfp_type {
-        ZfpType::Int32 => zfp_sys::zfp_type_zfp_type_int32,
-        ZfpType::Int64 => zfp_sys::zfp_type_zfp_type_int64,
-        ZfpType::Float => zfp_sys::zfp_type_zfp_type_float,
-        ZfpType::Double => zfp_sys::zfp_type_zfp_type_double,
-    }
-}
-
-fn zarr_to_zfp_data_type(data_type: &DataType) -> Option<zfp_sys::zfp_type> {
-    let zfp = get_zfp_support(data_type)?;
-    zfp.zfp_type().map(zfp_type_to_sys)
 }
 
 #[allow(clippy::cast_possible_wrap)]
 fn promote_before_zfp_encoding(
     decoded_value: &[u8],
     data_type: &DataType,
-) -> Result<ZfpArray, CodecError> {
-    let zfp = get_zfp_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
-    let zfp_type = zfp.zfp_type().ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
-    let promotion = zfp.zfp_promotion();
+) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
+    let encoding = data_type.codec_zfp()?.zfp_encoding();
 
-    match (zfp_type, promotion) {
-        // Direct copy - no promotion needed
-        (ZfpType::Int32, ZfpPromotion::None) => Ok(ZfpArray::Int32(
-            convert_from_bytes_slice::<i32>(decoded_value),
-        )),
-        (ZfpType::Int64, ZfpPromotion::None) => Ok(ZfpArray::Int64(
-            convert_from_bytes_slice::<i64>(decoded_value),
-        )),
-        (ZfpType::Float, ZfpPromotion::None) => Ok(ZfpArray::Float(
-            convert_from_bytes_slice::<f32>(decoded_value),
-        )),
-        (ZfpType::Double, ZfpPromotion::None) => Ok(ZfpArray::Double(convert_from_bytes_slice::<
-            f64,
-        >(decoded_value))),
-        // i8 -> i32 with left shift 23
-        (ZfpType::Int32, ZfpPromotion::I8ToI32) => {
+    Ok(match encoding {
+        ZfpEncoding::Int32 => ZfpArray::Int32(convert_from_bytes_slice::<i32>(decoded_value)),
+        ZfpEncoding::Int64 => ZfpArray::Int64(convert_from_bytes_slice::<i64>(decoded_value)),
+        ZfpEncoding::Float32 => ZfpArray::Float32(convert_from_bytes_slice::<f32>(decoded_value)),
+        ZfpEncoding::Float64 => ZfpArray::Float64(convert_from_bytes_slice::<f64>(decoded_value)),
+        ZfpEncoding::Int8 => {
             let values = convert_from_bytes_slice::<i8>(decoded_value);
-            let promoted = values.into_iter().map(|i| i32::from(i) << 23).collect();
-            Ok(ZfpArray::Int32(promoted))
+            ZfpArray::Int8(values.into_iter().map(|i| i32::from(i) << 23).collect())
         }
-        // u8 -> i32 with offset and shift
-        (ZfpType::Int32, ZfpPromotion::U8ToI32) => {
+        ZfpEncoding::UInt8 => {
             let values = convert_from_bytes_slice::<u8>(decoded_value);
-            let promoted = values
-                .into_iter()
-                .map(|i| (i32::from(i) - 0x80) << 23)
-                .collect();
-            Ok(ZfpArray::Int32(promoted))
+            ZfpArray::UInt8(
+                values
+                    .into_iter()
+                    .map(|i| (i32::from(i) - 0x80) << 23)
+                    .collect(),
+            )
         }
-        // i16 -> i32 with left shift 15
-        (ZfpType::Int32, ZfpPromotion::I16ToI32) => {
+        ZfpEncoding::Int16 => {
             let values = convert_from_bytes_slice::<i16>(decoded_value);
-            let promoted = values.into_iter().map(|i| i32::from(i) << 15).collect();
-            Ok(ZfpArray::Int32(promoted))
+            ZfpArray::Int16(values.into_iter().map(|i| i32::from(i) << 15).collect())
         }
-        // u16 -> i32 with offset and shift
-        (ZfpType::Int32, ZfpPromotion::U16ToI32) => {
+        ZfpEncoding::UInt16 => {
             let values = convert_from_bytes_slice::<u16>(decoded_value);
-            let promoted = values
-                .into_iter()
-                .map(|i| (i32::from(i) - 0x8000) << 15)
-                .collect();
-            Ok(ZfpArray::Int32(promoted))
+            ZfpArray::UInt16(
+                values
+                    .into_iter()
+                    .map(|i| (i32::from(i) - 0x8000) << 15)
+                    .collect(),
+            )
         }
-        // u32 -> i32 clamping to i32::MAX
-        (ZfpType::Int32, ZfpPromotion::U32ToI32) => {
+        ZfpEncoding::UInt32 => {
             let values = convert_from_bytes_slice::<u32>(decoded_value);
-            let promoted = values
-                .into_iter()
-                .map(|u| core::cmp::min(u, i32::MAX as u32) as i32)
-                .collect();
-            Ok(ZfpArray::Int32(promoted))
+            ZfpArray::UInt32(
+                values
+                    .into_iter()
+                    .map(|u| core::cmp::min(u, i32::MAX as u32) as i32)
+                    .collect(),
+            )
         }
-        // u64 -> i64 clamping to i64::MAX
-        (ZfpType::Int64, ZfpPromotion::U64ToI64) => {
+        ZfpEncoding::UInt64 => {
             let values = convert_from_bytes_slice::<u64>(decoded_value);
-            let promoted = values
-                .into_iter()
-                .map(|u| core::cmp::min(u, i64::MAX as u64) as i64)
-                .collect();
-            Ok(ZfpArray::Int64(promoted))
+            ZfpArray::UInt64(
+                values
+                    .into_iter()
+                    .map(|u| core::cmp::min(u, i64::MAX as u64) as i64)
+                    .collect(),
+            )
         }
-        // Invalid combinations
-        _ => Err(CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )),
-    }
+    })
 }
 
 fn init_zfp_decoding_output(
     shape: &[NonZeroU64],
     data_type: &DataType,
-) -> Result<ZfpArray, CodecError> {
-    let zfp = get_zfp_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
-    let zfp_type = zfp.zfp_type().ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
-
+) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
+    let encoding = data_type.codec_zfp()?.zfp_encoding();
     let num_elements = shape.num_elements_usize();
-    match zfp_type {
-        ZfpType::Int32 => Ok(ZfpArray::Int32(vec![0; num_elements])),
-        ZfpType::Int64 => Ok(ZfpArray::Int64(vec![0; num_elements])),
-        ZfpType::Float => Ok(ZfpArray::Float(vec![0.0; num_elements])),
-        ZfpType::Double => Ok(ZfpArray::Double(vec![0.0; num_elements])),
-    }
-}
-
-#[allow(clippy::cast_sign_loss)]
-fn demote_after_zfp_decoding(array: ZfpArray, data_type: &DataType) -> Result<Vec<u8>, CodecError> {
-    let zfp = get_zfp_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
-    let promotion = zfp.zfp_promotion();
-
-    match (array, promotion) {
-        // Direct copy - no demotion needed
-        (ZfpArray::Int32(vec), ZfpPromotion::None) => Ok(transmute_to_bytes_vec(vec)),
-        (ZfpArray::Int64(vec), ZfpPromotion::None) => Ok(transmute_to_bytes_vec(vec)),
-        (ZfpArray::Float(vec), ZfpPromotion::None) => Ok(transmute_to_bytes_vec(vec)),
-        (ZfpArray::Double(vec), ZfpPromotion::None) => Ok(transmute_to_bytes_vec(vec)),
-        // i32 -> i8 with right shift and clamp
-        (ZfpArray::Int32(vec), ZfpPromotion::I8ToI32) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| i8::try_from((i >> 23).clamp(-0x80, 0x7f)).unwrap())
-                .collect::<Vec<_>>(),
-        )),
-        // i32 -> u8 with right shift, offset, and clamp
-        (ZfpArray::Int32(vec), ZfpPromotion::U8ToI32) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| u8::try_from(((i >> 23) + 0x80).clamp(0x00, 0xff)).unwrap())
-                .collect::<Vec<_>>(),
-        )),
-        // i32 -> i16 with right shift and clamp
-        (ZfpArray::Int32(vec), ZfpPromotion::I16ToI32) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| i16::try_from((i >> 15).clamp(-0x8000, 0x7fff)).unwrap())
-                .collect::<Vec<_>>(),
-        )),
-        // i32 -> u16 with right shift, offset, and clamp
-        (ZfpArray::Int32(vec), ZfpPromotion::U16ToI32) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| u16::try_from(((i >> 15) + 0x8000).clamp(0x0000, 0xffff)).unwrap())
-                .collect::<Vec<_>>(),
-        )),
-        // i32 -> u32 clamping to 0
-        (ZfpArray::Int32(vec), ZfpPromotion::U32ToI32) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| core::cmp::max(i, 0) as u32)
-                .collect::<Vec<_>>(),
-        )),
-        // i64 -> u64 clamping to 0
-        (ZfpArray::Int64(vec), ZfpPromotion::U64ToI64) => Ok(transmute_to_bytes_vec(
-            vec.into_iter()
-                .map(|i| core::cmp::max(i, 0) as u64)
-                .collect::<Vec<_>>(),
-        )),
-        // Invalid combinations
-        _ => Err(CodecError::UnsupportedDataType(
-            data_type.clone(),
-            ZfpCodec::aliases_v3().default_name.to_string(),
-        )),
-    }
+    Ok(ZfpArray::new_zeroed(encoding, num_elements))
 }
 
 fn zfp_decode(
@@ -497,7 +268,7 @@ fn zfp_decode(
         }
     }
 
-    demote_after_zfp_decoding(array, data_type)
+    Ok(array.into_bytes())
 }
 
 #[cfg(test)]

@@ -52,5 +52,5 @@ impl zarrs_data_type::DataTypeTraits for UInt4DataType {
     }
 }
 
-crate::array::codec::impl_packbits_codec!(UInt4DataType, 4, unsigned, 1);
-crate::array::codec::impl_bytes_codec_passthrough!(UInt4DataType);
+zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(UInt4DataType, 4, unsigned, 1);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(UInt4DataType, 1);

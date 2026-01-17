@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add `DataTypeTraitsV2` and `DataTypeTraitsV3` traits
+- Add `DataTypeCodecError` for codec support methods
+- Add `codec_traits` module with data type traits/plugins/macros for codec support
+  - These were moved from `zarrs` with various revisions (e.g. `zfp` enums simplified, rename impl macros, more useful `bytes` impl macro)
+- Add `Display` impl for `DataType`
 
 ### Changed
+- Add `paste` dependency
 - **Breaking**: Remove `create_fn` parameter from `DataTypePluginV2::create()` and add `T: DataTypeTraitsV2` bound
 - **Breaking**: Remove `create_fn` parameter from `DataTypePluginV3::create()` and add `T: DataTypeTraitsV3` bound
 - **Breaking**: Bump the MSRV to 1.91

@@ -6,14 +6,13 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use serde::Deserialize;
-use zarrs::array::codec::{BytesCodecDataTypeTraits, PackBitsCodecDataTypeTraits};
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
 };
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, FillValueMetadata};
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::CodecError;
+use zarrs_data_type::codec_traits::PackBitsDataTypeTraits;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
@@ -86,27 +85,11 @@ impl DataTypeTraits for CustomDataTypeUInt12 {
     }
 }
 
-/// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl BytesCodecDataTypeTraits for CustomDataTypeUInt12 {
-    fn encode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
-        Ok(bytes)
-    }
-
-    fn decode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
-        Ok(bytes)
-    }
-}
+// Add support for the `bytes` codec using the helper macro (component size 1 = passthrough).
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(CustomDataTypeUInt12, 1);
 
 /// Add support for the `packbits` codec.
-impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt12 {
+impl PackBitsDataTypeTraits for CustomDataTypeUInt12 {
     fn component_size_bits(&self) -> u64 {
         12
     }
@@ -120,16 +103,11 @@ impl PackBitsCodecDataTypeTraits for CustomDataTypeUInt12 {
     }
 }
 
-// Register codec support
-zarrs_codec::register_data_type_extension_codec!(
+// Register packbits codec support
+zarrs_data_type::register_data_type_extension_codec!(
     CustomDataTypeUInt12,
-    zarrs::array::codec::BytesPlugin,
-    zarrs::array::codec::BytesCodecDataTypeTraits
-);
-zarrs_codec::register_data_type_extension_codec!(
-    CustomDataTypeUInt12,
-    zarrs::array::codec::PackBitsPlugin,
-    zarrs::array::codec::PackBitsCodecDataTypeTraits
+    zarrs_data_type::codec_traits::PackBitsDataTypePlugin,
+    zarrs_data_type::codec_traits::PackBitsDataTypeTraits
 );
 
 impl TryFrom<u64> for CustomDataTypeUInt12Element {

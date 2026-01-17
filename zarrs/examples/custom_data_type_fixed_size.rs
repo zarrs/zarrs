@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 use num::traits::{FromBytes, ToBytes};
 use serde::Deserialize;
-use zarrs::array::codec::BytesCodecDataTypeTraits;
 use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
     FillValueMetadata,
@@ -26,7 +25,7 @@ use zarrs::array::{
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
 use zarrs::storage::store::MemoryStore;
-use zarrs_codec::CodecError;
+use zarrs_data_type::codec_traits::{BytesCodecEndiannessMissingError, BytesDataTypeTraits};
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
@@ -213,12 +212,12 @@ impl DataTypeTraits for CustomDataTypeFixedSize {
 }
 
 /// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
+impl BytesDataTypeTraits for CustomDataTypeFixedSize {
     fn encode<'a>(
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
@@ -238,9 +237,7 @@ impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
                 Ok(bytes)
             }
         } else {
-            Err(CodecError::from(
-                "endianness must be specified for multi-byte data types",
-            ))
+            Err(BytesCodecEndiannessMissingError)
         }
     }
 
@@ -248,7 +245,7 @@ impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
         &self,
         bytes: std::borrow::Cow<'a, [u8]>,
         endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
+    ) -> Result<std::borrow::Cow<'a, [u8]>, BytesCodecEndiannessMissingError> {
         if let Some(endianness) = endianness {
             if endianness != Endianness::native() {
                 let mut bytes = bytes.into_owned();
@@ -268,18 +265,16 @@ impl BytesCodecDataTypeTraits for CustomDataTypeFixedSize {
                 Ok(bytes)
             }
         } else {
-            Err(CodecError::from(
-                "endianness must be specified for multi-byte data types",
-            ))
+            Err(BytesCodecEndiannessMissingError)
         }
     }
 }
 
 // Register codec support
-zarrs_codec::register_data_type_extension_codec!(
+zarrs_data_type::register_data_type_extension_codec!(
     CustomDataTypeFixedSize,
-    zarrs::array::codec::BytesPlugin,
-    zarrs::array::codec::BytesCodecDataTypeTraits
+    zarrs_data_type::codec_traits::BytesDataTypePlugin,
+    zarrs_data_type::codec_traits::BytesDataTypeTraits
 );
 
 fn main() {

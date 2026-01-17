@@ -38,45 +38,7 @@ macro_rules! impl_complex_data_type {
             }
         }
 
-        impl crate::array::codec::BytesCodecDataTypeTraits for $marker {
-            fn encode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
-                let component_size = $size / 2;
-                if component_size == 1 {
-                    Ok(bytes)
-                } else {
-                    let endianness = endianness.ok_or($crate::array::CodecError::from(
-                        "`bytes` codec `endianness` not specified for a multi-byte data type".to_string()
-                    ))?;
-                    if endianness == zarrs_metadata::Endianness::native() {
-                        Ok(bytes)
-                    } else {
-                        let mut result = bytes.into_owned();
-                        for chunk in result.chunks_exact_mut(component_size) {
-                            chunk.reverse();
-                        }
-                        Ok(std::borrow::Cow::Owned(result))
-                    }
-                }
-            }
-
-            fn decode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
-                self.encode(bytes, endianness)
-            }
-        }
-
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            crate::array::codec::BytesPlugin,
-            crate::array::codec::BytesCodecDataTypeTraits
-        );
+        zarrs_data_type::codec_traits::impl_bytes_data_type_traits!($marker, { $size / 2 });
     };
 
     (@parse_components $self:ident, $re:ident, $im:ident, f32) => {{
@@ -203,20 +165,20 @@ mod bitround_impls {
 // Pcodec implementations for standard complex types
 #[cfg(feature = "pcodec")]
 mod pcodec_impls {
-    use crate::array::codec::array_to_bytes::pcodec::impl_pcodec_codec;
-    // crate::array::codec::array_to_bytes::pcodec::impl_pcodec_codec!(ComplexBFloat16DataType, BF16, 2);
-    impl_pcodec_codec!(super::ComplexFloat16DataType, F16, 2);
-    impl_pcodec_codec!(super::ComplexFloat32DataType, F32, 2);
-    impl_pcodec_codec!(super::ComplexFloat64DataType, F64, 2);
-    impl_pcodec_codec!(super::Complex64DataType, F32, 2);
-    impl_pcodec_codec!(super::Complex128DataType, F64, 2);
+    use crate::array::codec::array_to_bytes::pcodec::impl_pcodec_data_type_traits;
+    // crate::array::codec::array_to_bytes::pcodec::impl_pcodec_data_type_traits!(ComplexBFloat16DataType, BF16, 2);
+    impl_pcodec_data_type_traits!(super::ComplexFloat16DataType, F16, 2);
+    impl_pcodec_data_type_traits!(super::ComplexFloat32DataType, F32, 2);
+    impl_pcodec_data_type_traits!(super::ComplexFloat64DataType, F64, 2);
+    impl_pcodec_data_type_traits!(super::Complex64DataType, F32, 2);
+    impl_pcodec_data_type_traits!(super::Complex128DataType, F64, 2);
 }
 
 // PackBits implementations for standard complex types
-use crate::array::codec::array_to_bytes::packbits::impl_packbits_codec;
-impl_packbits_codec!(super::ComplexBFloat16DataType, 16, float, 2);
-impl_packbits_codec!(super::ComplexFloat16DataType, 16, float, 2);
-impl_packbits_codec!(super::ComplexFloat32DataType, 32, float, 2);
-impl_packbits_codec!(super::ComplexFloat64DataType, 64, float, 2);
-impl_packbits_codec!(super::Complex64DataType, 32, float, 2);
-impl_packbits_codec!(super::Complex128DataType, 64, float, 2);
+use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
+impl_pack_bits_data_type_traits!(super::ComplexBFloat16DataType, 16, float, 2);
+impl_pack_bits_data_type_traits!(super::ComplexFloat16DataType, 16, float, 2);
+impl_pack_bits_data_type_traits!(super::ComplexFloat32DataType, 32, float, 2);
+impl_pack_bits_data_type_traits!(super::ComplexFloat64DataType, 64, float, 2);
+impl_pack_bits_data_type_traits!(super::Complex64DataType, 32, float, 2);
+impl_pack_bits_data_type_traits!(super::Complex128DataType, 64, float, 2);

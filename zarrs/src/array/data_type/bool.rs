@@ -62,5 +62,5 @@ impl zarrs_data_type::DataTypeTraits for BoolDataType {
     }
 }
 
-crate::array::codec::impl_bytes_codec_passthrough!(BoolDataType);
-crate::array::codec::impl_packbits_codec!(BoolDataType, 1, unsigned, 1);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(BoolDataType, 1);
+zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(BoolDataType, 1, unsigned, 1);

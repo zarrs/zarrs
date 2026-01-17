@@ -125,23 +125,23 @@ impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType);
 impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType);
 
 // PackBits codec implementations for complex subfloats
-use crate::array::codec::array_to_bytes::packbits::impl_packbits_codec;
-impl_packbits_codec!(ComplexFloat4E2M1FNDataType, 4, float, 2);
-impl_packbits_codec!(ComplexFloat6E2M3FNDataType, 6, float, 2);
-impl_packbits_codec!(ComplexFloat6E3M2FNDataType, 6, float, 2);
-impl_packbits_codec!(ComplexFloat8E3M4DataType, 8, float, 2);
-impl_packbits_codec!(ComplexFloat8E4M3B11FNUZDataType, 8, float, 2);
-impl_packbits_codec!(ComplexFloat8E4M3FNUZDataType, 8, float, 2);
-impl_packbits_codec!(ComplexFloat8E5M2FNUZDataType, 8, float, 2);
-impl_packbits_codec!(ComplexFloat8E8M0FNUDataType, 8, float, 2);
+use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
+impl_pack_bits_data_type_traits!(ComplexFloat4E2M1FNDataType, 4, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat6E2M3FNDataType, 6, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat6E3M2FNDataType, 6, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat8E3M4DataType, 8, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat8E4M3B11FNUZDataType, 8, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat8E4M3FNUZDataType, 8, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat8E5M2FNUZDataType, 8, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat8E8M0FNUDataType, 8, float, 2);
 
 // Bytes codec implementations for complex subfloats (passthrough - two single-byte components)
-use crate::array::codec::array_to_bytes::bytes::impl_bytes_codec_passthrough;
-impl_bytes_codec_passthrough!(ComplexFloat4E2M1FNDataType);
-impl_bytes_codec_passthrough!(ComplexFloat6E2M3FNDataType);
-impl_bytes_codec_passthrough!(ComplexFloat6E3M2FNDataType);
-impl_bytes_codec_passthrough!(ComplexFloat8E3M4DataType);
-impl_bytes_codec_passthrough!(ComplexFloat8E4M3B11FNUZDataType);
-impl_bytes_codec_passthrough!(ComplexFloat8E4M3FNUZDataType);
-impl_bytes_codec_passthrough!(ComplexFloat8E5M2FNUZDataType);
-impl_bytes_codec_passthrough!(ComplexFloat8E8M0FNUDataType);
+use zarrs_data_type::codec_traits::impl_bytes_data_type_traits;
+impl_bytes_data_type_traits!(ComplexFloat4E2M1FNDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat6E2M3FNDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat6E3M2FNDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat8E3M4DataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat8E4M3B11FNUZDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat8E4M3FNUZDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat8E5M2FNUZDataType, 1);
+impl_bytes_data_type_traits!(ComplexFloat8E8M0FNUDataType, 1);

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zfp_sys::{
     zfp_compress,
     zfp_stream_maximum_size,
@@ -15,8 +15,8 @@ use super::zfp_bitstream::ZfpBitstream;
 use super::zfp_field::ZfpField;
 use super::zfp_stream::ZfpStream;
 use super::{
-    ZfpCodecConfiguration, ZfpCodecConfigurationV1, promote_before_zfp_encoding,
-    zarr_to_zfp_data_type, zfp_decode,
+    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, promote_before_zfp_encoding,
+    zfp_decode, zfp_native_type_to_sys,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -269,12 +269,8 @@ impl ArrayToBytesCodecTraits for ZfpCodec {
         data_type: &DataType,
         _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let zfp_type = zarr_to_zfp_data_type(data_type).ok_or_else(|| {
-            CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            )
-        })?;
+        let encoding = data_type.codec_zfp()?.zfp_encoding();
+        let zfp_type = zfp_native_type_to_sys(encoding.native_type());
 
         let bufsize = {
             let field = unsafe {

@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use zarrs_plugin::ExtensionAliasesV3;
-
-use super::{BitroundCodec, round_bytes};
+use super::{BitroundDataTypeExt, round_bytes};
 use crate::array::DataType;
 use zarrs_codec::{
     ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
@@ -25,19 +23,12 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         data_type: &DataType,
         keepbits: u32,
     ) -> Result<Self, CodecError> {
-        // Use get_bitround_support() to check support
-        if super::get_bitround_support(data_type).is_some() {
-            Ok(Self {
-                input_output_handle,
-                data_type: data_type.clone(),
-                keepbits,
-            })
-        } else {
-            Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                BitroundCodec::aliases_v3().default_name.to_string(),
-            ))
-        }
+        data_type.codec_bitround()?;
+        Ok(Self {
+            input_output_handle,
+            data_type: data_type.clone(),
+            keepbits,
+        })
     }
 }
 

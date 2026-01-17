@@ -40,10 +40,9 @@ use std::sync::Arc;
 
 pub use bitround_codec::BitroundCodec;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::ExtensionAliasesV3;
 
 use crate::array::DataType;
-use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
+use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bitround::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1,
 };
@@ -66,23 +65,10 @@ impl CodecTraitsV3 for BitroundCodec {
     }
 }
 
-/// Traits for a data type supporting the `bitround` codec.
-///
-/// The bitround codec rounds the mantissa of floating point data types or
-/// rounds integers from the most significant set bit to the specified number of bits.
-pub trait BitroundCodecDataTypeTraits {
-    /// The number of bits to round to for floating point types.
-    ///
-    /// Returns `None` for integer types where rounding is from the MSB.
-    fn mantissa_bits(&self) -> Option<u32>;
-
-    /// Apply bit rounding to the bytes in-place.
-    ///
-    /// # Arguments
-    /// * `bytes` - The bytes to round in-place
-    /// * `keepbits` - The number of bits to keep
-    fn round(&self, bytes: &mut [u8], keepbits: u32);
-}
+// Re-export the trait from zarrs_data_type
+pub use zarrs_data_type::codec_traits::{
+    BitroundDataTypeExt, BitroundDataTypePlugin, BitroundDataTypeTraits,
+};
 
 fn round_bits8(mut input: u8, keepbits: u32, maxbits: u32) -> u8 {
     if keepbits < maxbits {
@@ -207,10 +193,7 @@ pub fn round_bytes_float64(bytes: &mut [u8], keepbits: u32, mantissa_bits: u32) 
     }
 }
 
-// Generate the codec support infrastructure using the generic macro
-zarrs_codec::define_data_type_support!(Bitround, BitroundCodecDataTypeTraits);
-
-/// Macro to implement `BitroundCodecDataTypeTraits` for data types and register support.
+/// Macro to implement `BitroundDataTypeTraits` for data types and register support.
 ///
 /// # Usage
 /// ```ignore
@@ -229,7 +212,7 @@ zarrs_codec::define_data_type_support!(Bitround, BitroundCodecDataTypeTraits);
 macro_rules! _impl_bitround_codec {
     // Float16/BFloat16 types (use round_bytes_float16 with specified mantissa bits)
     ($marker:ty, 2, float16, $mantissa_bits:expr) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
             }
@@ -237,15 +220,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_float16(bytes, keepbits, $mantissa_bits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Float32 types
     ($marker:ty, 4, float32, $mantissa_bits:expr) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
             }
@@ -253,15 +236,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_float32(bytes, keepbits, $mantissa_bits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Float64 types
     ($marker:ty, 8, float64, $mantissa_bits:expr) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 Some($mantissa_bits)
             }
@@ -269,15 +252,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_float64(bytes, keepbits, $mantissa_bits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Int8 types (no mantissa, round from MSB)
     ($marker:ty, 1, int8) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -285,15 +268,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int8(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Int16 types
     ($marker:ty, 2, int16) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -301,15 +284,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int16(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Int32 types
     ($marker:ty, 4, int32) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -317,15 +300,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int32(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // Int64 types
     ($marker:ty, 8, int64) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -333,15 +316,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int64(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // UInt8 types (use int8 rounding function)
     ($marker:ty, 1, uint8) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -349,15 +332,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int8(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // UInt16 types (use int16 rounding function)
     ($marker:ty, 2, uint16) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -365,15 +348,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int16(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // UInt32 types (use int32 rounding function)
     ($marker:ty, 4, uint32) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -381,15 +364,15 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int32(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
     // UInt64 types (use int64 rounding function)
     ($marker:ty, 8, uint64) => {
-        impl $crate::array::codec::BitroundCodecDataTypeTraits for $marker {
+        impl $crate::array::codec::BitroundDataTypeTraits for $marker {
             fn mantissa_bits(&self) -> Option<u32> {
                 None
             }
@@ -397,10 +380,10 @@ macro_rules! _impl_bitround_codec {
                 $crate::array::codec::round_bytes_int64(bytes, keepbits);
             }
         }
-        $crate::array::codec::api::register_data_type_extension_codec!(
+        $crate::array::data_type::api::register_data_type_extension_codec!(
             $marker,
-            $crate::array::codec::BitroundPlugin,
-            $crate::array::codec::BitroundCodecDataTypeTraits
+            $crate::array::codec::BitroundDataTypePlugin,
+            $crate::array::codec::BitroundDataTypeTraits
         );
     };
 }
@@ -408,14 +391,12 @@ macro_rules! _impl_bitround_codec {
 #[doc(inline)]
 pub use _impl_bitround_codec as impl_bitround_codec;
 
-fn round_bytes(bytes: &mut [u8], data_type: &DataType, keepbits: u32) -> Result<(), CodecError> {
-    // Use get_bitround_support() for all types
-    let bitround = get_bitround_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            BitroundCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
+fn round_bytes(
+    bytes: &mut [u8],
+    data_type: &DataType,
+    keepbits: u32,
+) -> Result<(), zarrs_data_type::DataTypeCodecError> {
+    let bitround = data_type.codec_bitround()?;
     bitround.round(bytes, keepbits);
     Ok(())
 }
