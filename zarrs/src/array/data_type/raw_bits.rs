@@ -211,4 +211,4 @@ impl zarrs_data_type::DataTypeTraits for RawBitsDataType {
     }
 }
 
-crate::array::codec::impl_bytes_codec_passthrough!(RawBitsDataType);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(RawBitsDataType, 1);

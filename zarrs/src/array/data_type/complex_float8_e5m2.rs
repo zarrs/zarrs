@@ -160,5 +160,10 @@ mod impl_float8 {
     }
 }
 
-crate::array::codec::impl_packbits_codec!(ComplexFloat8E5M2DataType, 8, float, 2);
-crate::array::codec::impl_bytes_codec_passthrough!(ComplexFloat8E5M2DataType);
+zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(
+    ComplexFloat8E5M2DataType,
+    8,
+    float,
+    2
+);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(ComplexFloat8E5M2DataType, 1);

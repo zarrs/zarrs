@@ -2,7 +2,7 @@
 
 /// Helper macro to implement `DataTypeTraits` for simple fixed-size numeric types.
 ///
-/// This macro implements the `DataTypeTraits` trait and `BytesCodecDataTypeTraits` trait,
+/// This macro implements the `DataTypeTraits` trait and `BytesDataTypeTraits` trait,
 /// and also registers the type with the bytes codec registry.
 ///
 /// Usage:
@@ -44,30 +44,7 @@ macro_rules! impl_data_type_extension_numeric {
             }
         }
 
-        #[allow(unused_variables)]
-        impl crate::array::codec::BytesCodecDataTypeTraits for $marker {
-            fn encode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
-                impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
-            }
-
-            fn decode<'a>(
-                &self,
-                bytes: std::borrow::Cow<'a, [u8]>,
-                endianness: Option<zarrs_metadata::Endianness>,
-            ) -> Result<std::borrow::Cow<'a, [u8]>, $crate::array::CodecError> {
-                impl_data_type_extension_numeric!(@bytes_codec bytes, endianness, $rust_type, $size)
-            }
-        }
-
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            crate::array::codec::BytesPlugin,
-            crate::array::codec::BytesCodecDataTypeTraits
-        );
+        zarrs_data_type::codec_traits::impl_bytes_data_type_traits!($marker, $size);
     };
 
     // Fill value from metadata for signed integers
@@ -210,25 +187,6 @@ macro_rules! impl_data_type_extension_numeric {
         let bytes: [u8; 8] = $fill_value.as_ne_bytes().try_into().map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
         let number = f64::from_ne_bytes(bytes);
         Ok(zarrs_metadata::FillValueMetadata::from(number))
-    }};
-
-    // Encode/decode for single-byte types (passthrough)
-    (@bytes_codec $bytes:ident, $_endianness:ident, $rust_type:tt, 1) => {{
-        Ok($bytes)
-    }};
-    // Encode/decode for multi-byte types (endianness swap if needed)
-    (@bytes_codec $bytes:ident, $endianness:ident, $rust_type:tt, $size:tt) => {{
-        let endianness = $endianness.ok_or($crate::array::CodecError::from("endianness must be specified for multi-byte data types"))?;
-        if endianness == zarrs_metadata::Endianness::native() {
-            Ok($bytes)
-        } else {
-            // Swap endianness
-            let mut result = $bytes.into_owned();
-            for chunk in result.as_chunks_mut::<$size>().0 {
-                chunk.reverse();
-            }
-            Ok(std::borrow::Cow::Owned(result))
-        }
     }};
 }
 

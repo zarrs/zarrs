@@ -122,23 +122,23 @@ impl_subfloat_data_type!(Float8E5M2FNUZDataType);
 impl_subfloat_data_type!(Float8E8M0FNUDataType);
 
 // PackBits codec implementations for subfloats
-use crate::array::codec::impl_packbits_codec;
-impl_packbits_codec!(Float4E2M1FNDataType, 4, float, 1);
-impl_packbits_codec!(Float6E2M3FNDataType, 6, float, 1);
-impl_packbits_codec!(Float6E3M2FNDataType, 6, float, 1);
-impl_packbits_codec!(Float8E3M4DataType, 8, float, 1);
-impl_packbits_codec!(Float8E4M3B11FNUZDataType, 8, float, 1);
-impl_packbits_codec!(Float8E4M3FNUZDataType, 8, float, 1);
-impl_packbits_codec!(Float8E5M2FNUZDataType, 8, float, 1);
-impl_packbits_codec!(Float8E8M0FNUDataType, 8, float, 1);
+use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
+impl_pack_bits_data_type_traits!(Float4E2M1FNDataType, 4, float, 1);
+impl_pack_bits_data_type_traits!(Float6E2M3FNDataType, 6, float, 1);
+impl_pack_bits_data_type_traits!(Float6E3M2FNDataType, 6, float, 1);
+impl_pack_bits_data_type_traits!(Float8E3M4DataType, 8, float, 1);
+impl_pack_bits_data_type_traits!(Float8E4M3B11FNUZDataType, 8, float, 1);
+impl_pack_bits_data_type_traits!(Float8E4M3FNUZDataType, 8, float, 1);
+impl_pack_bits_data_type_traits!(Float8E5M2FNUZDataType, 8, float, 1);
+impl_pack_bits_data_type_traits!(Float8E8M0FNUDataType, 8, float, 1);
 
 // Bytes codec implementations for subfloats (passthrough - single byte, no endianness conversion)
-use crate::array::codec::impl_bytes_codec_passthrough;
-impl_bytes_codec_passthrough!(Float4E2M1FNDataType);
-impl_bytes_codec_passthrough!(Float6E2M3FNDataType);
-impl_bytes_codec_passthrough!(Float6E3M2FNDataType);
-impl_bytes_codec_passthrough!(Float8E3M4DataType);
-impl_bytes_codec_passthrough!(Float8E4M3B11FNUZDataType);
-impl_bytes_codec_passthrough!(Float8E4M3FNUZDataType);
-impl_bytes_codec_passthrough!(Float8E5M2FNUZDataType);
-impl_bytes_codec_passthrough!(Float8E8M0FNUDataType);
+use zarrs_data_type::codec_traits::impl_bytes_data_type_traits;
+impl_bytes_data_type_traits!(Float4E2M1FNDataType, 1);
+impl_bytes_data_type_traits!(Float6E2M3FNDataType, 1);
+impl_bytes_data_type_traits!(Float6E3M2FNDataType, 1);
+impl_bytes_data_type_traits!(Float8E3M4DataType, 1);
+impl_bytes_data_type_traits!(Float8E4M3B11FNUZDataType, 1);
+impl_bytes_data_type_traits!(Float8E4M3FNUZDataType, 1);
+impl_bytes_data_type_traits!(Float8E5M2FNUZDataType, 1);
+impl_bytes_data_type_traits!(Float8E8M0FNUDataType, 1);

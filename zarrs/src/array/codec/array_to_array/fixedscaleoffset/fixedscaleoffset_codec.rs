@@ -4,7 +4,7 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
 use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
-    FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
+    FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
 };
 use crate::array::{DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
@@ -142,13 +142,10 @@ impl ArrayCodecTraits for FixedScaleOffsetCodec {
     }
 }
 
-fn get_element_type(data_type: &DataType) -> Result<FixedScaleOffsetElementType, CodecError> {
-    let fso = super::get_fixedscaleoffset_support(data_type).ok_or_else(|| {
-        CodecError::UnsupportedDataType(
-            data_type.clone(),
-            FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
-        )
-    })?;
+fn get_element_type(
+    data_type: &DataType,
+) -> Result<FixedScaleOffsetElementType, zarrs_data_type::DataTypeCodecError> {
+    let fso = data_type.codec_fixedscaleoffset()?;
     Ok(fso.fixedscaleoffset_element_type())
 }
 
@@ -163,7 +160,7 @@ fn scale_array(
     data_type: &DataType,
     offset: f32,
     scale: f32,
-) -> Result<(), CodecError> {
+) -> Result<(), zarrs_data_type::DataTypeCodecError> {
     let element_type = get_element_type(data_type)?;
     let float_type = element_type.intermediate_float();
 
@@ -190,10 +187,11 @@ fn scale_array(
         (FixedScaleOffsetElementType::F32, FixedScaleOffsetFloatType::F32) => scale_impl!(f32, f32),
         (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => scale_impl!(f64, f64),
         _ => {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
-            ));
+            // FIXME: make this unreachable?
+            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+                data_type: data_type.clone(),
+                codec_name: "fixedscaleoffset",
+            });
         }
     }
     Ok(())
@@ -210,7 +208,7 @@ fn unscale_array(
     data_type: &DataType,
     offset: f32,
     scale: f32,
-) -> Result<(), CodecError> {
+) -> Result<(), zarrs_data_type::DataTypeCodecError> {
     let element_type = get_element_type(data_type)?;
     let float_type = element_type.intermediate_float();
 
@@ -252,10 +250,11 @@ fn unscale_array(
             unscale_impl!(f64, f64);
         }
         _ => {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                FixedScaleOffsetCodec::aliases_v3().default_name.to_string(),
-            ));
+            // FIXME: Make this unreachable?
+            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
+                data_type: data_type.clone(),
+                codec_name: "fixedscaleoffset",
+            });
         }
     }
     Ok(())
@@ -272,7 +271,7 @@ fn cast_array(
     bytes: &[u8],
     data_type: &DataType,
     as_type: &DataType,
-) -> Result<Vec<u8>, CodecError> {
+) -> Result<Vec<u8>, zarrs_data_type::DataTypeCodecError> {
     let from_type = get_element_type(data_type)?;
     let to_type = get_element_type(as_type)?;
 

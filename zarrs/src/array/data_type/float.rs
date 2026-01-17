@@ -54,33 +54,31 @@ mod impl_bitround {
 // Pcodec implementations for standard floats
 #[cfg(feature = "pcodec")]
 mod impl_pcodec {
-    use crate::array::codec::impl_pcodec_codec;
-    // impl_pcodec_codec!(super::BFloat16DataType, BF16, 1);
-    impl_pcodec_codec!(super::Float16DataType, F16, 1);
-    impl_pcodec_codec!(super::Float32DataType, F32, 1);
-    impl_pcodec_codec!(super::Float64DataType, F64, 1);
+    use crate::array::codec::impl_pcodec_data_type_traits;
+    // impl_pcodec_data_type_traits!(super::BFloat16DataType, BF16, 1);
+    impl_pcodec_data_type_traits!(super::Float16DataType, F16, 1);
+    impl_pcodec_data_type_traits!(super::Float32DataType, F32, 1);
+    impl_pcodec_data_type_traits!(super::Float64DataType, F64, 1);
 }
 
 // FixedScaleOffset implementations for standard floats
-use crate::array::codec::impl_fixedscaleoffset_codec;
-// impl_fixedscaleoffset_codec!(BFloat16DataType, BF16);
-// impl_fixedscaleoffset_codec!(Float16DataType, F16);
-impl_fixedscaleoffset_codec!(Float32DataType, F32);
-impl_fixedscaleoffset_codec!(Float64DataType, F64);
+use crate::array::codec::impl_fixed_scale_offset_data_type_traits;
+// impl_fixed_scale_offset_data_type_traits!(BFloat16DataType, BF16);
+// impl_fixed_scale_offset_data_type_traits!(Float16DataType, F16);
+impl_fixed_scale_offset_data_type_traits!(Float32DataType, F32);
+impl_fixed_scale_offset_data_type_traits!(Float64DataType, F64);
 
 // ZFP implementations for standard floats
 #[cfg(feature = "zfp")]
 mod impl_zfp {
-    use crate::array::codec::impl_zfp_codec;
-    impl_zfp_codec!(super::BFloat16DataType, None);
-    impl_zfp_codec!(super::Float16DataType, None);
-    impl_zfp_codec!(super::Float32DataType, Float);
-    impl_zfp_codec!(super::Float64DataType, Double);
+    use crate::array::codec::impl_zfp_data_type_traits;
+    impl_zfp_data_type_traits!(super::Float32DataType, Float32);
+    impl_zfp_data_type_traits!(super::Float64DataType, Float64);
 }
 
 // PackBits implementations for standard floats
-use crate::array::codec::impl_packbits_codec;
-impl_packbits_codec!(BFloat16DataType, 16, float, 1);
-impl_packbits_codec!(Float16DataType, 16, float, 1);
-impl_packbits_codec!(Float32DataType, 32, float, 1);
-impl_packbits_codec!(Float64DataType, 64, float, 1);
+use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
+impl_pack_bits_data_type_traits!(BFloat16DataType, 16, float, 1);
+impl_pack_bits_data_type_traits!(Float16DataType, 16, float, 1);
+impl_pack_bits_data_type_traits!(Float32DataType, 32, float, 1);
+impl_pack_bits_data_type_traits!(Float64DataType, 64, float, 1);

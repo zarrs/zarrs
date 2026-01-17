@@ -81,106 +81,12 @@ impl CodecTraitsV2 for FixedScaleOffsetCodec {
     }
 }
 
-/// The numeric element type for fixedscaleoffset operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum FixedScaleOffsetElementType {
-    /// 8-bit signed integer
-    I8,
-    /// 16-bit signed integer
-    I16,
-    /// 32-bit signed integer
-    I32,
-    /// 64-bit signed integer
-    I64,
-    /// 8-bit unsigned integer
-    U8,
-    /// 16-bit unsigned integer
-    U16,
-    /// 32-bit unsigned integer
-    U32,
-    /// 64-bit unsigned integer
-    U64,
-    /// 32-bit floating point
-    F32,
-    /// 64-bit floating point
-    F64,
-}
-
-impl FixedScaleOffsetElementType {
-    /// Returns the element size in bytes.
-    #[must_use]
-    pub const fn size(&self) -> usize {
-        match self {
-            Self::I8 | Self::U8 => 1,
-            Self::I16 | Self::U16 => 2,
-            Self::I32 | Self::U32 | Self::F32 => 4,
-            Self::I64 | Self::U64 | Self::F64 => 8,
-        }
-    }
-
-    /// Returns the float type to use for intermediate calculations.
-    #[must_use]
-    pub const fn intermediate_float(&self) -> FixedScaleOffsetFloatType {
-        match self {
-            Self::I8 | Self::U8 | Self::I16 | Self::U16 | Self::F32 => {
-                FixedScaleOffsetFloatType::F32
-            }
-            Self::I32 | Self::U32 | Self::I64 | Self::U64 | Self::F64 => {
-                FixedScaleOffsetFloatType::F64
-            }
-        }
-    }
-}
-
-/// The intermediate float type for fixedscaleoffset calculations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FixedScaleOffsetFloatType {
-    /// 32-bit floating point
-    F32,
-    /// 64-bit floating point
-    F64,
-}
-
-/// Traits for a data type supporting the `fixedscaleoffset` codec.
-///
-/// The fixedscaleoffset codec applies a linear transformation to numerical data.
-pub trait FixedScaleOffsetCodecDataTypeTraits {
-    /// Returns the element type for this data type.
-    fn fixedscaleoffset_element_type(&self) -> FixedScaleOffsetElementType;
-}
-
-// Generate the codec support infrastructure using the generic macro
-zarrs_codec::define_data_type_support!(FixedScaleOffset, FixedScaleOffsetCodecDataTypeTraits);
-
-/// Macro to implement `FixedScaleOffsetCodecDataTypeTraits` for data types and register support.
-///
-/// # Usage
-/// ```ignore
-/// impl_fixedscaleoffset_codec!(Int32DataType, I32);
-/// impl_fixedscaleoffset_codec!(Float32DataType, F32);
-/// ```
-#[doc(hidden)]
-#[macro_export]
-macro_rules! _impl_fixedscaleoffset_codec {
-    ($marker:ty, $element_type:ident) => {
-        impl $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits for $marker {
-            fn fixedscaleoffset_element_type(
-                &self,
-            ) -> $crate::array::codec::FixedScaleOffsetElementType {
-                $crate::array::codec::FixedScaleOffsetElementType::$element_type
-            }
-        }
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            $crate::array::codec::FixedScaleOffsetPlugin,
-            $crate::array::codec::FixedScaleOffsetCodecDataTypeTraits
-        );
-    };
-}
-
-#[doc(inline)]
-pub use _impl_fixedscaleoffset_codec as impl_fixedscaleoffset_codec;
+// Re-export the trait and types from zarrs_data_type
+pub use zarrs_data_type::codec_traits::{
+    FixedScaleOffsetDataTypeExt, FixedScaleOffsetDataTypePlugin, FixedScaleOffsetDataTypeTraits,
+    FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
+    impl_fixed_scale_offset_data_type_traits,
+};
 
 #[cfg(test)]
 mod tests {

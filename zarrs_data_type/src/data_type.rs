@@ -28,6 +28,19 @@ impl PartialEq for DataType {
 
 impl Eq for DataType {}
 
+impl std::fmt::Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v3_name = self.name(ZarrVersion::V3);
+        let v2_name = self.name(ZarrVersion::V2);
+
+        match (v3_name, v2_name) {
+            (Some(v3), Some(v2)) if v3 != v2 => write!(f, "{v3} / {v2}"),
+            (Some(name), _) | (_, Some(name)) => write!(f, "{name}"),
+            (None, None) => write!(f, "<unknown data type>"),
+        }
+    }
+}
+
 impl<T: DataTypeTraits + 'static> From<Arc<T>> for DataType {
     fn from(data_type: Arc<T>) -> Self {
         Self(data_type)

@@ -2,7 +2,6 @@
 
 use std::num::NonZeroU32;
 
-use zarrs_codec::CodecError;
 use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::PluginCreateError;
@@ -101,44 +100,16 @@ impl zarrs_data_type::DataTypeTraits for NumpyDateTime64DataType {
     }
 }
 
-impl crate::array::codec::BytesCodecDataTypeTraits for NumpyDateTime64DataType {
-    fn encode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
-        let endianness = endianness.ok_or(CodecError::from(
-            "endianness must be specified for multi-byte data types",
-        ))?;
-        if endianness == zarrs_metadata::Endianness::native() {
-            Ok(bytes)
-        } else {
-            let mut result = bytes.into_owned();
-            for chunk in result.as_chunks_mut::<8>().0 {
-                chunk.reverse();
-            }
-            Ok(std::borrow::Cow::Owned(result))
-        }
-    }
-
-    fn decode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, CodecError> {
-        self.encode(bytes, endianness)
-    }
-}
-
-zarrs_codec::register_data_type_extension_codec!(
-    NumpyDateTime64DataType,
-    crate::array::codec::BytesPlugin,
-    crate::array::codec::BytesCodecDataTypeTraits
-);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(NumpyDateTime64DataType, 8);
 #[cfg(feature = "pcodec")]
-crate::array::codec::impl_pcodec_codec!(NumpyDateTime64DataType, I64, 1);
+crate::array::codec::impl_pcodec_data_type_traits!(NumpyDateTime64DataType, I64, 1);
 #[cfg(feature = "bitround")]
 crate::array::codec::impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
 #[cfg(feature = "zfp")]
-crate::array::codec::impl_zfp_codec!(NumpyDateTime64DataType, Int64);
-crate::array::codec::impl_packbits_codec!(NumpyDateTime64DataType, 64, signed, 1);
+crate::array::codec::impl_zfp_data_type_traits!(NumpyDateTime64DataType, Int64);
+zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(
+    NumpyDateTime64DataType,
+    64,
+    signed,
+    1
+);

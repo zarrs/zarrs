@@ -55,32 +55,32 @@ mod impl_bitround {
 // Pcodec implementations for standard unsigned integers (uint8 not supported)
 #[cfg(feature = "pcodec")]
 mod impl_pcodec {
-    use crate::array::codec::impl_pcodec_codec;
-    impl_pcodec_codec!(super::UInt16DataType, U16, 1);
-    impl_pcodec_codec!(super::UInt32DataType, U32, 1);
-    impl_pcodec_codec!(super::UInt64DataType, U64, 1);
+    use crate::array::codec::impl_pcodec_data_type_traits;
+    impl_pcodec_data_type_traits!(super::UInt16DataType, U16, 1);
+    impl_pcodec_data_type_traits!(super::UInt32DataType, U32, 1);
+    impl_pcodec_data_type_traits!(super::UInt64DataType, U64, 1);
 }
 
 // FixedScaleOffset implementations for standard unsigned integers
-use crate::array::codec::impl_fixedscaleoffset_codec;
-impl_fixedscaleoffset_codec!(UInt8DataType, U8);
-impl_fixedscaleoffset_codec!(UInt16DataType, U16);
-impl_fixedscaleoffset_codec!(UInt32DataType, U32);
-impl_fixedscaleoffset_codec!(UInt64DataType, U64);
+use crate::array::codec::impl_fixed_scale_offset_data_type_traits;
+impl_fixed_scale_offset_data_type_traits!(UInt8DataType, U8);
+impl_fixed_scale_offset_data_type_traits!(UInt16DataType, U16);
+impl_fixed_scale_offset_data_type_traits!(UInt32DataType, U32);
+impl_fixed_scale_offset_data_type_traits!(UInt64DataType, U64);
 
 // ZFP implementations for standard unsigned integers
 #[cfg(feature = "zfp")]
 mod impl_zfp {
-    use crate::array::codec::impl_zfp_codec;
-    impl_zfp_codec!(super::UInt8DataType, Int32, U8ToI32);
-    impl_zfp_codec!(super::UInt16DataType, Int32, U16ToI32);
-    impl_zfp_codec!(super::UInt32DataType, Int32, U32ToI32);
-    impl_zfp_codec!(super::UInt64DataType, Int64, U64ToI64);
+    use crate::array::codec::impl_zfp_data_type_traits;
+    impl_zfp_data_type_traits!(super::UInt8DataType, UInt8);
+    impl_zfp_data_type_traits!(super::UInt16DataType, UInt16);
+    impl_zfp_data_type_traits!(super::UInt32DataType, UInt32);
+    impl_zfp_data_type_traits!(super::UInt64DataType, UInt64);
 }
 
 // PackBits implementations for standard unsigned integers
-use crate::array::codec::impl_packbits_codec;
-impl_packbits_codec!(UInt8DataType, 8, unsigned, 1);
-impl_packbits_codec!(UInt16DataType, 16, unsigned, 1);
-impl_packbits_codec!(UInt32DataType, 32, unsigned, 1);
-impl_packbits_codec!(UInt64DataType, 64, unsigned, 1);
+use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
+impl_pack_bits_data_type_traits!(UInt8DataType, 8, unsigned, 1);
+impl_pack_bits_data_type_traits!(UInt16DataType, 16, unsigned, 1);
+impl_pack_bits_data_type_traits!(UInt32DataType, 32, unsigned, 1);
+impl_pack_bits_data_type_traits!(UInt64DataType, 64, unsigned, 1);

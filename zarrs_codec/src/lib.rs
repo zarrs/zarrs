@@ -9,9 +9,6 @@
 
 mod options;
 
-mod data_type_support;
-pub use data_type_support::{define_data_type_support, register_data_type_extension_codec};
-
 mod codec_partial_default;
 pub use codec_partial_default::CodecPartialDefault;
 use codec_partial_default::{
@@ -1905,6 +1902,9 @@ pub enum CodecError {
     /// Unsupported data type
     #[error("{}", format_unsupported_data_type(.0, .1))]
     UnsupportedDataType(DataType, String),
+    /// Data type does not support a codec.
+    #[error(transparent)]
+    UnsupportedDataTypeCodec(#[from] zarrs_data_type::DataTypeCodecError),
     /// Offsets are not [`None`] with a fixed length data type.
     #[error(
         "Offsets are invalid or are not compatible with the data type (e.g. fixed-sized data types)"
@@ -1976,5 +1976,11 @@ impl From<&str> for CodecError {
 impl From<String> for CodecError {
     fn from(err: String) -> Self {
         Self::Other(err)
+    }
+}
+
+impl From<zarrs_data_type::codec_traits::BytesCodecEndiannessMissingError> for CodecError {
+    fn from(err: zarrs_data_type::codec_traits::BytesCodecEndiannessMissingError) -> Self {
+        Self::Other(err.to_string())
     }
 }

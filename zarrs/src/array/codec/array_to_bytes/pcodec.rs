@@ -82,86 +82,11 @@ impl CodecTraitsV2 for PcodecCodec {
     }
 }
 
-/// The pcodec element type for dispatching to the pcodec library.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PcodecElementType {
-    /// 16-bit unsigned integer
-    U16,
-    /// 32-bit unsigned integer
-    U32,
-    /// 64-bit unsigned integer
-    U64,
-    /// 16-bit signed integer
-    I16,
-    /// 32-bit signed integer
-    I32,
-    /// 64-bit signed integer
-    I64,
-    /// 16-bit floating point
-    F16,
-    /// 32-bit floating point
-    F32,
-    /// 64-bit floating point
-    F64,
-}
-
-impl PcodecElementType {
-    /// Returns the element size in bytes.
-    #[must_use]
-    pub const fn size(&self) -> usize {
-        match self {
-            Self::U16 | Self::I16 | Self::F16 => 2,
-            Self::U32 | Self::I32 | Self::F32 => 4,
-            Self::U64 | Self::I64 | Self::F64 => 8,
-        }
-    }
-}
-
-/// Traits for a data type supporting the `pcodec` codec.
-///
-/// The pcodec codec losslessly compresses numerical data with high compression ratio.
-pub trait PcodecCodecDataTypeTraits {
-    /// Returns the pcodec element type for this data type.
-    fn pcodec_element_type(&self) -> PcodecElementType;
-
-    /// Returns the number of elements per data type element.
-    fn pcodec_elements_per_element(&self) -> usize;
-}
-
-// Generate the codec support infrastructure using the generic macro
-zarrs_codec::define_data_type_support!(Pcodec, PcodecCodecDataTypeTraits);
-
-/// Macro to implement `PcodecCodecDataTypeTraits` for data types and register support.
-///
-/// # Usage
-/// ```ignore
-/// impl_pcodec_codec!(Int32DataType, I32, 1);
-/// impl_pcodec_codec!(Float32DataType, F32, 1);
-/// impl_pcodec_codec!(Complex64DataType, F32, 2);
-/// ```
-#[doc(hidden)]
-#[macro_export]
-macro_rules! _impl_pcodec_codec {
-    ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
-        impl $crate::array::codec::PcodecCodecDataTypeTraits for $marker {
-            fn pcodec_element_type(&self) -> $crate::array::codec::PcodecElementType {
-                $crate::array::codec::PcodecElementType::$element_type
-            }
-            fn pcodec_elements_per_element(&self) -> usize {
-                $elements_per_element
-            }
-        }
-        $crate::array::codec::api::register_data_type_extension_codec!(
-            $marker,
-            $crate::array::codec::PcodecPlugin,
-            $crate::array::codec::PcodecCodecDataTypeTraits
-        );
-    };
-}
-
-#[doc(inline)]
-pub use _impl_pcodec_codec as impl_pcodec_codec;
+// Re-export the trait and types from zarrs_data_type
+pub use zarrs_data_type::codec_traits::{
+    PcodecDataTypeExt, PcodecDataTypePlugin, PcodecDataTypeTraits, PcodecElementType,
+    impl_pcodec_data_type_traits,
+};
 
 #[cfg(test)]
 mod tests {

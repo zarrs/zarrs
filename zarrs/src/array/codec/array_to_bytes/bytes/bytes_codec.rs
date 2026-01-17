@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 
-use super::{BytesCodecConfiguration, BytesCodecConfigurationV1, Endianness, bytes_codec_partial};
+use super::{
+    BytesCodecConfiguration, BytesCodecConfigurationV1, BytesDataTypeExt, Endianness,
+    bytes_codec_partial,
+};
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, DataTypeSize,
     FillValue,
@@ -155,15 +158,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         bytes.validate(num_elements, data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        // Use get_bytes_support() for all types
-        let bytes_encoded = super::get_bytes_support(data_type)
-            .ok_or_else(|| {
-                CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::aliases_v3().default_name.to_string(),
-                )
-            })?
-            .encode(bytes, self.endian)?;
+        let bytes_encoded = data_type.codec_bytes()?.encode(bytes, self.endian)?;
         Ok(bytes_encoded)
     }
 
@@ -183,16 +178,7 @@ impl ArrayToBytesCodecTraits for BytesCodec {
             ));
         }
 
-        // Use get_bytes_support() for all types
-        let bytes_decoded: ArrayBytes = super::get_bytes_support(data_type)
-            .ok_or_else(|| {
-                CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::aliases_v3().default_name.to_string(),
-                )
-            })?
-            .decode(bytes, self.endian)?
-            .into();
+        let bytes_decoded: ArrayBytes = data_type.codec_bytes()?.decode(bytes, self.endian)?.into();
 
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         bytes_decoded.validate(num_elements, data_type)?;

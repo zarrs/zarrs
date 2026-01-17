@@ -50,5 +50,5 @@ impl zarrs_data_type::DataTypeTraits for Int4DataType {
     }
 }
 
-crate::array::codec::impl_packbits_codec!(Int4DataType, 4, signed, 1);
-crate::array::codec::impl_bytes_codec_passthrough!(Int4DataType);
+zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(Int4DataType, 4, signed, 1);
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(Int4DataType, 1);
