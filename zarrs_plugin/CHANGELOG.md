@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Implement `From<<serde_json::Error>>` for `PluginCreateError`
+- Implement `From<Arc<serde_json::Error>>` for `PluginCreateError`
 
 ## [0.4.0] - 2026-01-13
 
