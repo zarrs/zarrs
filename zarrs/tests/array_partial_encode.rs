@@ -59,8 +59,8 @@ fn array_partial_encode_sharding(
     };
 
     let expected_writes_per_shard = match sharding_index_location {
-        ShardingIndexLocation::Start => 2, // Separate write for inner chunks and index
-        ShardingIndexLocation::End => 1,   // Combined write for inner chunks and index
+        ShardingIndexLocation::Start => 2, // Separate write for subchunks and index
+        ShardingIndexLocation::End => 1,   // Combined write for subchunks and index
     };
 
     let chunks_per_shard = 2 * 2;
@@ -112,7 +112,7 @@ fn array_partial_encode_sharding(
     // [3, 4]
     // [0, 0]
     array.store_array_subset_opt(&[0..1, 0..2], &[3u16, 4], &opt)?;
-    assert_eq!(store_perf.reads(), 1); // index + 1x inner chunk
+    assert_eq!(store_perf.reads(), 1); // index + 1x subchunk
     assert_eq!(store_perf.writes(), expected_writes_per_shard);
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(store_perf.bytes_read(), shard_index_size);
@@ -134,7 +134,7 @@ fn array_partial_encode_sharding(
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),
-            shard_index_size + size_of::<u16>() * 4 // 1 stale inner chunk + 3 inner chunks
+            shard_index_size + size_of::<u16>() * 4 // 1 stale subchunk + 3 subchunks
         );
     }
     assert_eq!(
@@ -152,7 +152,7 @@ fn array_partial_encode_sharding(
     if inner_bytes_to_bytes_codecs.is_empty() {
         assert_eq!(
             get_bytes_0_0()?.unwrap().len(),
-            shard_index_size + size_of::<u16>() * 5 // 1 stale inner chunk + 4 inner chunks
+            shard_index_size + size_of::<u16>() * 5 // 1 stale subchunk + 4 subchunks
         );
     }
     store_perf.reset();
@@ -242,7 +242,7 @@ fn array_partial_encode_sharding_compact(
     );
     builder
         .array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16()) // 2x2 inner chunks
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type::uint16()) // 2x2 subchunks
                 .index_bytes_to_bytes_codecs(vec![])
                 .index_location(sharding_index_location)
                 .bytes_to_bytes_codecs(inner_bytes_to_bytes_codecs.clone())
@@ -258,19 +258,19 @@ fn array_partial_encode_sharding_compact(
     };
 
     // Step 1: Write a large compressible pattern (all same values)
-    // This fills multiple inner chunks with highly compressible data
+    // This fills multiple subchunks with highly compressible data
     let compressible_data = vec![42u16; 16]; // Fill all 16 elements of the shard
     array.store_chunk_opt(&[0, 0], &compressible_data, &opt)?;
 
     let size_after_first_write = get_bytes_0_0()?.unwrap().len();
 
-    // Step 2: Overwrite with different data in some inner chunks
+    // Step 2: Overwrite with different data in some subchunks
     // This creates gaps as the old compressed data is marked stale
-    // Write to inner chunk [0,0] (elements [0..2, 0..2] of the shard)
+    // Write to subchunk [0,0] (elements [0..2, 0..2] of the shard)
     let random_data1 = vec![100u16, 101, 102, 103];
     array.store_array_subset_opt(&[0..2, 0..2], &random_data1, &opt)?;
 
-    // Write to inner chunk [1,0] (elements [2..4, 0..2] of the shard)
+    // Write to subchunk [1,0] (elements [2..4, 0..2] of the shard)
     let random_data2 = vec![200u16, 201, 202, 203];
     array.store_array_subset_opt(&[2..4, 0..2], &random_data2, &opt)?;
 
@@ -305,15 +305,15 @@ fn array_partial_encode_sharding_compact(
     );
 
     // Verify data integrity after compaction
-    // The 4x4 array in row-major order with 2x2 inner chunks:
+    // The 4x4 array in row-major order with 2x2 subchunks:
     let expected_data = vec![
-        // Row 0 (elements 0-3): inner chunks [0,0] cols 0-1, then [0,1] cols 2-3
+        // Row 0 (elements 0-3): subchunks [0,0] cols 0-1, then [0,1] cols 2-3
         100, 101, 42, 42,
-        // Row 1 (elements 4-7): inner chunks [0,0] cols 0-1, then [0,1] cols 2-3
+        // Row 1 (elements 4-7): subchunks [0,0] cols 0-1, then [0,1] cols 2-3
         102, 103, 42, 42,
-        // Row 2 (elements 8-11): inner chunks [1,0] cols 0-1, then [1,1] cols 2-3
+        // Row 2 (elements 8-11): subchunks [1,0] cols 0-1, then [1,1] cols 2-3
         200, 201, 42, 42,
-        // Row 3 (elements 12-15): inner chunks [1,0] cols 0-1, then [1,1] cols 2-3
+        // Row 3 (elements 12-15): subchunks [1,0] cols 0-1, then [1,1] cols 2-3
         202, 203, 42, 42,
     ];
     assert_eq!(

@@ -433,7 +433,7 @@ pub trait ArrayCodecTraits: CodecTraits {
     ///
     /// This represents the shape of the smallest subset of a chunk that can be efficiently decoded if the chunk were subdivided into a regular grid.
     /// For most codecs, this is just the shape of the chunk.
-    /// It is the shape of the "inner chunks" for the sharding codec.
+    /// It is the shape of the sub chunks (inner chunks) for the sharding codec.
     fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
         shape.to_vec()
     }

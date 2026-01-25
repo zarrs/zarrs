@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add the `zarrs.optional` data type and codec (spec proposal https://github.com/zarr-developers/zarr-extensions/pull/33)
 - Much improved API for Zarr extension point registration and aliasing, with runtime extension registration support
+- **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" (`inner_chunk_shape()` → `subchunk_shape()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, etc.)
 
 ### Added
 - Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
@@ -120,6 +121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Do not re-export `array::FillValueMetadata{V3,V3}`, use `FillValueMetadata` instead
 - **Breaking**: Rename `StorageTransformerExtension` to `StorageTransformerTraits` for alignment with other extension traits
   - add `create` and `configuration`methods, remove `metadata` method
+- **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" throughout:
+  - `ArrayShardedExt`: `inner_chunk_shape()` → `subchunk_shape()`, `effective_inner_chunk_shape()` → `effective_subchunk_shape()`, `inner_chunk_grid()` → `subchunk_grid()`, `inner_chunk_grid_shape()` → `subchunk_grid_shape()`
+  - `ArrayShardedReadableExt` / `AsyncArrayShardedReadableExt`: `inner_chunk_byte_range()` → `subchunk_byte_range()`, `retrieve_encoded_inner_chunk()` → `retrieve_encoded_subchunk()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, `retrieve_inner_chunks_opt()` → `retrieve_subchunks_opt()`, and related `_elements` / `_ndarray` methods
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency

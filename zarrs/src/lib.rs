@@ -122,7 +122,7 @@
 //!     zarrs::array::data_type::float32(),
 //!     0.0f32, // fill value
 //! )
-//! .subchunk_shape(vec![2, 1]) // inner chunk shape
+//! .subchunk_shape(vec![2, 1]) // subchunk (inner chunk) shape
 //! .bytes_to_bytes_codecs(vec![
 //!     // GzipCodec requires the gzip feature
 //! #   #[cfg(feature = "gzip")]
@@ -167,15 +167,15 @@
 //! // [[  0.2,  0.3],
 //! //  [ -1.2,  1.3]]
 //!
-//! // Retrieve an inner chunk
+//! // Retrieve a subchunk
 //! use zarrs::array::ArrayShardedReadableExt;
 //! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
-//! let array_inner_chunk = array.retrieve_inner_chunk_ndarray_opt::<f32>(
+//! let array_subchunk = array.retrieve_subchunk_ndarray_opt::<f32>(
 //!     &shard_index_cache,
-//!     &[0, 3], // inner chunk index
+//!     &[0, 3], // subchunk index
 //!     &zarrs::array::CodecOptions::default(),
 //! )?;
-//! println!("{array_inner_chunk:4}");
+//! println!("{array_subchunk:4}");
 //! // [[ 0.3],
 //! //  [ 1.3]]
 //! # Ok::<(), Box<dyn std::error::Error>>(())

@@ -51,14 +51,14 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an array
     let array_path = "/group/array";
-    let inner_chunk_shape = vec![4, 4];
+    let subchunk_shape = vec![4, 4];
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         vec![4, 8], // chunk (shard) shape
         data_type::uint16(),
         0u16,
     )
-    .subchunk_shape(inner_chunk_shape.clone())
+    .subchunk_shape(subchunk_shape.clone())
     .bytes_to_bytes_codecs(vec![
         #[cfg(feature = "gzip")]
         Arc::new(codec::GzipCodec::new(5)?),
@@ -112,7 +112,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let data_shard: ArrayD<u16> = array.retrieve_chunk(&shard_indices)?;
     println!("Shard [1,0] is:\n{data_shard}\n");
 
-    // Read an inner chunk from the store
+    // Read a subchunk from the store
     let subset_chunk_1_0 = ArraySubset::new_with_ranges(&[4..8, 0..4]);
     let data_chunk: ArrayD<u16> = array.retrieve_array_subset(&subset_chunk_1_0)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
@@ -122,21 +122,20 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let data_4x2: ArrayD<u16> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
-    // Decode inner chunks
-    // In some cases, it might be preferable to decode inner chunks in a shard directly.
+    // Decode subchunks
+    // In some cases, it might be preferable to decode subchunks in a shard directly.
     // If using the partial decoder, then the shard index will only be read once from the store.
     let partial_decoder = array.partial_decoder(&[0, 0])?;
-    println!("Decoded inner chunks:");
-    for inner_chunk_subset in [
-        ArraySubset::new_with_start_shape(vec![0, 0], inner_chunk_shape.clone())?,
-        ArraySubset::new_with_start_shape(vec![0, 4], inner_chunk_shape.clone())?,
+    println!("Decoded subchunks:");
+    for subchunk_subset in [
+        ArraySubset::new_with_start_shape(vec![0, 0], subchunk_shape.clone())?,
+        ArraySubset::new_with_start_shape(vec![0, 4], subchunk_shape.clone())?,
     ] {
-        println!("{inner_chunk_subset}");
-        let decoded_inner_chunk_bytes =
-            partial_decoder.partial_decode(&inner_chunk_subset, &options)?;
+        println!("{subchunk_subset}");
+        let decoded_subchunk_bytes = partial_decoder.partial_decode(&subchunk_subset, &options)?;
         let ndarray = bytes_to_ndarray::<u16>(
-            &inner_chunk_shape,
-            decoded_inner_chunk_bytes.into_fixed()?.into_owned(),
+            &subchunk_shape,
+            decoded_subchunk_bytes.into_fixed()?.into_owned(),
         )?;
         println!("{ndarray}\n");
     }
