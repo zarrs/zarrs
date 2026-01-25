@@ -11,31 +11,31 @@ pub trait ArrayShardedExt: private::Sealed {
     /// Returns true if the array-to-bytes codec of the array is `sharding_indexed` and the array has no array-to-array or bytes-to-bytes codecs.
     fn is_exclusively_sharded(&self) -> bool;
 
-    /// Return the inner chunk shape as defined in the `sharding_indexed` codec metadata.
+    /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
     ///
     /// Returns [`None`] for an unsharded array.
-    fn inner_chunk_shape(&self) -> Option<ChunkShape>;
+    fn subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// The effective inner chunk shape.
+    /// The effective subchunk shape.
     ///
-    /// The effective inner chunk shape is the "read granularity" of the sharded array that accounts for array-to-array codecs preceding the sharding codec.
-    /// For example, the transpose codec changes the shape of an array subset that corresponds to a single inner chunk.
-    /// The effective inner chunk shape is used when determining the inner chunk grid of a sharded array.
+    /// The effective subchunk shape is the "read granularity" of the sharded array that accounts for array-to-array codecs preceding the sharding codec.
+    /// For example, the transpose codec changes the shape of an array subset that corresponds to a single subchunk.
+    /// The effective subchunk shape is used when determining the subchunk grid of a sharded array.
     ///
-    /// Returns [`None`] for an unsharded array of if the effective inner chunk shape is indeterminate.
-    fn effective_inner_chunk_shape(&self) -> Option<ChunkShape>;
+    /// Returns [`None`] for an unsharded array of if the effective subchunk shape is indeterminate.
+    fn effective_subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// Retrieve the inner chunk grid.
+    /// Retrieve the subchunk grid.
     ///
-    /// This uses the effective inner shape so that reading an inner chunk reads only one contiguous byte range.
+    /// This uses the effective subchunk shape so that reading a subchunk reads only one contiguous byte range.
     ///
     /// Returns the normal chunk grid for an unsharded array.
-    fn inner_chunk_grid(&self) -> ChunkGrid;
+    fn subchunk_grid(&self) -> ChunkGrid;
 
-    /// Return the shape of the inner chunk grid (i.e., the number of inner chunks).
+    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
     ///
     /// Returns the normal chunk grid shape for an unsharded array.
-    fn inner_chunk_grid_shape(&self) -> ArrayShape;
+    fn subchunk_grid_shape(&self) -> ArrayShape;
 }
 
 impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
@@ -52,7 +52,7 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
             && self.codecs.bytes_to_bytes_codecs().is_empty()
     }
 
-    fn inner_chunk_shape(&self) -> Option<ChunkShape> {
+    fn subchunk_shape(&self) -> Option<ChunkShape> {
         let configuration = self
             .codecs
             .array_to_bytes_codec()
@@ -67,34 +67,34 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
         }
     }
 
-    fn effective_inner_chunk_shape(&self) -> Option<ChunkShape> {
-        let mut inner_chunk_shape = self.inner_chunk_shape()?;
+    fn effective_subchunk_shape(&self) -> Option<ChunkShape> {
+        let mut subchunk_shape = self.subchunk_shape()?;
         for codec in self.codecs().array_to_array_codecs().iter().rev() {
-            if let Ok(Some(inner_chunk_shape_)) = codec.decoded_shape(&inner_chunk_shape) {
-                inner_chunk_shape = inner_chunk_shape_;
+            if let Ok(Some(subchunk_shape_)) = codec.decoded_shape(&subchunk_shape) {
+                subchunk_shape = subchunk_shape_;
             } else {
                 return None;
             }
         }
-        Some(inner_chunk_shape)
+        Some(subchunk_shape)
     }
 
-    fn inner_chunk_grid(&self) -> ChunkGrid {
-        // FIXME: Create the inner chunk grid in `Array` and return a ref
-        if let Some(inner_chunk_shape) = self.effective_inner_chunk_shape() {
+    fn subchunk_grid(&self) -> ChunkGrid {
+        // FIXME: Create the subchunk grid in `Array` and return a ref
+        if let Some(subchunk_shape) = self.effective_subchunk_shape() {
             ChunkGrid::new(
                 crate::array::chunk_grid::RegularChunkGrid::new(
                     self.shape().to_vec(),
-                    inner_chunk_shape,
-                ).expect("the chunk grid dimensionality is already confirmed to match the array dimensionality"),
+                    subchunk_shape,
+                ).expect("the subchunk grid dimensionality is already confirmed to match the array dimensionality"),
             )
         } else {
             self.chunk_grid().clone()
         }
     }
 
-    fn inner_chunk_grid_shape(&self) -> ArrayShape {
-        self.inner_chunk_grid().grid_shape().to_vec()
+    fn subchunk_grid_shape(&self) -> ArrayShape {
+        self.subchunk_grid().grid_shape().to_vec()
     }
 }
 

@@ -7,7 +7,7 @@ use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytes
 
 /// A [`ShardingCodec`] builder.
 ///
-/// By default, the inner chunks are encoded with the default codec for the data type (see [`default_array_to_bytes_codec`]).
+/// By default, the subchunks are encoded with the default codec for the data type (see [`default_array_to_bytes_codec`]).
 /// The index is encoded with the `bytes` codec with native endian encoding, additionally with the `crc32c checksum` codec (if the `crc32c` feature is enabled).
 ///
 /// Use the methods in the `sharding` codec builder to change the configuration away from these defaults, and then build the `sharding` codec with [`build`](ShardingCodecBuilder::build).
@@ -25,7 +25,7 @@ pub struct ShardingCodecBuilder {
 impl ShardingCodecBuilder {
     /// Create a new `sharding` codec builder.
     ///
-    /// The default inner chunk array-to-bytes codec is chosen based on the data type
+    /// The default subchunk array-to-bytes codec is chosen based on the data type
     /// (see [`default_array_to_bytes_codec`]).
     #[must_use]
     pub fn new(subchunk_shape: ChunkShape, data_type: &DataType) -> Self {
@@ -65,9 +65,9 @@ impl ShardingCodecBuilder {
         self
     }
 
-    /// Set the inner chunk array to array codecs.
+    /// Set the subchunk array to array codecs.
     ///
-    /// If left unmodified, no array to array codecs will be applied for the inner chunks.
+    /// If left unmodified, no array to array codecs will be applied for the subchunks.
     pub fn array_to_array_codecs(
         &mut self,
         array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
@@ -76,9 +76,9 @@ impl ShardingCodecBuilder {
         self
     }
 
-    /// Set the inner chunk array to bytes codec.
+    /// Set the subchunk array to bytes codec.
     ///
-    /// If left unmodified, the inner chunks will be encoded with the default codec for the data type
+    /// If left unmodified, the subchunks will be encoded with the default codec for the data type
     /// (see [`default_array_to_bytes_codec`]).
     pub fn array_to_bytes_codec(
         &mut self,
@@ -88,9 +88,9 @@ impl ShardingCodecBuilder {
         self
     }
 
-    /// Set the inner chunk bytes to bytes codecs.
+    /// Set the subchunk bytes to bytes codecs.
     ///
-    /// If left unmodified, no bytes to bytes codecs will be applied for the inner chunks.
+    /// If left unmodified, no bytes to bytes codecs will be applied for the subchunks.
     pub fn bytes_to_bytes_codecs(
         &mut self,
         bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,

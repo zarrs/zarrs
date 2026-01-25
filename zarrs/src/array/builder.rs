@@ -343,7 +343,7 @@ impl ArrayBuilder {
     /// Set the subchunk (inner chunk) shape for sharding.
     ///
     /// When set, the array will use the `sharding` codec.
-    /// The chunk shape is the shard shape, and `subchunk_shape` is the shape of the inner chunks within each shard.
+    /// The chunk shape is the shard shape, and `subchunk_shape` is the shape of the subchunks within each shard.
     ///
     /// If left unmodified or set to `None`, the array will not use sharding, unless configured manually via [`array_to_bytes_codec`](Self::array_to_bytes_codec).
     ///
@@ -359,7 +359,7 @@ impl ArrayBuilder {
     /// The codecs specified via [`array_to_array_codecs`](Self::array_to_array_codecs),
     /// [`array_to_bytes_codec`](Self::array_to_bytes_codec), and
     /// [`bytes_to_bytes_codecs`](Self::bytes_to_bytes_codecs) are used internally
-    /// for encoding the inner chunks within each shard.
+    /// for encoding the subchunks within each shard.
     ///
     /// For more advanced usage (e.g., compressing an entire shard), set
     /// [`array_to_bytes_codec`](Self::array_to_bytes_codec) explicitly with a sharding codec
@@ -375,7 +375,7 @@ impl ArrayBuilder {
     ///     data_type::float32(),
     ///     0.0f32,
     /// )
-    /// .subchunk_shape(vec![4, 4])  // inner chunk shape within each shard
+    /// .subchunk_shape(vec![4, 4])  // subchunk shape within each shard
     /// .build(store, "/array")
     /// .unwrap();
     /// ```

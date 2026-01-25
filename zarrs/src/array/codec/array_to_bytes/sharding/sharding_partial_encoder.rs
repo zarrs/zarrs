@@ -163,8 +163,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .max()
             .expect("shards cannot be empty");
 
-        let get_inner_chunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
-        let inner_chunk_fill_value = || {
+        let get_subchunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
+        let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
                 &self.data_type,
                 self.subchunk_shape.num_elements_u64(),
@@ -172,11 +172,11 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             )
         };
 
-        // Get all the inner chunks that need to be retrieved
+        // Get all the subchunks that need to be retrieved
         //   This only includes chunks that straddle chunk subsets.
         //   Chunks that are entirely within a chunk subset are entirely replaced and are not read.
-        let mut inner_chunks_intersected = HashSet::<u64>::new();
-        let mut inner_chunks_indices = HashSet::<u64>::new();
+        let mut subchunks_intersected = HashSet::<u64>::new();
+        let mut subchunks_indices = HashSet::<u64>::new();
 
         let Some(chunk_subset_indexer) = chunk_subset_indexer.as_array_subset() else {
             // TODO: Add support for generic indexers
@@ -198,63 +198,63 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             ))?;
         }
 
-        // Get the iterator over the inner chunks
-        let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
-        let inner_chunks = inner_chunks.indices();
+        // Get the iterator over the subchunks
+        let subchunks = get_subchunks(chunk_subset_indexer)?;
+        let subchunks = subchunks.indices();
 
-        // Get all the inner chunks intersected
-        inner_chunks_intersected.extend(inner_chunks.iter().map(
-            |inner_chunk_indices: ArrayIndicesTinyVec| {
-                ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk")
+        // Get all the subchunks intersected
+        subchunks_intersected.extend(subchunks.iter().map(
+            |subchunk_indices: ArrayIndicesTinyVec| {
+                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk")
             },
         ));
 
-        // Get all the inner chunks that need to be updated
+        // Get all the subchunks that need to be updated
         let chunk_subset_start = chunk_subset_indexer.start();
         let chunk_subset_end_exc = chunk_subset_indexer.end_exc();
-        inner_chunks_indices.extend(inner_chunks.iter().filter_map(
-            |inner_chunk_indices: ArrayIndicesTinyVec| {
-                let inner_chunk_subset = self
+        subchunks_indices.extend(subchunks.iter().filter_map(
+            |subchunk_indices: ArrayIndicesTinyVec| {
+                let subchunk_subset = self
                     .chunk_grid
-                    .subset(&inner_chunk_indices)
+                    .subset(&subchunk_indices)
                     .expect("matching dimensionality");
 
-                // Check if the inner chunk straddles the chunk subset
-                if inner_chunk_subset
+                // Check if the subchunk straddles the chunk subset
+                if subchunk_subset
                     .start()
                     .iter()
                     .zip(chunk_subset_start.iter())
                     .any(|(a, b)| a < b)
-                    || inner_chunk_subset
+                    || subchunk_subset
                         .end_exc()
                         .iter()
                         .zip(chunk_subset_end_exc.iter())
                         .any(|(a, b)| *a > *b)
                 {
-                    let inner_chunk_index = ravel_indices(&inner_chunk_indices, &chunks_per_shard)
+                    let subchunk_index = ravel_indices(&subchunk_indices, &chunks_per_shard)
                         .expect("inbounds chunk");
-                    Some(inner_chunk_index)
+                    Some(subchunk_index)
                 } else {
                     None
                 }
             },
         ));
 
-        // Get the byte ranges of the straddling inner chunk indices
+        // Get the byte ranges of the straddling subchunk indices
         //   Sorting byte ranges may improves store retrieve efficiency in some cases
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = inner_chunks_indices.into_par_iter();
+        let iterator = subchunks_indices.into_par_iter();
         #[cfg(target_arch = "wasm32")]
-        let iterator = inner_chunks_indices.into_iter();
+        let iterator = subchunks_indices.into_iter();
 
-        let (inner_chunks_indices, byte_ranges): (Vec<_>, Vec<_>) = iterator
-            .filter_map(|inner_chunk_index| {
-                let offset = shard_index[usize::try_from(inner_chunk_index * 2).unwrap()];
-                let size = shard_index[usize::try_from(inner_chunk_index * 2 + 1).unwrap()];
+        let (subchunks_indices, byte_ranges): (Vec<_>, Vec<_>) = iterator
+            .filter_map(|subchunk_index| {
+                let offset = shard_index[usize::try_from(subchunk_index * 2).unwrap()];
+                let size = shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()];
                 if offset == u64::MAX && size == u64::MAX {
                     None
                 } else {
-                    Some((inner_chunk_index, ByteRange::FromStart(offset, Some(size))))
+                    Some((subchunk_index, ByteRange::FromStart(offset, Some(size))))
                 }
             })
             .collect::<Vec<_>>()
@@ -262,133 +262,129 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .sorted_by_key(|(_, byte_range)| *byte_range)
             .unzip();
 
-        // Read the straddling inner chunks
-        let inner_chunks_encoded = self
+        // Read the straddling subchunks
+        let subchunks_encoded = self
             .input_output_handle
             .partial_decode_many(Box::new(byte_ranges.into_iter()), options)?
             .map(|bytes| bytes.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
 
-        // Decode the straddling inner chunks
-        let inner_chunks_decoded: HashMap<_, _> =
-            if let Some(inner_chunks_encoded) = inner_chunks_encoded {
-                #[cfg(not(target_arch = "wasm32"))]
-                let iterator = inner_chunks_indices.into_par_iter();
-                #[cfg(target_arch = "wasm32")]
-                let iterator = inner_chunks_indices.into_iter();
+        // Decode the straddling subchunks
+        let subchunks_decoded: HashMap<_, _> = if let Some(subchunks_encoded) = subchunks_encoded {
+            #[cfg(not(target_arch = "wasm32"))]
+            let iterator = subchunks_indices.into_par_iter();
+            #[cfg(target_arch = "wasm32")]
+            let iterator = subchunks_indices.into_iter();
 
-                let inner_chunks_encoded = iterator
-                    .zip(inner_chunks_encoded)
-                    .map(|(inner_chunk_index, inner_chunk_encoded)| {
-                        Ok((
-                            inner_chunk_index,
-                            self.inner_codecs.decode(
-                                Cow::Owned(inner_chunk_encoded),
-                                &self.subchunk_shape,
-                                &self.data_type,
-                                &self.fill_value,
-                                options,
-                            )?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, CodecError>>()?;
-                HashMap::from_iter(inner_chunks_encoded)
-            } else {
-                HashMap::new()
-            };
+            let subchunks_encoded = iterator
+                .zip(subchunks_encoded)
+                .map(|(subchunk_index, subchunk_encoded)| {
+                    Ok((
+                        subchunk_index,
+                        self.inner_codecs.decode(
+                            Cow::Owned(subchunk_encoded),
+                            &self.subchunk_shape,
+                            &self.data_type,
+                            &self.fill_value,
+                            options,
+                        )?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, CodecError>>()?;
+            HashMap::from_iter(subchunks_encoded)
+        } else {
+            HashMap::new()
+        };
 
-        // Update all of the intersecting inner chunks
-        let inner_chunks_decoded = Arc::new(Mutex::new(inner_chunks_decoded));
-        let inner_chunks = get_inner_chunks(chunk_subset_indexer)?;
+        // Update all of the intersecting subchunks
+        let subchunks_decoded = Arc::new(Mutex::new(subchunks_decoded));
+        let subchunks = get_subchunks(chunk_subset_indexer)?;
 
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = inner_chunks.indices().into_par_iter();
+        let iterator = subchunks.indices().into_par_iter();
         #[cfg(target_arch = "wasm32")]
-        let mut iterator = inner_chunks.indices().into_iter();
+        let mut iterator = subchunks.indices().into_iter();
 
         let chunk_subset_start = chunk_subset_indexer.start();
         let chunk_subset_shape = chunk_subset_indexer.shape();
-        iterator.try_for_each(|inner_chunk_indices: ArrayIndicesTinyVec| {
-            // Extract the inner chunk bytes that overlap with the chunk subset
-            let inner_chunk_index =
-                ravel_indices(&inner_chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-            let inner_chunk_subset = self
+        iterator.try_for_each(|subchunk_indices: ArrayIndicesTinyVec| {
+            // Extract the subchunk bytes that overlap with the chunk subset
+            let subchunk_index =
+                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk");
+            let subchunk_subset = self
                 .chunk_grid
-                .subset(&inner_chunk_indices)
+                .subset(&subchunk_indices)
                 .expect("matching dimensionality");
-            let inner_chunk_subset_overlap =
-                chunk_subset_indexer.overlap(&inner_chunk_subset).unwrap();
-            let inner_chunk_bytes = chunk_subset_bytes.extract_array_subset(
-                &inner_chunk_subset_overlap
+            let subchunk_subset_overlap = chunk_subset_indexer.overlap(&subchunk_subset).unwrap();
+            let subchunk_bytes = chunk_subset_bytes.extract_array_subset(
+                &subchunk_subset_overlap
                     .relative_to(&chunk_subset_start)
                     .unwrap(),
                 &chunk_subset_shape,
                 &self.data_type,
             )?;
 
-            // Decode the inner chunk
-            let inner_chunk_decoded = if let Some(inner_chunk_decoded) = inner_chunks_decoded
-                .lock()
-                .unwrap()
-                .remove(&inner_chunk_index)
+            // Decode the subchunk
+            let subchunk_decoded = if let Some(subchunk_decoded) =
+                subchunks_decoded.lock().unwrap().remove(&subchunk_index)
             {
-                inner_chunk_decoded.into_owned()
+                subchunk_decoded.into_owned()
             } else {
-                inner_chunk_fill_value()?
+                subchunk_fill_value()?
             };
 
-            // Update the inner chunk
-            let inner_chunk_updated = update_array_bytes(
-                inner_chunk_decoded,
+            // Update the subchunk
+            let subchunk_updated = update_array_bytes(
+                subchunk_decoded,
                 bytemuck::cast_slice(&self.subchunk_shape),
-                &inner_chunk_subset_overlap
-                    .relative_to(inner_chunk_subset.start())
+                &subchunk_subset_overlap
+                    .relative_to(subchunk_subset.start())
                     .unwrap(),
-                &inner_chunk_bytes,
+                &subchunk_bytes,
                 self.data_type.size(),
             )?;
-            inner_chunks_decoded
+            subchunks_decoded
                 .lock()
                 .unwrap()
-                .insert(inner_chunk_index, inner_chunk_updated);
+                .insert(subchunk_index, subchunk_updated);
 
             Ok::<_, CodecError>(())
         })?;
-        let inner_chunks_decoded = Arc::try_unwrap(inner_chunks_decoded)
-            .expect("inner_chunks_decoded should have one strong reference")
+        let subchunks_decoded = Arc::try_unwrap(subchunks_decoded)
+            .expect("subchunks_decoded should have one strong reference")
             .into_inner()
-            .expect("inner_chunks_decoded should not be poisoned");
+            .expect("subchunks_decoded should not be poisoned");
 
-        // Encode the updated inner chunks
+        // Encode the updated subchunks
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = inner_chunks_decoded.into_par_iter();
+        let iterator = subchunks_decoded.into_par_iter();
         #[cfg(target_arch = "wasm32")]
-        let iterator = inner_chunks_decoded.into_iter();
+        let iterator = subchunks_decoded.into_iter();
 
-        let updated_inner_chunks = iterator
-            .map(|(inner_chunk_index, inner_chunk_decoded)| {
-                if inner_chunk_decoded.is_fill_value(&self.fill_value) {
-                    Ok((inner_chunk_index, None))
+        let updated_subchunks = iterator
+            .map(|(subchunk_index, subchunk_decoded)| {
+                if subchunk_decoded.is_fill_value(&self.fill_value) {
+                    Ok((subchunk_index, None))
                 } else {
-                    let inner_chunk_encoded = self
+                    let subchunk_encoded = self
                         .inner_codecs
                         .encode(
-                            inner_chunk_decoded,
+                            subchunk_decoded,
                             &self.subchunk_shape,
                             &self.data_type,
                             &self.fill_value,
                             options,
                         )?
                         .into_owned();
-                    Ok((inner_chunk_index, Some(inner_chunk_encoded)))
+                    Ok((subchunk_index, Some(subchunk_encoded)))
                 }
             })
             .collect::<Result<Vec<_>, CodecError>>()?;
 
         // Check if the shard can be entirely rewritten instead of appended
-        //  This occurs if the shard index is empty if all of the intersected inner chunks are removed
-        for inner_chunk_index in &inner_chunks_intersected {
-            shard_index[usize::try_from(inner_chunk_index * 2).unwrap()] = u64::MAX;
-            shard_index[usize::try_from(inner_chunk_index * 2 + 1).unwrap()] = u64::MAX;
+        //  This occurs if the shard index is empty if all of the intersected subchunks are removed
+        for subchunk_index in &subchunks_intersected {
+            shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
+            shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
         }
         let max_data_offset = if shard_index.par_iter().all(|&x| x == u64::MAX) {
             self.input_output_handle.erase()?;
@@ -408,15 +404,15 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Update the shard index
         {
             let mut offset_append = offset_new_chunks;
-            for (inner_chunk_index, inner_chunk_encoded) in &updated_inner_chunks {
-                if let Some(inner_chunk_encoded) = inner_chunk_encoded {
-                    let len = inner_chunk_encoded.len() as u64;
-                    shard_index[usize::try_from(inner_chunk_index * 2).unwrap()] = offset_append;
-                    shard_index[usize::try_from(inner_chunk_index * 2 + 1).unwrap()] = len;
+            for (subchunk_index, subchunk_encoded) in &updated_subchunks {
+                if let Some(subchunk_encoded) = subchunk_encoded {
+                    let len = subchunk_encoded.len() as u64;
+                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = offset_append;
+                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = len;
                     offset_append += len;
                 } else {
-                    shard_index[usize::try_from(inner_chunk_index * 2).unwrap()] = u64::MAX;
-                    shard_index[usize::try_from(inner_chunk_index * 2 + 1).unwrap()] = u64::MAX;
+                    shard_index[usize::try_from(subchunk_index * 2).unwrap()] = u64::MAX;
+                    shard_index[usize::try_from(subchunk_index * 2 + 1).unwrap()] = u64::MAX;
                 }
             }
         }
@@ -439,27 +435,27 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 )?
                 .into_owned();
 
-            // Get the total size of the encoded inner chunks
-            let encoded_inner_chunks_size = updated_inner_chunks
+            // Get the total size of the encoded subchunks
+            let encoded_subchunks_size = updated_subchunks
                 .iter()
-                .filter_map(|(_, inner_chunk_encoded)| inner_chunk_encoded.as_ref().map(Vec::len))
+                .filter_map(|(_, subchunk_encoded)| subchunk_encoded.as_ref().map(Vec::len))
                 .sum::<usize>();
 
             // Get the suffix write size
             let suffix_write_size = match self.index_location {
-                ShardingIndexLocation::Start => encoded_inner_chunks_size,
-                ShardingIndexLocation::End => encoded_inner_chunks_size + encoded_array_index.len(),
+                ShardingIndexLocation::Start => encoded_subchunks_size,
+                ShardingIndexLocation::End => encoded_subchunks_size + encoded_array_index.len(),
             };
 
-            // Concatenate the updated inner chunks
+            // Concatenate the updated subchunks
             let mut encoded_output = Vec::with_capacity(suffix_write_size);
-            for (_, inner_chunk_encoded) in updated_inner_chunks {
-                if let Some(inner_chunk_encoded) = inner_chunk_encoded {
-                    encoded_output.extend(inner_chunk_encoded);
+            for (_, subchunk_encoded) in updated_subchunks {
+                if let Some(subchunk_encoded) = subchunk_encoded {
+                    encoded_output.extend(subchunk_encoded);
                 }
             }
 
-            // Write the encoded index and updated inner chunks
+            // Write the encoded index and updated subchunks
             match self.index_location {
                 ShardingIndexLocation::Start => {
                     self.input_output_handle.partial_encode_many(

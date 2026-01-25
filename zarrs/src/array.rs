@@ -296,15 +296,15 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// Refer to the [`chunk_cache`] module.
 ///
 /// ## Reading Sharded Arrays
-/// The `sharding_indexed` codec ([`ShardingCodec`](codec::array_to_bytes::sharding)) enables multiple sub-chunks ("inner chunks") to be stored in a single chunk ("shard").
+/// The `sharding_indexed` codec ([`ShardingCodec`](codec::array_to_bytes::sharding)) enables multiple subchunks ("inner chunks") to be stored in a single chunk ("shard").
 /// With a sharded array, the [`chunk_grid`](Array::chunk_grid) and chunk indices in store/retrieve methods reference the chunks ("shards") of an array.
 ///
-/// The [`ArrayShardedExt`] trait provides additional methods to [`Array`] to query if an array is sharded and retrieve the inner chunk shape.
-/// Additionally, the *inner chunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to inner chunks rather than shards.
+/// The [`ArrayShardedExt`] trait provides additional methods to [`Array`] to query if an array is sharded and retrieve the subchunk shape.
+/// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
 /// The [`ArrayShardedReadableExt`] trait adds [`Array`] methods to conveniently and efficiently access the data in a sharded array (with `_elements` and `_ndarray` variants):
-///  - [`retrieve_inner_chunk_opt`](ArrayShardedReadableExt::retrieve_inner_chunk_opt)
-///  - [`retrieve_inner_chunks_opt`](ArrayShardedReadableExt::retrieve_inner_chunks_opt)
+///  - [`retrieve_subchunk_opt`](ArrayShardedReadableExt::retrieve_subchunk_opt)
+///  - [`retrieve_subchunks_opt`](ArrayShardedReadableExt::retrieve_subchunks_opt)
 ///  - [`retrieve_array_subset_sharded_opt`](ArrayShardedReadableExt::retrieve_array_subset_sharded_opt)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.

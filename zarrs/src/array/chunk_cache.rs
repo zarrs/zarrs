@@ -7,7 +7,7 @@
 //!   - Preferred where decoding is cheap and memory is scarce, provided that data is well compressed/sparse.
 //! - [`ChunkCacheTypePartialDecoder`]: caches partial decoders.
 //!   - Preferred where chunks are repeatedly *partially retrieved*.
-//!   - Useful for retrieval of inner chunks from sharded arrays, as the partial decoder caches shard indexes (but **not** inner chunks).
+//!   - Useful for retrieval of subchunks from sharded arrays, as the partial decoder caches shard indexes (but **not** subchunks).
 //!   - Memory usage of this cache is highly dependent on the array codecs and whether the codec chain ([`Array::codecs`]) ends up decoding entire chunks or caching inputs based on their [`PartialDecoderCapability`](zarrs_codec::PartialDecoderCapability).
 //!
 //! `zarrs` implements the following Least Recently Used (LRU) chunk caches:

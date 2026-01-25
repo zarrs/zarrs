@@ -35,9 +35,9 @@ use zarrs_plugin::{ExtensionAliasesV3, PluginCreateError, ZarrVersion};
 /// A `sharding` codec implementation.
 #[derive(Clone, Debug)]
 pub struct ShardingCodec {
-    /// An array of integers specifying the shape of the inner chunks in a shard along each dimension of the outer array.
+    /// An array of integers specifying the shape of the subchunks in a shard along each dimension of the outer array.
     pub(crate) subchunk_shape: ChunkShape,
-    /// The codecs used to encode and decode inner chunks.
+    /// The codecs used to encode and decode subchunks.
     pub(crate) inner_codecs: Arc<CodecChain>,
     /// The codecs used to encode and decode the shard index.
     pub(crate) index_codecs: Arc<CodecChain>,
@@ -209,14 +209,14 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
 
         // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_inner_chunks) = calc_concurrency_outer_inner(
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
             &self.recommended_concurrency(shape, data_type)?,
             &self
                 .inner_codecs
                 .recommended_concurrency(&self.subchunk_shape, data_type)?,
         );
-        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
+        let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         if data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
@@ -228,7 +228,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         let shard_shape_u64 = bytemuck::must_cast_slice(shape);
         match data_type.size() {
             DataTypeSize::Variable => {
-                let decode_inner_chunk = |chunk_index: usize| {
+                let decode_subchunk = |chunk_index: usize| {
                     let chunk_subset = self
                         .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
                         .expect("inbounds chunk");
@@ -265,12 +265,12 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                     Ok((chunk_bytes, chunk_subset))
                 };
 
-                // Decode the inner chunks
+                // Decode the subchunks
                 let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     (0..num_chunks),
                     map,
-                    decode_inner_chunk
+                    decode_subchunk
                 )
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -296,7 +296,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         let chunk_subset = self
                             .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
                             .expect("inbounds chunk");
-                        let mut output_view_inner_chunk = unsafe {
+                        let mut output_view_subchunk = unsafe {
                             // SAFETY: chunks represent disjoint array subsets
                             ArrayBytesFixedDisjointView::new(
                                 output,
@@ -310,7 +310,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                         let offset = shard_index[chunk_index * 2];
                         let size = shard_index[chunk_index * 2 + 1];
                         if offset == u64::MAX && size == u64::MAX {
-                            output_view_inner_chunk.fill(fill_value.as_ne_bytes())?;
+                            output_view_subchunk.fill(fill_value.as_ne_bytes())?;
                         } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
                             return Err(CodecError::Other(
                                 "The shard index references out-of-bounds bytes. The chunk may be corrupted."
@@ -327,8 +327,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                                 fill_value,
                                 &options,
                             )?;
-                            output_view_inner_chunk
-                                .copy_from_slice(&decoded_chunk.into_fixed()?)?;
+                            output_view_subchunk.copy_from_slice(&decoded_chunk.into_fixed()?)?;
                         }
 
                         Ok::<_, CodecError>(())
@@ -481,14 +480,14 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
 
         // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_inner_chunks) = calc_concurrency_outer_inner(
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
             &self.recommended_concurrency(shape, data_type)?,
             &self
                 .inner_codecs
                 .recommended_concurrency(&self.subchunk_shape, data_type)?,
         );
-        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
+        let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         let decode_chunk = |chunk_index: usize| {
             let chunk_subset = self
@@ -505,8 +504,8 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 chunk_subset.shape().to_vec(),
             )
             .unwrap();
-            let mut output_view_inner_chunk = unsafe {
-                // SAFETY: inner chunks represent disjoint array subsets
+            let mut output_view_subchunk = unsafe {
+                // SAFETY: subchunks represent disjoint array subsets
                 output_view.subdivide(output_subset_chunk)?
             };
 
@@ -514,7 +513,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             let offset = shard_index[chunk_index * 2];
             let size = shard_index[chunk_index * 2 + 1];
             if offset == u64::MAX && size == u64::MAX {
-                output_view_inner_chunk.fill(fill_value.as_ne_bytes())?;
+                output_view_subchunk.fill(fill_value.as_ne_bytes())?;
             } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
                 return Err(CodecError::Other(
                     "The shard index references out-of-bounds bytes. The chunk may be corrupted."
@@ -529,7 +528,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                     &self.subchunk_shape,
                     data_type,
                     fill_value,
-                    ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_inner_chunk),
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
                     &options,
                 )?;
             }
@@ -722,14 +721,14 @@ impl ShardingCodec {
         };
 
         // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_inner_chunks) = calc_concurrency_outer_inner(
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
             &self.recommended_concurrency(shard_shape, data_type)?,
             &self
                 .inner_codecs
                 .recommended_concurrency(subchunk_shape, data_type)?,
         );
-        let options = options.with_concurrent_target(concurrency_limit_inner_chunks);
+        let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
         // Encode the shards and update the shard index
         {
@@ -821,7 +820,7 @@ impl ShardingCodec {
         Ok(shard)
     }
 
-    /// Encode inner chunks (in parallel), then allocate shard, then write to shard (in parallel)
+    /// Encode subchunks (in parallel), then allocate shard, then write to shard (in parallel)
     // TODO: Collecting chunks then allocating shard can use a lot of memory, have a low memory variant
     // TODO: Also benchmark performance with just performing an alloc like 1x decoded size and writing directly into it, growing if needed
     #[allow(clippy::too_many_lines)]
@@ -850,14 +849,14 @@ impl ShardingCodec {
             .product::<usize>();
 
         // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_inner_chunks) = calc_concurrency_outer_inner(
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
             &self.recommended_concurrency(shard_shape, data_type)?,
             &self
                 .inner_codecs
                 .recommended_concurrency(subchunk_shape, data_type)?,
         );
-        let options_inner = options.with_concurrent_target(concurrency_limit_inner_chunks);
+        let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
         let encode_chunk = |chunk_index| {
             let chunk_subset = self

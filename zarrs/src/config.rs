@@ -62,7 +62,7 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 /// > default: [`false`]
 ///
 /// If `true`, [`Array::store_chunk_subset`](crate::array::Array::store_chunk_subset) and [`Array::store_array_subset`](crate::array::Array::store_array_subset) and variants can use partial encoding.
-/// This is relevant when using the sharding codec, as it enables inner chunks to be written without reading and writing entire shards.
+/// This is relevant when using the sharding codec, as it enables subchunks to be written without reading and writing entire shards.
 ///
 /// This is an experimental feature for now until it has more comprehensively tested and support is added in the async API.
 ///

@@ -180,7 +180,7 @@ fn get_index_byte_range(
     })
 }
 
-fn inner_chunk_byte_range(
+fn subchunk_byte_range(
     shard_index: Option<&[u64]>,
     shard_shape: &[NonZeroU64],
     chunk_shape: &[NonZeroU64],
@@ -218,8 +218,8 @@ fn get_concurrent_target_and_codec_options(
 ) -> Result<(usize, CodecOptions), CodecError> {
     let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
 
-    // Calculate inner chunk/codec concurrency
-    let (inner_chunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
+    // Calculate subchunk/codec concurrency
+    let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
         options.concurrent_target(),
         &RecommendedConcurrency::new_maximum(std::cmp::min(
             options.concurrent_target(),
@@ -228,7 +228,7 @@ fn get_concurrent_target_and_codec_options(
         &inner_codecs.recommended_concurrency(subchunk_shape, data_type)?,
     );
     let options = options.with_concurrent_target(concurrency_limit_codec);
-    Ok((inner_chunk_concurrent_limit, options))
+    Ok((subchunk_concurrent_limit, options))
 }
 
 /// Returns `None` if there is no shard.
@@ -813,7 +813,7 @@ mod tests {
     fn codec_sharding_compact() {
         // Test that compact removes gaps in sharded data
         // 1. Fully encode a shard
-        // 2. Update an inner chunk and verify the shard size increased
+        // 2. Update a subchunk and verify the shard size increased
         // 3. Compact and check that the size matches the original fully encoded shard
 
         let chunk_shape: ChunkShape = vec![NonZeroU64::new(4).unwrap(); 2];
@@ -823,7 +823,7 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let original_bytes: ArrayBytes = bytes.into();
 
-        // Create a sharding codec with 2x2 inner chunks
+        // Create a sharding codec with 2x2 subchunks
         let codec_configuration: ShardingCodecConfiguration =
             serde_json::from_str(JSON_VALID3).unwrap();
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap());
@@ -852,12 +852,12 @@ mod tests {
             .unwrap();
         assert_eq!(original_bytes, decoded);
 
-        // Step 2: Update an inner chunk using partial encoder
+        // Step 2: Update a subchunk using partial encoder
         let input_output_handle = Arc::new(Mutex::new(Some(original_encoded.to_vec())));
         {
-            // Update a single inner chunk (e.g., chunk at position [0, 1])
-            let inner_chunk_subset = ArraySubset::new_with_ranges(&[0..2, 2..4]);
-            let updated_elements: Vec<u16> = vec![100, 101, 102, 103]; // New values for this inner chunk
+            // Update a single subchunk (e.g., chunk at position [0, 1])
+            let subchunk_subset = ArraySubset::new_with_ranges(&[0..2, 2..4]);
+            let updated_elements: Vec<u16> = vec![100, 101, 102, 103]; // New values for this subchunk
             let updated_bytes = crate::array::transmute_to_bytes_vec(updated_elements);
             let partial_encoder = codec
                 .clone()
@@ -872,7 +872,7 @@ mod tests {
 
             partial_encoder
                 .partial_encode(
-                    &inner_chunk_subset,
+                    &subchunk_subset,
                     &ArrayBytes::from(updated_bytes),
                     &CodecOptions::default(),
                 )
@@ -921,7 +921,7 @@ mod tests {
             )
             .unwrap();
 
-        // Build expected result: original data with the updated inner chunk
+        // Build expected result: original data with the updated subchunk
         let mut expected_elements: Vec<u16> =
             (0..chunk_shape.num_elements_usize() as u16).collect();
         expected_elements[2] = 100; // Row 0, Col 2
