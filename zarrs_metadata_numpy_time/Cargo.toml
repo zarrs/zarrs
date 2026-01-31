@@ -1,0 +1,22 @@
+[package]
+name = "zarrs_metadata_numpy_time"
+version = "1.0.0"
+authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
+edition = "2021"
+rust-version = "1.77"
+description = "NumPy datetime64/timedelta64 types for the zarrs crate"
+homepage = "https://zarrs.dev"
+documentation = "https://docs.rs/zarrs_metadata_numpy_time"
+repository = "https://github.com/zarrs/zarrs/tree/main/zarrs_metadata_numpy_time"
+license = "MIT OR Apache-2.0"
+keywords = ["zarr", "zarrs", "numpy", "datetime"]
+categories = ["encoding"]
+
+[lints]
+workspace = true
+
+[dependencies]
+derive_more = { version = "2.0.0", features = ["display"] }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.71"
+zarrs_metadata.workspace = true

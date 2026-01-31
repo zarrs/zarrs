@@ -1,6 +1,6 @@
 [package]
 name = "zarrs_metadata_ext"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2021"
 rust-version = "1.77"
@@ -24,3 +24,4 @@ serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_orde
 serde_repr = "0.1.19"
 thiserror.workspace = true
 zarrs_metadata.workspace = true
+zarrs_metadata_numpy_time.workspace = true
