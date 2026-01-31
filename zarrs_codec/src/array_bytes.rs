@@ -202,8 +202,7 @@ impl<'a> ArrayBytes<'a> {
     pub fn into_fixed(self) -> Result<ArrayBytesRaw<'a>, CodecError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
-            Self::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
-            Self::Optional(..) => Err(CodecError::ExpectedNonOptionalBytes),
+            Self::Variable(..) | Self::Optional(..) => Err(CodecError::ExpectedFixedLengthBytes),
         }
     }
 
@@ -213,31 +212,19 @@ impl<'a> ArrayBytes<'a> {
     /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
     pub fn into_variable(self) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
         match self {
-            Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
+            Self::Fixed(..) | Self::Optional(..) => Err(CodecError::ExpectedVariableLengthBytes),
             Self::Variable(variable_length_bytes) => Ok(variable_length_bytes),
-            Self::Optional(..) => Err(CodecError::ExpectedNonOptionalBytes),
         }
     }
 
     /// Convert the array bytes into optional data and validity mask.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
+    /// Returns a [`CodecError::ExpectedOptionalBytes`] if the bytes are not optional.
     pub fn into_optional(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
         match self {
             Self::Optional(optional_bytes) => Ok(optional_bytes),
-            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
-        }
-    }
-
-    /// Convert the array bytes into [`ArrayBytesOptional`].
-    ///
-    /// # Errors
-    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional_bytes(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
-        match self {
-            Self::Optional(optional_bytes) => Ok(optional_bytes),
-            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
+            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedOptionalBytes),
         }
     }
 
