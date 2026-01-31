@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add runtime extension registration for codecs, data types, chunk grids, chunk key encodings, and storage transformers
 - Add `ArrayError::ArraySubsetError` variant and `CodecOptions::[{set_,with_}]chunk_concurrent_minimum()`
 - Add `register_data_type_extension_codec!` macro and `DataTypeExt` trait
+- Add `From<ExpectedFixedLengthBytesError>`, `From<ExpectedVariableLengthBytesError>`, and `From<ExpectedOptionalBytesError>` for `ArrayError`
 
 ### Changed
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
