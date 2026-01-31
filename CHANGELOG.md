@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" (`inner_chunk_shape()` → `subchunk_shape()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, etc.)
 
 ### Added
+- Add `ElementError` type
 - Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
 - Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
 - Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type` (implementing `ExtensionAliases` for per-data-type alias management)
@@ -77,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `register_data_type_extension_codec!` macro and `DataTypeExt` trait
 
 ### Changed
+- **Breaking**: `Element` and `ElementOwned` trait methods now return `ElementError` instead of `ArrayError`
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
 - **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.0, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.0, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
 - Bump internal dependencies: `zarrs_filesystem` 0.3.8, `zarrs_storage` 0.4.2, `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
