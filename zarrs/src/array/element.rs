@@ -1,44 +1,47 @@
 use std::mem::ManuallyDrop;
 
-use ArrayError::IncompatibleElementType as IET;
+use ElementError::IncompatibleElementType as IET;
 use itertools::Itertools;
 
 use crate::array::data_type;
 
 use super::{
-    ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, convert_from_bytes_slice,
-    transmute_to_bytes, transmute_to_bytes_vec,
+    ArrayBytes, ArrayBytesOffsets, DataType, convert_from_bytes_slice, transmute_to_bytes,
+    transmute_to_bytes_vec,
 };
 
+mod error;
 mod numpy;
+
+pub use error::ElementError;
 
 /// A trait representing an array element type.
 pub trait Element: Sized + Clone {
     /// Validate the data type.
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError>;
+    /// Returns an [`ElementError`] if the data type is incompatible with [`Element`].
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError>;
 
     /// Convert a slice of elements into [`ArrayBytes`].
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
+    /// Returns an [`ElementError`] if the data type is incompatible with [`Element`].
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError>;
+    ) -> Result<ArrayBytes<'a>, ElementError>;
 
     /// Convert a vector of elements into [`ArrayBytes`].
     ///
     /// Avoids an extra copy compared to `to_array_bytes` when possible.
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
+    /// Returns an [`ElementError`] if the data type is incompatible with [`Element`].
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<ArrayBytes<'static>, ArrayError>;
+    ) -> Result<ArrayBytes<'static>, ElementError>;
 }
 
 /// A trait representing an owned array element type.
@@ -46,11 +49,11 @@ pub trait ElementOwned: Element {
     /// Convert bytes into a [`Vec<ElementOwned>`].
     ///
     /// # Errors
-    /// Returns an [`ArrayError`] if the data type is incompatible with [`Element`].
+    /// Returns an [`ElementError`] if the data type is incompatible with [`Element`].
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError>;
+    ) -> Result<Vec<Self>, ElementError>;
 }
 
 /// A marker trait for a fixed length element.
@@ -77,7 +80,7 @@ impl<const N: usize> ElementFixedLength for [u8; N] {}
 impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
 
 impl Element for bool {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
             .is::<data_type::BoolDataType>()
             .then_some(())
@@ -87,7 +90,7 @@ impl Element for bool {
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes(elements).into())
     }
@@ -95,7 +98,7 @@ impl Element for bool {
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<ArrayBytes<'static>, ArrayError> {
+    ) -> Result<ArrayBytes<'static>, ElementError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes_vec(elements).into())
     }
@@ -105,7 +108,7 @@ impl ElementOwned for bool {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes = bytes.into_fixed()?;
         let elements_u8 = convert_from_bytes_slice::<u8>(&bytes);
@@ -117,7 +120,7 @@ impl ElementOwned for bool {
             let ptr: *mut Self = vec_ptr.cast::<Self>();
             Ok(unsafe { Vec::from_raw_parts(ptr, length, capacity) })
         } else {
-            Err(ArrayError::InvalidElementValue)
+            Err(ElementError::InvalidElementValue)
         }
     }
 }
@@ -127,7 +130,7 @@ impl ElementOwned for bool {
 macro_rules! impl_element_pod {
     ($raw_type:ty, $($data_type:ty),+ $(,)?) => {
         impl Element for $raw_type {
-            fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+            fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
                 let type_id = data_type.as_any().type_id();
                 if $( type_id == std::any::TypeId::of::<$data_type>() )||+ {
                     Ok(())
@@ -139,7 +142,7 @@ macro_rules! impl_element_pod {
             fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
-            ) -> Result<ArrayBytes<'a>, ArrayError> {
+            ) -> Result<ArrayBytes<'a>, ElementError> {
                 Self::validate_data_type(data_type)?;
                 Ok(transmute_to_bytes(elements).into())
             }
@@ -147,7 +150,7 @@ macro_rules! impl_element_pod {
             fn into_array_bytes(
                 data_type: &DataType,
                 elements: Vec<Self>,
-            ) -> Result<ArrayBytes<'static>, ArrayError> {
+            ) -> Result<ArrayBytes<'static>, ElementError> {
                 Self::validate_data_type(data_type)?;
                 Ok(transmute_to_bytes_vec(elements).into())
             }
@@ -157,7 +160,7 @@ macro_rules! impl_element_pod {
             fn from_array_bytes(
                 data_type: &DataType,
                 bytes: ArrayBytes<'_>,
-            ) -> Result<Vec<Self>, ArrayError> {
+            ) -> Result<Vec<Self>, ElementError> {
                 Self::validate_data_type(data_type)?;
                 let bytes = bytes.into_fixed()?;
                 Ok(convert_from_bytes_slice::<Self>(&bytes))
@@ -213,7 +216,7 @@ impl_element_pod!(
 );
 
 impl<const N: usize> Element for &[u8; N] {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // RawBits and fixed size equal to N
         if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
             Ok(())
@@ -225,7 +228,7 @@ impl<const N: usize> Element for &[u8; N] {
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes: Vec<u8> = elements.iter().flat_map(|i| i.iter()).copied().collect();
         Ok(bytes.into())
@@ -234,7 +237,7 @@ impl<const N: usize> Element for &[u8; N] {
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<ArrayBytes<'static>, ArrayError> {
+    ) -> Result<ArrayBytes<'static>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes: Vec<u8> = elements.into_iter().flatten().copied().collect();
         Ok(bytes.into())
@@ -242,7 +245,7 @@ impl<const N: usize> Element for &[u8; N] {
 }
 
 impl<const N: usize> Element for [u8; N] {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // RawBits and fixed size equal to N
         if data_type.is::<data_type::RawBitsDataType>() && data_type.fixed_size() == Some(N) {
             Ok(())
@@ -254,7 +257,7 @@ impl<const N: usize> Element for [u8; N] {
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes(elements).into())
     }
@@ -262,7 +265,7 @@ impl<const N: usize> Element for [u8; N] {
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<ArrayBytes<'static>, ArrayError> {
+    ) -> Result<ArrayBytes<'static>, ElementError> {
         Self::validate_data_type(data_type)?;
         Ok(transmute_to_bytes_vec(elements).into())
     }
@@ -272,7 +275,7 @@ impl<const N: usize> ElementOwned for [u8; N] {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes = bytes.into_fixed()?;
         Ok(convert_from_bytes_slice::<Self>(&bytes))
@@ -282,7 +285,7 @@ impl<const N: usize> ElementOwned for [u8; N] {
 macro_rules! impl_element_string {
     ($raw_type:ty) => {
         impl Element for $raw_type {
-            fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+            fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
                 data_type
                     .is::<data_type::StringDataType>()
                     .then_some(())
@@ -292,7 +295,7 @@ macro_rules! impl_element_string {
             fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
-            ) -> Result<ArrayBytes<'a>, ArrayError> {
+            ) -> Result<ArrayBytes<'a>, ElementError> {
                 Self::validate_data_type(data_type)?;
 
                 // Calculate offsets
@@ -323,7 +326,7 @@ macro_rules! impl_element_string {
             fn into_array_bytes(
                 data_type: &DataType,
                 elements: Vec<Self>,
-            ) -> Result<ArrayBytes<'static>, ArrayError> {
+            ) -> Result<ArrayBytes<'static>, ElementError> {
                 Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
             }
         }
@@ -337,14 +340,14 @@ impl ElementOwned for String {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
             elements.push(
                 Self::from_utf8(bytes[*curr..*next].to_vec())
-                    .map_err(|_| ArrayError::InvalidElementValue)?,
+                    .map_err(|_| ElementError::InvalidElementValue)?,
             );
         }
         Ok(elements)
@@ -354,7 +357,7 @@ impl ElementOwned for String {
 macro_rules! impl_element_bytes {
     ($raw_type:ty) => {
         impl Element for $raw_type {
-            fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+            fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
                 data_type
                     .is::<crate::array::data_type::BytesDataType>()
                     .then_some(())
@@ -364,7 +367,7 @@ macro_rules! impl_element_bytes {
             fn to_array_bytes<'a>(
                 data_type: &DataType,
                 elements: &'a [Self],
-            ) -> Result<ArrayBytes<'a>, ArrayError> {
+            ) -> Result<ArrayBytes<'a>, ElementError> {
                 Self::validate_data_type(data_type)?;
 
                 // Calculate offsets
@@ -393,7 +396,7 @@ macro_rules! impl_element_bytes {
             fn into_array_bytes(
                 data_type: &DataType,
                 elements: Vec<Self>,
-            ) -> Result<ArrayBytes<'static>, ArrayError> {
+            ) -> Result<ArrayBytes<'static>, ElementError> {
                 Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
             }
         }
@@ -407,7 +410,7 @@ impl ElementOwned for Vec<u8> {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
@@ -440,7 +443,7 @@ impl<T> Element for Option<T>
 where
     T: Element + Default,
 {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         let opt = data_type.as_optional().ok_or(IET)?;
         T::validate_data_type(opt.data_type())
     }
@@ -448,7 +451,7 @@ where
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
 
         let opt = data_type.as_optional().ok_or(IET)?;
@@ -483,7 +486,7 @@ where
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<ArrayBytes<'static>, ArrayError> {
+    ) -> Result<ArrayBytes<'static>, ElementError> {
         Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
@@ -495,14 +498,14 @@ where
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
 
         let opt = data_type.as_optional().ok_or(IET)?;
 
         // Extract mask and dense data from optional ArrayBytes
         let optional_bytes = bytes.into_optional().map_err(|e| {
-            ArrayError::Other(format!(
+            ElementError::Other(format!(
                 "Expected optional ArrayBytes (with mask) for optional data type: {e}"
             ))
         })?;
@@ -520,7 +523,7 @@ where
             } else {
                 // Some value - take from dense data
                 if i >= dense_values.len() {
-                    return Err(ArrayError::Other(format!(
+                    return Err(ElementError::Other(format!(
                         "Not enough dense values for mask at index {i}"
                     )));
                 }

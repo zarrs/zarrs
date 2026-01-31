@@ -577,10 +577,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
+        Ok(T::from_array_bytes(
             self.data_type(),
             self.retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
-        )
+        )?)
     }
 
     #[cfg(feature = "ndarray")]
@@ -639,10 +639,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
+        Ok(T::from_array_bytes(
             self.data_type(),
             self.retrieve_chunks_opt::<ArrayBytes<'static>>(chunks, options)?,
-        )
+        )?)
     }
 
     #[cfg(feature = "ndarray")]
@@ -921,10 +921,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
+        Ok(T::from_array_bytes(
             self.data_type(),
             self.retrieve_array_subset_opt::<ArrayBytes<'static>>(array_subset, options)?,
-        )
+        )?)
     }
 
     #[cfg(feature = "ndarray")]
@@ -1044,14 +1044,14 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        T::from_array_bytes(
+        Ok(T::from_array_bytes(
             self.data_type(),
             self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
                 chunk_indices,
                 chunk_subset,
                 options,
             )?,
-        )
+        )?)
     }
 
     #[cfg(feature = "ndarray")]

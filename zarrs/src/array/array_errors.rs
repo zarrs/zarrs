@@ -173,3 +173,15 @@ impl AdditionalFieldUnsupportedError {
         &self.value
     }
 }
+
+impl From<super::ElementError> for ArrayError {
+    fn from(err: super::ElementError) -> Self {
+        use super::ElementError;
+        match err {
+            ElementError::IncompatibleElementType => Self::IncompatibleElementType,
+            ElementError::InvalidElementValue => Self::InvalidElementValue,
+            ElementError::CodecError(e) => Self::CodecError(e),
+            ElementError::Other(s) => Self::Other(s),
+        }
+    }
+}

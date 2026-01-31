@@ -23,25 +23,25 @@ impl<'a> IntoArrayBytes<'a> for ArrayBytes<'a> {
 
 impl<T: Element> IntoArrayBytes<'static> for Vec<T> {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'static>, ArrayError> {
-        T::into_array_bytes(data_type, self)
+        Ok(T::into_array_bytes(data_type, self)?)
     }
 }
 
 impl<'a, T: Element> IntoArrayBytes<'a> for &'a Vec<T> {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ArrayError> {
-        T::to_array_bytes(data_type, self)
+        Ok(T::to_array_bytes(data_type, self)?)
     }
 }
 
 impl<'a, T: Element> IntoArrayBytes<'a> for &'a [T] {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ArrayError> {
-        T::to_array_bytes(data_type, self)
+        Ok(T::to_array_bytes(data_type, self)?)
     }
 }
 
 impl<'a, T: Element, const N: usize> IntoArrayBytes<'a> for &'a [T; N] {
     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ArrayError> {
-        T::to_array_bytes(data_type, self)
+        Ok(T::to_array_bytes(data_type, self)?)
     }
 }
 
@@ -67,7 +67,7 @@ impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static> for ndarray::Arr
         }
         .into_raw_vec_and_offset()
         .0;
-        T::into_array_bytes(data_type, elements).map(ArrayBytes::into_owned)
+        Ok(T::into_array_bytes(data_type, elements)?.into_owned())
     }
 }
 

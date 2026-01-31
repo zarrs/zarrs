@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
+    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
     FillValueMetadata,
 };
 use zarrs::metadata::Configuration;
@@ -155,17 +155,17 @@ impl CustomDataTypeFloat8e3m4Element {
 
 /// This defines how an in-memory CustomDataTypeFloat8e3m4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFloat8e3m4Element {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
             .is::<CustomDataTypeFloat8e3m4>()
             .then_some(())
-            .ok_or(ArrayError::IncompatibleElementType)
+            .ok_or(ElementError::IncompatibleElementType)
     }
 
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len());
         for element in elements {
@@ -177,7 +177,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<zarrs::array::ArrayBytes<'static>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ElementError> {
         Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
@@ -187,7 +187,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();

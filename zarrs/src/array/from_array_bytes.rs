@@ -78,7 +78,7 @@ impl<T: ElementOwned> FromArrayBytes for Vec<T> {
         _shape: &[u64],
         data_type: &DataType,
     ) -> Result<Self, ArrayError> {
-        T::from_array_bytes(data_type, bytes)
+        Ok(T::from_array_bytes(data_type, bytes)?)
     }
 }
 
@@ -89,7 +89,7 @@ impl<T: ElementOwned, D: ndarray::Dimension> FromArrayBytes for ndarray::Array<T
         shape: &[u64],
         data_type: &DataType,
     ) -> Result<Self, ArrayError> {
-        let elements = T::from_array_bytes(data_type, bytes)?;
+        let elements: Vec<T> = T::from_array_bytes(data_type, bytes)?;
         let length = elements.len();
         let arrayd = ndarray::ArrayD::from_shape_vec(
             crate::array::iter_u64_to_usize(shape.iter()),
