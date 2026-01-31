@@ -97,7 +97,7 @@ pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, 
 pub use self::array_metadata_options::ArrayMetadataOptions;
 use self::chunk_grid::RegularChunkGrid;
 pub use self::codec::CodecChain;
-pub use self::element::{Element, ElementError, ElementFixedLength, ElementOwned};
+pub use self::element::{Element, ElementError, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
