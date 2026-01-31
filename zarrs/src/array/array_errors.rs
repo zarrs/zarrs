@@ -1,6 +1,9 @@
 use serde_json::Value;
 use thiserror::Error;
-use zarrs_codec::CodecError;
+use zarrs_codec::{
+    CodecError, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
+    ExpectedVariableLengthBytesError,
+};
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
@@ -142,6 +145,24 @@ pub enum ArrayError {
     /// Any other error.
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<ExpectedFixedLengthBytesError> for ArrayError {
+    fn from(err: ExpectedFixedLengthBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
+}
+
+impl From<ExpectedVariableLengthBytesError> for ArrayError {
+    fn from(err: ExpectedVariableLengthBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
+}
+
+impl From<ExpectedOptionalBytesError> for ArrayError {
+    fn from(err: ExpectedOptionalBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
 }
 
 /// An unsupported additional field error.

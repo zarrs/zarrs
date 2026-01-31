@@ -87,6 +87,21 @@ pub enum ArrayBytesError {
     UsedFixedLengthMethodOnVariableLengthArray,
 }
 
+/// Expected fixed length array bytes but found variable or optional.
+#[derive(Clone, Copy, Debug, Display, Error)]
+#[display("Expected fixed length array bytes")]
+pub struct ExpectedFixedLengthBytesError;
+
+/// Expected variable length array bytes but found fixed or optional.
+#[derive(Clone, Copy, Debug, Display, Error)]
+#[display("Expected variable length array bytes")]
+pub struct ExpectedVariableLengthBytesError;
+
+/// Expected optional array bytes but found fixed or variable.
+#[derive(Clone, Copy, Debug, Display, Error)]
+#[display("Expected optional array bytes")]
+pub struct ExpectedOptionalBytesError;
+
 impl<'a> ArrayBytes<'a> {
     /// Create a new fixed length array bytes from `bytes`.
     ///
@@ -195,49 +210,38 @@ impl<'a> ArrayBytes<'a> {
         }
     }
 
-    /// Convert the array bytes into fixed size bytes.
+    /// Convert the array bytes into fixed length bytes.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedFixedLengthBytes`] if the bytes are variable length.
-    pub fn into_fixed(self) -> Result<ArrayBytesRaw<'a>, CodecError> {
+    /// Returns an [`ExpectedFixedLengthBytesError`] if the bytes are not fixed.
+    pub fn into_fixed(self) -> Result<ArrayBytesRaw<'a>, ExpectedFixedLengthBytesError> {
         match self {
             Self::Fixed(bytes) => Ok(bytes),
-            Self::Variable(..) => Err(CodecError::ExpectedFixedLengthBytes),
-            Self::Optional(..) => Err(CodecError::ExpectedNonOptionalBytes),
+            Self::Variable(..) | Self::Optional(..) => Err(ExpectedFixedLengthBytesError),
         }
     }
 
-    /// Convert the array bytes into variable sized bytes and element byte offsets.
+    /// Convert the array bytes into variable length bytes and element byte offsets.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedVariableLengthBytes`] if the bytes are fixed length.
-    pub fn into_variable(self) -> Result<ArrayBytesVariableLength<'a>, CodecError> {
+    /// Returns an [`ExpectedVariableLengthBytesError`] if the bytes are not variable.
+    pub fn into_variable(
+        self,
+    ) -> Result<ArrayBytesVariableLength<'a>, ExpectedVariableLengthBytesError> {
         match self {
-            Self::Fixed(..) => Err(CodecError::ExpectedVariableLengthBytes),
+            Self::Fixed(..) | Self::Optional(..) => Err(ExpectedVariableLengthBytesError),
             Self::Variable(variable_length_bytes) => Ok(variable_length_bytes),
-            Self::Optional(..) => Err(CodecError::ExpectedNonOptionalBytes),
         }
     }
 
     /// Convert the array bytes into optional data and validity mask.
     ///
     /// # Errors
-    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
+    /// Returns an [`ExpectedOptionalBytesError`] if the bytes are not optional.
+    pub fn into_optional(self) -> Result<ArrayBytesOptional<'a>, ExpectedOptionalBytesError> {
         match self {
             Self::Optional(optional_bytes) => Ok(optional_bytes),
-            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
-        }
-    }
-
-    /// Convert the array bytes into [`ArrayBytesOptional`].
-    ///
-    /// # Errors
-    /// Returns a [`CodecError::ExpectedNonOptionalBytes`] if the bytes are not optional.
-    pub fn into_optional_bytes(self) -> Result<ArrayBytesOptional<'a>, CodecError> {
-        match self {
-            Self::Optional(optional_bytes) => Ok(optional_bytes),
-            Self::Fixed(..) | Self::Variable(..) => Err(CodecError::ExpectedNonOptionalBytes),
+            Self::Fixed(..) | Self::Variable(..) => Err(ExpectedOptionalBytesError),
         }
     }
 
@@ -694,8 +698,8 @@ fn update_array_bytes_array_subset<'a>(
                 mask,
             )))
         }
-        (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
-        (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
+        (_, _, DataTypeSize::Variable) => Err(ExpectedVariableLengthBytesError.into()),
+        (_, _, DataTypeSize::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
     }
 }
 
@@ -782,8 +786,8 @@ fn update_array_bytes_indexer<'a>(
                 mask,
             )))
         }
-        (_, _, DataTypeSize::Variable) => Err(CodecError::ExpectedVariableLengthBytes),
-        (_, _, DataTypeSize::Fixed(_)) => Err(CodecError::ExpectedFixedLengthBytes),
+        (_, _, DataTypeSize::Variable) => Err(ExpectedVariableLengthBytesError.into()),
+        (_, _, DataTypeSize::Fixed(_)) => Err(ExpectedFixedLengthBytesError.into()),
     }
 }
 
@@ -962,7 +966,7 @@ pub fn merge_chunks_vlen_optional<'a>(
         result = result.with_optional_mask(mask);
     }
 
-    result.into_optional()
+    Ok(result.into_optional()?)
 }
 
 /// Extract decoded variable-length regions from bytes and offsets using an indexer.
@@ -1063,13 +1067,13 @@ pub fn decode_into_array_bytes_target(
         }
 
         // Type mismatches
-        (ArrayBytes::Variable(..), _) => Err(CodecError::ExpectedFixedLengthBytes),
-        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(..)) => Err(CodecError::Other(
-            "Cannot decode non-optional data into optional target".to_string(),
-        )),
-        (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => Err(CodecError::Other(
-            "Cannot decode optional data into non-optional target".to_string(),
-        )),
+        (ArrayBytes::Variable(..), _) => Err(ExpectedFixedLengthBytesError.into()),
+        (ArrayBytes::Fixed(_), ArrayBytesDecodeIntoTarget::Optional(..)) => {
+            Err(ExpectedOptionalBytesError.into())
+        }
+        (ArrayBytes::Optional(..), ArrayBytesDecodeIntoTarget::Fixed(_)) => {
+            Err(ExpectedFixedLengthBytesError.into())
+        }
     }
 }
 

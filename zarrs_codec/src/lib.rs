@@ -31,7 +31,8 @@ mod array_bytes;
 pub use array_bytes::{
     ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
-    ArrayBytesVariableLength, build_nested_optional_target, copy_fill_value_into,
+    ArrayBytesVariableLength, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
+    ExpectedVariableLengthBytesError, build_nested_optional_target, copy_fill_value_into,
     decode_into_array_bytes_target, extract_decoded_regions_vlen, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth, update_array_bytes,
 };
@@ -1917,14 +1918,14 @@ pub enum CodecError {
     #[error("Invalid variable sized array offsets")]
     InvalidVariableSizedArrayOffsets,
     /// Expected fixed length bytes.
-    #[error("Expected fixed length array bytes")]
-    ExpectedFixedLengthBytes,
+    #[error(transparent)]
+    ExpectedFixedLengthBytes(#[from] ExpectedFixedLengthBytesError),
     /// Expected variable length bytes.
-    #[error("Expected variable length array bytes")]
-    ExpectedVariableLengthBytes,
-    /// Expected non-optional bytes.
-    #[error("Expected non-optional array bytes")]
-    ExpectedNonOptionalBytes,
+    #[error(transparent)]
+    ExpectedVariableLengthBytes(#[from] ExpectedVariableLengthBytesError),
+    /// Expected optional bytes.
+    #[error(transparent)]
+    ExpectedOptionalBytes(#[from] ExpectedOptionalBytesError),
     /// Invalid array shape.
     #[error(transparent)]
     InvalidArrayShape(#[from] InvalidArrayShapeError),
