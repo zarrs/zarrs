@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `From<Arc<serde_json::Error>>` for `PluginCreateError`
+- Change to Rust 2024 edition
 
 ## [0.4.0] - 2026-01-13
 

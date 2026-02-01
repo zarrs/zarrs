@@ -2,7 +2,7 @@
 name = "zarrs_plugin"
 version = "0.4.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.88"
 description = "The plugin API for the zarrs crate"
 homepage = "https://zarrs.dev"
