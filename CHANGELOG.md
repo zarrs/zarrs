@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
 - Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type` (implementing `ExtensionAliases` for per-data-type alias management)
 - Add `ArrayBytesVariableLength`, `ArrayBytesDecodeIntoTarget`, and `ArrayBytesOptional` types
-- Add support for the `optional` data type and codec (`OptionalCodec`, `OptionalDataType`, `Element[Owned|FixedLength]` for `Option<T>`, examples)
+- Add support for the `optional` data type and codec (`OptionalCodec`, `OptionalDataType`, `Element[Owned]` for `Option<T>`, examples)
 - Add chunk compaction API (`Array::[async_]compact_chunk()`, `ArrayToBytesCodecTraits::compact()`)
 - Add `zarrs::array::codec::default_array_to_bytes_codec()`
 - Add `ArrayBuilder::subchunk_shape()` and `InvalidSubchunkShape` variant to `ArrayCreateError`
@@ -143,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename `codec_v2_to_v3_name()` to `codec_v2_to_v3()` and change parameter to metadata from name
 - **Breaking**: Remove `ArrayBuilderChunkGrid` type
 - **Breaking**: Remove `array::ArrayBuilder{ChunkGridMetadata,DataType,FillValue}` re-exports
+- **Breaking**: Remove unused `ElementFixedLength` marker trait
 
 ### Fixed
 - Fix `transpose` codec decoding with variable-size data types
