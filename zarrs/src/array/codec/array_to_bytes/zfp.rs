@@ -133,8 +133,8 @@ impl CodecTraitsV3 for ZfpCodec {
     }
 }
 
-// Re-export the trait and types from zarrs_data_type
-pub use zarrs_data_type::codec_traits::{
+// Re-export the trait and macro from zarrs_data_type
+pub use zarrs_data_type::codec_traits::zfp::{
     ZfpDataTypeExt, ZfpDataTypePlugin, ZfpDataTypeTraits, ZfpEncoding, ZfpNativeType,
     impl_zfp_data_type_traits,
 };

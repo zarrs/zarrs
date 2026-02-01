@@ -1980,8 +1980,8 @@ impl From<String> for CodecError {
     }
 }
 
-impl From<zarrs_data_type::codec_traits::BytesCodecEndiannessMissingError> for CodecError {
-    fn from(err: zarrs_data_type::codec_traits::BytesCodecEndiannessMissingError) -> Self {
+impl From<zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError> for CodecError {
+    fn from(err: zarrs_data_type::codec_traits::bytes::BytesCodecEndiannessMissingError) -> Self {
         Self::Other(err.to_string())
     }
 }

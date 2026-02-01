@@ -14,7 +14,7 @@ use zarrs::array::{
 use zarrs::metadata::Configuration;
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::store::MemoryStore;
-use zarrs_data_type::codec_traits::PackBitsDataTypeTraits;
+use zarrs_data_type::codec_traits::packbits::PackBitsDataTypeTraits;
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
@@ -108,8 +108,8 @@ impl PackBitsDataTypeTraits for CustomDataTypeUInt4 {
 // Register packbits codec support
 zarrs_data_type::register_data_type_extension_codec!(
     CustomDataTypeUInt4,
-    zarrs_data_type::codec_traits::PackBitsDataTypePlugin,
-    zarrs_data_type::codec_traits::PackBitsDataTypeTraits
+    zarrs_data_type::codec_traits::packbits::PackBitsDataTypePlugin,
+    zarrs_data_type::codec_traits::packbits::PackBitsDataTypeTraits
 );
 
 impl TryFrom<u64> for CustomDataTypeUInt4Element {

@@ -34,7 +34,7 @@ crate::define_data_type_support!(PackBits);
 macro_rules! _impl_pack_bits_data_type_traits {
     // Multi-component, signed integer
     ($marker:ty, $bits:expr, signed, $components:expr) => {
-        impl $crate::codec_traits::PackBitsDataTypeTraits for $marker {
+        impl $crate::codec_traits::packbits::PackBitsDataTypeTraits for $marker {
             fn component_size_bits(&self) -> u64 {
                 $bits
             }
@@ -47,13 +47,13 @@ macro_rules! _impl_pack_bits_data_type_traits {
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::PackBitsDataTypePlugin,
-            $crate::codec_traits::PackBitsDataTypeTraits
+            $crate::codec_traits::packbits::PackBitsDataTypePlugin,
+            $crate::codec_traits::packbits::PackBitsDataTypeTraits
         );
     };
     // Multi-component, unsigned integer
     ($marker:ty, $bits:expr, unsigned, $components:expr) => {
-        impl $crate::codec_traits::PackBitsDataTypeTraits for $marker {
+        impl $crate::codec_traits::packbits::PackBitsDataTypeTraits for $marker {
             fn component_size_bits(&self) -> u64 {
                 $bits
             }
@@ -66,13 +66,13 @@ macro_rules! _impl_pack_bits_data_type_traits {
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::PackBitsDataTypePlugin,
-            $crate::codec_traits::PackBitsDataTypeTraits
+            $crate::codec_traits::packbits::PackBitsDataTypePlugin,
+            $crate::codec_traits::packbits::PackBitsDataTypeTraits
         );
     };
     // Multi-component, float (no sign extension)
     ($marker:ty, $bits:expr, float, $components:expr) => {
-        impl $crate::codec_traits::PackBitsDataTypeTraits for $marker {
+        impl $crate::codec_traits::packbits::PackBitsDataTypeTraits for $marker {
             fn component_size_bits(&self) -> u64 {
                 $bits
             }
@@ -85,8 +85,8 @@ macro_rules! _impl_pack_bits_data_type_traits {
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::PackBitsDataTypePlugin,
-            $crate::codec_traits::PackBitsDataTypeTraits
+            $crate::codec_traits::packbits::PackBitsDataTypePlugin,
+            $crate::codec_traits::packbits::PackBitsDataTypeTraits
         );
     };
 }

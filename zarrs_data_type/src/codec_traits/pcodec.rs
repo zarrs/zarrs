@@ -61,9 +61,9 @@ crate::define_data_type_support!(Pcodec);
 #[macro_export]
 macro_rules! _impl_pcodec_data_type_traits {
     ($marker:ty, $element_type:ident, $elements_per_element:expr) => {
-        impl $crate::codec_traits::PcodecDataTypeTraits for $marker {
-            fn pcodec_element_type(&self) -> $crate::codec_traits::PcodecElementType {
-                $crate::codec_traits::PcodecElementType::$element_type
+        impl $crate::codec_traits::pcodec::PcodecDataTypeTraits for $marker {
+            fn pcodec_element_type(&self) -> $crate::codec_traits::pcodec::PcodecElementType {
+                $crate::codec_traits::pcodec::PcodecElementType::$element_type
             }
             fn pcodec_elements_per_element(&self) -> usize {
                 $elements_per_element
@@ -71,8 +71,8 @@ macro_rules! _impl_pcodec_data_type_traits {
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::PcodecDataTypePlugin,
-            $crate::codec_traits::PcodecDataTypeTraits
+            $crate::codec_traits::pcodec::PcodecDataTypePlugin,
+            $crate::codec_traits::pcodec::PcodecDataTypeTraits
         );
     };
 }

@@ -45,7 +45,7 @@ impl_data_type_extension_numeric!(Int64DataType, 8, i64);
 // Bitround codec implementations for standard integers
 #[cfg(feature = "bitround")]
 mod impl_bitround {
-    use crate::array::codec::impl_bitround_codec;
+    use zarrs_data_type::codec_traits::impl_bitround_codec;
     impl_bitround_codec!(super::Int8DataType, 1, int8);
     impl_bitround_codec!(super::Int16DataType, 2, int16);
     impl_bitround_codec!(super::Int32DataType, 4, int32);

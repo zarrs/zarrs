@@ -104,7 +104,7 @@ zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(NumpyDateTime64DataT
 #[cfg(feature = "pcodec")]
 crate::array::codec::impl_pcodec_data_type_traits!(NumpyDateTime64DataType, I64, 1);
 #[cfg(feature = "bitround")]
-crate::array::codec::impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
+zarrs_data_type::codec_traits::impl_bitround_codec!(NumpyDateTime64DataType, 8, int64);
 #[cfg(feature = "zfp")]
 crate::array::codec::impl_zfp_data_type_traits!(NumpyDateTime64DataType, Int64);
 zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(

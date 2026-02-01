@@ -10,7 +10,7 @@
 //! - <https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/bytes>
 //!
 //! ### Specification Deviations
-//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`zarrs_data_type::codec_traits::BytesDataTypeTraits`] trait.
+//! The `bytes` specification defines a fixed set of supported data types, whereas the `bytes` codec in `zarrs` supports any fixed size data type that implements the [`zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits`] trait.
 //!
 //! ### Codec `name` Aliases (Zarr V3)
 //! - `bytes`
@@ -43,8 +43,8 @@ use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bytes::{BytesCodecConfiguration, BytesCodecConfigurationV1};
 use zarrs_plugin::PluginCreateError;
 
-// Re-export extension trait from zarrs_data_type
-pub use zarrs_data_type::codec_traits::{
+// Re-export extension trait and macro from zarrs_data_type
+pub use zarrs_data_type::codec_traits::bytes::{
     BytesCodecEndiannessMissingError, BytesDataTypeExt, BytesDataTypePlugin, BytesDataTypeTraits,
     impl_bytes_data_type_traits,
 };

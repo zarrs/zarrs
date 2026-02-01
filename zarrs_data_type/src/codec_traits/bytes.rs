@@ -65,14 +65,14 @@ crate::define_data_type_support!(Bytes);
 macro_rules! _impl_bytes_data_type_traits {
     ($marker:ty, 1) => {
         // Passthrough for single-byte components (no endianness conversion needed)
-        impl $crate::codec_traits::BytesDataTypeTraits for $marker {
+        impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
             fn encode<'a>(
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 _endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
                 ::std::borrow::Cow<'a, [u8]>,
-                $crate::codec_traits::BytesCodecEndiannessMissingError,
+                $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 Ok(bytes)
             }
@@ -83,31 +83,31 @@ macro_rules! _impl_bytes_data_type_traits {
                 _endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
                 ::std::borrow::Cow<'a, [u8]>,
-                $crate::codec_traits::BytesCodecEndiannessMissingError,
+                $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 Ok(bytes)
             }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::BytesDataTypePlugin,
-            $crate::codec_traits::BytesDataTypeTraits
+            $crate::codec_traits::bytes::BytesDataTypePlugin,
+            $crate::codec_traits::bytes::BytesDataTypeTraits
         );
     };
     ($marker:ty, $component_size:tt) => {
         // Multi-byte components need endianness handling
-        impl $crate::codec_traits::BytesDataTypeTraits for $marker {
+        impl $crate::codec_traits::bytes::BytesDataTypeTraits for $marker {
             fn encode<'a>(
                 &self,
                 bytes: ::std::borrow::Cow<'a, [u8]>,
                 endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
                 ::std::borrow::Cow<'a, [u8]>,
-                $crate::codec_traits::BytesCodecEndiannessMissingError,
+                $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 const COMPONENT_SIZE: usize = $component_size;
-                let endianness =
-                    endianness.ok_or($crate::codec_traits::BytesCodecEndiannessMissingError)?;
+                let endianness = endianness
+                    .ok_or($crate::codec_traits::bytes::BytesCodecEndiannessMissingError)?;
                 if endianness == ::zarrs_metadata::Endianness::native() {
                     Ok(bytes)
                 } else {
@@ -125,15 +125,15 @@ macro_rules! _impl_bytes_data_type_traits {
                 endianness: Option<::zarrs_metadata::Endianness>,
             ) -> Result<
                 ::std::borrow::Cow<'a, [u8]>,
-                $crate::codec_traits::BytesCodecEndiannessMissingError,
+                $crate::codec_traits::bytes::BytesCodecEndiannessMissingError,
             > {
                 self.encode(bytes, endianness)
             }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::BytesDataTypePlugin,
-            $crate::codec_traits::BytesDataTypeTraits
+            $crate::codec_traits::bytes::BytesDataTypePlugin,
+            $crate::codec_traits::bytes::BytesDataTypeTraits
         );
     };
 }

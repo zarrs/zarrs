@@ -153,7 +153,7 @@ impl_complex_data_type!(Complex128DataType, 16, f64);
 // Bitround implementations for standard complex types
 #[cfg(feature = "bitround")]
 mod bitround_impls {
-    use crate::array::codec::array_to_array::bitround::impl_bitround_codec;
+    use zarrs_data_type::codec_traits::impl_bitround_codec;
     impl_bitround_codec!(super::ComplexBFloat16DataType, 2, float16, 7);
     impl_bitround_codec!(super::ComplexFloat16DataType, 2, float16, 10);
     impl_bitround_codec!(super::ComplexFloat32DataType, 4, float32, 23);

@@ -79,15 +79,15 @@ crate::define_data_type_support!(Zfp);
 #[macro_export]
 macro_rules! _impl_zfp_data_type_traits {
     ($marker:ty, $encoding:ident) => {
-        impl $crate::codec_traits::ZfpDataTypeTraits for $marker {
-            fn zfp_encoding(&self) -> $crate::codec_traits::ZfpEncoding {
-                $crate::codec_traits::ZfpEncoding::$encoding
+        impl $crate::codec_traits::zfp::ZfpDataTypeTraits for $marker {
+            fn zfp_encoding(&self) -> $crate::codec_traits::zfp::ZfpEncoding {
+                $crate::codec_traits::zfp::ZfpEncoding::$encoding
             }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::ZfpDataTypePlugin,
-            $crate::codec_traits::ZfpDataTypeTraits
+            $crate::codec_traits::zfp::ZfpDataTypePlugin,
+            $crate::codec_traits::zfp::ZfpDataTypeTraits
         );
     };
 }

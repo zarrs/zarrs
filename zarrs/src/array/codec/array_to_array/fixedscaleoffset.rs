@@ -81,8 +81,8 @@ impl CodecTraitsV2 for FixedScaleOffsetCodec {
     }
 }
 
-// Re-export the trait and types from zarrs_data_type
-pub use zarrs_data_type::codec_traits::{
+// Re-export the trait and macro from zarrs_data_type
+pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
     FixedScaleOffsetDataTypeExt, FixedScaleOffsetDataTypePlugin, FixedScaleOffsetDataTypeTraits,
     FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
     impl_fixed_scale_offset_data_type_traits,

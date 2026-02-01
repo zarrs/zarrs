@@ -45,7 +45,7 @@ impl_data_type_extension_numeric!(UInt64DataType, 8, u64);
 // Bitround codec implementations for standard unsigned integers
 #[cfg(feature = "bitround")]
 mod impl_bitround {
-    use crate::array::codec::impl_bitround_codec;
+    use zarrs_data_type::codec_traits::impl_bitround_codec;
     impl_bitround_codec!(super::UInt8DataType, 1, uint8);
     impl_bitround_codec!(super::UInt16DataType, 2, uint16);
     impl_bitround_codec!(super::UInt32DataType, 4, uint32);

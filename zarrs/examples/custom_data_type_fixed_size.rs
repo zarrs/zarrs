@@ -25,7 +25,7 @@ use zarrs::array::{
 use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata::{Configuration, Endianness};
 use zarrs::storage::store::MemoryStore;
-use zarrs_data_type::codec_traits::{BytesCodecEndiannessMissingError, BytesDataTypeTraits};
+use zarrs_data_type::codec_traits::bytes::{BytesCodecEndiannessMissingError, BytesDataTypeTraits};
 use zarrs_data_type::{
     DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
@@ -273,8 +273,8 @@ impl BytesDataTypeTraits for CustomDataTypeFixedSize {
 // Register codec support
 zarrs_data_type::register_data_type_extension_codec!(
     CustomDataTypeFixedSize,
-    zarrs_data_type::codec_traits::BytesDataTypePlugin,
-    zarrs_data_type::codec_traits::BytesDataTypeTraits
+    zarrs_data_type::codec_traits::bytes::BytesDataTypePlugin,
+    zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits
 );
 
 fn main() {

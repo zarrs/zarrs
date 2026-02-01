@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `DataTypeCodecError` for codec support methods
 - Add `codec_traits` module with data type traits/plugins/macros for codec support
   - These were moved from `zarrs` with various revisions (e.g. `zfp` enums simplified, rename impl macros, more useful `bytes` impl macro)
+- Add `impl_bitround_codec` macro and bitround helper functions (`round_bytes_*`) to `codec_traits::bitround`
 - Add `Display` impl for `DataType`
 
 ### Changed

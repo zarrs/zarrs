@@ -82,17 +82,17 @@ crate::define_data_type_support!(FixedScaleOffset);
 #[macro_export]
 macro_rules! _impl_fixed_scale_offset_data_type_traits {
     ($marker:ty, $element_type:ident) => {
-        impl $crate::codec_traits::FixedScaleOffsetDataTypeTraits for $marker {
+        impl $crate::codec_traits::fixedscaleoffset::FixedScaleOffsetDataTypeTraits for $marker {
             fn fixedscaleoffset_element_type(
                 &self,
-            ) -> $crate::codec_traits::FixedScaleOffsetElementType {
-                $crate::codec_traits::FixedScaleOffsetElementType::$element_type
+            ) -> $crate::codec_traits::fixedscaleoffset::FixedScaleOffsetElementType {
+                $crate::codec_traits::fixedscaleoffset::FixedScaleOffsetElementType::$element_type
             }
         }
         $crate::register_data_type_extension_codec!(
             $marker,
-            $crate::codec_traits::FixedScaleOffsetDataTypePlugin,
-            $crate::codec_traits::FixedScaleOffsetDataTypeTraits
+            $crate::codec_traits::fixedscaleoffset::FixedScaleOffsetDataTypePlugin,
+            $crate::codec_traits::fixedscaleoffset::FixedScaleOffsetDataTypeTraits
         );
     };
 }
