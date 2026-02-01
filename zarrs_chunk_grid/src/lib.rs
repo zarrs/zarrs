@@ -36,8 +36,8 @@ pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 
 use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 
-use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{
     ExtensionAliases, ExtensionName, MaybeSend, MaybeSync, Plugin2, PluginCreateError,
     PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry, ZarrVersion, ZarrVersion3,

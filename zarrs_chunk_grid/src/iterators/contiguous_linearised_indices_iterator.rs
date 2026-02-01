@@ -1,9 +1,9 @@
 use std::iter::FusedIterator;
 
-use super::contiguous_indices_iterator::ContiguousIndices;
 use super::ContiguousIndicesIterator;
+use super::contiguous_indices_iterator::ContiguousIndices;
 use crate::iterators::contiguous_indices_iterator::ContiguousIndicesIntoIterator;
-use crate::{ravel_indices, ArrayShape, ArraySubset, IndexerError};
+use crate::{ArrayShape, ArraySubset, IndexerError, ravel_indices};
 
 /// Iterates over contiguous linearised element indices in an array subset.
 ///

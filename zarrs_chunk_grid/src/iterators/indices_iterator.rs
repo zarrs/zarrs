@@ -1,11 +1,11 @@
 use std::iter::FusedIterator;
 
-use rayon::iter::plumbing::{bridge, Consumer, Producer, ProducerCallback, UnindexedConsumer};
+use rayon::iter::plumbing::{Consumer, Producer, ProducerCallback, UnindexedConsumer, bridge};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 
-use crate::{unravel_index, ArrayIndicesTinyVec, ArraySubset};
+use crate::{ArrayIndicesTinyVec, ArraySubset, unravel_index};
 
 /// An iterator over the indices in an array subset.
 ///

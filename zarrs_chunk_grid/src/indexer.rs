@@ -4,8 +4,8 @@ use std::ops::Range;
 use thiserror::Error;
 
 use crate::{
-    ravel_indices, ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits,
-    IncompatibleDimensionalityError, MaybeSend, MaybeSync,
+    ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubsetTraits,
+    IncompatibleDimensionalityError, MaybeSend, MaybeSync, ravel_indices,
 };
 
 /// An incompatible indexer and array shape error.

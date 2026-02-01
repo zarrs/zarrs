@@ -401,10 +401,12 @@ mod tests {
             .bound(&[5, 5])
             .unwrap();
         assert_eq!(array_subset.shape().as_ref(), &[5, 5]);
-        assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10])
-            .unwrap()
-            .bound(&[5, 5, 5])
-            .is_err());
+        assert!(
+            ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10])
+                .unwrap()
+                .bound(&[5, 5, 5])
+                .is_err()
+        );
 
         let array_subset0 = ArraySubset::new_with_ranges(&[1..5, 2..6]);
         let array_subset1 = ArraySubset::new_with_ranges(&[3..6, 4..7]);
@@ -443,9 +445,11 @@ mod tests {
     fn array_subset_bytes() {
         let array_subset = ArraySubset::new_with_ranges(&[1..3, 1..3]);
 
-        assert!(array_subset
-            .iter_contiguous_byte_ranges(&[1, 1], 1)
-            .is_err());
+        assert!(
+            array_subset
+                .iter_contiguous_byte_ranges(&[1, 1], 1)
+                .is_err()
+        );
         let ranges = array_subset
             .iter_contiguous_byte_ranges(&[4, 4], 1)
             .unwrap()
