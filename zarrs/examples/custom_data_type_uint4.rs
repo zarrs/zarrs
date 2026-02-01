@@ -85,6 +85,12 @@ impl DataTypeTraits for CustomDataTypeUInt4 {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    /// Allow u8 as compatible element type.
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u8>()];
+        &TYPES
+    }
 }
 
 // Add support for the `bytes` codec using the helper macro (component size 1 = passthrough).

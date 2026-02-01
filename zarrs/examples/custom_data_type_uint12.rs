@@ -83,6 +83,12 @@ impl DataTypeTraits for CustomDataTypeUInt12 {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    /// Allow u16 as compatible element type.
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u16>()];
+        &TYPES
+    }
 }
 
 // Add support for the `bytes` codec using the helper macro (component size 1 = passthrough).
