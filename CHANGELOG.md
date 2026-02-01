@@ -7,19 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-02-01
+
 ### Highlights and Major Breaking Changes
+
+> This release includes many breaking changes, particularly for extension developers.
+> The most impactful breaking changes are summarised below.
+
 - Improved performance!
-- **Major Breaking**: split `zarrs` into more crates, add `zarrs_codec`, `zarrs_chunk_grid`, and `zarrs_chunk_key_encoding`
-  - Many types that were previously accessible in these modules are not individually re-exported, but are accessible via `api` submodules
-  - Various types are now only re-exported higher in `zarrs::array`, e.g. ~~`zarrs::array::data_type::DataType`~~ -> `zarrs::array::DataType`
-- **Major Breaking**: `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
+- **Breaking**: `DataType` is now a newtype holding (`Arc<dyn DataTypeExtension>`) rather than an enum
   - Use factory functions in `zarrs::array::data_type` to create data types (e.g. `data_type::int8()`, `data_type::float32()`, etc.)
 
   ```diff
   - let data_type = DataType::Float32;
   + let data_type: DataType = data_type::float32();
   ```
-- Generic `Array` `store_*` and `retrieve_*` methods
+- **Breaking**: Generic `Array` `store_*` and `retrieve_*` methods
 
   ```diff
   - let data = array.retrieve_array_subset(&subset)?;
@@ -36,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   + array.store_array_subset(&subset, &data)?;
   ```
 
+- **Breaking**: split `zarrs` into more crates, add `zarrs_codec`, `zarrs_chunk_grid`, and `zarrs_chunk_key_encoding`
+  - Many types that were previously accessible in these modules are not individually re-exported, but are accessible via `api` submodules
+  - Various types are now only re-exported higher in `zarrs::array`, e.g. `zarrs::array::data_type::DataType` -> `zarrs::array::DataType`
+- **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" (`inner_chunk_shape()` → `subchunk_shape()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, etc.)
+
 - Many parameters are now `&dyn ArraySubsetTraits` instead of `ArraySubset` for ergonomic array subset indexing
 
   ```diff
@@ -49,7 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - array_builder.array_to_bytes_codec(
   -    ShardingCodecBuilder::new(
   -        vec![4, 4].try_into()?, // subchunk shape
-  -        &DataType::Float32,
   -    )
   -    .build_arc(),
   -)
@@ -58,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add the `zarrs.optional` data type and codec (spec proposal https://github.com/zarr-developers/zarr-extensions/pull/33)
 - Much improved API for Zarr extension point registration and aliasing, with runtime extension registration support
-- **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" (`inner_chunk_shape()` → `subchunk_shape()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, etc.)
+  - See <https://book.zarrs.dev/extensions.html> for a tutorial on custom data types and codecs
 
 ### Added
 - Add `ElementError` type for `Element` and `ElementOwned` trait methods
@@ -83,8 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Element` and `ElementOwned` trait methods now return `ElementError` instead of `ArrayError`
 - **Breaking**: Replace `ArrayError::IncompatibleElementType` and `ArrayError::InvalidElementValue` with `ArrayError::ElementError`
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
-- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.0, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.0, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
-- Bump internal dependencies: `zarrs_filesystem` 0.3.8, `zarrs_storage` 0.4.2, `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
+- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.2, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.1, `zarrs_filesystem` 0.3.9, `zarrs_storage` 0.4.2, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
+- Bump internal dependencies: `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
   - Extensions now implement `ExtensionAliases<V>` trait for per-extension alias management
@@ -123,7 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change `Codec::from_metadata` parameter to `&CodecMetadata` instead of `&MetadataV3`
 - **Breaking**: Change the representation of the `ArrayError::{InvalidFillValue,InvalidFillValueMetadata}` variants
 - **Breaking**: Rename `ArrayBytesFixedDisjointViewCreateError::IncompatibleIndexerError` to `IndexerError`
-- **Breaking**: Do not re-export `array::FillValueMetadata{V3,V3}`, use `FillValueMetadata` instead
+- **Breaking**: Do not re-export `array::FillValueMetadata{V2,V3}`, use `FillValueMetadata` instead
 - **Breaking**: Rename `StorageTransformerExtension` to `StorageTransformerTraits` for alignment with other extension traits
   - add `create` and `configuration`methods, remove `metadata` method
 - **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" throughout:
@@ -2015,7 +2022,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.22.10...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.0...HEAD
+[0.23.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0
 [0.23.0-beta.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.6
 [0.23.0-beta.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.5
 [0.23.0-beta.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.4
