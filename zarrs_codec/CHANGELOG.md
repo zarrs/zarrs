@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `CodecError::ExpectedFixedLengthBytes`, `CodecError::ExpectedVariableLengthBytes`, and `CodecError::ExpectedOptionalBytes` now wrap their respective dedicated error types
 
 ### Removed
+- **Breaking**: Remove `CodecError::ExpectedNonOptionalBytes` (replaced with `CodecError::ExpectedOptionalBytes`)
+- **Breaking**: Remove `ArrayBytes::into_optional_bytes()` method (use `into_optional()` instead)
 - **Breaking**: Remove `optional_nesting_depth`, `build_nested_optional_target`, `merge_chunks_vlen`, `merge_chunks_vlen_optional`, and `extract_decoded_regions_vlen` (moved to `zarrs` as private functions)
 
 ## [0.1.0] - 2026-01-14
@@ -30,5 +32,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Split from the `zarrs::array::codec` module of `zarrs` 0.23.0-beta.5
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.1.0...HEAD
-[0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.1.0
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_codec-v0.1.0...HEAD
+[0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.1.0
