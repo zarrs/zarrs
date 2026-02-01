@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-02-01
+## [0.9.0] - 2026-02-02
 
 ### Added
 - Add `DataTypeTraits::compatible_element_types()` method for declaring compatible Rust element types
