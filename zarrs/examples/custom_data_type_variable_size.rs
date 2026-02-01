@@ -6,7 +6,7 @@ use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayError, DataType, DataTypeSize, Element,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, DataType, DataTypeSize, Element, ElementError,
     ElementOwned,
 };
 use zarrs::metadata::v3::MetadataV3;
@@ -28,17 +28,17 @@ impl From<Option<f32>> for CustomDataTypeVariableSizeElement {
 }
 
 impl Element for CustomDataTypeVariableSizeElement {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
             .is::<CustomDataTypeVariableSize>()
             .then_some(())
-            .ok_or(ArrayError::IncompatibleElementType)
+            .ok_or(ElementError::IncompatibleElementType)
     }
 
     fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes = Vec::new();
         let mut offsets = Vec::with_capacity(elements.len() + 1);
@@ -60,7 +60,7 @@ impl Element for CustomDataTypeVariableSizeElement {
     fn into_array_bytes(
         data_type: &DataType,
         elements: Vec<Self>,
-    ) -> Result<zarrs::array::ArrayBytes<'static>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ElementError> {
         Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
@@ -69,7 +69,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
