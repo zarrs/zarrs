@@ -36,10 +36,31 @@ macro_rules! impl_complex_data_type {
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
+
+            fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+                impl_complex_data_type!(@compatible_element_types $component_type)
+            }
         }
 
         zarrs_data_type::codec_traits::impl_bytes_data_type_traits!($marker, { $size / 2 });
     };
+
+    (@compatible_element_types f32) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<num::complex::Complex32>()];
+        &TYPES
+    }};
+    (@compatible_element_types f64) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<num::complex::Complex64>()];
+        &TYPES
+    }};
+    (@compatible_element_types f16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<num::complex::Complex<half::f16>>()];
+        &TYPES
+    }};
+    (@compatible_element_types bf16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<num::complex::Complex<half::bf16>>()];
+        &TYPES
+    }};
 
     (@parse_components $self:ident, $re:ident, $im:ident, f32) => {{
         let re = $re.as_f32().ok_or(zarrs_data_type::DataTypeFillValueMetadataError)?;

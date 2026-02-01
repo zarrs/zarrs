@@ -333,4 +333,14 @@ pub trait DataTypeTraits: ExtensionName + Debug + MaybeSend + MaybeSync {
     ///
     /// This enables accessing concrete type-specific methods (like `OptionalDataType::data_type()`).
     fn as_any(&self) -> &dyn Any;
+
+    /// Returns the set of Rust element types this data type is compatible with.
+    ///
+    /// `Element` implementations use this to check compatibility without needing to know about every specific data type.
+    /// Custom data types can override this to declare compatibility with existing `Element` implementations.
+    ///
+    /// Returns an empty slice by default (no automatic compatibility).
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        &[]
+    }
 }

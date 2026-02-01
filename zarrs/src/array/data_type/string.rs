@@ -52,4 +52,12 @@ impl zarrs_data_type::DataTypeTraits for StringDataType {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 2] = [
+            std::any::TypeId::of::<String>(),
+            std::any::TypeId::of::<&str>(),
+        ];
+        &TYPES
+    }
 }

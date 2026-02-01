@@ -60,6 +60,11 @@ impl zarrs_data_type::DataTypeTraits for BoolDataType {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<bool>()];
+        &TYPES
+    }
 }
 
 zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(BoolDataType, 1);

@@ -48,6 +48,11 @@ impl zarrs_data_type::DataTypeTraits for Int4DataType {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<i8>()];
+        &TYPES
+    }
 }
 
 zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(Int4DataType, 4, signed, 1);

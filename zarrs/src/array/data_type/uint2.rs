@@ -48,6 +48,11 @@ impl zarrs_data_type::DataTypeTraits for UInt2DataType {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u8>()];
+        &TYPES
+    }
 }
 
 zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits!(UInt2DataType, 2, unsigned, 1);

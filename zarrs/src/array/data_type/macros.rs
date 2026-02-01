@@ -42,10 +42,64 @@ macro_rules! impl_data_type_extension_numeric {
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
+
+            fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+                impl_data_type_extension_numeric!(@compatible_element_types $rust_type)
+            }
         }
 
         zarrs_data_type::codec_traits::impl_bytes_data_type_traits!($marker, $size);
     };
+
+    // Compatible element types for standard primitive types
+    (@compatible_element_types i8) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<i8>()];
+        &TYPES
+    }};
+    (@compatible_element_types i16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<i16>()];
+        &TYPES
+    }};
+    (@compatible_element_types i32) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<i32>()];
+        &TYPES
+    }};
+    (@compatible_element_types i64) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<i64>()];
+        &TYPES
+    }};
+    (@compatible_element_types u8) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u8>()];
+        &TYPES
+    }};
+    (@compatible_element_types u16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u16>()];
+        &TYPES
+    }};
+    (@compatible_element_types u32) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u32>()];
+        &TYPES
+    }};
+    (@compatible_element_types u64) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u64>()];
+        &TYPES
+    }};
+    (@compatible_element_types f16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<half::f16>()];
+        &TYPES
+    }};
+    (@compatible_element_types bf16) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<half::bf16>()];
+        &TYPES
+    }};
+    (@compatible_element_types f32) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<f32>()];
+        &TYPES
+    }};
+    (@compatible_element_types f64) => {{
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<f64>()];
+        &TYPES
+    }};
 
     // Fill value from metadata for signed integers
     (@fill_value $self:ident, $fill_value_metadata:ident, i8) => {{

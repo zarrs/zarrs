@@ -64,6 +64,8 @@ mod impl_default {
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
+
+        // No compatible element types when float8 feature is disabled
     }
 }
 
@@ -144,6 +146,11 @@ mod impl_float8 {
 
         fn as_any(&self) -> &dyn std::any::Any {
             self
+        }
+
+        fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+            const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<float8::F8E5M2>()];
+            &TYPES
         }
     }
 }
