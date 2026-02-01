@@ -27,17 +27,13 @@ pub use recommended_concurrency::RecommendedConcurrency;
 mod bytes_representation;
 pub use bytes_representation::BytesRepresentation;
 
-// Re-export core ArrayBytes types from zarrs_data_type
-pub use zarrs_data_type::array_bytes::{
-    ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
-    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError, ArrayBytesValidateError,
-    ArrayBytesVariableLength, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError, InvalidBytesLengthError,
-};
-
 mod array_bytes;
 pub use array_bytes::{
-    ArrayBytesExt, copy_fill_value_into, decode_into_array_bytes_target, update_array_bytes,
+    ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
+    ArrayBytesVariableLength, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
+    ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
+    update_array_bytes,
 };
 
 mod byte_interval_partial_decoder;
@@ -1808,6 +1804,22 @@ impl AsyncBytesPartialDecoderTraits for Vec<u8> {
     }
 }
 
+/// An error indicating the length of bytes does not match the expected length.
+#[derive(Clone, Debug, Display, Error)]
+#[display("Invalid bytes len {len}, expected {expected_len}")]
+pub struct InvalidBytesLengthError {
+    len: usize,
+    expected_len: usize,
+}
+
+impl InvalidBytesLengthError {
+    /// Create a new [`InvalidBytesLengthError`].
+    #[must_use]
+    pub fn new(len: usize, expected_len: usize) -> Self {
+        Self { len, expected_len }
+    }
+}
+
 /// An error indicating the shape is not compatible with the expected number of elements.
 #[derive(Clone, Debug, Display, Error)]
 #[display("Invalid shape {shape:?} for number of elements {expected_num_elements}")]
@@ -1934,9 +1946,6 @@ pub enum CodecError {
     /// An array region error.
     #[error(transparent)]
     ArraySubsetError(#[from] ArraySubsetError),
-    /// Array bytes validation error.
-    #[error(transparent)]
-    ArrayBytesValidateError(#[from] ArrayBytesValidateError),
 }
 
 fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> String {

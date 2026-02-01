@@ -62,15 +62,15 @@ pub use zarrs_chunk_grid::{
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 pub use zarrs_codec::{
-    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesExt,
-    ArrayBytesFixedDisjointView, ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets,
-    ArrayBytesOptional, ArrayBytesRaw, ArrayBytesRawOffsetsCreateError,
-    ArrayBytesRawOffsetsOutOfBoundsError, ArrayBytesVariableLength, ArrayCodecTraits,
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToArrayCodecTraits,
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits,
-    BytesRepresentation, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
-    StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
+    ArrayBytes, ArrayBytesDecodeIntoTarget, ArrayBytesError, ArrayBytesFixedDisjointView,
+    ArrayBytesFixedDisjointViewCreateError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
+    ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
+    ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
+    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, StoragePartialDecoder,
+    copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{

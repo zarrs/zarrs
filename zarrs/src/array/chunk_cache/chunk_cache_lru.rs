@@ -8,7 +8,7 @@ use super::{
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShapeTraits,
 };
-use zarrs_codec::{ArrayBytesExt, ArrayToBytesCodecTraits, CodecError};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;

@@ -13,7 +13,6 @@ mod data_type_plugin;
 mod fill_value;
 mod optional;
 
-pub mod array_bytes;
 pub mod codec_traits;
 
 pub use data_type::{DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3};

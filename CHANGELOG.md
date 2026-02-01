@@ -76,15 +76,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add runtime extension registration for codecs, data types, chunk grids, chunk key encodings, and storage transformers
 - Add `ArrayError::ArraySubsetError` variant and `CodecOptions::[{set_,with_}]chunk_concurrent_minimum()`
 - Add `register_data_type_extension_codec!` macro and `DataTypeExt` trait
-- Add `From<ExpectedFixedLengthBytesError>`, `From<ExpectedVariableLengthBytesError>`, `From<ExpectedOptionalBytesError>`, and `From<ArrayBytesValidateError>` for `ArrayError`
+- Add `From<ExpectedFixedLengthBytesError>`, `From<ExpectedVariableLengthBytesError>`, and `From<ExpectedOptionalBytesError>` for `ArrayError`
 - Add `ArrayError::ElementError` variant
-- Re-export `ArrayBytesExt` trait from `zarrs_codec`
 
 ### Changed
 - **Breaking**: `Element` and `ElementOwned` trait methods now return `ElementError` instead of `ArrayError`
 - **Breaking**: Replace `ArrayError::IncompatibleElementType` and `ArrayError::InvalidElementValue` with `ArrayError::ElementError`
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
-- **Breaking**: Bump public dependencies: `zarrs_codec` 0.2.0, `zarrs_metadata` 0.7.0, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.0, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
+- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.0, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.0, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
 - Bump internal dependencies: `zarrs_filesystem` 0.3.8, `zarrs_storage` 0.4.2, `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings

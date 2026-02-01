@@ -10,7 +10,7 @@ use super::{
 use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use zarrs_codec::{ArrayBytesExt, ArrayToBytesCodecTraits, CodecOptions};
+use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
 use zarrs_storage::{
     AsyncWritableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
 };

@@ -1,4 +1,4 @@
-use super::{ArrayBytes, ArrayBytesRaw};
+use crate::{ArrayBytes, ArrayBytesRaw};
 
 /// Optional array bytes composed of data and a validity mask.
 ///
@@ -21,7 +21,6 @@ pub struct ArrayBytesOptional<'a> {
 
 impl<'a> ArrayBytesOptional<'a> {
     /// Create a new `ArrayBytesOptional` with validation.
-    #[must_use]
     pub fn new(data: impl Into<Box<ArrayBytes<'a>>>, mask: impl Into<ArrayBytesRaw<'a>>) -> Self {
         let data = data.into();
         let mask = mask.into();

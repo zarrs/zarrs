@@ -15,7 +15,6 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
   - Re-exports [`zarrs::metadata`](crate::metadata).
 - [`zarrs_metadata_ext`]: Zarr extensions metadata support.
   - Re-exports [`zarrs::metadata_ext`](crate::metadata_ext).
-  - [`zarrs_metadata_numpy_time`]: `NumPy` temporal data type metadata support.
 - [`zarrs_plugin`]: The plugin API.
   - Re-exports [`zarrs::plugin`](crate::plugin).
 - [`zarrs_storage`]: The storage API.
@@ -60,12 +59,10 @@ A hierarchical overview of these crates can be found in the [The `zarrs` Book].
 
 [`zarrs`]: https://docs.rs/zarrs/latest/zarrs/
 [`zarrs_chunk_grid`]: https://docs.rs/zarrs_data_type/latest/zarrs_chunk_grid/
-[`zarrs_chunk_key_encoding`]: https://docs.rs/zarrs_chunk_key_encoding/latest/zarrs_chunk_key_encoding/
 [`zarrs_codec`]: https://docs.rs/zarrs_data_type/latest/zarrs_codec/
 [`zarrs_data_type`]: https://docs.rs/zarrs_data_type/latest/zarrs_data_type/
 [`zarrs_metadata`]: https://docs.rs/zarrs_metadata/latest/zarrs_metadata/
 [`zarrs_metadata_ext`]: https://docs.rs/zarrs_metadata_ext/latest/zarrs_metadata_ext/
-[`zarrs_metadata_numpy_time`]: https://docs.rs/zarrs_metadata_numpy_time/latest/zarrs_metadata_numpy_time/
 [`zarrs_plugin`]: https://docs.rs/zarrs_plugin/latest/zarrs_plugin/
 [`zarrs_registry`]: https://docs.rs/zarrs_registry/latest/zarrs_registry/
 [`zarrs_storage`]: https://docs.rs/zarrs_storage/latest/zarrs_storage/

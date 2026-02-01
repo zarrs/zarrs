@@ -4,8 +4,8 @@ use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
 use crate::array::{ArraySubset, ArraySubsetTraits};
 use zarrs_codec::{
-    ArrayBytesExt, ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions,
-    CodecTraits, StoragePartialEncoder, update_array_bytes,
+    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
+    StoragePartialEncoder, update_array_bytes,
 };
 use zarrs_storage::{
     AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,

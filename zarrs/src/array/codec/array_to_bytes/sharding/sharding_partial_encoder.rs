@@ -18,7 +18,7 @@ use crate::array::{
     DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use zarrs_codec::{
-    ArrayBytesExt, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
     BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes,
 };
 use zarrs_storage::StorageError;
