@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `paste` dependency
 - **Breaking**: Remove `create_fn` parameter from `DataTypePluginV2::create()` and add `T: DataTypeTraitsV2` bound
 - **Breaking**: Remove `create_fn` parameter from `DataTypePluginV3::create()` and add `T: DataTypeTraitsV3` bound
-- **Breaking**: Bump the MSRV to 1.91
+- **Breaking**: Bump the MSRV to 1.91 and Rust 2024 edition
 
 ## [0.8.1] - 2026-01-14
 

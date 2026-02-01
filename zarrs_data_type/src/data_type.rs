@@ -12,8 +12,9 @@ use zarrs_plugin::{
 };
 
 use crate::{
-    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV2, DataTypePluginV3,
-    FillValue, OptionalDataType, DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3,
+    DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3, DataTypeFillValueError,
+    DataTypeFillValueMetadataError, DataTypePluginV2, DataTypePluginV3, FillValue,
+    OptionalDataType,
 };
 
 /// A data type implementing [`DataTypeTraits`].

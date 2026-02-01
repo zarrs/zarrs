@@ -6,8 +6,8 @@ use zarrs_plugin::{
     ExtensionAliases, Plugin, RuntimePlugin, RuntimeRegistry, ZarrVersion2, ZarrVersion3,
 };
 
-use crate::data_type::{DataTypeTraitsV2, DataTypeTraitsV3};
 use crate::DataType;
+use crate::data_type::{DataTypeTraitsV2, DataTypeTraitsV3};
 
 /// A Zarr V3 data type plugin.
 #[derive(derive_more::Deref)]
