@@ -47,13 +47,13 @@ impl<'a> ArrayBytesVariableLength<'a> {
 
     /// Get the underlying bytes.
     #[must_use]
-    pub fn bytes(&self) -> &ArrayBytesRaw<'_> {
+    pub fn bytes(&self) -> &ArrayBytesRaw<'a> {
         &self.bytes
     }
 
     /// Get the underlying offsets.
     #[must_use]
-    pub fn offsets(&self) -> &ArrayBytesOffsets<'_> {
+    pub fn offsets(&self) -> &ArrayBytesOffsets<'a> {
         &self.offsets
     }
 
