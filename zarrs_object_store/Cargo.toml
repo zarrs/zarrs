@@ -1,8 +1,8 @@
 [package]
 name = "zarrs_object_store"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 description = "object_store store support for the zarrs crate"
 homepage = "https://zarrs.dev"
