@@ -1,6 +1,8 @@
 //! Element error types.
 
-use zarrs_codec::CodecError;
+use zarrs_codec::{
+    ExpectedFixedLengthBytesError, ExpectedOptionalBytesError, ExpectedVariableLengthBytesError,
+};
 
 /// An element error.
 #[derive(Clone, Debug, thiserror::Error)]
@@ -11,9 +13,15 @@ pub enum ElementError {
     /// Invalid element value.
     #[error("Invalid element value")]
     InvalidElementValue,
-    /// Codec error.
+    /// Expected fixed length bytes.
     #[error(transparent)]
-    CodecError(#[from] CodecError),
+    ExpectedFixedLengthBytes(#[from] ExpectedFixedLengthBytesError),
+    /// Expected variable length bytes.
+    #[error(transparent)]
+    ExpectedVariableLengthBytes(#[from] ExpectedVariableLengthBytesError),
+    /// Expected optional bytes.
+    #[error(transparent)]
+    ExpectedOptionalBytes(#[from] ExpectedOptionalBytesError),
     /// Other error.
     #[error("{0}")]
     Other(String),

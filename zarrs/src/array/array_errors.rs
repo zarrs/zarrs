@@ -1,9 +1,6 @@
 use serde_json::Value;
 use thiserror::Error;
-use zarrs_codec::{
-    CodecError, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError,
-};
+use zarrs_codec::CodecError;
 use zarrs_data_type::FillValue;
 use zarrs_metadata::FillValueMetadata;
 
@@ -122,19 +119,12 @@ pub enum ArrayError {
     /// An unexpected chunk decoded shape.
     #[error("got chunk decoded shape {_0:?}, expected {_1:?}")]
     UnexpectedChunkDecodedShape(ArrayShape, ArrayShape),
-    /// Incompatible element size.
-    #[error("the element types does not match the data type")]
-    IncompatibleElementType,
+    /// An element error.
+    #[error(transparent)]
+    ElementError(#[from] super::ElementError),
     /// Invalid data shape.
     #[error("data has shape {_0:?}, expected {_1:?}")]
     InvalidDataShape(Vec<usize>, Vec<usize>),
-    /// Invalid element value.
-    ///
-    /// For example
-    ///  - a bool array with a value not equal to 0 (false) or 1 (true).
-    ///  - a string with invalid utf-8 encoding.
-    #[error("Invalid element value")]
-    InvalidElementValue, // TODO: Add reason
     /// Unsupported method.
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),
@@ -147,20 +137,20 @@ pub enum ArrayError {
     Other(String),
 }
 
-impl From<ExpectedFixedLengthBytesError> for ArrayError {
-    fn from(err: ExpectedFixedLengthBytesError) -> Self {
+impl From<zarrs_codec::ExpectedFixedLengthBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedFixedLengthBytesError) -> Self {
         Self::CodecError(err.into())
     }
 }
 
-impl From<ExpectedVariableLengthBytesError> for ArrayError {
-    fn from(err: ExpectedVariableLengthBytesError) -> Self {
+impl From<zarrs_codec::ExpectedVariableLengthBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedVariableLengthBytesError) -> Self {
         Self::CodecError(err.into())
     }
 }
 
-impl From<ExpectedOptionalBytesError> for ArrayError {
-    fn from(err: ExpectedOptionalBytesError) -> Self {
+impl From<zarrs_codec::ExpectedOptionalBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedOptionalBytesError) -> Self {
         Self::CodecError(err.into())
     }
 }
@@ -192,17 +182,5 @@ impl AdditionalFieldUnsupportedError {
     #[must_use]
     pub const fn value(&self) -> &Value {
         &self.value
-    }
-}
-
-impl From<super::ElementError> for ArrayError {
-    fn from(err: super::ElementError) -> Self {
-        use super::ElementError;
-        match err {
-            ElementError::IncompatibleElementType => Self::IncompatibleElementType,
-            ElementError::InvalidElementValue => Self::InvalidElementValue,
-            ElementError::CodecError(e) => Self::CodecError(e),
-            ElementError::Other(s) => Self::Other(s),
-        }
     }
 }

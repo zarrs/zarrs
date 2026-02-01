@@ -504,11 +504,7 @@ where
         let opt = data_type.as_optional().ok_or(IET)?;
 
         // Extract mask and dense data from optional ArrayBytes
-        let optional_bytes = bytes.into_optional().map_err(|e| {
-            ElementError::Other(format!(
-                "Expected optional ArrayBytes (with mask) for optional data type: {e}"
-            ))
-        })?;
+        let optional_bytes = bytes.into_optional()?;
         let (data, mask) = optional_bytes.into_parts();
 
         // Convert the dense inner data to a Vec<T>
