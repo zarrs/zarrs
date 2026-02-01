@@ -52,9 +52,10 @@ use crate::array::{
     IncompatibleDimensionalityError,
 };
 use crate::iter_concurrent_limit;
-use zarrs_codec::{
-    ArrayPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
-    merge_chunks_vlen_optional, optional_nesting_depth,
+use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+
+use super::array_bytes_internal::{
+    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
@@ -491,7 +492,7 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
         Ok(ArrayBytes::Variable(merge_chunks_vlen(
             chunk_bytes_and_subsets,
             &array_subset.shape(),
-        )?)
+        ))
         .into())
     }
 }

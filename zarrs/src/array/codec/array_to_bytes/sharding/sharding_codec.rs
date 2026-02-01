@@ -15,6 +15,7 @@ use super::{
     calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
     sharding_index_shape, sharding_partial_encoder,
 };
+use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
@@ -25,7 +26,7 @@ use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, merge_chunks_vlen,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -278,7 +279,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 Ok(ArrayBytes::Variable(merge_chunks_vlen(
                     chunk_bytes_and_subsets,
                     shard_shape_u64,
-                )?))
+                )))
             }
             DataTypeSize::Fixed(data_type_size) => {
                 // Allocate an array for the output

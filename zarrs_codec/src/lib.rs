@@ -32,9 +32,8 @@ pub use array_bytes::{
     ArrayBytes, ArrayBytesError, ArrayBytesOffsets, ArrayBytesOptional, ArrayBytesRaw,
     ArrayBytesRawOffsetsCreateError, ArrayBytesRawOffsetsOutOfBoundsError,
     ArrayBytesVariableLength, ExpectedFixedLengthBytesError, ExpectedOptionalBytesError,
-    ExpectedVariableLengthBytesError, build_nested_optional_target, copy_fill_value_into,
-    decode_into_array_bytes_target, extract_decoded_regions_vlen, merge_chunks_vlen,
-    merge_chunks_vlen_optional, optional_nesting_depth, update_array_bytes,
+    ExpectedVariableLengthBytesError, copy_fill_value_into, decode_into_array_bytes_target,
+    update_array_bytes,
 };
 
 mod byte_interval_partial_decoder;

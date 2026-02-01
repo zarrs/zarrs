@@ -3,11 +3,9 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
 use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
-use zarrs_codec::{
-    ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions,
-    extract_decoded_regions_vlen,
-};
+use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
 use zarrs_storage::StorageError;

@@ -7,6 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
+use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
 use crate::array::{
@@ -16,7 +17,7 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
-    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions, merge_chunks_vlen,
+    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -537,7 +538,7 @@ async fn partial_decode_variable_array_subset(
         .await?;
 
     // Convert into an array
-    let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape())?;
+    let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape());
     Ok(ArrayBytes::Variable(out_array_subset))
 }
 

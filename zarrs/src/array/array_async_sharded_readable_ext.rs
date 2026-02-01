@@ -13,10 +13,11 @@ use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
+use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::{ArraySubset, ArraySubsetTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
-    CodecError, CodecOptions, merge_chunks_vlen,
+    CodecError, CodecOptions,
 };
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
@@ -624,7 +625,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
                         ArrayBytes::Variable(merge_chunks_vlen(
                             chunk_bytes_and_subsets,
                             &array_subset_shape,
-                        )?)
+                        ))
                     }
                     DataTypeSize::Fixed(data_type_size) => {
                         let size_output = array_subset.num_elements_usize() * data_type_size;

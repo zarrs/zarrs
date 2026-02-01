@@ -21,6 +21,7 @@
 //!
 //! The documentation for [`Array`] details how to interact with arrays.
 
+mod array_bytes_internal;
 mod array_errors;
 mod array_metadata_options;
 mod element;
