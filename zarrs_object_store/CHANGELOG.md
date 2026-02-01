@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Change to Rust 2024 edition
+- Bump `zarrs_storage` to 0.4.2
 
 ## [0.6.1] - 2025-12-31
 
