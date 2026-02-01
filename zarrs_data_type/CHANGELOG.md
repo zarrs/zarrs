@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-02-02
+
 ### Added
 - Add `DataTypeTraits::compatible_element_types()` method for declaring compatible Rust element types
 - Add `DataTypeTraitsV2` and `DataTypeTraitsV3` traits
@@ -152,7 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.8.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.9.0...HEAD
+[0.9.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.9.0
 [0.8.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.1
 [0.8.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.0
 [0.7.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.7.0

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-02
+
 ### Changed
 - **Breaking**: Add `create()` method to `ChunkGridTraits` trait
 - **Breaking**: Remove `create_fn` parameter from `ChunkGridPlugin::new()` and add `T: ChunkGridTraits` bound
@@ -78,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change return type `ChunkGridTraits::{array_shape,grid_shape}()` to `&[u64]` instead of `&ArrayShape`
 - **Breaking**: Change `ChunkGridPlugin::new()` `create_fn` signature from `fn(&(MetadataV3, ArrayShape))` to `fn(&MetadataV3, &ArrayShape)`
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_grid-v0.4.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_grid-v0.5.0...HEAD
+[0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_grid-v0.5.0
 [0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.4.1
 [0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.4.0
 [0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.3.0

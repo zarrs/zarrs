@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-02-02
+
 ### Added
 - Add `Configuration::to_typed()`
 - Add `Metadata{V3,V2}::to_typed_configuration()`
@@ -222,7 +224,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `metadata` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata-v0.7.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata-v0.7.2...HEAD
+[0.7.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata-v0.7.2
 [0.7.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.7.1
 [0.7.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.7.0
 [0.6.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata-v0.6.2
