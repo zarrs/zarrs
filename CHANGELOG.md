@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `ElementError` type for `Element` and `ElementOwned` trait methods
 - Add `ZfpyCodec` for `numcodecs.zfpy` compatibility
 - Add `zarrs::convert` module (moved from `zarrs_metadata_ext::v2_to_v3`)
-- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type` (implementing `ExtensionAliases` for per-data-type alias management)
+- Add data type marker types (`BoolDataType`, `Int8DataType`, `Float32DataType`, etc.) in `zarrs::array::data_type` (implementing `ExtensionAliases` for per-data-type alias management and `DataTypeTraits::compatible_element_types()` for `Element` type compatibility)
 - Add `ArrayBytesVariableLength`, `ArrayBytesDecodeIntoTarget`, and `ArrayBytesOptional` types
 - Add support for the `optional` data type and codec (`OptionalCodec`, `OptionalDataType`, `Element[Owned]` for `Option<T>`, examples)
 - Add chunk compaction API (`Array::[async_]compact_chunk()`, `ArrayToBytesCodecTraits::compact()`)
@@ -130,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Rename sharding "inner chunk" terminology to "subchunk" throughout:
   - `ArrayShardedExt`: `inner_chunk_shape()` → `subchunk_shape()`, `effective_inner_chunk_shape()` → `effective_subchunk_shape()`, `inner_chunk_grid()` → `subchunk_grid()`, `inner_chunk_grid_shape()` → `subchunk_grid_shape()`
   - `ArrayShardedReadableExt` / `AsyncArrayShardedReadableExt`: `inner_chunk_byte_range()` → `subchunk_byte_range()`, `retrieve_encoded_inner_chunk()` → `retrieve_encoded_subchunk()`, `retrieve_inner_chunk_opt()` → `retrieve_subchunk_opt()`, `retrieve_inner_chunks_opt()` → `retrieve_subchunks_opt()`, and related `_elements` / `_ndarray` methods
+- Refactor `Element`/`ElementOwned` implementations into separate submodules and use `DataTypeTraits::compatible_element_types()` for type validation (enables custom data types to declare compatibility with existing `Element` types)
 
 ### Removed
 - **Breaking**: Remove `zarrs_registry` dependency

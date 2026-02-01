@@ -1,16 +1,18 @@
+use std::any::TypeId;
 use std::mem::ManuallyDrop;
 
 use crate::array::{
-    ArrayBytes, DataType, convert_from_bytes_slice, data_type, transmute_to_bytes,
-    transmute_to_bytes_vec,
+    ArrayBytes, DataType, convert_from_bytes_slice, transmute_to_bytes, transmute_to_bytes_vec,
 };
 
 use super::{Element, ElementError, ElementOwned};
 
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        let my_type_id = TypeId::of::<bool>();
         data_type
-            .is::<data_type::BoolDataType>()
+            .compatible_element_types()
+            .contains(&my_type_id)
             .then_some(())
             .ok_or(ElementError::IncompatibleElementType)
     }

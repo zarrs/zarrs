@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add `DataTypeTraits::compatible_element_types()` method for declaring compatible Rust element types
 - Add `DataTypeTraitsV2` and `DataTypeTraitsV3` traits
 - Add `DataTypeCodecError` for codec support methods
 - Add `codec_traits` module with data type traits/plugins/macros for codec support

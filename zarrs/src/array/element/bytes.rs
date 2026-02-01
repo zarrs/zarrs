@@ -1,6 +1,8 @@
+use std::any::TypeId;
+
 use itertools::Itertools;
 
-use crate::array::{ArrayBytes, ArrayBytesOffsets, DataType, data_type};
+use crate::array::{ArrayBytes, ArrayBytesOffsets, DataType};
 
 use super::{Element, ElementError, ElementOwned};
 
@@ -10,8 +12,10 @@ macro_rules! impl_element_bytes {
     ($raw_type:ty) => {
         impl Element for $raw_type {
             fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+                let my_type_id = TypeId::of::<$raw_type>();
                 data_type
-                    .is::<data_type::BytesDataType>()
+                    .compatible_element_types()
+                    .contains(&my_type_id)
                     .then_some(())
                     .ok_or(IET)
             }
