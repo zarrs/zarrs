@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `Element` and `ElementOwned` trait methods now return `ElementError` instead of `ArrayError`
 - **Breaking**: Replace `ArrayError::IncompatibleElementType` and `ArrayError::InvalidElementValue` with `ArrayError::ElementError`
 - **Breaking**: Bump MSRV to 1.91 and use Rust 2024 edition
-- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.2, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.0, `zarrs_plugin` 0.4.1, `zarrs_filesystem` 0.3.9, `zarrs_storage` 0.4.2, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
+- **Breaking**: Bump public dependencies: `zarrs_metadata` 0.7.2, `zarrs_data_type` 0.9.0, `zarrs_metadata_ext` 0.4.1, `zarrs_plugin` 0.4.1, `zarrs_filesystem` 0.3.9, `zarrs_storage` 0.4.2, `float8` 0.5.0, `dlpark` 0.6.0, `ndarray` 0.17.1
 - Bump internal dependencies: `zfp-sys` 0.4.2, `pco` 0.4.9, `criterion` (dev) 0.8.1
 - **Breaking**: Replace `DataType` enum with `Arc<dyn DataTypeExtension>`
 - **Breaking**: Revise extension alias handling for codecs, chunk grids, and chunk key encodings
