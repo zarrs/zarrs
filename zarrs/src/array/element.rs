@@ -56,29 +56,6 @@ pub trait ElementOwned: Element {
     ) -> Result<Vec<Self>, ElementError>;
 }
 
-/// A marker trait for a fixed length element.
-pub trait ElementFixedLength {}
-
-impl ElementFixedLength for bool {}
-impl ElementFixedLength for u8 {}
-impl ElementFixedLength for u16 {}
-impl ElementFixedLength for u32 {}
-impl ElementFixedLength for u64 {}
-impl ElementFixedLength for i8 {}
-impl ElementFixedLength for i16 {}
-impl ElementFixedLength for i32 {}
-impl ElementFixedLength for i64 {}
-impl ElementFixedLength for half::f16 {}
-impl ElementFixedLength for half::bf16 {}
-impl ElementFixedLength for f32 {}
-impl ElementFixedLength for f64 {}
-impl ElementFixedLength for num::complex::Complex<half::bf16> {}
-impl ElementFixedLength for num::complex::Complex<half::f16> {}
-impl ElementFixedLength for num::complex::Complex32 {}
-impl ElementFixedLength for num::complex::Complex64 {}
-impl<const N: usize> ElementFixedLength for [u8; N] {}
-impl<T: ElementFixedLength> ElementFixedLength for Option<T> {}
-
 impl Element for bool {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
