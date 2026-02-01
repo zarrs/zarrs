@@ -151,34 +151,28 @@ impl_complex_data_type!(Complex64DataType, 8, f32);
 impl_complex_data_type!(Complex128DataType, 16, f64);
 
 // Bitround implementations for standard complex types
-#[cfg(feature = "bitround")]
-mod bitround_impls {
-    use zarrs_data_type::codec_traits::impl_bitround_codec;
-    impl_bitround_codec!(super::ComplexBFloat16DataType, 2, float16, 7);
-    impl_bitround_codec!(super::ComplexFloat16DataType, 2, float16, 10);
-    impl_bitround_codec!(super::ComplexFloat32DataType, 4, float32, 23);
-    impl_bitround_codec!(super::ComplexFloat64DataType, 8, float64, 52);
-    impl_bitround_codec!(super::Complex64DataType, 4, float32, 23);
-    impl_bitround_codec!(super::Complex128DataType, 8, float64, 52);
-}
+use zarrs_data_type::codec_traits::impl_bitround_codec;
+impl_bitround_codec!(ComplexBFloat16DataType, 2, float16, 7);
+impl_bitround_codec!(ComplexFloat16DataType, 2, float16, 10);
+impl_bitround_codec!(ComplexFloat32DataType, 4, float32, 23);
+impl_bitround_codec!(ComplexFloat64DataType, 8, float64, 52);
+impl_bitround_codec!(Complex64DataType, 4, float32, 23);
+impl_bitround_codec!(Complex128DataType, 8, float64, 52);
 
 // Pcodec implementations for standard complex types
-#[cfg(feature = "pcodec")]
-mod pcodec_impls {
-    use crate::array::codec::array_to_bytes::pcodec::impl_pcodec_data_type_traits;
-    // crate::array::codec::array_to_bytes::pcodec::impl_pcodec_data_type_traits!(ComplexBFloat16DataType, BF16, 2);
-    impl_pcodec_data_type_traits!(super::ComplexFloat16DataType, F16, 2);
-    impl_pcodec_data_type_traits!(super::ComplexFloat32DataType, F32, 2);
-    impl_pcodec_data_type_traits!(super::ComplexFloat64DataType, F64, 2);
-    impl_pcodec_data_type_traits!(super::Complex64DataType, F32, 2);
-    impl_pcodec_data_type_traits!(super::Complex128DataType, F64, 2);
-}
+use zarrs_data_type::codec_traits::impl_pcodec_data_type_traits;
+// impl_pcodec_data_type_traits!(ComplexBFloat16DataType, BF16, 2);
+impl_pcodec_data_type_traits!(ComplexFloat16DataType, F16, 2);
+impl_pcodec_data_type_traits!(ComplexFloat32DataType, F32, 2);
+impl_pcodec_data_type_traits!(ComplexFloat64DataType, F64, 2);
+impl_pcodec_data_type_traits!(Complex64DataType, F32, 2);
+impl_pcodec_data_type_traits!(Complex128DataType, F64, 2);
 
 // PackBits implementations for standard complex types
 use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
-impl_pack_bits_data_type_traits!(super::ComplexBFloat16DataType, 16, float, 2);
-impl_pack_bits_data_type_traits!(super::ComplexFloat16DataType, 16, float, 2);
-impl_pack_bits_data_type_traits!(super::ComplexFloat32DataType, 32, float, 2);
-impl_pack_bits_data_type_traits!(super::ComplexFloat64DataType, 64, float, 2);
-impl_pack_bits_data_type_traits!(super::Complex64DataType, 32, float, 2);
-impl_pack_bits_data_type_traits!(super::Complex128DataType, 64, float, 2);
+impl_pack_bits_data_type_traits!(ComplexBFloat16DataType, 16, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat16DataType, 16, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat32DataType, 32, float, 2);
+impl_pack_bits_data_type_traits!(ComplexFloat64DataType, 64, float, 2);
+impl_pack_bits_data_type_traits!(Complex64DataType, 32, float, 2);
+impl_pack_bits_data_type_traits!(Complex128DataType, 64, float, 2);

@@ -42,39 +42,30 @@ impl_data_type_extension_numeric!(Float32DataType, 4, f32);
 impl_data_type_extension_numeric!(Float64DataType, 8, f64);
 
 // Bitround codec implementations for standard floats
-#[cfg(feature = "bitround")]
-mod impl_bitround {
-    use zarrs_data_type::codec_traits::impl_bitround_codec;
-    impl_bitround_codec!(super::BFloat16DataType, 2, float16, 7);
-    impl_bitround_codec!(super::Float16DataType, 2, float16, 10);
-    impl_bitround_codec!(super::Float32DataType, 4, float32, 23);
-    impl_bitround_codec!(super::Float64DataType, 8, float64, 52);
-}
+use zarrs_data_type::codec_traits::impl_bitround_codec;
+impl_bitround_codec!(BFloat16DataType, 2, float16, 7);
+impl_bitround_codec!(Float16DataType, 2, float16, 10);
+impl_bitround_codec!(Float32DataType, 4, float32, 23);
+impl_bitround_codec!(Float64DataType, 8, float64, 52);
 
 // Pcodec implementations for standard floats
-#[cfg(feature = "pcodec")]
-mod impl_pcodec {
-    use crate::array::codec::impl_pcodec_data_type_traits;
-    // impl_pcodec_data_type_traits!(super::BFloat16DataType, BF16, 1);
-    impl_pcodec_data_type_traits!(super::Float16DataType, F16, 1);
-    impl_pcodec_data_type_traits!(super::Float32DataType, F32, 1);
-    impl_pcodec_data_type_traits!(super::Float64DataType, F64, 1);
-}
+use zarrs_data_type::codec_traits::impl_pcodec_data_type_traits;
+// impl_pcodec_data_type_traits!(BFloat16DataType, BF16, 1);
+impl_pcodec_data_type_traits!(Float16DataType, F16, 1);
+impl_pcodec_data_type_traits!(Float32DataType, F32, 1);
+impl_pcodec_data_type_traits!(Float64DataType, F64, 1);
 
 // FixedScaleOffset implementations for standard floats
-use crate::array::codec::impl_fixed_scale_offset_data_type_traits;
+use zarrs_data_type::codec_traits::impl_fixed_scale_offset_data_type_traits;
 // impl_fixed_scale_offset_data_type_traits!(BFloat16DataType, BF16);
 // impl_fixed_scale_offset_data_type_traits!(Float16DataType, F16);
 impl_fixed_scale_offset_data_type_traits!(Float32DataType, F32);
 impl_fixed_scale_offset_data_type_traits!(Float64DataType, F64);
 
 // ZFP implementations for standard floats
-#[cfg(feature = "zfp")]
-mod impl_zfp {
-    use crate::array::codec::impl_zfp_data_type_traits;
-    impl_zfp_data_type_traits!(super::Float32DataType, Float32);
-    impl_zfp_data_type_traits!(super::Float64DataType, Float64);
-}
+use zarrs_data_type::codec_traits::impl_zfp_data_type_traits;
+impl_zfp_data_type_traits!(Float32DataType, Float32);
+impl_zfp_data_type_traits!(Float64DataType, Float64);
 
 // PackBits implementations for standard floats
 use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
