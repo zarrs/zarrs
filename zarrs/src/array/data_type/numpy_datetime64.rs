@@ -37,13 +37,6 @@ inventory::submit! {
 }
 
 impl NumpyDateTime64DataType {
-    /// Static instance for use in trait implementations (bytes codec only).
-    /// Uses `NumpyTimeUnit::Generic` and scale factor 1 as defaults.
-    pub const STATIC: Self = Self {
-        unit: NumpyTimeUnit::Generic,
-        scale_factor: NonZeroU32::new(1).unwrap(),
-    };
-
     /// Create a new `numpy.datetime64` data type.
     #[must_use]
     pub const fn new(unit: NumpyTimeUnit, scale_factor: NonZeroU32) -> Self {

@@ -134,9 +134,6 @@ impl zarrs_plugin::ExtensionName for RawBitsDataType {
 }
 
 impl RawBitsDataType {
-    /// Static instance for use in trait implementations (defaults to 1 byte).
-    pub const STATIC: Self = Self { size_bytes: 1 };
-
     /// Create a new `RawBitsDataType` with the given size in bytes.
     #[must_use]
     pub const fn new(size_bytes: usize) -> Self {
