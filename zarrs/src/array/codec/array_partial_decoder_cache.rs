@@ -3,7 +3,7 @@
 use crate::array::{ArrayBytes, ArraySubset, ChunkShape, DataType};
 #[cfg(feature = "async")]
 use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{ArrayBytesExt, ArrayPartialDecoderTraits, CodecError, CodecOptions};
 use zarrs_storage::StorageError;
 
 /// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.

@@ -7,7 +7,7 @@ use super::concurrency::concurrency_chunks_and_codec;
 use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes, update_array_bytes};
 use crate::array::{ArrayBytes, ArraySubset, ArraySubsetTraits};
 use zarrs_codec::{
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits,
+    ArrayBytesExt, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, CodecOptions, CodecTraits,
     StoragePartialEncoder,
 };
 use zarrs_storage::{ReadableStorageTraits, ReadableWritableStorageTraits, StorageHandle};

@@ -1,4 +1,4 @@
-use crate::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsError};
+use super::{ArrayBytesOffsets, ArrayBytesRaw, ArrayBytesRawOffsetsOutOfBoundsError};
 
 /// Variable length array bytes composed of bytes and element bytes offsets.
 ///
@@ -25,10 +25,10 @@ impl<'a> ArrayBytesVariableLength<'a> {
         if offsets.last() <= bytes.len() {
             Ok(ArrayBytesVariableLength { bytes, offsets })
         } else {
-            Err(ArrayBytesRawOffsetsOutOfBoundsError {
-                offset: offsets.last(),
-                len: bytes.len(),
-            })
+            Err(ArrayBytesRawOffsetsOutOfBoundsError::new(
+                offsets.last(),
+                bytes.len(),
+            ))
         }
     }
 
@@ -36,6 +36,7 @@ impl<'a> ArrayBytesVariableLength<'a> {
     ///
     /// # Safety
     /// The last offset must be less than or equal to the length of the bytes.
+    #[must_use]
     pub unsafe fn new_unchecked(
         bytes: impl Into<ArrayBytesRaw<'a>>,
         offsets: ArrayBytesOffsets<'a>,
@@ -61,5 +62,14 @@ impl<'a> ArrayBytesVariableLength<'a> {
     #[must_use]
     pub fn into_parts(self) -> (ArrayBytesRaw<'a>, ArrayBytesOffsets<'a>) {
         (self.bytes, self.offsets)
+    }
+
+    /// Convert into owned [`ArrayBytesVariableLength<'static>`].
+    #[must_use]
+    pub fn into_owned(self) -> ArrayBytesVariableLength<'static> {
+        ArrayBytesVariableLength {
+            bytes: self.bytes.into_owned().into(),
+            offsets: self.offsets.into_owned(),
+        }
     }
 }

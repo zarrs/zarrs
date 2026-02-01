@@ -10,17 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `CodecTraitsV2` and  `CodecTraitsV3` traits
 - Add `CodecError::UnsupportedDataTypeCodec` variant for data type codec support errors
-- Add `ExpectedFixedLengthBytesError`, `ExpectedVariableLengthBytesError`, and `ExpectedOptionalBytesError` error types
+- Add `CodecError::ArrayBytesValidateError` variant
+- Add `ArrayBytesExt` extension trait with `extract_array_subset()` method
 
 ### Changed
 - **Breaking**: Remove `create_fn` parameter from `CodecPluginV2::create()` and add `T: CodecTraitsV2` bound
 - **Breaking**: Remove `create_fn` parameter from `CodecPluginV3::create()` and add `T: CodecTraitsV3` bound
-- **Breaking**: Rename `ArrayRawBytesOffsetsOutOfBoundsError` to `ArrayBytesRawOffsetsOutOfBoundsError`
-- **Breaking**: Rename `ArrayRawBytesOffsetsCreateError` to `ArrayBytesRawOffsetsCreateError`
+- **Breaking**: Move core `ArrayBytes` types to `zarrs_data_type` (re-exported for compatibility)
 - **Breaking**: `ArrayBytes::into_fixed()` now returns `Result<_, ExpectedFixedLengthBytesError>` instead of `Result<_, CodecError>`
 - **Breaking**: `ArrayBytes::into_variable()` now returns `Result<_, ExpectedVariableLengthBytesError>` instead of `Result<_, CodecError>`
 - **Breaking**: `ArrayBytes::into_optional()` now returns `Result<_, ExpectedOptionalBytesError>` instead of `Result<_, CodecError>`
-- **Breaking**: `CodecError::ExpectedFixedLengthBytes`, `CodecError::ExpectedVariableLengthBytes`, and `CodecError::ExpectedOptionalBytes` now wrap their respective dedicated error types
+- Bump `zarrs_data_type` to 0.9.0
 
 ### Removed
 - **Breaking**: Remove `optional_nesting_depth`, `build_nested_optional_target`, `merge_chunks_vlen`, `merge_chunks_vlen_optional`, and `extract_decoded_regions_vlen` (moved to `zarrs` as private functions)

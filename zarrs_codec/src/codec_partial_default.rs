@@ -11,7 +11,7 @@ use super::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, ChunkShape, CodecError, CodecOptions, DataType,
 };
-use crate::array_bytes::update_array_bytes;
+use crate::array_bytes::{ArrayBytesExt, update_array_bytes};
 #[cfg(feature = "async")]
 use crate::{
     AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits, AsyncBytesPartialDecoderTraits,

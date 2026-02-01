@@ -155,6 +155,12 @@ impl From<zarrs_codec::ExpectedOptionalBytesError> for ArrayError {
     }
 }
 
+impl From<zarrs_codec::ArrayBytesValidateError> for ArrayError {
+    fn from(err: zarrs_codec::ArrayBytesValidateError) -> Self {
+        Self::CodecError(err.into())
+    }
+}
+
 /// An unsupported additional field error.
 ///
 /// An unsupported field in array or group metadata is an unrecognised field without `"must_understand": false`.

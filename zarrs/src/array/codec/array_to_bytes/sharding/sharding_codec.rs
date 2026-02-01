@@ -23,7 +23,7 @@ use crate::array::{
     transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayBytesDecodeIntoTarget, ArrayBytesExt, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
     BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
