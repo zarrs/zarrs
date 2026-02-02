@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use thiserror::Error;
+use zarrs_data_type::DataTypeTraitsV3;
 use zarrs_metadata::v2::{
     ArrayMetadataV2, ArrayMetadataV2Order, DataTypeMetadataV2, DataTypeMetadataV2EndiannessError,
     GroupMetadataV2, MetadataV2, data_type_metadata_v2_to_endianness,
@@ -419,6 +420,15 @@ pub fn fill_value_metadata_v2_to_v3(
             } else if is_bool {
                 // Any other null fill value is "undefined"; we pick false for bools
                 FillValueMetadata::from(false)
+            } else if data_type::RawBitsDataType::matches_name_v3(data_type_name) {
+                let raw_bits_dtype = data_type::RawBitsDataType::create(data_type)
+                    .map_err(|e| ArrayMetadataV2ToV3Error::Other(e.to_string()))?;
+                FillValueMetadata::from(vec![
+                    0u8;
+                    raw_bits_dtype.fixed_size().ok_or_else(|| {
+                        ArrayMetadataV2ToV3Error::Other("raw bits should be fixed size".to_string())
+                    })?
+                ])
             } else {
                 // And zero for other data types
                 FillValueMetadata::from(0)

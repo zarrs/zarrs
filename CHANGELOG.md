@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Support Zarr V2 `|VX` data with a `null` fill value
+
 ## [0.23.0] - 2026-02-02
 
 ### Highlights and Major Breaking Changes
