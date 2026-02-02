@@ -49,7 +49,7 @@ fn configuration_to_chunk_config(configuration: &PcodecCodecConfigurationV1) -> 
     let mode_spec = mode_spec_config_to_pco(configuration.mode_spec);
     let delta_spec = match configuration.delta_spec {
         PcodecDeltaSpecConfiguration::Auto => DeltaSpec::Auto,
-        PcodecDeltaSpecConfiguration::None => DeltaSpec::None,
+        PcodecDeltaSpecConfiguration::None => DeltaSpec::NoOp,
         PcodecDeltaSpecConfiguration::TryConsecutive => DeltaSpec::TryConsecutive(
             configuration
                 .delta_encoding_order
@@ -102,21 +102,20 @@ impl CodecTraits for PcodecCodec {
         let mode_spec = mode_spec_pco_to_config(&self.chunk_config.mode_spec);
         let (delta_spec, delta_encoding_order) = match self.chunk_config.delta_spec {
             DeltaSpec::Auto => (PcodecDeltaSpecConfiguration::Auto, None),
-            DeltaSpec::None => (PcodecDeltaSpecConfiguration::None, None),
+            DeltaSpec::NoOp => (PcodecDeltaSpecConfiguration::None, None),
             DeltaSpec::TryConsecutive(delta_encoding_order) => (
                 PcodecDeltaSpecConfiguration::TryConsecutive,
                 Some(PcodecDeltaEncodingOrder::try_from(delta_encoding_order).expect("valid")),
             ),
             DeltaSpec::TryLookback => (PcodecDeltaSpecConfiguration::TryLookback, None),
-            _ => unimplemented!("unsupported pcodec delta spec"),
+            DeltaSpec::TryConv1(_) | _ => unreachable!("not reachable by any constructor"),
         };
         let (paging_spec, equal_pages_up_to) = match self.chunk_config.paging_spec {
             PagingSpec::EqualPagesUpTo(equal_pages_up_to) => (
                 PcodecPagingSpecConfiguration::EqualPagesUpTo,
                 equal_pages_up_to,
             ),
-            PagingSpec::Exact(_) => unimplemented!("pcodec exact paging spec not supported"),
-            _ => unimplemented!("unsupported pcodec paging spec"),
+            PagingSpec::Exact(_) | _ => unreachable!("not reachable by any constructor"),
         };
 
         let configuration = PcodecCodecConfiguration::V1(PcodecCodecConfigurationV1 {
