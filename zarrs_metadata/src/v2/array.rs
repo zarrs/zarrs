@@ -185,13 +185,15 @@ impl From<DataTypeMetadataV2Structured> for DataTypeMetadataV2StructuredTuple {
 }
 
 /// Zarr V2 data type metadata.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, From)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, From, Display)]
 #[serde(untagged)]
 pub enum DataTypeMetadataV2 {
     /// A simple data type.
     #[from(String, &str)]
+    #[display("{_0}")]
     Simple(String),
     /// A structured data type.
+    #[display("{}", serde_json::to_string(self).unwrap_or_default())]
     Structured(Vec<DataTypeMetadataV2Structured>),
 }
 
