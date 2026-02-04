@@ -30,6 +30,7 @@ module_name_repetitions = "allow"
 missing_panics_doc = "warn"
 missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
+unit_cmp = "deny"
 
 [workspace.dependencies.zarrs_chunk_grid]
 version = "0.5.0"
