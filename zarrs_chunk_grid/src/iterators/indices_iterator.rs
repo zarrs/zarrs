@@ -401,6 +401,7 @@ mod tests {
         assert_eq!(iter.next(), None);
     }
 
+    #[allow(clippy::reversed_empty_ranges)]
     #[test]
     fn indices_iterator_empty() {
         let indices =

@@ -10,6 +10,7 @@ use zarrs::metadata::v3::MetadataV3;
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::array::{ArraySubset, ZARR_NAN_F32, codec, data_type};
@@ -21,17 +22,17 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableWritableListableStorage =
     //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -86,21 +87,21 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     array.store_metadata()?;
 
     // Write some chunks (in parallel)
-    (0..4).into_par_iter().try_for_each(|i| {
+    (0..4).into_par_iter().try_for_each(|i: u8| {
         let chunk_grid = array.chunk_grid();
-        let chunk_indices = vec![i, 0];
+        let chunk_indices = vec![u64::from(i), 0];
         if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices)? {
             let chunk_array = ndarray::ArrayD::<f32>::from_elem(
                 chunk_shape
                     .iter()
-                    .map(|u| u.get() as usize)
+                    .map(|u| u.get().try_into().unwrap())
                     .collect::<Vec<_>>(),
-                i as f32,
+                f32::from(i),
             );
             array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
+                chunk_indices.clone(),
             ))
         }
     })?;
@@ -155,6 +156,6 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = rectangular_array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

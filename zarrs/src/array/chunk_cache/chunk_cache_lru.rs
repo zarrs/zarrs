@@ -431,6 +431,7 @@ mod tests {
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
     };
 
+    #[allow(clippy::type_complexity)]
     fn create_store_array() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
         Arc<Array<dyn ReadableStorageTraits>>,
@@ -448,7 +449,7 @@ mod tests {
         .build_arc(store.clone(), "/")
         .unwrap();
 
-        let data: Vec<u8> = (0..8 * 8).map(|i| i as u8).collect();
+        let data: Vec<u8> = (0..8 * 8).collect();
         array
             .store_array_subset(&ArraySubset::new_with_shape(vec![8, 8]), &data)
             .unwrap();
@@ -459,9 +460,10 @@ mod tests {
         (store, array)
     }
 
+    #[allow(clippy::too_many_lines, clippy::fn_params_excessive_bools)]
     fn array_chunk_cache_impl<TChunkCache: ChunkCache>(
-        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
-        cache: TChunkCache,
+        store: &Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: &TChunkCache,
         // yikes
         thread_local: bool,
         size_limit: bool,
@@ -634,7 +636,7 @@ mod tests {
     fn array_chunk_cache_encoded_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, false, true);
+        array_chunk_cache_impl(&store, &cache, false, false, false, true);
     }
 
     #[test]
@@ -642,7 +644,7 @@ mod tests {
     fn array_chunk_cache_encoded_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, false, true);
+        array_chunk_cache_impl(&store, &cache, true, false, false, true);
     }
 
     #[test]
@@ -652,7 +654,7 @@ mod tests {
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let (store, array) = create_store_array();
         let cache = ChunkCacheEncodedLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, false, true);
+        array_chunk_cache_impl(&store, &cache, false, true, false, true);
     }
 
     #[test]
@@ -662,7 +664,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>() + size_of::<u64>() * 2 * 2 * 2 + size_of::<u32>();
         let cache = ChunkCacheEncodedLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, false, true);
+        array_chunk_cache_impl(&store, &cache, true, true, false, true);
     }
 
     #[test]
@@ -670,7 +672,7 @@ mod tests {
     fn array_chunk_cache_decoded_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, false, false);
+        array_chunk_cache_impl(&store, &cache, false, false, false, false);
     }
 
     #[test]
@@ -678,7 +680,7 @@ mod tests {
     fn array_chunk_cache_decoded_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, false, false);
+        array_chunk_cache_impl(&store, &cache, true, false, false, false);
     }
 
     #[test]
@@ -688,7 +690,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, false, false);
+        array_chunk_cache_impl(&store, &cache, false, true, false, false);
     }
 
     #[test]
@@ -698,7 +700,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks
         let chunk_size = 4 * 4 * size_of::<u8>();
         let cache = ChunkCacheDecodedLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, false, false);
+        array_chunk_cache_impl(&store, &cache, true, true, false, false);
     }
 
     #[test]
@@ -706,7 +708,7 @@ mod tests {
     fn array_chunk_cache_partial_decoder_chunks() {
         let (store, array) = create_store_array();
         let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
-        array_chunk_cache_impl(store, cache, false, false, true, false);
+        array_chunk_cache_impl(&store, &cache, false, false, true, false);
     }
 
     #[test]
@@ -714,7 +716,7 @@ mod tests {
     fn array_chunk_cache_partial_decoder_chunks_thread_local() {
         let (store, array) = create_store_array();
         let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_impl(store, cache, true, false, true, false);
+        array_chunk_cache_impl(&store, &cache, true, false, true, false);
     }
 
     #[test]
@@ -724,7 +726,7 @@ mod tests {
         // Create a cache with a size limit equivalent to 2 chunks (indexes)
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, false, true, true, false);
+        array_chunk_cache_impl(&store, &cache, false, true, true, false);
     }
 
     #[test]
@@ -735,9 +737,10 @@ mod tests {
         let chunk_size = size_of::<u64>() * 2 * 2 * 2;
         let cache =
             ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
-        array_chunk_cache_impl(store, cache, true, true, true, false);
+        array_chunk_cache_impl(&store, &cache, true, true, true, false);
     }
 
+    #[allow(clippy::type_complexity)]
     fn create_store_array_string() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
         Arc<Array<dyn ReadableStorageTraits>>,
@@ -767,9 +770,10 @@ mod tests {
         (store, array)
     }
 
+    #[allow(clippy::too_many_lines, clippy::fn_params_excessive_bools)]
     fn array_chunk_cache_string_impl<TChunkCache: ChunkCache>(
-        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
-        cache: TChunkCache,
+        store: &Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: &TChunkCache,
         thread_local: bool,
         size_limit: bool,
         partial_decoder: bool,
@@ -937,7 +941,7 @@ mod tests {
     fn array_chunk_cache_string_encoded_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, false, true);
+        array_chunk_cache_string_impl(&store, &cache, false, false, false, true);
     }
 
     #[test]
@@ -945,7 +949,7 @@ mod tests {
     fn array_chunk_cache_string_encoded_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheEncodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, false, true);
+        array_chunk_cache_string_impl(&store, &cache, true, false, false, true);
     }
 
     #[test]
@@ -953,7 +957,7 @@ mod tests {
     fn array_chunk_cache_string_decoded_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, false, false);
+        array_chunk_cache_string_impl(&store, &cache, false, false, false, false);
     }
 
     #[test]
@@ -961,7 +965,7 @@ mod tests {
     fn array_chunk_cache_string_decoded_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCacheDecodedLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, false, false);
+        array_chunk_cache_string_impl(&store, &cache, true, false, false, false);
     }
 
     #[test]
@@ -969,7 +973,7 @@ mod tests {
     fn array_chunk_cache_string_partial_decoder_chunks() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, false, false, true, false);
+        array_chunk_cache_string_impl(&store, &cache, false, false, true, false);
     }
 
     #[test]
@@ -977,6 +981,6 @@ mod tests {
     fn array_chunk_cache_string_partial_decoder_chunks_thread_local() {
         let (store, array) = create_store_array_string();
         let cache = ChunkCachePartialDecoderLruChunkLimitThreadLocal::new(array, 2);
-        array_chunk_cache_string_impl(store, cache, true, false, true, false);
+        array_chunk_cache_string_impl(&store, &cache, true, false, true, false);
     }
 }

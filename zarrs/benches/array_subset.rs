@@ -9,7 +9,7 @@ use zarrs::array::ArraySubset;
 
 fn array_subset_indices_iterator(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    let mut group = c.benchmark_group(format!("array_subset_indices_iterator"));
+    let mut group = c.benchmark_group("array_subset_indices_iterator".to_string());
     group.plot_config(plot_config);
 
     for array_subset_size in [4, 16, 64, 256] {
@@ -19,7 +19,7 @@ fn array_subset_indices_iterator(c: &mut Criterion) {
             b.iter(|| {
                 array_subset.indices().into_iter().for_each(|indices| {
                     std::hint::black_box(indices.first().unwrap());
-                })
+                });
             });
         });
     }

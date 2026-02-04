@@ -103,6 +103,7 @@ fn zarr_python_v2_compat_int_fv_null() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[allow(clippy::approx_constant)]
 #[test]
 fn zarr_python_v2_compat_float_fv_null() -> Result<(), Box<dyn Error>> {
     let store = Arc::new(FilesystemStore::new(

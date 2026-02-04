@@ -60,7 +60,7 @@ impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
             .as_f32()
             .ok_or(DataTypeFillValueMetadataError)?;
         let element = CustomDataTypeFloat8e3m4Element::from(element_metadata);
-        Ok(FillValue::new(element.to_ne_bytes().to_vec()))
+        Ok(FillValue::new(element.into_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
@@ -73,7 +73,7 @@ impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
                 .try_into()
                 .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadata::from(element.as_f32()))
+        Ok(FillValueMetadata::from(f32::from(element)))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
@@ -102,7 +102,7 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
         sign
     } else if biased_to_exponent > 7 {
         // Overflow: return ±Infinity
-        sign | 0b01110000
+        sign | 0b0111_0000
     } else {
         sign | ((biased_to_exponent as u8) << 4) | mantissa
     }
@@ -110,9 +110,9 @@ fn float32_to_float8_e3m4(val: f32) -> u8 {
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float8_e3m4_to_float32(val: u8) -> f32 {
-    let sign = (val & 0b10000000) as u32;
-    let biased_exponent = ((val >> 4) & 0b111) as i16;
-    let mantissa = (val & 0b1111) as u32;
+    let sign = u32::from(val & 0b1000_0000);
+    let biased_exponent = i16::from((val >> 4) & 0b111);
+    let mantissa = u32::from(val & 0b1111);
 
     let f32_bits = if biased_exponent == 0 {
         // Subnormal
@@ -120,9 +120,9 @@ fn float8_e3m4_to_float32(val: u8) -> f32 {
     } else if biased_exponent == 7 {
         // Infinity or NaN
         if mantissa == 0 {
-            (sign << 24) | 0x7F800000 // ±Infinity
+            (sign << 24) | 0x7F80_0000 // ±Infinity
         } else {
-            (sign << 24) | 0x7F800000 | (mantissa << 19) // NaN
+            (sign << 24) | 0x7F80_0000 | (mantissa << 19) // NaN
         }
     } else {
         let unbiased_exponent = biased_exponent - 3;
@@ -139,21 +139,23 @@ impl From<f32> for CustomDataTypeFloat8e3m4Element {
     }
 }
 
-impl CustomDataTypeFloat8e3m4Element {
-    fn to_ne_bytes(&self) -> [u8; 1] {
-        [self.0]
-    }
-
-    fn from_ne_bytes(bytes: &[u8; 1]) -> Self {
-        Self(bytes[0])
-    }
-
-    fn as_f32(&self) -> f32 {
-        float8_e3m4_to_float32(self.0)
+impl From<CustomDataTypeFloat8e3m4Element> for f32 {
+    fn from(value: CustomDataTypeFloat8e3m4Element) -> Self {
+        float8_e3m4_to_float32(value.0)
     }
 }
 
-/// This defines how an in-memory CustomDataTypeFloat8e3m4Element is converted into ArrayBytes before encoding via the codec pipeline.
+impl CustomDataTypeFloat8e3m4Element {
+    fn into_ne_bytes(self) -> [u8; 1] {
+        [self.0]
+    }
+
+    fn from_ne_bytes(bytes: [u8; 1]) -> Self {
+        Self(bytes[0])
+    }
+}
+
+/// This defines how an in-memory `CustomDataTypeFloat8e3m4Element` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeFloat8e3m4Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         data_type
@@ -182,7 +184,7 @@ impl Element for CustomDataTypeFloat8e3m4Element {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeFloat8e3m4Element after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeFloat8e3m4Element` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeFloat8e3m4Element {
     fn from_array_bytes(
         data_type: &DataType,
@@ -194,7 +196,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
         let mut elements = Vec::with_capacity(bytes_len);
         // NOTE: Could memcpy here
         for byte in bytes.iter() {
-            elements.push(CustomDataTypeFloat8e3m4Element(*byte))
+            elements.push(CustomDataTypeFloat8e3m4Element(*byte));
         }
         Ok(elements)
     }
@@ -208,7 +210,7 @@ fn main() {
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
         Arc::new(CustomDataTypeFloat8e3m4),
-        FillValue::new(fill_value.to_ne_bytes().to_vec()),
+        FillValue::new(fill_value.into_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -239,11 +241,11 @@ fn main() {
     let data: Vec<CustomDataTypeFloat8e3m4Element> =
         array.retrieve_array_subset(&array.subset_all()).unwrap();
 
-    for f in &data {
+    for f in data.iter().copied() {
         println!(
             "float8_e3m4: {:08b} f32: {}",
-            f.to_ne_bytes()[0],
-            f.as_f32()
+            f.into_ne_bytes()[0],
+            f32::from(f)
         );
     }
 

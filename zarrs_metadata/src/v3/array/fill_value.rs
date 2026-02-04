@@ -327,6 +327,7 @@ mod tests {
         assert_eq!(metadata.as_i64().unwrap(), -7);
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn fill_value_metadata_float_number() {
         let json = r"7.5";
@@ -335,6 +336,7 @@ mod tests {
         assert_eq!(metadata.as_f64().unwrap(), 7.5);
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn fill_value_metadata_float_infinity() {
         let json = r#""Infinity""#;
@@ -346,6 +348,7 @@ mod tests {
         assert_eq!(metadata.as_f64().unwrap(), f64::INFINITY);
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn fill_value_metadata_float_neg_infinity() {
         let json = r#""-Infinity""#;
@@ -393,6 +396,7 @@ mod tests {
         assert!(metadata.as_f64().is_none());
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn fill_value_metadata_float_hex_string() {
         let json = r#""0x3F800000""#;
@@ -400,6 +404,7 @@ mod tests {
         assert_eq!(metadata.as_f32().unwrap(), 1.0);
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn fill_value_metadata_float_complex() {
         let json = r#"["0x3F800000","NaN"]"#;

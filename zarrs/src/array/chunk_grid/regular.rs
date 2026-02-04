@@ -325,10 +325,11 @@ mod tests {
             RegularChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"#
+            r"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"
         );
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];

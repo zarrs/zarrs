@@ -879,7 +879,7 @@ mod tests {
             vec![8, 8],
             vec![2, 2],
             data_type::float32(),
-            f32::from_bits(0x7fc00001),
+            f32::from_bits(0x7fc0_0001),
         ); // non-standard NaN
         assert_eq!(
             ab.build_metadata().unwrap().fill_value,

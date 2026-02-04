@@ -78,7 +78,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
 
     let ps = page_size::get();
     let base_vec: Bytes = (0..(ps * 10) + 15)
-        .map(|i| (i % 256) as u8)
+        .map(#[allow(clippy::cast_possible_truncation)] |i| (i % 256) as u8)
         .collect::<Vec<u8>>()
         .into();
 
@@ -156,12 +156,9 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             e,
             r,
-            "{}",
-            format!(
-                "errored with expected length {} and result length {}",
-                e.len(),
-                r.len()
-            )
+            "errored with expected length {} and result length {}",
+            e.len(),
+            r.len(),
         );
     });
     Ok(())

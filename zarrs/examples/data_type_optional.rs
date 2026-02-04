@@ -15,6 +15,7 @@ use ndarray::ArrayD;
 use zarrs::array::{ArrayBuilder, FillValue, data_type};
 use zarrs::storage::ReadableStorageTraits;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an in-memory store
     // let store = Arc::new(zarrs::filesystem::FilesystemStore::new(
@@ -32,12 +33,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .dimension_names(["y", "x"].into())
     .attributes(
         serde_json::json!({
-            "description": r#"A 4x4 array of optional uint8 values with some missing data.
+            "description": r"A 4x4 array of optional uint8 values with some missing data.
 N marks missing (`None`=`null`) values:
  0  N  2  3 
  N  5  N  7 
  8  9  N  N 
-12  N  N  N"#,
+12  N  N  N",
         })
         .as_object()
         .unwrap()
@@ -72,10 +73,10 @@ N marks missing (`None`=`null`) values:
     println!("Data grid, N marks missing (`None`=`null`) values");
     println!("   0  1  2  3");
     for y in 0..4 {
-        print!("{} ", y);
+        print!("{y} ");
         for x in 0..4 {
             match data_read[[y, x]] {
-                Some(value) => print!("{:2} ", value),
+                Some(value) => print!("{value:2} "),
                 None => print!(" N "),
             }
         }
@@ -89,14 +90,14 @@ N marks missing (`None`=`null`) values:
         for chunk_x in 0..chunk_grid_shape[1] {
             let chunk_indices = vec![chunk_y, chunk_x];
             let chunk_key = array.chunk_key(&chunk_indices);
-            println!("  Chunk [{}, {}] (key: {}):", chunk_y, chunk_x, chunk_key);
+            println!("  Chunk [{chunk_y}, {chunk_x}] (key: {chunk_key}):");
 
             if let Some(chunk_bytes) = store.get(&chunk_key)? {
                 println!("    Size: {} bytes", chunk_bytes.len());
 
                 if chunk_bytes.len() >= 16 {
                     // Parse first 8 bytes as mask size (little-endian u64)
-                    let mask_size = u64::from_le_bytes([
+                    let mask_size = usize::from_le_bytes([
                         chunk_bytes[0],
                         chunk_bytes[1],
                         chunk_bytes[2],
@@ -105,10 +106,10 @@ N marks missing (`None`=`null`) values:
                         chunk_bytes[5],
                         chunk_bytes[6],
                         chunk_bytes[7],
-                    ]) as usize;
+                    ]);
 
                     // Parse second 8 bytes as data size (little-endian u64)
-                    let data_size = u64::from_le_bytes([
+                    let data_size = usize::from_le_bytes([
                         chunk_bytes[8],
                         chunk_bytes[9],
                         chunk_bytes[10],
@@ -117,21 +118,21 @@ N marks missing (`None`=`null`) values:
                         chunk_bytes[13],
                         chunk_bytes[14],
                         chunk_bytes[15],
-                    ]) as usize;
+                    ]);
 
                     // Display mask size header with raw bytes
                     print!("    Mask size: 0b");
                     for byte in &chunk_bytes[0..8] {
-                        print!("{:08b}", byte);
+                        print!("{byte:08b}");
                     }
-                    println!(" -> {} bytes", mask_size);
+                    println!(" -> {mask_size} bytes");
 
                     // Display data size header with raw bytes
                     print!("    Data size: 0b");
                     for byte in &chunk_bytes[8..16] {
-                        print!("{:08b}", byte);
+                        print!("{byte:08b}");
                     }
-                    println!(" -> {} bytes", data_size);
+                    println!(" -> {data_size} bytes");
 
                     // Show mask and data sections separately
                     if chunk_bytes.len() >= 16 + mask_size + data_size {
@@ -143,7 +144,7 @@ N marks missing (`None`=`null`) values:
                             println!("    Mask (binary):");
                             print!("      ");
                             for byte in &chunk_bytes[mask_start..mask_start + mask_size] {
-                                print!("0b{:08b} ", byte);
+                                print!("0b{byte:08b} ");
                             }
                             println!();
                         }
@@ -153,7 +154,7 @@ N marks missing (`None`=`null`) values:
                             println!("    Data (binary):");
                             print!("      ");
                             for byte in &chunk_bytes[data_start..data_start + data_size] {
-                                print!("0b{:08b} ", byte);
+                                print!("0b{byte:08b} ");
                             }
                             println!();
                         }

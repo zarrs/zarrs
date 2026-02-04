@@ -386,6 +386,7 @@ impl Indexer for ArraySubset {
 mod tests {
     use super::*;
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn array_subset() {
         assert!(ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10]).is_ok());
@@ -400,7 +401,7 @@ mod tests {
             .unwrap()
             .bound(&[5, 5])
             .unwrap();
-        assert_eq!(array_subset.shape().as_ref(), &[5, 5]);
+        assert_eq!(array_subset.shape(), &[5, 5]);
         assert!(
             ArraySubset::new_with_start_shape(vec![0, 0], vec![10, 10])
                 .unwrap()

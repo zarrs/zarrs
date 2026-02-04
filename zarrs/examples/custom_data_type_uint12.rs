@@ -60,7 +60,7 @@ impl DataTypeTraits for CustomDataTypeUInt12 {
             .ok_or(DataTypeFillValueMetadataError)?;
         let element = CustomDataTypeUInt12Element::try_from(element_metadata)
             .map_err(|_| DataTypeFillValueMetadataError)?;
-        Ok(FillValue::new(element.to_le_bytes().to_vec()))
+        Ok(FillValue::new(element.into_le_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
@@ -73,7 +73,7 @@ impl DataTypeTraits for CustomDataTypeUInt12 {
                 .try_into()
                 .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadata::from(element.as_u16()))
+        Ok(FillValueMetadata::from(u16::from(element)))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
@@ -120,29 +120,27 @@ impl TryFrom<u64> for CustomDataTypeUInt12Element {
     type Error = u64;
 
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        if value < 4096 {
-            Ok(Self(value as u16))
-        } else {
-            Err(value)
-        }
+        u16::try_from(value).map(Self).map_err(|_| value)
+    }
+}
+
+impl From<CustomDataTypeUInt12Element> for u16 {
+    fn from(value: CustomDataTypeUInt12Element) -> Self {
+        value.0
     }
 }
 
 impl CustomDataTypeUInt12Element {
-    fn to_le_bytes(&self) -> [u8; 2] {
+    fn into_le_bytes(self) -> [u8; 2] {
         self.0.to_le_bytes()
     }
 
     fn from_le_bytes(bytes: [u8; 2]) -> Self {
         Self(u16::from_le_bytes(bytes))
     }
-
-    fn as_u16(&self) -> u16 {
-        self.0
-    }
 }
 
-/// This defines how an in-memory CustomDataTypeUInt12Element is converted into ArrayBytes before encoding via the codec pipeline.
+/// This defines how an in-memory `CustomDataTypeUInt12Element` is converted into `ArrayBytes` before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt12Element {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         // Check if the data type matches our custom data type
@@ -158,9 +156,9 @@ impl Element for CustomDataTypeUInt12Element {
     ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes: Vec<u8> =
-            Vec::with_capacity(elements.len() * size_of::<CustomDataTypeUInt12Element>());
+            Vec::with_capacity(std::mem::size_of_val(elements));
         for element in elements {
-            bytes.extend_from_slice(&element.to_le_bytes());
+            bytes.extend_from_slice(&element.into_le_bytes());
         }
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
     }
@@ -173,7 +171,7 @@ impl Element for CustomDataTypeUInt12Element {
     }
 }
 
-/// This defines how ArrayBytes are converted into a CustomDataTypeUInt12Element after decoding via the codec pipeline.
+/// This defines how `ArrayBytes` are converted into a `CustomDataTypeUInt12Element` after decoding via the codec pipeline.
 impl ElementOwned for CustomDataTypeUInt12Element {
     fn from_array_bytes(
         data_type: &DataType,
@@ -184,7 +182,7 @@ impl ElementOwned for CustomDataTypeUInt12Element {
         let bytes_len = bytes.len();
         let mut elements = Vec::with_capacity(bytes_len / size_of::<CustomDataTypeUInt12Element>());
         for chunk in bytes.as_chunks::<2>().0 {
-            elements.push(CustomDataTypeUInt12Element::from_le_bytes(*chunk))
+            elements.push(CustomDataTypeUInt12Element::from_le_bytes(*chunk));
         }
         Ok(elements)
     }
@@ -198,7 +196,7 @@ fn main() {
         vec![4096, 1], // array shape
         vec![5, 1],    // regular chunk shape
         Arc::new(CustomDataTypeUInt12),
-        FillValue::new(fill_value.to_le_bytes().to_vec()),
+        FillValue::new(fill_value.into_le_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -219,7 +217,6 @@ fn main() {
     println!("{}", array.metadata().to_string_pretty());
 
     let data: Vec<CustomDataTypeUInt12Element> = (0..4096)
-        .into_iter()
         .map(|i| CustomDataTypeUInt12Element::try_from(i).unwrap())
         .collect();
 
@@ -227,12 +224,12 @@ fn main() {
         .store_array_subset(&array.subset_all(), &data)
         .unwrap();
 
-    let data: Vec<CustomDataTypeUInt12Element> =
+    let mut data: Vec<CustomDataTypeUInt12Element> =
         array.retrieve_array_subset(&array.subset_all()).unwrap();
 
-    for i in 0usize..4096 {
+    for (i, e) in data.drain(0..4096).enumerate() {
         let element = CustomDataTypeUInt12Element::try_from(i as u64).unwrap();
-        assert_eq!(data[i], element);
+        assert_eq!(e, element);
         let element_pd: Vec<CustomDataTypeUInt12Element> = array
             .retrieve_array_subset(&[(i as u64)..i as u64 + 1, 0..1])
             .unwrap();

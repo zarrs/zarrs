@@ -392,7 +392,7 @@ mod tests {
     fn data_type_metadata(data_type: &DataType) -> MetadataV3 {
         let name = data_type
             .name_v3()
-            .map_or_else(String::new, |n| n.into_owned());
+            .map_or_else(String::new, Cow::into_owned);
         let configuration = data_type.configuration_v3();
         if configuration.is_empty() {
             MetadataV3::new(name)
@@ -971,6 +971,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::float_cmp)]
     #[cfg(feature = "float8")]
     #[test]
     fn data_type_float8_e4m3() {
@@ -1103,6 +1104,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::float_cmp)]
     #[cfg(feature = "float8")]
     #[test]
     fn data_type_float8_e5m2() {
@@ -1118,8 +1120,8 @@ mod tests {
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
         assert_eq!(fill_value.as_ne_bytes(), [170]);
-        // Verify that the fill value represents -0.046875 in float8_e5m2 format
-        assert_eq!(float8::F8E5M2::from_bits(170).to_f32(), -0.046875);
+        // Verify that the fill value represents -0.046_875 in float8_e5m2 format
+        assert_eq!(float8::F8E5M2::from_bits(170).to_f32(), -0.046_875);
         // metadata_fill_value returns numeric value (with float8 feature enabled)
         let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
@@ -1678,6 +1680,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::unusual_byte_groupings)]
     #[test]
     fn float_fill_value() {
         assert_eq!(

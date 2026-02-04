@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected="typesize is a positive integer required if shuffling is enabled.")]
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_invalid_typesize_with_shuffling() {
         codec_blosc_round_trip(JSON_INVALID1);

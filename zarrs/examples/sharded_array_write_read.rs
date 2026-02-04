@@ -7,6 +7,7 @@ use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_codec::CodecOptions;
 
+#[allow(clippy::too_many_lines)]
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
@@ -23,17 +24,17 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/sharded_array_write_read.zarr")?,
     // );
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -80,9 +81,9 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let options = CodecOptions::default();
 
     // Write some shards (in parallel)
-    (0..2).into_par_iter().try_for_each(|s| {
+    (0..2).into_par_iter().try_for_each(|s: u8| {
         let chunk_grid = array.chunk_grid();
-        let chunk_indices = vec![s, 0];
+        let chunk_indices = vec![u64::from(s), 0];
         if let Some(chunk_shape) = chunk_grid.chunk_shape(&chunk_indices)? {
             let chunk_array = ndarray::ArrayD::<u16>::from_shape_fn(
                 chunk_shape
@@ -90,7 +91,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|u| u.get() as usize)
                     .collect::<Vec<_>>(),
                 |ij| {
-                    (s * chunk_shape[0].get() * chunk_shape[1].get()
+                    (u64::from(s) * chunk_shape[0].get() * chunk_shape[1].get()
                         + ij[0] as u64 * chunk_shape[1].get()
                         + ij[1] as u64) as u16
                 },
@@ -98,7 +99,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
-                chunk_indices.to_vec(),
+                chunk_indices.clone(),
             ))
         }
     })?;
@@ -143,7 +144,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("The Zarr hierarchy tree is:\n{}", tree);
+    println!("The Zarr hierarchy tree is:\n{tree}");
 
     println!(
         "The keys in the store are:\n[{}]",
@@ -155,6 +156,6 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = sharded_array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

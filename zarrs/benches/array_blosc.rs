@@ -10,7 +10,7 @@ use zarrs::metadata_ext::codec::blosc::{BloscCompressionLevel, BloscCompressor, 
 
 fn array_blosc_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_blosc_write_all");
-    for size in [128u64, 256u64, 512u64].iter() {
+    for size in &[128u64, 256u64, 512u64] {
         let num_elements: u64 = size * size * size;
         group.throughput(Throughput::Bytes(num_elements));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
@@ -45,7 +45,7 @@ fn array_blosc_write_all(c: &mut Criterion) {
 
 fn array_blosc_read_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_blosc_read_all");
-    for size in [128u64, 256u64, 512u64].iter() {
+    for size in &[128u64, 256u64, 512u64] {
         let num_elements: u64 = size * size * size;
         group.throughput(Throughput::Bytes(num_elements));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {

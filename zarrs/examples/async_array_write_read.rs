@@ -5,6 +5,7 @@ use ndarray::ArrayD;
 use zarrs::storage::AsyncReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
@@ -16,17 +17,17 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let mut store: AsyncReadableWritableListableStorage = Arc::new(
         zarrs_object_store::AsyncObjectStore::new(object_store::memory::InMemory::new()),
     );
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -70,20 +71,18 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write some chunks
-    let store_chunk = |i: u64| {
+    let store_chunk = async |i: u8| {
         let array = array.clone();
-        async move {
-            let chunk_indices: Vec<u64> = vec![0, i];
-            let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-                zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
-            })?;
-            array
-                .async_store_chunk(
-                    &chunk_indices,
-                    vec![i as f32 * 0.1; chunk_subset.num_elements() as usize],
-                )
-                .await
-        }
+        let chunk_indices = vec![0, u64::from(i)];
+        let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
+            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
+        })?;
+        array
+            .async_store_chunk(
+                &chunk_indices,
+                vec![f32::from(i) * 0.1; chunk_subset.num_elements().try_into().unwrap()],
+            )
+            .await
     };
     futures::stream::iter(0..2)
         .map(Ok)
@@ -165,7 +164,7 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::async_open(store, "/").await.unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
@@ -173,6 +172,6 @@ async fn async_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() {
     if let Err(err) = async_array_write_read().await {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

@@ -5,6 +5,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
+#[allow(clippy::too_many_lines)]
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
@@ -20,17 +21,17 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -73,16 +74,16 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write some chunks
-    (0..2).into_par_iter().try_for_each(|i| {
-        let chunk_indices: Vec<u64> = vec![0, i];
+    (0..2).into_par_iter().try_for_each(|i: u8| {
+        let chunk_indices = vec![0, u64::from(i)];
         let chunk_subset = array.chunk_grid().subset(&chunk_indices)?.ok_or_else(|| {
-            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec())
+            zarrs::array::ArrayError::InvalidChunkGridIndicesError(chunk_indices.clone())
         })?;
         array.store_chunk(
             &chunk_indices,
             ArrayD::<f32>::from_shape_vec(
                 chunk_subset.shape_usize(),
-                vec![i as f32 * 0.1; chunk_subset.num_elements() as usize],
+                vec![f32::from(i) * 0.1; chunk_subset.num_elements().try_into().unwrap()],
             )
             .unwrap(),
         )
@@ -160,13 +161,13 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // Show the hierarchy
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
-    println!("hierarchy_tree:\n{}", tree);
+    println!("hierarchy_tree:\n{tree}");
 
     Ok(())
 }
 
 fn main() {
     if let Err(err) = array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

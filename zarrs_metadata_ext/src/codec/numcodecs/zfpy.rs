@@ -146,6 +146,7 @@ mod tests {
     use super::*;
     use crate::codec::zfp::ZfpCodecConfigurationV1;
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn codec_zfpy_fixed_rate() {
         let v2 = serde_json::from_str::<ZfpyCodecConfigurationNumcodecs>(
@@ -188,6 +189,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::float_cmp)]
     #[test]
     fn codec_zfpy_fixed_accuracy() {
         let v2 = serde_json::from_str::<ZfpyCodecConfigurationNumcodecs>(

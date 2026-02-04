@@ -25,13 +25,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .dimension_names(["y", "x"].into())
     .attributes(
         serde_json::json!({
-            "description": r#"A 4x4 array of optional optional uint8 values with some missing data.
+            "description": r"A 4x4 array of optional optional uint8 values with some missing data.
 The fill value is null on the inner optional layer, i.e. Some(None).
 N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
   N  SN   2   3 
   N   5   N   7 
  SN  SN   N   N 
- SN  SN   N   N"#,
+ SN  SN   N   N",
         })
         .as_object()
         .unwrap()
@@ -69,10 +69,10 @@ N marks missing (`None`=`null`) values. SN marks `Some(None)`=`[null]` values:
     );
     println!("    0   1   2   3");
     for y in 0..4 {
-        print!("{} ", y);
+        print!("{y} ");
         for x in 0..4 {
             match data_read[[y, x]] {
-                Some(Some(value)) => print!("{:3} ", value),
+                Some(Some(value)) => print!("{value:3} "),
                 Some(None) => print!(" SN "),
                 None => print!("  N "),
             }

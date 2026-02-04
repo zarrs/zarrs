@@ -527,7 +527,7 @@ mod tests {
     use super::*;
     use crate::ArraySubset;
 
-    /// Test `as_array_subset` is Some for types implementing ArraySubsetTraits.
+    /// Test `as_array_subset` is Some for types implementing `ArraySubsetTraits`.
     #[test]
     fn test_as_array_subset() {
         let subset = ArraySubset::new_with_shape(vec![10, 10]);

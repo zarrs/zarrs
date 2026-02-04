@@ -31,6 +31,8 @@ pub const ZARR_NAN_F16: f16 = f16::NAN;
 /// The Zarr V3 "NaN" fill value for a 16-bit brain floating point number.
 pub const ZARR_NAN_BF16: bf16 = bf16::NAN;
 
+
+#[allow(clippy::unusual_byte_groupings)]
 #[cfg(test)]
 mod tests {
     use super::*;
