@@ -62,7 +62,7 @@ impl DataTypeTraits for CustomDataTypeUInt4 {
             .ok_or(DataTypeFillValueMetadataError)?;
         let element = CustomDataTypeUInt4Element::try_from(element_metadata)
             .map_err(|_| DataTypeFillValueMetadataError)?;
-        Ok(FillValue::new(element.to_ne_bytes().to_vec()))
+        Ok(FillValue::new(element.into_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
@@ -75,7 +75,7 @@ impl DataTypeTraits for CustomDataTypeUInt4 {
                 .try_into()
                 .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadata::from(element.as_u8()))
+        Ok(FillValueMetadata::from(element.into_u8()))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
@@ -131,15 +131,15 @@ impl TryFrom<u64> for CustomDataTypeUInt4Element {
 }
 
 impl CustomDataTypeUInt4Element {
-    fn to_ne_bytes(&self) -> [u8; 1] {
+    fn into_ne_bytes(self) -> [u8; 1] {
         [self.0]
     }
 
-    fn from_ne_bytes(bytes: &[u8; 1]) -> Self {
+    fn from_ne_bytes(bytes: [u8; 1]) -> Self {
         Self(bytes[0])
     }
 
-    fn as_u8(&self) -> u8 {
+    fn into_u8(self) -> u8 {
         self.0
     }
 }
@@ -200,7 +200,7 @@ fn main() {
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
         Arc::new(CustomDataTypeUInt4),
-        FillValue::new(fill_value.to_ne_bytes().to_vec()),
+        FillValue::new(fill_value.into_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -233,7 +233,7 @@ fn main() {
         array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for f in &data {
-        println!("uint4: {:08b} u8: {}", f.as_u8(), f.as_u8());
+        println!("uint4: {:08b} u8: {}", f.into_u8(), f.into_u8());
     }
 
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(1).unwrap());

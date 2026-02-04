@@ -316,6 +316,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn chunk_grid_regular_bounded() {
         let array_shape: ArrayShape = vec![5, 7, 52];
@@ -344,7 +345,7 @@ mod tests {
             );
             assert_eq!(
                 chunk_grid.chunk_shape(&[0, 3, 17]).unwrap(),
-                Some(vec![NonZeroU64::new(1).unwrap(); 3].try_into().unwrap())
+                Some(vec![NonZeroU64::new(1).unwrap(); 3])
             );
             assert_eq!(chunk_grid.chunk_shape(&[5, 0, 0]).unwrap(), None);
             let chunk_grid_shape = chunk_grid.grid_shape();

@@ -227,6 +227,7 @@ mod tests {
         assert_eq!(decoded_elements, &[0, 3, 7, 16, 16, 56, 96, 128, 224]);
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn codec_bitround_partial_decode() {
         const JSON: &str = r#"{ "keepbits": 2 }"#;
@@ -286,6 +287,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_bitround_async_partial_decode() {

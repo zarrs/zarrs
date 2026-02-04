@@ -60,7 +60,7 @@ impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
             .as_f32()
             .ok_or(DataTypeFillValueMetadataError)?;
         let element = CustomDataTypeFloat8e3m4Element::from(element_metadata);
-        Ok(FillValue::new(element.to_ne_bytes().to_vec()))
+        Ok(FillValue::new(element.into_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
@@ -73,7 +73,7 @@ impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
                 .try_into()
                 .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadata::from(element.as_f32()))
+        Ok(FillValueMetadata::from(element.into_f32()))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
@@ -140,15 +140,15 @@ impl From<f32> for CustomDataTypeFloat8e3m4Element {
 }
 
 impl CustomDataTypeFloat8e3m4Element {
-    fn to_ne_bytes(&self) -> [u8; 1] {
+    fn into_ne_bytes(self) -> [u8; 1] {
         [self.0]
     }
 
-    fn from_ne_bytes(bytes: &[u8; 1]) -> Self {
+    fn from_ne_bytes(bytes: [u8; 1]) -> Self {
         Self(bytes[0])
     }
 
-    fn as_f32(&self) -> f32 {
+    fn into_f32(self) -> f32 {
         float8_e3m4_to_float32(self.0)
     }
 }
@@ -208,7 +208,7 @@ fn main() {
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
         Arc::new(CustomDataTypeFloat8e3m4),
-        FillValue::new(fill_value.to_ne_bytes().to_vec()),
+        FillValue::new(fill_value.into_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -242,8 +242,8 @@ fn main() {
     for f in &data {
         println!(
             "float8_e3m4: {:08b} f32: {}",
-            f.to_ne_bytes()[0],
-            f.as_f32()
+            f.into_ne_bytes()[0],
+            f.into_f32()
         );
     }
 

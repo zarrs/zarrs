@@ -40,6 +40,7 @@ fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
     println!();
 }
 
+#[allow(clippy::single_range_in_vec_init)]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
@@ -130,6 +131,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(clippy::single_range_in_vec_init)]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {

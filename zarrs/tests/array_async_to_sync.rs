@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-#![cfg(all(feature = "async"))]
+#![cfg(feature = "async")]
 
 use std::sync::Arc;
 

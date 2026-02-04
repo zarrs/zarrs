@@ -16,12 +16,12 @@ use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
-    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        async move { tokio::task::spawn_blocking(f).await.unwrap() }
+        tokio::task::spawn_blocking(f).await.unwrap()
     }
 }
 
