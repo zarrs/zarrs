@@ -643,9 +643,7 @@ async fn test_codec_chain_async_partial_encoding() {
     let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
     assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
-    println!(
-        "Codec chain partial encoder size_held(): {encoder_size_held}"
-    );
+    println!("Codec chain partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().await.unwrap();
     assert!(!partial_encoder.exists().await.unwrap());
 }

@@ -567,9 +567,7 @@ fn test_codec_chain_sync_partial_encoding() {
     let partial_encoder = array.partial_encoder(&[0, 0], &opt).unwrap();
     assert!(partial_encoder.exists().unwrap());
     let encoder_size_held = partial_encoder.size_held();
-    println!(
-        "Codec chain partial encoder size_held(): {encoder_size_held}"
-    );
+    println!("Codec chain partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().unwrap();
     assert!(!partial_encoder.exists().unwrap());
 }

@@ -19,7 +19,7 @@ impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        tokio::task::spawn_blocking(f).await.unwrap() 
+        tokio::task::spawn_blocking(f).await.unwrap()
     }
 }
 

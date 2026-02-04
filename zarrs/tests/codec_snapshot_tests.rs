@@ -459,7 +459,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
 
 /// Generate deterministic test data for a given data type and element count
 /// Returns `ArrayBytes` which can be Fixed, Variable, or Optional
-#[must_use] 
+#[must_use]
 pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayBytes<'static> {
     match data_type_id(data_type) {
         // Variable-length String type
@@ -589,7 +589,7 @@ pub struct SnapshotPath {
 }
 
 impl SnapshotPath {
-    #[must_use] 
+    #[must_use]
     pub fn new(
         chunk_grid: &str,
         data_type: &DataType,

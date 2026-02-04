@@ -157,8 +157,7 @@ impl Element for CustomDataTypeUInt12Element {
         elements: &'a [Self],
     ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let mut bytes: Vec<u8> =
-            Vec::with_capacity(std::mem::size_of_val(elements));
+        let mut bytes: Vec<u8> = Vec::with_capacity(std::mem::size_of_val(elements));
         for element in elements {
             bytes.extend_from_slice(&element.into_le_bytes());
         }
