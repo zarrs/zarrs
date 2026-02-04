@@ -392,7 +392,7 @@ mod tests {
     fn data_type_metadata(data_type: &DataType) -> MetadataV3 {
         let name = data_type
             .name_v3()
-            .map_or_else(String::new, |n| n.into_owned());
+            .map_or_else(String::new, std::borrow::Cow::into_owned);
         let configuration = data_type.configuration_v3();
         if configuration.is_empty() {
             MetadataV3::new(name)

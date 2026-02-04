@@ -325,7 +325,7 @@ mod tests {
             RegularChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"#
+            r"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"
         );
     }
 

@@ -19,8 +19,8 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log" {
             let log_writer = Arc::new(std::sync::Mutex::new(
                 // std::io::BufWriter::new(
                 std::io::stdout(),
@@ -30,7 +30,6 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                 chrono::Utc::now().format("[%T%.3f] ").to_string()
             }));
         }
-    }
 
     // Create the root group
     zarrs::group::GroupBuilder::new()
@@ -108,6 +107,6 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

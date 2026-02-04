@@ -459,6 +459,7 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
 
 /// Generate deterministic test data for a given data type and element count
 /// Returns `ArrayBytes` which can be Fixed, Variable, or Optional
+#[must_use] 
 pub fn generate_test_data(data_type: &DataType, num_elements: usize) -> ArrayBytes<'static> {
     match data_type_id(data_type) {
         // Variable-length String type
@@ -588,6 +589,7 @@ pub struct SnapshotPath {
 }
 
 impl SnapshotPath {
+    #[must_use] 
     pub fn new(
         chunk_grid: &str,
         data_type: &DataType,
@@ -1016,8 +1018,7 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                             println!("Added newly supported snapshot: {display_path}/{checksum}");
                         } else {
                             panic!(
-                                "Test {} was previously unsupported but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update.",
-                                display_path
+                                "Test {display_path} was previously unsupported but now succeeds. Run with ADD_SNAPSHOTS=1 to add or UPDATE_SNAPSHOTS=1 to update."
                             );
                         }
                     }
