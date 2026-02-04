@@ -35,6 +35,7 @@ pub const ZARR_NAN_BF16: bf16 = bf16::NAN;
 mod tests {
     use super::*;
 
+    #[allow(clippy::unusual_byte_groupings)]
     #[test]
     fn nan_representations() {
         assert_eq!(

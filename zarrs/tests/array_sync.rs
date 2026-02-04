@@ -8,6 +8,7 @@ use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{ArrayCodecTraits, CodecOptions};
 
+#[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
 fn array_sync_read(array: &Array<MemoryStore>) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(*array.data_type(), data_type::uint8());

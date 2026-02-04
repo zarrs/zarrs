@@ -819,6 +819,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use zarrs_storage::StoreKey;
     use zarrs_storage::store::MemoryStore;
@@ -1046,9 +1048,8 @@ mod tests {
             nodes
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
-                .collect::<Vec<&str>>()
-                .sort_unstable(),
-            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort_unstable()
+                .collect::<HashSet<_>>(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].into()
         );
     }
 
@@ -1103,9 +1104,8 @@ mod tests {
             nodes
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
-                .collect::<Vec<&str>>()
-                .sort_unstable(),
-            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort_unstable()
+                .collect::<HashSet<_>>(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].into()
         );
     }
 }

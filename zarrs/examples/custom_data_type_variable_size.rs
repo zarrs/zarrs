@@ -79,7 +79,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
             if let Ok(bytes) = <[u8; 4]>::try_from(bytes) {
                 let value = f32::from_le_bytes(bytes);
                 elements.push(CustomDataTypeVariableSizeElement(Some(value)));
-            } else if bytes.len() == 0 {
+            } else if bytes.is_empty() {
                 elements.push(CustomDataTypeVariableSizeElement(None));
             } else {
                 panic!()
@@ -94,7 +94,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
 #[derive(Debug)]
 struct CustomDataTypeVariableSize;
 
-const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
+const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeVariableSize";
 
 zarrs_plugin::impl_extension_aliases!(CustomDataTypeVariableSize, v3: CUSTOM_NAME);
 
@@ -135,7 +135,7 @@ impl DataTypeTraits for CustomDataTypeVariableSize {
         fill_value: &FillValue,
     ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let fill_value = fill_value.as_ne_bytes();
-        if fill_value.len() == 0 {
+        if fill_value.is_empty() {
             Ok(FillValueMetadata::Null)
         } else if fill_value.len() == 4 {
             let value = f32::from_ne_bytes(fill_value.try_into().unwrap());

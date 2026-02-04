@@ -21,17 +21,17 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     // let mut store: ReadableWritableListableStorage =
     //     Arc::new(zarrs::filesystem::FilesystemStore::new(path.path())?);
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group

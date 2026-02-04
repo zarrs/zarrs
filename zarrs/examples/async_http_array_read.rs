@@ -33,17 +33,17 @@ async fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Err
             Arc::new(zarrs_object_store::AsyncObjectStore::new(store))
         }
     };
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Init the existing array, reading metadata

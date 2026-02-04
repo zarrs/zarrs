@@ -18,7 +18,7 @@ fn fill_value(c: &mut Criterion) {
             let num_elements = size3 / element_size;
             let fill_value: FillValue = FillValue::new(vec![0; element_size]);
 
-            let data = vec![0u8; (num_elements * element_size).try_into().unwrap()];
+            let data = vec![0u8; num_elements * element_size];
             group.throughput(Throughput::Bytes((num_elements * element_size) as u64));
             group.bench_function(BenchmarkId::new("equals_all", size3), |b| {
                 b.iter(|| fill_value.equals_all(&data));

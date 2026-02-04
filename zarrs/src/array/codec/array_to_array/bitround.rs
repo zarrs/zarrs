@@ -104,15 +104,15 @@ mod tests {
         let elements: Vec<f32> = vec![
             //                         |
             0.0,
-            // 1.23456789 -> 001111111001|11100000011001010010
-            // 1.25       -> 001111111010
-            1.23456789,
-            // -8.3587192 -> 110000010000|01011011110101010000
-            // -8.0       -> 110000010000
-            -8.3587192834,
-            // 98765.43210-> 010001111100|00001110011010110111
-            // 98304.0    -> 010001111100
-            98765.43210,
+            // 1.234_567_9 -> 001111111001|11100000011001010010
+            // 1.25        -> 001111111010
+            1.234_567_9,
+            // -8.358_719  -> 110000010000|01011011110101010000
+            // -8.0        -> 110000010000
+            -8.358_719,
+            // 98_765.43   -> 010001111100|00001110011010110111
+            // 98_304.0    -> 010001111100
+            98_765.43,
         ];
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes = ArrayBytes::from(bytes);
@@ -227,6 +227,7 @@ mod tests {
         assert_eq!(decoded_elements, &[0, 3, 7, 16, 16, 56, 96, 128, 224]);
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn codec_bitround_partial_decode() {
         const JSON: &str = r#"{ "keepbits": 2 }"#;
@@ -286,6 +287,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_bitround_async_partial_decode() {

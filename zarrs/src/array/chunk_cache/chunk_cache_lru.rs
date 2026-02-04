@@ -431,6 +431,7 @@ mod tests {
         ReadableStorageTraits, ReadableWritableStorage, ReadableWritableStorageTraits,
     };
 
+    #[allow(clippy::type_complexity)]
     fn create_store_array() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
         Arc<Array<dyn ReadableStorageTraits>>,
@@ -738,6 +739,7 @@ mod tests {
         array_chunk_cache_impl(store, cache, true, true, true, false);
     }
 
+    #[allow(clippy::type_complexity)]
     fn create_store_array_string() -> (
         Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
         Arc<Array<dyn ReadableStorageTraits>>,

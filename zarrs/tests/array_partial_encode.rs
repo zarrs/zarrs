@@ -191,10 +191,7 @@ fn array_partial_encode_sharding_index_compressed() {
                 #[cfg(feature = "gzip")]
                 Arc::new(zarrs::array::codec::GzipCodec::new(5).unwrap()),
                 #[cfg(feature = "zstd")]
-                Arc::new(zarrs::array::codec::ZstdCodec::new(
-                    5.try_into().unwrap(),
-                    true,
-                )),
+                Arc::new(zarrs::array::codec::ZstdCodec::new(5, true)),
                 #[cfg(feature = "bz2")]
                 Arc::new(zarrs::array::codec::Bz2Codec::new(
                     Bz2CompressionLevel::try_from(5u8).unwrap(),
@@ -364,10 +361,7 @@ fn array_partial_encode_sharding_compact_index_compressed() {
                 #[cfg(feature = "gzip")]
                 Arc::new(zarrs::array::codec::GzipCodec::new(5).unwrap()),
                 #[cfg(feature = "zstd")]
-                Arc::new(zarrs::array::codec::ZstdCodec::new(
-                    5.try_into().unwrap(),
-                    true,
-                )),
+                Arc::new(zarrs::array::codec::ZstdCodec::new(5, true)),
                 #[cfg(feature = "bz2")]
                 Arc::new(zarrs::array::codec::Bz2Codec::new(
                     Bz2CompressionLevel::try_from(5u8).unwrap(),

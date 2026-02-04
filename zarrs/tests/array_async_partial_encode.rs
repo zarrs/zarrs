@@ -16,12 +16,12 @@ use zarrs_codec::{ArrayToArrayCodecTraits, BytesToBytesCodecTraits, CodecOptions
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
-    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        async move { tokio::task::spawn_blocking(f).await.unwrap() }
+        tokio::task::spawn_blocking(f).await.unwrap()
     }
 }
 
@@ -410,7 +410,7 @@ async fn test_gzip_async_partial_encoding() {
 async fn test_zstd_async_partial_encoding() {
     use zarrs::array::codec::ZstdCodec;
 
-    let codec = Arc::new(ZstdCodec::new(5.try_into().unwrap(), true));
+    let codec = Arc::new(ZstdCodec::new(5, true));
 
     // Zstd does not support partial encoding due to compression
     test_bytes_to_bytes_codec_async_partial_encoding(codec, "zstd", false)
@@ -643,10 +643,7 @@ async fn test_codec_chain_async_partial_encoding() {
     let partial_encoder = array.async_partial_encoder(&[0, 0], &opt).await.unwrap();
     assert!(partial_encoder.exists().await.unwrap());
     let encoder_size_held = partial_encoder.size_held();
-    println!(
-        "Codec chain partial encoder size_held(): {}",
-        encoder_size_held
-    );
+    println!("Codec chain partial encoder size_held(): {encoder_size_held}");
     partial_encoder.erase().await.unwrap();
     assert!(!partial_encoder.exists().await.unwrap());
 }

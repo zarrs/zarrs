@@ -10,7 +10,7 @@ use zarrs_plugin::ExtensionAliasesV3;
 
 /// bz2 could stabilise as is, so test supporting that via the codec map.
 /// This test verifies that changing the default name and adding an alias
-/// still allows reading arrays with the old name, and that convert_aliased_extension_names
+/// still allows reading arrays with the old name, and that `convert_aliased_extension_names`
 /// properly converts to the new default name.
 #[test]
 fn array_future_stabilisation_bz2() {
