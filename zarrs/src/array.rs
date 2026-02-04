@@ -1794,7 +1794,7 @@ mod tests {
         // (a string fill value for an int32 data type)
         let metadata = ArrayMetadataV2::new(
             vec![10, 10],
-            vec![NonZeroU64::new(5).unwrap(); 2].try_into().unwrap(),
+            vec![NonZeroU64::new(5).unwrap(); 2],
             DataTypeMetadataV2::Simple("<i4".to_string()),
             FillValueMetadata::from("invalid"),
             None, // compressor

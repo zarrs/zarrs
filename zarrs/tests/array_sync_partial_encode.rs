@@ -364,7 +364,7 @@ fn test_gzip_sync_partial_encoding() {
 fn test_zstd_sync_partial_encoding() {
     use zarrs::array::codec::ZstdCodec;
 
-    let codec = Arc::new(ZstdCodec::new(5.try_into().unwrap(), true));
+    let codec = Arc::new(ZstdCodec::new(5, true));
 
     // Zstd does not support partial encoding due to compression
     test_bytes_to_bytes_codec_sync_partial_encoding(codec, "zstd", false).unwrap();

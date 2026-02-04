@@ -12,6 +12,7 @@ use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
 use zarrs_codec::CodecOptions;
 
+#[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
 async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>> {
     let store = std::sync::Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));

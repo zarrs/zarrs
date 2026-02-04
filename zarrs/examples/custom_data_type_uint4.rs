@@ -160,7 +160,7 @@ impl Element for CustomDataTypeUInt4Element {
     ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes: Vec<u8> =
-            Vec::with_capacity(elements.len() * size_of::<CustomDataTypeUInt4Element>());
+            Vec::with_capacity(std::mem::size_of_val(elements));
         for element in elements {
             bytes.push(element.0);
         }

@@ -156,12 +156,9 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             e,
             r,
-            "{}",
-            format!(
-                "errored with expected length {} and result length {}",
-                e.len(),
-                r.len()
-            )
+            "errored with expected length {} and result length {}",
+            e.len(),
+            r.len()
         );
     });
     Ok(())

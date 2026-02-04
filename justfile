@@ -23,7 +23,7 @@ fmt:
 # Lint with clippy
 clippy:
     cargo +{{TOOLCHAIN}} clippy --all-features -- -D warnings
-    cargo +{{TOOLCHAIN}} clippy --all-features --all-targets -- -A warnings
+    cargo +{{TOOLCHAIN}} clippy --all-features --all-targets -- -A clippy::pedantic
 
 # Generate documentation
 doc:

@@ -30,6 +30,12 @@ impl TestUnboundedCodec {
     }
 }
 
+impl Default for TestUnboundedCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CodecTraits for TestUnboundedCodec {
     fn as_any(&self) -> &dyn std::any::Any {
         self

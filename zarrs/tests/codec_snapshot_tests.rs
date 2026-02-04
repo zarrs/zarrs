@@ -811,9 +811,7 @@ fn has_chunks(dir: &Path) -> bool {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_file() {
-                    return true;
-                } else if path.is_dir() && has_files(&path) {
+                if path.is_file() || (path.is_dir() && has_files(&path)) {
                     return true;
                 }
             }

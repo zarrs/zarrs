@@ -1061,7 +1061,7 @@ mod tests {
 
         // Create test data with some valid and some invalid f32 values
         let mask = vec![1u8, 0, 1, 1, 0];
-        let data = vec![
+        let data = [
             1.5f32.to_le_bytes(),
             [0u8; 4], // placeholder
             2.5f32.to_le_bytes(),

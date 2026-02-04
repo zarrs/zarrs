@@ -870,8 +870,7 @@ mod tests {
                         NonZeroU64::new(3).unwrap()
                     },
                     NonZeroU64::new(3).unwrap(),
-                ]
-                .try_into()?,
+                ],
                 &data_type::uint32(),
             )
             .bytes_to_bytes_codecs(vec![

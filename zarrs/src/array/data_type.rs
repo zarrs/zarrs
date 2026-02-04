@@ -1678,6 +1678,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::unusual_byte_groupings)]
     #[test]
     fn float_fill_value() {
         assert_eq!(
