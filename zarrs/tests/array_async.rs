@@ -7,10 +7,10 @@ use std::sync::Arc;
 use object_store::memory::InMemory;
 use zarrs::array::codec::TransposeCodec;
 use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
-use zarrs::array::{Array, ArrayBuilder, ArrayBytes, data_type};
+use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, data_type};
 use zarrs::metadata_ext::codec::transpose::TransposeOrder;
 use zarrs::metadata_ext::codec::vlen::VlenIndexLocation;
-use zarrs_codec::CodecOptions;
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions};
 
 #[allow(clippy::single_range_in_vec_init)]
 #[rustfmt::skip]
@@ -298,4 +298,107 @@ async fn array_str_async_sharded_transpose() -> Result<(), Box<dyn std::error::E
         array_str_impl(array).await?;
     }
     Ok(())
+}
+
+type AsyncStore = zarrs_object_store::AsyncObjectStore<InMemory>;
+
+/// Helper to call `async_retrieve_array_subset_into` and return the output bytes.
+async fn async_retrieve_into_vec(
+    array: &Array<AsyncStore>,
+    subset: &[std::ops::Range<u64>],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let subset = ArraySubset::from(subset.to_vec());
+    let num_elements = subset.num_elements_usize();
+    let data_type_size = array.data_type().fixed_size().unwrap();
+    let shape: Vec<u64> = subset.shape().to_vec();
+    let total_bytes = num_elements * data_type_size;
+    let mut output = vec![0u8; total_bytes];
+
+    {
+        let output_slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut output);
+        let full_subset = ArraySubset::new_with_shape(shape.clone());
+        let mut view = unsafe {
+            // SAFETY: single view, no overlap
+            ArrayBytesFixedDisjointView::new(output_slice, data_type_size, &shape, full_subset)?
+        };
+        let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
+        array
+            .async_retrieve_array_subset_into(&subset, target)
+            .await?;
+    }
+
+    Ok(output)
+}
+
+#[allow(clippy::single_range_in_vec_init)]
+#[rustfmt::skip]
+async fn array_async_read_into(array: &Array<AsyncStore>) -> Result<(), Box<dyn std::error::Error>> {
+    // 1  2 | 3  4
+    // 5  6 | 7  8
+    // -----|-----
+    // 9 10 | 0  0
+    // 0  0 | 0  0
+    array.async_store_chunk(&[0, 0], &[1u8, 2, 0, 0]).await?;
+    array.async_store_chunk(&[0, 1], &[3u8, 4, 7, 8]).await?;
+    array.async_store_array_subset(&[1..3, 0..2], &[5u8, 6, 9, 10]).await?;
+
+    // Full array retrieval (multi-chunk)
+    assert_eq!(
+        async_retrieve_into_vec(array, &[0..4, 0..4]).await?,
+        vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0, 0, 0]
+    );
+
+    // Cross-chunk subset
+    assert_eq!(async_retrieve_into_vec(array, &[1..3, 1..3]).await?, vec![6, 7, 10, 0]);
+
+    // Single chunk (aligned)
+    assert_eq!(async_retrieve_into_vec(array, &[0..2, 0..2]).await?, vec![1, 2, 5, 6]);
+
+    // OOB -> fill value
+    assert_eq!(async_retrieve_into_vec(array, &[5..7, 5..6]).await?, vec![0, 0]);
+
+    // Empty subset (test via retrieve_array_subset for comparison; _into doesn't support empty views)
+    assert_eq!(array.async_retrieve_array_subset::<ArrayBytes>(&[0..0, 0..0]).await?, Vec::<u8>::new().into());
+
+    // Dimensionality mismatch should error
+    let subset_1d = ArraySubset::from(vec![0..4u64]);
+    let shape_1d: Vec<u64> = vec![4];
+    let mut buf = vec![0u8; 4];
+    let slice = unsafe_cell_slice::UnsafeCellSlice::new(&mut buf);
+    let full = ArraySubset::new_with_shape(shape_1d.clone());
+    let mut view = unsafe {
+        ArrayBytesFixedDisjointView::new(slice, 1, &shape_1d, full).unwrap()
+    };
+    let target = ArrayBytesDecodeIntoTarget::Fixed(&mut view);
+    assert!(array.async_retrieve_array_subset_into(&subset_1d, target).await.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn array_async_read_into_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
+    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8)
+        .bytes_to_bytes_codecs(vec![])
+        .build(store, "/array")?;
+
+    array_async_read_into(&array).await
+}
+
+#[cfg(feature = "sharding")]
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn array_async_read_into_sharded() -> Result<(), Box<dyn std::error::Error>> {
+    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let mut builder = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::uint8(), 0u8);
+    builder
+        .subchunk_shape(vec![1, 1])
+        .bytes_to_bytes_codecs(vec![
+            #[cfg(feature = "gzip")]
+            Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+        ]);
+    let array = builder.build(store, "/array")?;
+
+    array_async_read_into(&array).await
 }

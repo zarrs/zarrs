@@ -36,6 +36,25 @@ pub(crate) fn build_nested_optional_target<'a>(
     }
 }
 
+/// Extract shared references to the data view and mask views from an [`ArrayBytesDecodeIntoTarget`].
+///
+/// Mask views are returned outer-to-inner, matching the convention of [`build_nested_optional_target`].
+pub(crate) fn extract_target_views<'a, 'b>(
+    target: &'b ArrayBytesDecodeIntoTarget<'a>,
+) -> (
+    &'b ArrayBytesFixedDisjointView<'a>,
+    Vec<&'b ArrayBytesFixedDisjointView<'a>>,
+) {
+    match target {
+        ArrayBytesDecodeIntoTarget::Fixed(view) => (view, vec![]),
+        ArrayBytesDecodeIntoTarget::Optional(inner, mask_view) => {
+            let (data_view, mut mask_views) = extract_target_views(inner);
+            mask_views.insert(0, mask_view);
+            (data_view, mask_views)
+        }
+    }
+}
+
 /// Merge a set of variable length chunks into an array subset.
 ///
 /// # Panics
