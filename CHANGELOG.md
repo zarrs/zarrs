@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `Array::[async_]retrieve_array_subset_into[_opt]` for decoding array subsets directly into preallocated `ArrayBytesDecodeIntoTarget`
+
 ### Changed
 - Bump `pcodec` to 1.0.0
 
