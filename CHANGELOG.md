@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-02-08
+
 ### Added
 - Add `Array::[async_]retrieve_array_subset_into[_opt]` for decoding array subsets directly into preallocated `ArrayBytesDecodeIntoTarget`
 
@@ -2031,7 +2033,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.1...HEAD
+[0.23.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.1
 [0.23.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0
 [0.23.0-beta.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.6
 [0.23.0-beta.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.5
