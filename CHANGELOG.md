@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Restore `i64` `Element[Owned]` support for `numpy.{datetime64,timedelta64}` (broken in 0.23.0)
+
 ## [0.23.1] - 2026-02-08
 
 ### Added

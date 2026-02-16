@@ -437,3 +437,104 @@ fn zarr_python_v3_numpy_timedelta_write() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[test]
+fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::new());
+    let array = ArrayBuilder::new(
+        vec![3],
+        vec![5],
+        data_type::numpy_datetime64(NumpyTimeUnit::Second, 1.try_into().unwrap()),
+        i64::MIN,
+    )
+    .build(store.clone(), "/")?;
+    array.store_metadata()?;
+
+    // Test storing and retrieving raw i64 values (seconds since Unix epoch)
+    let i64_values = vec![
+        0_i64,     // Unix epoch (1970-01-01T00:00:00Z)
+        i64::MIN,  // NaT (Not a Time)
+        946782245, // 2000-01-02T03:04:05Z
+    ];
+
+    array.store_array_subset(&array.subset_all(), &i64_values)?;
+    let retrieved = array.retrieve_array_subset::<Vec<i64>>(&array.subset_all())?;
+    assert_eq!(retrieved, i64_values);
+
+    // Also verify we can retrieve as chrono/jiff types
+    #[cfg(feature = "chrono")]
+    {
+        use chrono::{DateTime, Utc};
+        let chrono_values =
+            array.retrieve_array_subset::<Vec<DateTime<Utc>>>(&array.subset_all())?;
+        assert_eq!(chrono_values[0], DateTime::UNIX_EPOCH);
+        assert_eq!(chrono_values[1], DateTime::<Utc>::MIN_UTC);
+        assert_eq!(
+            chrono_values[2],
+            DateTime::parse_from_rfc3339("2000-01-02T03:04:05Z")?.to_utc()
+        );
+    }
+
+    #[cfg(feature = "jiff")]
+    {
+        use jiff::Timestamp;
+        let jiff_values = array.retrieve_array_subset::<Vec<Timestamp>>(&array.subset_all())?;
+        assert_eq!(jiff_values[0], Timestamp::UNIX_EPOCH);
+        assert_eq!(jiff_values[1], Timestamp::MIN);
+        assert_eq!(jiff_values[2], "2000-01-02T03:04:05Z".parse::<Timestamp>()?);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn numpy_timedelta64_i64_compatibility() -> Result<(), Box<dyn Error>> {
+    use zarrs::array::ArrayBuilder;
+    use zarrs::storage::store::MemoryStore;
+
+    let store = Arc::new(MemoryStore::new());
+    let array = ArrayBuilder::new(
+        vec![3],
+        vec![5],
+        data_type::numpy_timedelta64(NumpyTimeUnit::Millisecond, 1.try_into().unwrap()),
+        i64::MIN,
+    )
+    .build(store.clone(), "/")?;
+    array.store_metadata()?;
+
+    // Test storing and retrieving raw i64 values (milliseconds)
+    let i64_values = vec![
+        0_i64,    // Zero duration
+        i64::MIN, // NaT (Not a Time)
+        86400000, // 1 day in milliseconds
+    ];
+
+    array.store_array_subset(&array.subset_all(), &i64_values)?;
+    let retrieved = array.retrieve_array_subset::<Vec<i64>>(&array.subset_all())?;
+    assert_eq!(retrieved, i64_values);
+
+    // Also verify we can retrieve as chrono/jiff types
+    #[cfg(feature = "chrono")]
+    {
+        use chrono::TimeDelta;
+        let chrono_values = array.retrieve_array_subset::<Vec<TimeDelta>>(&array.subset_all())?;
+        assert_eq!(chrono_values[0], TimeDelta::default());
+        assert_eq!(chrono_values[1], TimeDelta::MIN);
+        assert_eq!(chrono_values[2], TimeDelta::milliseconds(86400000));
+    }
+
+    #[cfg(feature = "jiff")]
+    {
+        use jiff::SignedDuration;
+        let jiff_values =
+            array.retrieve_array_subset::<Vec<SignedDuration>>(&array.subset_all())?;
+        assert_eq!(jiff_values[0], SignedDuration::ZERO);
+        assert_eq!(jiff_values[1], SignedDuration::MIN);
+        assert_eq!(jiff_values[2], SignedDuration::from_millis(86400000));
+    }
+
+    Ok(())
+}
