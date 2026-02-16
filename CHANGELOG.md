@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-02-17
+
 ### Fixed
 - Restore `i64` `Element[Owned]` support for `numpy.{datetime64,timedelta64}` (broken in 0.23.0)
 
@@ -2036,7 +2038,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.2...HEAD
+[0.23.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.2
 [0.23.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.1
 [0.23.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0
 [0.23.0-beta.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0-beta.6
