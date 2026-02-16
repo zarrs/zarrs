@@ -455,9 +455,9 @@ fn numpy_datetime64_i64_compatibility() -> Result<(), Box<dyn Error>> {
 
     // Test storing and retrieving raw i64 values (seconds since Unix epoch)
     let i64_values = vec![
-        0_i64,       // Unix epoch (1970-01-01T00:00:00Z)
-        i64::MIN,    // NaT (Not a Time)
-        946782245,   // 2000-01-02T03:04:05Z
+        0_i64,     // Unix epoch (1970-01-01T00:00:00Z)
+        i64::MIN,  // NaT (Not a Time)
+        946782245, // 2000-01-02T03:04:05Z
     ];
 
     array.store_array_subset(&array.subset_all(), &i64_values)?;
