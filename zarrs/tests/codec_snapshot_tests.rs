@@ -11,6 +11,16 @@
 //! previously marked as unsupported but now succeed. It will not update existing snapshots.
 
 #![allow(missing_docs)]
+#![cfg(all(
+    feature = "adler32",
+    feature = "bitround",
+    feature = "bz2",
+    feature = "fletcher32",
+    feature = "gdeflate",
+    feature = "pcodec",
+    feature = "zfp",
+    feature = "zlib",
+))]
 
 use half::{bf16, f16};
 use rayon::ThreadPoolBuilder;
