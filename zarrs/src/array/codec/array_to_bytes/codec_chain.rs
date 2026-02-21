@@ -25,6 +25,9 @@ use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::PluginCreateError;
 
+type ArrayRepresentations = Vec<(ChunkShape, DataType, FillValue)>;
+type BytesRepresentations = Vec<BytesRepresentation>;
+
 /// A codec chain is a sequence of array to array, a bytes to bytes, and a sequence of array to bytes codecs.
 ///
 /// A codec chain partial decoder may insert a cache.
@@ -213,7 +216,7 @@ impl CodecChain {
         shape: &[NonZeroU64],
         data_type: &DataType,
         fill_value: &FillValue,
-    ) -> Result<Vec<(ChunkShape, DataType, FillValue)>, CodecError> {
+    ) -> Result<ArrayRepresentations, CodecError> {
         let mut array_representations = Vec::with_capacity(self.array_to_array.len() + 1);
         array_representations.push((shape.to_vec(), data_type.clone(), fill_value.clone()));
         for codec in &self.array_to_array {
@@ -228,7 +231,7 @@ impl CodecChain {
         shape: &[NonZeroU64],
         data_type: &DataType,
         fill_value: &FillValue,
-    ) -> Result<Vec<BytesRepresentation>, CodecError> {
+    ) -> Result<BytesRepresentations, CodecError> {
         let mut bytes_representations = Vec::with_capacity(self.bytes_to_bytes.len() + 1);
         bytes_representations.push(
             self.array_to_bytes
@@ -239,6 +242,20 @@ impl CodecChain {
                 .push(codec.encoded_representation(bytes_representations.last().unwrap()));
         }
         Ok(bytes_representations)
+    }
+
+    fn get_representations(
+        &self,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
+    ) -> Result<(ArrayRepresentations, BytesRepresentations), CodecError> {
+        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
+        let bytes_representations = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.get_bytes_representations(shape, data_type, fill_value)?
+        };
+        Ok((array_representations, bytes_representations))
     }
 }
 
@@ -367,9 +384,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
@@ -380,10 +396,11 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
 
         // bytes->array
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let mut bytes = self
-            .array_to_bytes
-            .decode(bytes, shape, data_type, fill_value, options)?;
+        let mut bytes = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.array_to_bytes
+                .decode(bytes, shape, data_type, fill_value, options)?
+        };
 
         // array->array
         for (codec, (shape, data_type, fill_value)) in std::iter::zip(
@@ -393,7 +410,9 @@ impl ArrayToBytesCodecTraits for CodecChain {
             bytes = codec.decode(bytes, shape, data_type, fill_value, options)?;
         }
 
+        let (shape, data_type, _) = array_representations.first().unwrap();
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
+
         Ok(bytes)
     }
 
@@ -406,9 +425,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
             // Fast path if no bytes to bytes or array to array codecs
@@ -445,10 +463,11 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
 
         // bytes->array
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let mut bytes = self
-            .array_to_bytes
-            .decode(bytes, shape, data_type, fill_value, options)?;
+        let mut bytes = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.array_to_bytes
+                .decode(bytes, shape, data_type, fill_value, options)?
+        };
 
         // array->array
         for (codec, (shape, data_type, fill_value)) in std::iter::zip(
@@ -457,6 +476,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         ) {
             bytes = codec.decode(bytes, shape, data_type, fill_value, options)?;
         }
+
+        let (shape, data_type, _) = array_representations.first().unwrap();
         bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
 
         decode_into_array_bytes_target(&bytes, output_target)
@@ -470,9 +491,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         // Decode through bytes_to_bytes codecs (in reverse) to get to array_to_bytes level
         for (codec, bytes_representation) in std::iter::zip(
@@ -483,10 +503,11 @@ impl ArrayToBytesCodecTraits for CodecChain {
         }
 
         // Compact at the array_to_bytes level (e.g., ShardingCodec compact)
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let compacted = self
-            .array_to_bytes
-            .compact(bytes, shape, data_type, fill_value, options)?;
+        let compacted = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.array_to_bytes
+                .compact(bytes, shape, data_type, fill_value, options)?
+        };
 
         // If compaction occurred, re-encode through bytes_to_bytes codecs
         if let Some(mut compacted_bytes) = compacted {
@@ -509,9 +530,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
         let mut codec_index = 0;
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
@@ -581,9 +601,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
@@ -596,14 +615,16 @@ impl ArrayToBytesCodecTraits for CodecChain {
             )?;
         }
 
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let mut input_output_handle = self.array_to_bytes.clone().partial_encoder(
-            input_output_handle,
-            shape,
-            data_type,
-            fill_value,
-            options,
-        )?;
+        let mut input_output_handle = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.array_to_bytes.clone().partial_encoder(
+                input_output_handle,
+                shape,
+                data_type,
+                fill_value,
+                options,
+            )?
+        };
 
         if self.array_to_array.is_empty() {
             return Ok(input_output_handle);
@@ -634,9 +655,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         let mut codec_index = 0;
         for (codec, bytes_representation) in std::iter::zip(
@@ -716,9 +736,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
-        let array_representations = self.get_array_representations(shape, data_type, fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) =
+            self.get_representations(shape, data_type, fill_value)?;
 
         for (codec, bytes_representation) in std::iter::zip(
             self.bytes_to_bytes.iter().rev(),
@@ -729,12 +748,13 @@ impl ArrayToBytesCodecTraits for CodecChain {
                 .await?;
         }
 
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let mut input_output_handle = self
-            .array_to_bytes
-            .clone()
-            .async_partial_encoder(input_output_handle, shape, data_type, fill_value, options)
-            .await?;
+        let mut input_output_handle = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.array_to_bytes
+                .clone()
+                .async_partial_encoder(input_output_handle, shape, data_type, fill_value, options)
+                .await?
+        };
 
         if self.array_to_array.is_empty() {
             return Ok(input_output_handle);
@@ -793,8 +813,10 @@ impl ArrayCodecTraits for CodecChain {
         let fill_value: FillValue = vec![0u8; data_type.fixed_size().unwrap_or(0)].into();
         let array_representations =
             self.get_array_representations(shape, data_type, &fill_value)?;
-        let (shape, data_type, fill_value) = array_representations.last().unwrap();
-        let bytes_representations = self.get_bytes_representations(shape, data_type, fill_value)?;
+        let bytes_representations = {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            self.get_bytes_representations(shape, data_type, fill_value)?
+        };
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
@@ -806,10 +828,12 @@ impl ArrayCodecTraits for CodecChain {
             concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
         }
 
-        let (shape, data_type, _fill_value) = array_representations.last().unwrap();
-        let recommended_concurrency = &self
-            .array_to_bytes
-            .recommended_concurrency(shape, data_type)?;
+        let recommended_concurrency = {
+            let (shape, data_type, _fill_value) = array_representations.last().unwrap();
+            &self
+                .array_to_bytes
+                .recommended_concurrency(shape, data_type)?
+        };
         concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
         concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
 
