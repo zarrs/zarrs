@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `CodecChain` internal validation of decoded bytes with an array-to-array codec that changes the data type
+
 ## [0.23.2] - 2026-02-17
 
 ### Fixed
