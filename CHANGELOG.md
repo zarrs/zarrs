@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.3] - 2026-02-21
+
 ### Fixed
 - Fix `CodecChain` internal validation of decoded bytes with an array-to-array codec that changes the data type
 
@@ -2041,7 +2043,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.2...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.3...HEAD
+[0.23.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.3
 [0.23.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.2
 [0.23.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.1
 [0.23.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.0
