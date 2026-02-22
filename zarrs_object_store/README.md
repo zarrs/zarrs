@@ -23,7 +23,7 @@ let store: AsyncReadableWritableListableStorage =
 ```
 
 ## Version Compatibility Matrix
-See [doc/version_compatibility_matrix.md](./doc/version_compatibility_matrix.md).
+See [`doc/version_compatibility_matrix.md`](https://github.com/zarrs/zarrs/blob/main/zarrs_object_store/doc/version_compatibility_matrix.md).
 
 `object_store` is re-exported as a dependency of this crate, so it does not need to be specified as a direct dependency.
 You can enable `object_store` features `fs`, `aws`, `azure`, `gcp` and `http` by enabling features for this crate of the same name.

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix link to `version_compatibility_matrix.md` in README
+
 ## [0.6.2] - 2026-02-02
 
 ### Changed
