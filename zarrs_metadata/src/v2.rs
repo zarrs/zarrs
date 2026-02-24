@@ -1,5 +1,6 @@
 /// Zarr V2 group metadata.
 mod group;
+use derive_more::{Display, From};
 pub use group::GroupMetadataV2;
 
 /// Zarr V2 array metadata.
@@ -14,7 +15,8 @@ mod metadata;
 pub use metadata::MetadataV2;
 
 /// Zarr V2 node metadata ([`ArrayMetadataV2`] or [`GroupMetadataV2`]).
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Display, From)]
+#[display("{}", serde_json::to_string(self).unwrap_or_default())]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum NodeMetadataV2 {
