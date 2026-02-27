@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.4] - 2026-02-28
+
 ### Fixed
 - Fix enabling `array_async_sharded_readable_ext` module without the `sharding` feature
 
@@ -2046,7 +2048,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.3...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.4...HEAD
+[0.23.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.4
 [0.23.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.3
 [0.23.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.2
 [0.23.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.1
