@@ -26,14 +26,13 @@ fn codec_bytes(c: &mut Criterion) {
 
     let fill_value = FillValue::from(0u16);
     for size in [32, 64, 128, 256, 512].iter() {
-        let size3 = size * size * size;
-        let num_elements = size3 / 2;
+        let num_elements = size * size * size;
         let shape = [num_elements.try_into().unwrap(); 1];
-        let data = vec![0u8; size3.try_into().unwrap()];
+        let data = vec![0u16; num_elements.try_into().unwrap()];
         let bytes = Element::into_array_bytes(&data_type::uint16(), data).unwrap();
-        group.throughput(Throughput::Bytes(size3));
+        group.throughput(Throughput::Bytes(num_elements * 2));
         // encode and decode have the same implementation
-        group.bench_function(BenchmarkId::new("encode_decode", size3), |b| {
+        group.bench_function(BenchmarkId::new("encode_decode", num_elements), |b| {
             b.iter(|| {
                 codec
                     .encode(

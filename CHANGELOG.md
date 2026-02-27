@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Sharding codec partial decoder: coalesce adjacent inner-chunk byte ranges into a single I/O read
+
 ## [0.23.4] - 2026-02-28
 
 ### Fixed
