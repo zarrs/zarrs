@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix enabling `array_async_sharded_readable_ext` module without the `sharding` feature
+
 ## [0.23.3] - 2026-02-21
 
 ### Fixed

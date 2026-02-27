@@ -1227,7 +1227,7 @@ mod array_async_writable;
 #[cfg(feature = "async")]
 mod array_async_readable_writable;
 
-#[cfg(feature = "async")]
+#[cfg(all(feature = "sharding", feature = "async"))]
 mod array_async_sharded_readable_ext;
 
 /// Transmute from `&[u8]` to `Vec<T>`.
