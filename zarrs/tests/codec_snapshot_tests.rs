@@ -12,6 +12,7 @@
 
 #![allow(missing_docs)]
 #![cfg(all(
+    // Codecs
     feature = "adler32",
     feature = "bitround",
     feature = "bz2",
@@ -20,6 +21,9 @@
     feature = "pcodec",
     feature = "zfp",
     feature = "zlib",
+    // Element types
+    feature = "chrono",
+    feature = "float8",
 ))]
 
 use half::{bf16, f16};
