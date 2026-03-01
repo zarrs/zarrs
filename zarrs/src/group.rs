@@ -147,7 +147,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
     /// This method is used internally by [`Group::store_metadata`] and [`Group::store_metadata_opt`].
     #[must_use]
     pub fn metadata_opt(&self, options: &GroupMetadataOptions) -> GroupMetadata {
-        use {GroupMetadata as GM, MetadataConvertVersion as V};
+        use GroupMetadata as GM;
+        use MetadataConvertVersion as V;
         let metadata = self.metadata.clone();
 
         match (metadata, options.metadata_convert_version()) {

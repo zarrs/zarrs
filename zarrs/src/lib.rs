@@ -234,10 +234,10 @@ pub mod version;
 
 #[cfg(feature = "filesystem")]
 pub use zarrs_filesystem as filesystem;
-pub use {
-    zarrs_metadata as metadata, zarrs_metadata_ext as metadata_ext, zarrs_plugin as plugin,
-    zarrs_storage as storage,
-};
+pub use zarrs_metadata as metadata;
+pub use zarrs_metadata_ext as metadata_ext;
+pub use zarrs_plugin as plugin;
+pub use zarrs_storage as storage;
 
 /// Get a mutable slice of the spare capacity in a vector.
 ///
