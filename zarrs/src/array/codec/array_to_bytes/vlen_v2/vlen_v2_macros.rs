@@ -271,4 +271,5 @@ macro_rules! vlen_v2_codec {
     };
 }
 
-pub(crate) use {vlen_v2_codec, vlen_v2_module};
+pub(crate) use vlen_v2_codec;
+pub(crate) use vlen_v2_module;
