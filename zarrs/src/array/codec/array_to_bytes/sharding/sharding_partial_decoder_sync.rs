@@ -11,14 +11,16 @@ use super::{ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
+use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
     ArraySubset, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
-    IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
+    IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices, unravel_index,
 };
 use zarrs_codec::{
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder,
-    BytesPartialDecoderTraits, CodecError, CodecOptions,
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError, CodecOptions,
+    RecommendedConcurrency,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -259,66 +261,80 @@ fn get_subchunk_partial_decoder(
         })
 }
 
-/// Metadata for one inner chunk, collected before parallel I/O.
-struct ChunkInfo {
-    /// The overlap with the requested array subset, relative to the output array subset origin.
-    chunk_subset_overlap_in_output: ArraySubset,
-    /// The overlap with the requested array subset, relative to the inner chunk origin.
-    chunk_subset_overlap_in_chunk: ArraySubset,
-    /// Byte offset of the encoded inner chunk in the shard. `u64::MAX` = fill value.
-    offset: u64,
-    /// Byte length of the encoded inner chunk.
-    size: u64,
-}
-
 /// A set of byte-adjacent inner chunks that can be read in a single I/O call.
 struct CoalescedGroup {
     /// Byte offset of the first byte in the shard for this group.
     start: u64,
     /// Total byte length of the coalesced read.
     total_len: u64,
-    /// Indices into the `chunk_infos` slice, in ascending byte-offset order.
+    /// Positions into `chunk_indices_1d` in ascending byte-offset order.
     chunks: Vec<usize>,
+}
+
+/// Collect the 1-D ravelled indices of all inner chunks overlapping `array_subset`.
+fn collect_chunk_indices(
+    shard_chunk_grid: &RegularChunkGrid,
+    array_subset: &dyn ArraySubsetTraits,
+    chunks_per_shard: &[u64],
+) -> Result<Vec<u64>, CodecError> {
+    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
+    let mut chunk_indices = Vec::with_capacity(chunks.num_elements_usize());
+    for chunk_indices_nd in chunks.indices() {
+        let idx = ravel_indices(&chunk_indices_nd, chunks_per_shard).expect("inbounds chunk");
+        chunk_indices.push(idx);
+    }
+    Ok(chunk_indices)
 }
 
 /// Sort inner chunks by byte offset and merge exactly-adjacent ranges.
 ///
-/// Returns coalesced I/O groups and a separate list of fill-value chunk indices.
-fn coalesce_chunks(chunk_infos: &[ChunkInfo]) -> (Vec<CoalescedGroup>, Vec<usize>) {
-    let mut fill_indices: Vec<usize> = Vec::new();
-    let mut io_indices: Vec<usize> = chunk_infos
+/// Returns coalesced groups and fill-value positions, both as positions into `chunk_indices_1d`.
+fn coalesce_chunks(
+    chunk_indices_1d: &[u64],
+    shard_index: &[u64],
+) -> (Vec<CoalescedGroup>, Vec<usize>) {
+    let mut fill_positions: Vec<usize> = Vec::new();
+    let mut io_positions: Vec<usize> = chunk_indices_1d
         .iter()
         .enumerate()
-        .filter_map(|(i, info)| {
-            if info.offset == u64::MAX {
-                fill_indices.push(i);
+        .filter_map(|(pos, &idx)| {
+            let i = usize::try_from(idx).unwrap();
+            let offset = shard_index[i * 2];
+            let size = shard_index[i * 2 + 1];
+            if offset == u64::MAX && size == u64::MAX {
+                fill_positions.push(pos);
                 None
             } else {
-                Some(i)
+                Some(pos)
             }
         })
         .collect();
 
-    io_indices.sort_by_key(|&i| chunk_infos[i].offset);
+    io_positions.sort_by_key(|&pos| {
+        let i = usize::try_from(chunk_indices_1d[pos]).unwrap();
+        shard_index[i * 2]
+    });
 
     let mut groups: Vec<CoalescedGroup> = Vec::new();
-    for idx in io_indices {
-        let info = &chunk_infos[idx];
+    for pos in io_positions {
+        let i = usize::try_from(chunk_indices_1d[pos]).unwrap();
+        let offset = shard_index[i * 2];
+        let size = shard_index[i * 2 + 1];
         if let Some(last) = groups.last_mut()
-            && last.start + last.total_len == info.offset
+            && last.start + last.total_len == offset
         {
-            last.total_len += info.size;
-            last.chunks.push(idx);
+            last.total_len += size;
+            last.chunks.push(pos);
         } else {
             groups.push(CoalescedGroup {
-                start: info.offset,
-                total_len: info.size,
-                chunks: vec![idx],
+                start: offset,
+                total_len: size,
+                chunks: vec![pos],
             });
         }
     }
 
-    (groups, fill_indices)
+    (groups, fill_positions)
 }
 
 #[expect(clippy::too_many_arguments)]
@@ -340,13 +356,6 @@ fn partial_decode_fixed_array_subset(
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
-        inner_codecs,
-        data_type,
-        subchunk_shape,
-        &chunks_per_shard,
-        options,
-    )?;
 
     let array_subset_size = array_subset.num_elements_usize() * data_type_size;
     let mut out_array_subset = vec![0u8; array_subset_size];
@@ -358,146 +367,171 @@ fn partial_decode_fixed_array_subset(
     )
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
-    let array_subset_start = array_subset.start();
     let array_subset_shape = array_subset.shape();
     let subchunk_shape_u64: &[u64] = bytemuck::must_cast_slice(subchunk_shape);
 
-    // Phase 1: Collect chunk metadata serially from the shard index.
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
-    let mut chunk_infos: Vec<ChunkInfo> = Vec::with_capacity(chunks.num_elements_usize());
-    for chunk_indices in chunks.indices() {
-        let shard_index_idx =
-            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-
-        let chunk_subset = shard_chunk_grid
-            .subset(&chunk_indices)
-            .expect("matching dimensionality");
-        let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-
-        chunk_infos.push(ChunkInfo {
-            chunk_subset_overlap_in_output: chunk_subset_overlap
-                .relative_to(&array_subset_start)
-                .unwrap(),
-            chunk_subset_overlap_in_chunk: chunk_subset_overlap
-                .relative_to(chunk_subset.start())
-                .unwrap(),
-            offset,
-            size,
-        });
-    }
+    // Phase 1: Collect 1-D chunk indices for all inner chunks overlapping the subset.
+    let chunk_indices_1d = collect_chunk_indices(&shard_chunk_grid, array_subset, &chunks_per_shard)?;
 
     // Phase 2: Sort by byte offset and merge adjacent ranges into coalesced groups.
-    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_infos);
+    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index);
 
-    // Phase 3: Process fill chunks and I/O groups all in parallel.
-    //   - Fill chunks: replicate the fill element bytes into each disjoint output region.
-    //   - I/O groups: one coalesced read per group, then inner chunks decoded in a nested
-    //     parallel loop.
-    //
-    // The outer iterator covers fill_indices.len() + coalesced_groups.len() items:
-    //   k < fill_indices.len()  → fill chunk at fill_indices[k]
-    //   k >= fill_indices.len() → I/O group at coalesced_groups[k - fill_indices.len()]
+    // Concurrency: split the budget across three levels — groups, chunks-per-group, codec.
+    //   Step 1: group vs. (chunk+codec).
+    let num_groups = coalesced_groups.len();
+    let codec_concurrency = inner_codecs.recommended_concurrency(subchunk_shape, data_type)?;
+    let group_concurrent_minimum = std::cmp::min(options.chunk_concurrent_minimum(), num_groups);
+    let group_concurrent_maximum = std::cmp::max(options.chunk_concurrent_minimum(), num_groups);
+    let (group_concurrent_limit, chunk_budget) = calc_concurrency_outer_inner(
+        options.concurrent_target(),
+        &RecommendedConcurrency::new(group_concurrent_minimum..group_concurrent_maximum),
+        &codec_concurrency,
+    );
+    let chunk_and_codec_options = options.with_concurrent_target(chunk_budget);
+    //   Step 2: chunk vs. codec (reuses existing helper).
+    let (chunk_concurrent_limit, codec_options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        data_type,
+        subchunk_shape,
+        &chunks_per_shard,
+        &chunk_and_codec_options,
+    )?;
+
+    // Helper: compute the overlap of chunk `chunk_indices_nd` with `array_subset`,
+    // relative to subset origin.
+    let chunk_overlap_in_output =
+        |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
+            let chunk_subset = shard_chunk_grid
+                .subset(chunk_indices_nd)
+                .expect("matching dimensionality");
+            let overlap = array_subset.overlap(&chunk_subset)?;
+            Ok(overlap.relative_to(&array_subset.start()).unwrap())
+        };
+
+    // Phase 3a: Fill chunks in parallel (disjoint output regions, no I/O).
     let fill_element_bytes = fill_value.as_ne_bytes();
     let num_fill = fill_indices.len();
-    let num_groups = coalesced_groups.len();
     crate::iter_concurrent_limit!(
-        subchunk_concurrent_limit,
-        (0..num_fill + num_groups),
+        group_concurrent_limit,
+        (0..num_fill),
         try_for_each,
-        |k: usize| -> Result<(), CodecError> {
-            if k < num_fill {
-                // Fill-value chunk: replicate fill bytes into the output region.
-                let ci = fill_indices[k];
-                let info = &chunk_infos[ci];
-                let decoded = fill_element_bytes
-                    .repeat(info.chunk_subset_overlap_in_output.num_elements_usize());
-                let mut output_view = unsafe {
-                    // SAFETY: chunks represent disjoint array subsets
-                    ArrayBytesFixedDisjointView::new(
-                        out_array_subset_slice,
-                        data_type_size,
-                        &array_subset_shape,
-                        info.chunk_subset_overlap_in_output.clone(),
-                    )?
-                };
-                output_view
-                    .copy_from_slice(&decoded)
-                    .map_err(CodecError::from)
-            } else {
-                // Coalesced I/O group: one read, then decode inner chunks in parallel.
-                let group = &coalesced_groups[k - num_fill];
-                let coalesced_bytes: Arc<Vec<u8>> = Arc::new(
-                    input_handle
-                        .partial_decode(
-                            ByteRange::FromStart(group.start, Some(group.total_len)),
-                            &options,
-                        )?
-                        .ok_or_else(|| {
-                            CodecError::Other(
-                                "Shard does not exist during partial decode.".to_string(),
-                            )
-                        })?
-                        .into_owned(),
-                );
-
-                let num_chunks_in_group = group.chunks.len();
-                crate::iter_concurrent_limit!(
-                    subchunk_concurrent_limit,
-                    (0..num_chunks_in_group),
-                    try_for_each,
-                    |j: usize| -> Result<(), CodecError> {
-                        let ci = group.chunks[j];
-                        let info = &chunk_infos[ci];
-                        let start = usize::try_from(info.offset - group.start).unwrap();
-                        let end = start + usize::try_from(info.size).unwrap();
-                        let decoded =
-                            if info.chunk_subset_overlap_in_chunk.shape() == subchunk_shape_u64 {
-                                // The overlap is the full inner chunk: decode directly.
-                                inner_codecs
-                                    .decode(
-                                        Cow::Borrowed(&coalesced_bytes[start..end]),
-                                        subchunk_shape,
-                                        data_type,
-                                        fill_value,
-                                        &options,
-                                    )?
-                                    .into_fixed()?
-                            } else {
-                                let coalesced_bytes: Arc<dyn BytesPartialDecoderTraits> =
-                                    coalesced_bytes.clone();
-                                get_subchunk_partial_decoder(
-                                    &coalesced_bytes,
-                                    data_type,
-                                    fill_value,
-                                    subchunk_shape,
-                                    inner_codecs,
-                                    &options,
-                                    info.offset - group.start,
-                                    info.size,
-                                )?
-                                .partial_decode(&info.chunk_subset_overlap_in_chunk, &options)?
-                                .into_owned()
-                                .into_fixed()?
-                            };
-                        let mut output_view = unsafe {
-                            // SAFETY: chunks represent disjoint array subsets
-                            ArrayBytesFixedDisjointView::new(
-                                out_array_subset_slice,
-                                data_type_size,
-                                &array_subset_shape,
-                                info.chunk_subset_overlap_in_output.clone(),
-                            )?
-                        };
-                        output_view
-                            .copy_from_slice(&decoded)
-                            .map_err(CodecError::from)
-                    }
-                )
-            }
+        |f: usize| -> Result<(), CodecError> {
+            let chunk_indices_nd =
+                unravel_index(chunk_indices_1d[fill_indices[f]], &chunks_per_shard)
+                    .expect("inbounds chunk index");
+            let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
+            let mut output_view = unsafe {
+                // SAFETY: chunks represent disjoint array subsets
+                ArrayBytesFixedDisjointView::new(
+                    out_array_subset_slice,
+                    data_type_size,
+                    &array_subset_shape,
+                    overlap,
+                )?
+            };
+            output_view
+                .fill(fill_element_bytes)
+                .map_err(CodecError::from)
         }
+    )?;
+
+    // Phase 3b: I/O groups in parallel; chunks within each group also in parallel.
+    let subchunk_num_elements: u64 = subchunk_shape_u64.iter().product();
+    let array_subset_start = array_subset.start();
+    let decode_group = |g: usize| -> Result<(), CodecError> {
+        let group = &coalesced_groups[g];
+        // Hold as Arc so the slow path can share the buffer without copying.
+        let coalesced_bytes: Arc<Vec<u8>> = Arc::new(
+            input_handle
+                .partial_decode(
+                    ByteRange::FromStart(group.start, Some(group.total_len)),
+                    options,
+                )?
+                .ok_or_else(|| {
+                    CodecError::Other("Shard does not exist during partial decode.".to_string())
+                })?
+                .into_owned(),
+        );
+
+        let decode_chunk = |j: usize| -> Result<(), CodecError> {
+            let pos = group.chunks[j];
+            let idx = chunk_indices_1d[pos];
+            let i = usize::try_from(idx).unwrap();
+            let offset = shard_index[i * 2];
+            let size = shard_index[i * 2 + 1];
+            // Compute chunk_indices_nd once; reused for both overlap and slow path.
+            let chunk_indices_nd =
+                unravel_index(idx, &chunks_per_shard).expect("inbounds chunk index");
+            let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
+            let start = usize::try_from(offset - group.start).unwrap();
+            let end = start + usize::try_from(size).unwrap();
+            let decoded = if overlap.num_elements() == subchunk_num_elements {
+                // Fast path: the overlap covers the full subchunk — decode directly.
+                inner_codecs
+                    .decode(
+                        Cow::Borrowed(&coalesced_bytes[start..end]),
+                        subchunk_shape,
+                        data_type,
+                        fill_value,
+                        &codec_options,
+                    )?
+                    .into_fixed()?
+            } else {
+                // Slow path: partial subchunk — Arc clone is cheap, no data copy.
+                // Compute the overlap region in chunk-local coordinates in a single pass,
+                // avoiding two intermediate Vec allocations.
+                let chunk_subset_overlap_in_chunk = ArraySubset::new_with_start_shape(
+                    std::iter::zip(
+                        std::iter::zip(overlap.start().iter(), array_subset_start.iter()),
+                        std::iter::zip(&chunk_indices_nd, subchunk_shape),
+                    )
+                    .map(|((&rel, &abs), (&ci, &cs))| rel + abs - ci * cs.get())
+                    .collect(),
+                    overlap.shape().to_owned(),
+                )
+                .expect("valid subset");
+                let coalesced_bytes_arc: Arc<Vec<u8>> = Arc::clone(&coalesced_bytes);
+                get_subchunk_partial_decoder(
+                    &(coalesced_bytes_arc as Arc<dyn BytesPartialDecoderTraits>),
+                    data_type,
+                    fill_value,
+                    subchunk_shape,
+                    inner_codecs,
+                    &codec_options,
+                    offset - group.start,
+                    size,
+                )?
+                .partial_decode(&chunk_subset_overlap_in_chunk, &codec_options)?
+                .into_owned()
+                .into_fixed()?
+            };
+            let mut output_view = unsafe {
+                // SAFETY: chunks represent disjoint array subsets
+                ArrayBytesFixedDisjointView::new(
+                    out_array_subset_slice,
+                    data_type_size,
+                    &array_subset_shape,
+                    overlap,
+                )?
+            };
+            output_view
+                .copy_from_slice(&decoded)
+                .map_err(CodecError::from)
+        };
+
+        let num_chunks_in_group = group.chunks.len();
+        crate::iter_concurrent_limit!(
+            chunk_concurrent_limit,
+            (0..num_chunks_in_group),
+            try_for_each,
+            decode_chunk
+        )
+    };
+    crate::iter_concurrent_limit!(
+        group_concurrent_limit,
+        (0..num_groups),
+        try_for_each,
+        decode_group
     )?;
 
     Ok(ArrayBytes::from(out_array_subset))
@@ -521,14 +555,6 @@ fn partial_decode_variable_array_subset(
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
-        inner_codecs,
-        data_type,
-        subchunk_shape,
-        &chunks_per_shard,
-        options,
-    )?;
-    let options = &options;
 
     let shard_chunk_grid = RegularChunkGrid::new(
         bytemuck::must_cast_slice(shard_shape).to_vec(),
@@ -536,147 +562,179 @@ fn partial_decode_variable_array_subset(
     )
     .expect("matching dimensionality");
 
-    let array_subset_start = array_subset.start();
     let subchunk_shape_u64: &[u64] = bytemuck::must_cast_slice(subchunk_shape);
 
-    // Phase 1: Collect chunk metadata serially.
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
-    let num_chunks = chunks.num_elements_usize();
-    let mut chunk_infos: Vec<ChunkInfo> = Vec::with_capacity(num_chunks);
-    for chunk_indices in chunks.indices() {
-        let shard_index_idx =
-            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-
-        let chunk_subset = shard_chunk_grid
-            .subset(&chunk_indices)
-            .expect("matching dimensionality");
-        let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-
-        chunk_infos.push(ChunkInfo {
-            chunk_subset_overlap_in_output: chunk_subset_overlap
-                .relative_to(&array_subset_start)
-                .unwrap(),
-            chunk_subset_overlap_in_chunk: chunk_subset_overlap
-                .relative_to(chunk_subset.start())
-                .unwrap(),
-            offset,
-            size,
-        });
-    }
+    // Phase 1: Collect 1-D chunk indices for all inner chunks overlapping the subset.
+    let chunk_indices_1d =
+        collect_chunk_indices(&shard_chunk_grid, array_subset, &chunks_per_shard)?;
+    let num_chunks = chunk_indices_1d.len();
 
     // Phase 2: Sort and coalesce.
-    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_infos);
+    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index);
 
-    // Phase 3: Decode each group in parallel; write results into a pre-allocated vec
-    // indexed by original chunk order (required for merge_chunks_vlen ordering).
-    let mut results: Vec<Option<ArrayBytes<'static>>> = (0..num_chunks).map(|_| None).collect();
+    // Concurrency: split the budget across three levels — groups, chunks-per-group, codec.
+    //   Step 1: group vs. (chunk+codec).
+    let num_groups = coalesced_groups.len();
+    let codec_concurrency = inner_codecs.recommended_concurrency(subchunk_shape, data_type)?;
+    let group_concurrent_minimum = std::cmp::min(options.chunk_concurrent_minimum(), num_groups);
+    let group_concurrent_maximum = std::cmp::max(options.chunk_concurrent_minimum(), num_groups);
+    let (group_concurrent_limit, chunk_budget) = calc_concurrency_outer_inner(
+        options.concurrent_target(),
+        &RecommendedConcurrency::new(group_concurrent_minimum..group_concurrent_maximum),
+        &codec_concurrency,
+    );
+    let chunk_and_codec_options = options.with_concurrent_target(chunk_budget);
+    //   Step 2: chunk vs. codec (reuses existing helper).
+    let (chunk_concurrent_limit, codec_options) = super::get_concurrent_target_and_codec_options(
+        inner_codecs,
+        data_type,
+        subchunk_shape,
+        &chunks_per_shard,
+        &chunk_and_codec_options,
+    )?;
+
+    // Helper: compute the overlap of chunk `chunk_indices_nd` with `array_subset`,
+    // relative to subset origin.
+    let chunk_overlap_in_output =
+        |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
+            let chunk_subset = shard_chunk_grid
+                .subset(chunk_indices_nd)
+                .expect("matching dimensionality");
+            let overlap = array_subset.overlap(&chunk_subset)?;
+            Ok(overlap.relative_to(&array_subset.start()).unwrap())
+        };
+
+    // Phase 3: Decode each group; write results (bytes + overlap subset) into a
+    // pre-allocated vec indexed by original chunk order (required for merge_chunks_vlen
+    // ordering). Storing the overlap avoids recomputing it in the final collection pass.
+    let mut results: Vec<Option<(ArrayBytes<'static>, ArraySubset)>> = vec![None; num_chunks];
     let results_slice = UnsafeCellSlice::new(results.as_mut_slice());
 
+    // Phase 3a: Fill chunks in parallel (no I/O).
     let num_fill = fill_indices.len();
-    let num_groups = coalesced_groups.len();
     crate::iter_concurrent_limit!(
-        subchunk_concurrent_limit,
-        (0..num_fill + num_groups),
+        group_concurrent_limit,
+        (0..num_fill),
         try_for_each,
-        |k: usize| -> Result<(), CodecError> {
-            if k < num_fill {
-                let ci = fill_indices[k];
-                let info = &chunk_infos[ci];
-                let decoded = ArrayBytes::new_fill_value(
-                    data_type,
-                    info.chunk_subset_overlap_in_output.num_elements(),
-                    fill_value,
-                )?
-                .into_variable()?;
-                // SAFETY: each ci is unique across all groups
-                unsafe {
-                    *results_slice.index_mut(ci) = Some(ArrayBytes::Variable(decoded));
-                }
-                Ok(())
-            } else {
-                let group = &coalesced_groups[k - num_fill];
-                let coalesced_bytes: Arc<Vec<u8>> = Arc::new(
-                    input_handle
-                        .partial_decode(
-                            ByteRange::FromStart(group.start, Some(group.total_len)),
-                            options,
-                        )?
-                        .ok_or_else(|| {
-                            CodecError::Other(
-                                "Shard does not exist during partial decode.".to_string(),
-                            )
-                        })?
-                        .into_owned(),
-                );
-
-                let num_chunks_in_group = group.chunks.len();
-                crate::iter_concurrent_limit!(
-                    subchunk_concurrent_limit,
-                    (0..num_chunks_in_group),
-                    try_for_each,
-                    |j: usize| -> Result<(), CodecError> {
-                        let ci = group.chunks[j];
-                        let info = &chunk_infos[ci];
-                        let start = usize::try_from(info.offset - group.start).unwrap();
-                        let end = start + usize::try_from(info.size).unwrap();
-                        let decoded =
-                            if info.chunk_subset_overlap_in_chunk.shape() == subchunk_shape_u64 {
-                                // The overlap is the full inner chunk: decode directly.
-                                inner_codecs
-                                    .decode(
-                                        Cow::Borrowed(&coalesced_bytes[start..end]),
-                                        subchunk_shape,
-                                        data_type,
-                                        fill_value,
-                                        options,
-                                    )?
-                                    .into_owned()
-                                    .into_variable()?
-                            } else {
-                                let coalesced_bytes: Arc<dyn BytesPartialDecoderTraits> =
-                                    coalesced_bytes.clone();
-                                get_subchunk_partial_decoder(
-                                    &coalesced_bytes,
-                                    data_type,
-                                    fill_value,
-                                    subchunk_shape,
-                                    inner_codecs,
-                                    options,
-                                    info.offset - group.start,
-                                    info.size,
-                                )?
-                                .partial_decode(&info.chunk_subset_overlap_in_chunk, options)?
-                                .into_owned()
-                                .into_variable()?
-                            };
-                        // SAFETY: each ci is unique across all groups
-                        unsafe {
-                            *results_slice.index_mut(ci) = Some(ArrayBytes::Variable(decoded));
-                        }
-                        Ok(())
-                    }
-                )
+        |f: usize| -> Result<(), CodecError> {
+            let pos = fill_indices[f];
+            let chunk_indices_nd =
+                unravel_index(chunk_indices_1d[pos], &chunks_per_shard)
+                    .expect("inbounds chunk index");
+            let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
+            let decoded =
+                ArrayBytes::new_fill_value(data_type, overlap.num_elements(), fill_value)?
+                    .into_variable()?;
+            // SAFETY: fill_indices holds unique positions into chunk_indices_1d
+            unsafe {
+                *results_slice.index_mut(pos) =
+                    Some((ArrayBytes::Variable(decoded), overlap));
             }
+            Ok(())
         }
+    )?;
+
+    // Phase 3b: I/O groups in parallel; chunks within each group also in parallel.
+    let subchunk_num_elements: u64 = subchunk_shape_u64.iter().product();
+    let array_subset_start = array_subset.start();
+    let decode_group = |g: usize| -> Result<(), CodecError> {
+        let group = &coalesced_groups[g];
+        // Hold as Arc so the slow path can share the buffer without copying.
+        let coalesced_bytes: Arc<Vec<u8>> = Arc::new(
+            input_handle
+                .partial_decode(
+                    ByteRange::FromStart(group.start, Some(group.total_len)),
+                    options,
+                )?
+                .ok_or_else(|| {
+                    CodecError::Other("Shard does not exist during partial decode.".to_string())
+                })?
+                .into_owned(),
+        );
+
+        let decode_chunk = |j: usize| -> Result<(), CodecError> {
+            let pos = group.chunks[j];
+            let idx = chunk_indices_1d[pos];
+            let i = usize::try_from(idx).unwrap();
+            let offset = shard_index[i * 2];
+            let size = shard_index[i * 2 + 1];
+            // Compute chunk_indices_nd once; reused for both overlap and slow path.
+            let chunk_indices_nd =
+                unravel_index(idx, &chunks_per_shard).expect("inbounds chunk index");
+            let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
+            let start = usize::try_from(offset - group.start).unwrap();
+            let end = start + usize::try_from(size).unwrap();
+            let decoded = if overlap.num_elements() == subchunk_num_elements {
+                // Fast path: the overlap covers the full subchunk — decode directly.
+                inner_codecs
+                    .decode(
+                        Cow::Borrowed(&coalesced_bytes[start..end]),
+                        subchunk_shape,
+                        data_type,
+                        fill_value,
+                        &codec_options,
+                    )?
+                    .into_owned()
+                    .into_variable()?
+            } else {
+                // Slow path: partial subchunk — Arc clone is cheap, no data copy.
+                // Compute the overlap region in chunk-local coordinates in a single pass,
+                // avoiding two intermediate Vec allocations.
+                let chunk_subset_overlap_in_chunk = ArraySubset::new_with_start_shape(
+                    std::iter::zip(
+                        std::iter::zip(overlap.start().iter(), array_subset_start.iter()),
+                        std::iter::zip(&chunk_indices_nd, subchunk_shape),
+                    )
+                    .map(|((&rel, &abs), (&ci, &cs))| rel + abs - ci * cs.get())
+                    .collect(),
+                    overlap.shape().to_owned(),
+                )
+                .expect("valid subset");
+                let coalesced_bytes_arc: Arc<Vec<u8>> = Arc::clone(&coalesced_bytes);
+                get_subchunk_partial_decoder(
+                    &(coalesced_bytes_arc as Arc<dyn BytesPartialDecoderTraits>),
+                    data_type,
+                    fill_value,
+                    subchunk_shape,
+                    inner_codecs,
+                    &codec_options,
+                    offset - group.start,
+                    size,
+                )?
+                .partial_decode(&chunk_subset_overlap_in_chunk, &codec_options)?
+                .into_owned()
+                .into_variable()?
+            };
+            // SAFETY: group.chunks holds unique positions into chunk_indices_1d
+            unsafe {
+                *results_slice.index_mut(pos) = Some((ArrayBytes::Variable(decoded), overlap));
+            }
+            Ok(())
+        };
+
+        let num_chunks_in_group = group.chunks.len();
+        crate::iter_concurrent_limit!(
+            chunk_concurrent_limit,
+            (0..num_chunks_in_group),
+            try_for_each,
+            decode_chunk
+        )
+    };
+    crate::iter_concurrent_limit!(
+        group_concurrent_limit,
+        (0..num_groups),
+        try_for_each,
+        decode_group
     )?;
 
     let chunk_bytes_and_subsets = results
         .into_iter()
-        .zip(
-            chunk_infos
-                .iter()
-                .map(|i| i.chunk_subset_overlap_in_output.clone()),
-        )
-        .map(|(bytes, subset)| {
-            bytes
-                .expect("all chunks decoded")
-                .into_variable()
-                .map(|v| (v, subset))
+        .map(|r| {
+            let (bytes, s) = r.expect("all chunks decoded");
+            let v = bytes.into_variable()?;
+            Ok((v, s))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, CodecError>>()?;
 
     // Convert into an array
     let out_array_subset = merge_chunks_vlen(chunk_bytes_and_subsets, &array_subset.shape());

@@ -187,4 +187,4 @@ harness = false
 [[bench]]
 name = "sharded_partial_read"
 harness = false
-required-features = ["sharding"]
+required-features = ["sharding", "filesystem"]
