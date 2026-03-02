@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Avoid a potential copy in `ShardingCodec::decode`
+
 ## [0.23.4] - 2026-02-28
 
 ### Fixed
