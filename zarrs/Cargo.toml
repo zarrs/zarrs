@@ -73,7 +73,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = { version = "1.0.71", features = ["float_roundtrip", "preserve_order"] }
 thiserror.workspace = true
 thread_local = "1.1.8"
-unsafe_cell_slice = "0.2.0"
+unsafe_cell_slice = "0.2.2"
 zarrs_chunk_key_encoding.workspace = true
 zarrs_filesystem = { workspace = true, optional = true }
 zarrs_data_type.workspace = true
