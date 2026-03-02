@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Avoid a potential copy in `ShardingCodec::decode`
 
+### Fixed
+- Fixed missing `ndarray` feature gate for `async_store_chunk_subset_ndarray_opt`
+
 ## [0.23.4] - 2026-02-28
 
 ### Fixed

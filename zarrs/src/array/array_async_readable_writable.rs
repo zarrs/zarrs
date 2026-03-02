@@ -261,6 +261,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         .await
     }
 
+    #[cfg(feature = "ndarray")]
     #[deprecated(since = "0.23.0", note = "Use async_store_chunk_subset_opt()  instead")]
     /// Async variant of [`store_chunk_subset_ndarray_opt`](Array::store_chunk_subset_ndarray_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
