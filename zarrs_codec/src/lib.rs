@@ -1957,7 +1957,7 @@ fn format_unsupported_data_type(data_type: &DataType, codec_name: &String) -> St
             "Unsupported data type {data_type_name} for codec {codec_name}. Use the optional codec to handle optional data types.",
         )
     } else {
-        format!("Unsupported data type {data_type_name} for codec {codec_name}",)
+        format!("Unsupported data type {data_type_name} for codec {codec_name}")
     }
 }
 
