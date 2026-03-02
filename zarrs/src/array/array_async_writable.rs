@@ -237,7 +237,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> Array<TStorage> {
                     .await
             }
         };
-        futures::stream::iter(chunks.indices().into_iter())
+        futures::stream::iter(chunks.indices())
             .map(Ok)
             .try_for_each_concurrent(None, erase_chunk)
             .await
