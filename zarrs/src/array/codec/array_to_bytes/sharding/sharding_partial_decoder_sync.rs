@@ -289,26 +289,31 @@ fn collect_chunk_indices(
 /// Sort inner chunks by byte offset and merge exactly-adjacent ranges.
 ///
 /// Returns coalesced groups and fill-value positions, both as positions into `chunk_indices_1d`.
+///
+/// # Errors
+/// Returns an error if a shard index entry has only one of `offset`/`size` equal to `u64::MAX`,
+/// which indicates a corrupted shard index.
 fn coalesce_chunks(
     chunk_indices_1d: &[u64],
     shard_index: &[u64],
-) -> (Vec<CoalescedGroup>, Vec<usize>) {
+) -> Result<(Vec<CoalescedGroup>, Vec<usize>), CodecError> {
     let mut fill_positions: Vec<usize> = Vec::new();
-    let mut io_positions: Vec<usize> = chunk_indices_1d
-        .iter()
-        .enumerate()
-        .filter_map(|(pos, &idx)| {
-            let i = usize::try_from(idx).unwrap();
-            let offset = shard_index[i * 2];
-            let size = shard_index[i * 2 + 1];
-            if offset == u64::MAX && size == u64::MAX {
-                fill_positions.push(pos);
-                None
-            } else {
-                Some(pos)
+    let mut io_positions: Vec<usize> = Vec::new();
+    for (pos, &idx) in chunk_indices_1d.iter().enumerate() {
+        let i = usize::try_from(idx).unwrap();
+        let offset = shard_index[i * 2];
+        let size = shard_index[i * 2 + 1];
+        match (offset == u64::MAX, size == u64::MAX) {
+            (true, true) => fill_positions.push(pos),
+            (false, false) => io_positions.push(pos),
+            _ => {
+                return Err(CodecError::Other(
+                    "Shard index entry has mismatched sentinel values; the shard may be corrupted."
+                        .to_string(),
+                ));
             }
-        })
-        .collect();
+        }
+    }
 
     io_positions.sort_by_key(|&pos| {
         let i = usize::try_from(chunk_indices_1d[pos]).unwrap();
@@ -334,7 +339,7 @@ fn coalesce_chunks(
         }
     }
 
-    (groups, fill_positions)
+    Ok((groups, fill_positions))
 }
 
 #[expect(clippy::too_many_arguments)]
@@ -374,10 +379,12 @@ fn partial_decode_fixed_array_subset(
     let chunk_indices_1d = collect_chunk_indices(&shard_chunk_grid, array_subset, &chunks_per_shard)?;
 
     // Phase 2: Sort by byte offset and merge adjacent ranges into coalesced groups.
-    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index);
+    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index)?;
 
     // Concurrency: split the budget across three levels — groups, chunks-per-group, codec.
     //   Step 1: group vs. (chunk+codec).
+    //   `chunk_concurrent_minimum` sets the floor so that even with many tiny groups the
+    //   per-group budget does not collapse to 1; the ceiling is clamped to `num_groups`.
     let num_groups = coalesced_groups.len();
     let codec_concurrency = inner_codecs.recommended_concurrency(subchunk_shape, data_type)?;
     let group_concurrent_minimum = std::cmp::min(options.chunk_concurrent_minimum(), num_groups);
@@ -412,7 +419,7 @@ fn partial_decode_fixed_array_subset(
     let fill_element_bytes = fill_value.as_ne_bytes();
     let num_fill = fill_indices.len();
     crate::iter_concurrent_limit!(
-        group_concurrent_limit,
+        options.concurrent_target(),
         (0..num_fill),
         try_for_each,
         |f: usize| -> Result<(), CodecError> {
@@ -459,7 +466,6 @@ fn partial_decode_fixed_array_subset(
             let i = usize::try_from(idx).unwrap();
             let offset = shard_index[i * 2];
             let size = shard_index[i * 2 + 1];
-            // Compute chunk_indices_nd once; reused for both overlap and slow path.
             let chunk_indices_nd =
                 unravel_index(idx, &chunks_per_shard).expect("inbounds chunk index");
             let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
@@ -477,7 +483,7 @@ fn partial_decode_fixed_array_subset(
                     )?
                     .into_fixed()?
             } else {
-                // Slow path: partial subchunk — Arc clone is cheap, no data copy.
+                // Slow path: partial subchunk
                 // Compute the overlap region in chunk-local coordinates in a single pass,
                 // avoiding two intermediate Vec allocations.
                 let chunk_subset_overlap_in_chunk = ArraySubset::new_with_start_shape(
@@ -570,7 +576,7 @@ fn partial_decode_variable_array_subset(
     let num_chunks = chunk_indices_1d.len();
 
     // Phase 2: Sort and coalesce.
-    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index);
+    let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index)?;
 
     // Concurrency: split the budget across three levels — groups, chunks-per-group, codec.
     //   Step 1: group vs. (chunk+codec).
@@ -613,7 +619,7 @@ fn partial_decode_variable_array_subset(
     // Phase 3a: Fill chunks in parallel (no I/O).
     let num_fill = fill_indices.len();
     crate::iter_concurrent_limit!(
-        group_concurrent_limit,
+        options.concurrent_target(),
         (0..num_fill),
         try_for_each,
         |f: usize| -> Result<(), CodecError> {
@@ -677,7 +683,7 @@ fn partial_decode_variable_array_subset(
                     .into_owned()
                     .into_variable()?
             } else {
-                // Slow path: partial subchunk — Arc clone is cheap, no data copy.
+                // Slow path: partial subchunk
                 // Compute the overlap region in chunk-local coordinates in a single pass,
                 // avoiding two intermediate Vec allocations.
                 let chunk_subset_overlap_in_chunk = ArraySubset::new_with_start_shape(
