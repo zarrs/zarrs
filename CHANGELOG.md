@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.5] - 2026-03-03
+
 ### Changed
 - Avoid a potential copy in `ShardingCodec::decode`
+- Bump `zarrs_storage` to 0.4.3
 
 ### Fixed
 - Fixed missing `ndarray` feature gate for `async_store_chunk_subset_ndarray_opt`
@@ -2054,7 +2057,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.4...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.5...HEAD
+[0.23.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.5
 [0.23.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.4
 [0.23.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.3
 [0.23.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.2
