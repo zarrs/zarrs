@@ -1,3 +1,5 @@
+#![allow(clippy::similar_names)]
+
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
