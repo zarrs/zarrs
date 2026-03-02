@@ -376,7 +376,8 @@ fn partial_decode_fixed_array_subset(
     let subchunk_shape_u64: &[u64] = bytemuck::must_cast_slice(subchunk_shape);
 
     // Phase 1: Collect 1-D chunk indices for all inner chunks overlapping the subset.
-    let chunk_indices_1d = collect_chunk_indices(&shard_chunk_grid, array_subset, &chunks_per_shard)?;
+    let chunk_indices_1d =
+        collect_chunk_indices(&shard_chunk_grid, array_subset, &chunks_per_shard)?;
 
     // Phase 2: Sort by byte offset and merge adjacent ranges into coalesced groups.
     let (coalesced_groups, fill_indices) = coalesce_chunks(&chunk_indices_1d, shard_index)?;
@@ -406,14 +407,13 @@ fn partial_decode_fixed_array_subset(
 
     // Helper: compute the overlap of chunk `chunk_indices_nd` with `array_subset`,
     // relative to subset origin.
-    let chunk_overlap_in_output =
-        |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
-            let chunk_subset = shard_chunk_grid
-                .subset(chunk_indices_nd)
-                .expect("matching dimensionality");
-            let overlap = array_subset.overlap(&chunk_subset)?;
-            Ok(overlap.relative_to(&array_subset.start()).unwrap())
-        };
+    let chunk_overlap_in_output = |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
+        let chunk_subset = shard_chunk_grid
+            .subset(chunk_indices_nd)
+            .expect("matching dimensionality");
+        let overlap = array_subset.overlap(&chunk_subset)?;
+        Ok(overlap.relative_to(&array_subset.start()).unwrap())
+    };
 
     // Phase 3a: Fill chunks in parallel (disjoint output regions, no I/O).
     let fill_element_bytes = fill_value.as_ne_bytes();
@@ -601,14 +601,13 @@ fn partial_decode_variable_array_subset(
 
     // Helper: compute the overlap of chunk `chunk_indices_nd` with `array_subset`,
     // relative to subset origin.
-    let chunk_overlap_in_output =
-        |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
-            let chunk_subset = shard_chunk_grid
-                .subset(chunk_indices_nd)
-                .expect("matching dimensionality");
-            let overlap = array_subset.overlap(&chunk_subset)?;
-            Ok(overlap.relative_to(&array_subset.start()).unwrap())
-        };
+    let chunk_overlap_in_output = |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
+        let chunk_subset = shard_chunk_grid
+            .subset(chunk_indices_nd)
+            .expect("matching dimensionality");
+        let overlap = array_subset.overlap(&chunk_subset)?;
+        Ok(overlap.relative_to(&array_subset.start()).unwrap())
+    };
 
     // Phase 3: Decode each group; write results (bytes + overlap subset) into a
     // pre-allocated vec indexed by original chunk order (required for merge_chunks_vlen
@@ -624,17 +623,15 @@ fn partial_decode_variable_array_subset(
         try_for_each,
         |f: usize| -> Result<(), CodecError> {
             let pos = fill_indices[f];
-            let chunk_indices_nd =
-                unravel_index(chunk_indices_1d[pos], &chunks_per_shard)
-                    .expect("inbounds chunk index");
+            let chunk_indices_nd = unravel_index(chunk_indices_1d[pos], &chunks_per_shard)
+                .expect("inbounds chunk index");
             let overlap = chunk_overlap_in_output(&chunk_indices_nd)?;
             let decoded =
                 ArrayBytes::new_fill_value(data_type, overlap.num_elements(), fill_value)?
                     .into_variable()?;
             // SAFETY: fill_indices holds unique positions into chunk_indices_1d
             unsafe {
-                *results_slice.index_mut(pos) =
-                    Some((ArrayBytes::Variable(decoded), overlap));
+                *results_slice.index_mut(pos) = Some((ArrayBytes::Variable(decoded), overlap));
             }
             Ok(())
         }
