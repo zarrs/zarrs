@@ -16,8 +16,8 @@ use crate::config::MetadataRetrieveVersion;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
-    AsyncStoragePartialDecoder, CodecError, CodecOptions, InvalidNumberOfElementsError,
-    copy_fill_value_into,
+    AsyncStoragePartialDecoder, CodecError, CodecOptions, DecodeMode, InvalidNumberOfElementsError,
+    copy_fill_value_into, decode_into_array_bytes_target,
 };
 
 use super::array_bytes_internal::{
@@ -348,30 +348,68 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .storage_transformers()
             .create_async_readable_transformer(storage_handle)
             .await?;
-        let chunk_encoded = storage_transformer
-            .get(&self.chunk_key(chunk_indices))
-            .await
-            .map_err(ArrayError::StorageError)?;
-        if let Some(chunk_encoded) = chunk_encoded {
+        if options.decode_mode() == DecodeMode::Partial {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            let bytes = self
-                .codecs()
-                .decode(
-                    Cow::Owned(chunk_encoded.into()),
+            let input_handle = Arc::new(AsyncStoragePartialDecoder::new(
+                storage_transformer,
+                self.chunk_key(chunk_indices),
+            ));
+            let partial_decoder = self
+                .codecs
+                .clone()
+                .async_partial_decoder(
+                    input_handle,
                     &chunk_shape,
                     self.data_type(),
                     self.fill_value(),
                     options,
                 )
-                .map_err(ArrayError::CodecError)?;
+                .await?;
+            if !partial_decoder
+                .exists()
+                .await
+                .map_err(ArrayError::StorageError)?
+            {
+                return Ok(None);
+            }
+            let chunk_subset =
+                ArraySubset::new_with_shape(bytemuck::must_cast_slice(&chunk_shape).to_vec());
+            let bytes = partial_decoder
+                .partial_decode(&chunk_subset, options)
+                .await?
+                .into_owned();
             bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
             Ok(Some(T::from_array_bytes(
-                bytes.into_owned(),
+                bytes,
                 bytemuck::must_cast_slice(&chunk_shape),
                 self.data_type(),
             )?))
         } else {
-            Ok(None)
+            let chunk_encoded = storage_transformer
+                .get(&self.chunk_key(chunk_indices))
+                .await
+                .map_err(ArrayError::StorageError)?;
+            if let Some(chunk_encoded) = chunk_encoded {
+                let chunk_shape = self.chunk_shape(chunk_indices)?;
+                let bytes = self
+                    .codecs()
+                    .decode(
+                        Cow::Owned(chunk_encoded.into()),
+                        &chunk_shape,
+                        self.data_type(),
+                        self.fill_value(),
+                        options,
+                    )
+                    .map_err(ArrayError::CodecError)?;
+                bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+                Ok(Some(T::from_array_bytes(
+                    bytes.into_owned(),
+                    bytemuck::must_cast_slice(&chunk_shape),
+                    self.data_type(),
+                )?))
+            } else {
+                Ok(None)
+            }
         }
     }
 
@@ -1062,11 +1100,20 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         }
 
         let chunk_subset_shape = chunk_subset.shape();
-        if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset_shape.as_ref() == chunk_shape_u64
-        {
+        let is_whole_chunk = chunk_subset.start().iter().all(|&o| o == 0)
+            && chunk_subset_shape.as_ref() == chunk_shape_u64;
+        if is_whole_chunk && options.decode_mode() != DecodeMode::Partial {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.async_retrieve_chunk_opt(chunk_indices, options).await
+            return self.async_retrieve_chunk_opt(chunk_indices, options).await;
+        }
+        let bytes = if options.decode_mode() == DecodeMode::Full {
+            // Decode the full chunk and extract the subset
+            let chunk_bytes = self
+                .async_retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)
+                .await?;
+            chunk_bytes
+                .extract_array_subset(chunk_subset, chunk_shape_u64, self.data_type())?
+                .into_owned()
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -1077,8 +1124,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 storage_transformer,
                 self.chunk_key(chunk_indices),
             ));
-            let bytes = self
-                .codecs
+            self.codecs
                 .clone()
                 .async_partial_decoder(
                     input_handle,
@@ -1090,10 +1136,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .await?
                 .partial_decode(chunk_subset, options)
                 .await?
-                .into_owned();
-            bytes.validate(chunk_subset.num_elements(), self.data_type())?;
-            T::from_array_bytes(bytes, &chunk_subset_shape, self.data_type())
-        }
+                .into_owned()
+        };
+        bytes.validate(chunk_subset.num_elements(), self.data_type())?;
+        T::from_array_bytes(bytes, &chunk_subset_shape, self.data_type())
     }
 
     async fn async_retrieve_chunk_subset_into(
@@ -1112,12 +1158,25 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             ));
         }
 
-        if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape().as_ref() == chunk_shape_u64
-        {
+        let is_whole_chunk = chunk_subset.start().iter().all(|&o| o == 0)
+            && chunk_subset.shape().as_ref() == chunk_shape_u64;
+        if is_whole_chunk && options.decode_mode() != DecodeMode::Partial {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
-                .await
+            return self
+                .async_retrieve_chunk_into(chunk_indices, output_target, options)
+                .await;
+        }
+        if options.decode_mode() == DecodeMode::Full {
+            // Decode the full chunk and extract the subset into the target
+            let chunk_bytes = self
+                .async_retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)
+                .await?;
+            let subset_bytes = chunk_bytes.extract_array_subset(
+                chunk_subset,
+                chunk_shape_u64,
+                self.data_type(),
+            )?;
+            decode_into_array_bytes_target(&subset_bytes, output_target)?;
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -1141,8 +1200,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .await?
                 .partial_decode_into(chunk_subset, output_target, options)
                 .await?;
-            Ok(())
         }
+        Ok(())
     }
 
     #[deprecated(

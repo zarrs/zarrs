@@ -42,7 +42,7 @@ pub use byte_interval_partial_decoder::AsyncByteIntervalPartialDecoder;
 pub use byte_interval_partial_decoder::ByteIntervalPartialDecoder;
 
 use derive_more::derive::Display;
-pub use options::{CodecMetadataOptions, CodecOptions};
+pub use options::{CodecMetadataOptions, CodecOptions, DecodeMode};
 use thiserror::Error;
 use zarrs_metadata::{ArrayShape, ChunkShape, Configuration};
 use zarrs_storage::byte_range::{

@@ -69,7 +69,7 @@ pub use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, StoragePartialDecoder,
+    CodecTraitsV2, CodecTraitsV3, DecodeMode, RecommendedConcurrency, StoragePartialDecoder,
     copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
@@ -285,6 +285,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// It is fastest to load arrays using [`retrieve_chunk`](Array::retrieve_chunk) or [`retrieve_chunks`](Array::retrieve_chunks) where possible.
 /// In contrast, the [`retrieve_chunk_subset`](Array::retrieve_chunk_subset) and [`retrieve_array_subset`](Array::retrieve_array_subset) may use partial decoders which can be less efficient with some codecs/stores.
 /// Like their write counterparts, these methods will use a fast path if subsets cover entire chunks.
+///
+/// The decode path can be overridden with [`CodecOptions::set_decode_mode`] / [`CodecOptions::with_decode_mode`] using a [`DecodeMode`]:
+///  - [`DecodeMode::Auto`]: the default; full-chunk decode for whole-chunk reads, partial decoder otherwise.
+///  - [`DecodeMode::Partial`]: always use the partial decoder, even for whole-chunk reads. With a sharding codec, this parallelises subchunk reads and may improve performance.
+///  - [`DecodeMode::Full`]: always do a full-chunk decode then extract the subset. May be preferable if the store has poor performance with many small reads.
 ///
 /// **Standard [`Array`] retrieve methods do not perform any caching**.
 /// For this reason, retrieving multiple subsets in a chunk with [`retrieve_chunk_subset`](Array::store_chunk_subset) is very inefficient and strongly discouraged.

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `DecodeMode` enum (`Auto`, `Partial`, `Full`) and `CodecOptions::decode_mode()`, `set_decode_mode()`, `with_decode_mode()` methods
+
 ## [0.2.0] - 2026-02-02
 
 ### Added
