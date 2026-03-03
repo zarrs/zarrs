@@ -1,5 +1,24 @@
 //! Codec options for encoding and decoding.
 
+/// Controls which decode path is used when reading a chunk or chunk subset.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DecodeMode {
+    /// Use the full-chunk decode path when the requested subset covers the entire chunk, and the partial-decoder path otherwise.
+    /// This is the default.
+    #[default]
+    Auto,
+    /// Always use the partial-decoder path, even when the requested subset covers the entire chunk.
+    ///
+    /// This can reduce memory usage and may improve performance with certain codecs.
+    /// A codec like sharding may perform better with this mode as store subchunk reads are parallel.
+    Partial,
+    /// Always use the full-chunk decode path, even when only a subset is requested.
+    /// The full chunk is decoded and the subset is then extracted from it.
+    ///
+    /// This mode is generally not recommended, but may be useful if a store has poor performance with many small reads.
+    Full,
+}
+
 /// Codec options for encoding/decoding.
 ///
 /// The default values are:
@@ -8,6 +27,7 @@
 /// - `concurrent_target`: number of threads available to Rayon
 /// - `chunk_concurrent_minimum`: `4`
 /// - `experimental_partial_encoding`: `false`
+/// - `decode_mode`: [`DecodeMode::Auto`]
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     validate_checksums: bool,
@@ -15,6 +35,7 @@ pub struct CodecOptions {
     concurrent_target: usize,
     chunk_concurrent_minimum: usize,
     experimental_partial_encoding: bool,
+    decode_mode: DecodeMode,
 }
 
 impl Default for CodecOptions {
@@ -25,6 +46,7 @@ impl Default for CodecOptions {
             concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             experimental_partial_encoding: false,
+            decode_mode: DecodeMode::Auto,
         }
     }
 }
@@ -132,6 +154,25 @@ impl CodecOptions {
         experimental_partial_encoding: bool,
     ) -> Self {
         self.experimental_partial_encoding = experimental_partial_encoding;
+        self
+    }
+
+    /// Return the decode mode.
+    #[must_use]
+    pub fn decode_mode(&self) -> DecodeMode {
+        self.decode_mode
+    }
+
+    /// Set the decode mode.
+    pub fn set_decode_mode(&mut self, decode_mode: DecodeMode) -> &mut Self {
+        self.decode_mode = decode_mode;
+        self
+    }
+
+    /// Set the decode mode.
+    #[must_use]
+    pub fn with_decode_mode(mut self, decode_mode: DecodeMode) -> Self {
+        self.decode_mode = decode_mode;
         self
     }
 }

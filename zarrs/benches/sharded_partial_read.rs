@@ -5,6 +5,8 @@
 //!
 //! Set [`USE_MEMORY_STORE`] to `true` to benchmark with an in-memory store instead of the
 //! filesystem store.
+//!
+//! Set [`USE_DIRECT_IO`] to `true` to bypass the OS page cache (Linux only).
 #![allow(missing_docs)]
 
 use std::path::PathBuf;
@@ -12,12 +14,23 @@ use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zarrs::array::ArraySubset;
-use zarrs::filesystem::FilesystemStore;
+use zarrs::filesystem::{FilesystemStore, FilesystemStoreOptions};
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
+use zarrs_codec::{CodecOptions, DecodeMode};
 
 /// If `true`, benchmark with an in-memory store; if `false`, use a filesystem store.
 const USE_MEMORY_STORE: bool = false;
+
+/// If `true`, open the filesystem store with `O_DIRECT` to bypass the OS page cache (Linux only).
+const USE_DIRECT_IO: bool = false;
+
+/// The decode mode to use for all benchmarks.
+const DECODE_MODE: DecodeMode = DecodeMode::Partial;
+
+fn codec_options() -> CodecOptions {
+    CodecOptions::default().with_decode_mode(DECODE_MODE)
+}
 
 // Array dimensions matching the Python snippet
 const SHAPE: [u64; 4] = [8192, 4, 128, 128];
@@ -48,13 +61,19 @@ fn random_data(n: usize) -> Vec<f64> {
         .collect()
 }
 
+fn fs_store(path: impl AsRef<std::path::Path>) -> FilesystemStore {
+    let mut opts = FilesystemStoreOptions::default();
+    opts.direct_io(USE_DIRECT_IO);
+    FilesystemStore::new_with_options(path, opts).unwrap()
+}
+
 fn make_store() -> ReadableWritableListableStorage {
     if USE_MEMORY_STORE {
         Arc::new(MemoryStore::new())
     } else {
         let path = data_path();
         std::fs::create_dir_all(&path).unwrap();
-        Arc::new(FilesystemStore::new(&path).unwrap())
+        Arc::new(fs_store(&path))
     }
 }
 
@@ -92,12 +111,13 @@ fn open_store() -> ReadableStorage {
         if !zarr_json.exists() {
             populate_array(make_store());
         }
-        Arc::new(FilesystemStore::new(path).unwrap())
+        Arc::new(fs_store(path))
     }
 }
 
 /// Full array read: both shards, shard-boundary-aligned.
 fn bench_read_full(c: &mut Criterion) {
+    let opt = codec_options();
     let store = open_store();
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
@@ -107,7 +127,8 @@ fn bench_read_full(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(full_bytes));
     group.bench_function("full_array", |b| {
         b.iter(|| {
-            let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+            let _: zarrs::array::ArrayBytes =
+                array.retrieve_array_subset_opt(&subset, &opt).unwrap();
         });
     });
 
@@ -116,6 +137,7 @@ fn bench_read_full(c: &mut Criterion) {
 
 /// Shard-aligned partial read: exactly the first shard.
 fn bench_read_partial_aligned(c: &mut Criterion) {
+    let opt = codec_options();
     let store = open_store();
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
@@ -125,7 +147,10 @@ fn bench_read_partial_aligned(c: &mut Criterion) {
     group.bench_function("partial_shard_aligned", |b| {
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]])
+                .retrieve_array_subset_opt(
+                    &[0..SHARD_SHAPE[0], 0..SHAPE[1], 0..SHAPE[2], 0..SHAPE[3]],
+                    &opt,
+                )
                 .unwrap();
         });
     });
@@ -135,6 +160,7 @@ fn bench_read_partial_aligned(c: &mut Criterion) {
 
 /// Unaligned partial read: one element short of the first shard boundary.
 fn bench_read_partial_unaligned(c: &mut Criterion) {
+    let opt = codec_options();
     let store = open_store();
     let array = zarrs::array::Array::open(store, "/").unwrap();
     let mut group = c.benchmark_group("sharded_partial_read");
@@ -144,12 +170,15 @@ fn bench_read_partial_unaligned(c: &mut Criterion) {
     group.bench_function("partial_shard_unaligned", |b| {
         b.iter(|| {
             let _: zarrs::array::ArrayBytes = array
-                .retrieve_array_subset(&[
-                    0..(SHARD_SHAPE[0] - 1),
-                    0..SHAPE[1],
-                    0..SHAPE[2],
-                    0..SHAPE[3],
-                ])
+                .retrieve_array_subset_opt(
+                    &[
+                        0..(SHARD_SHAPE[0] - 1),
+                        0..SHAPE[1],
+                        0..SHAPE[2],
+                        0..SHAPE[3],
+                    ],
+                    &opt,
+                )
                 .unwrap();
         });
     });

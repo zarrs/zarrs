@@ -17,8 +17,9 @@ use crate::iter_concurrent_limit;
 use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayBytesOptional, ArrayBytesVariableLength,
-    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions,
+    ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError, CodecOptions, DecodeMode,
     InvalidNumberOfElementsError, StoragePartialDecoder, copy_fill_value_into,
+    decode_into_array_bytes_target,
 };
 
 use super::array_bytes_internal::{
@@ -488,28 +489,56 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         let storage_transformer = self
             .storage_transformers()
             .create_readable_transformer(storage_handle)?;
-        let chunk_encoded = storage_transformer
-            .get(&self.chunk_key(chunk_indices))
-            .map_err(ArrayError::StorageError)?;
-        if let Some(chunk_encoded) = chunk_encoded {
+        if options.decode_mode() == DecodeMode::Partial {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            let bytes = self
-                .codecs()
-                .decode(
-                    Cow::Owned(chunk_encoded.into()),
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
-                .map_err(ArrayError::CodecError)?;
+            let input_handle = Arc::new(StoragePartialDecoder::new(
+                storage_transformer,
+                self.chunk_key(chunk_indices),
+            ));
+            let partial_decoder = self.codecs.clone().partial_decoder(
+                input_handle,
+                &chunk_shape,
+                self.data_type(),
+                self.fill_value(),
+                options,
+            )?;
+            if !partial_decoder.exists().map_err(ArrayError::StorageError)? {
+                return Ok(None);
+            }
+            let chunk_subset =
+                ArraySubset::new_with_shape(bytemuck::must_cast_slice(&chunk_shape).to_vec());
+            let bytes = partial_decoder
+                .partial_decode(&chunk_subset, options)?
+                .into_owned();
             Ok(Some(T::from_array_bytes(
-                bytes.into_owned(),
+                bytes,
                 bytemuck::must_cast_slice(&chunk_shape),
                 self.data_type(),
             )?))
         } else {
-            Ok(None)
+            let chunk_encoded = storage_transformer
+                .get(&self.chunk_key(chunk_indices))
+                .map_err(ArrayError::StorageError)?;
+            if let Some(chunk_encoded) = chunk_encoded {
+                let chunk_shape = self.chunk_shape(chunk_indices)?;
+                let bytes = self
+                    .codecs()
+                    .decode(
+                        Cow::Owned(chunk_encoded.into()),
+                        &chunk_shape,
+                        self.data_type(),
+                        self.fill_value(),
+                        options,
+                    )
+                    .map_err(ArrayError::CodecError)?;
+                Ok(Some(T::from_array_bytes(
+                    bytes.into_owned(),
+                    bytemuck::must_cast_slice(&chunk_shape),
+                    self.data_type(),
+                )?))
+            } else {
+                Ok(None)
+            }
         }
     }
 
@@ -1129,11 +1158,19 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             ));
         }
 
-        let bytes = if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_shape_u64
-        {
+        let is_whole_chunk =
+            chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64;
+        if is_whole_chunk && options.decode_mode() != DecodeMode::Partial {
             // Fast path if `chunk_subset` encompasses the whole chunk
             return self.retrieve_chunk_opt(chunk_indices, options);
+        }
+        let bytes = if options.decode_mode() == DecodeMode::Full {
+            // Decode the full chunk and extract the subset
+            let chunk_bytes =
+                self.retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?;
+            chunk_bytes
+                .extract_array_subset(chunk_subset, chunk_shape_u64, self.data_type())?
+                .into_owned()
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -1176,9 +1213,22 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
             ));
         }
 
-        if chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64 {
+        let is_whole_chunk =
+            chunk_subset.start().iter().all(|&o| o == 0) && chunk_subset.shape() == chunk_shape_u64;
+        if is_whole_chunk && options.decode_mode() != DecodeMode::Partial {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.retrieve_chunk_into(chunk_indices, output_target, options)
+            return self.retrieve_chunk_into(chunk_indices, output_target, options);
+        }
+        if options.decode_mode() == DecodeMode::Full {
+            // Decode the full chunk and extract the subset into the target
+            let chunk_bytes =
+                self.retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?;
+            let subset_bytes = chunk_bytes.extract_array_subset(
+                chunk_subset,
+                chunk_shape_u64,
+                self.data_type(),
+            )?;
+            decode_into_array_bytes_target(&subset_bytes, output_target)?;
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -1198,8 +1248,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                     options,
                 )?
                 .partial_decode_into(chunk_subset, output_target, options)?;
-            Ok(())
         }
+        Ok(())
     }
 
     #[deprecated(

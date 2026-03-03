@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Control the decode path for chunk reads with `CodecOptions::DecodeMode`
+  - `Auto` (the default) uses the full-chunk decode path when the requested subset covers the entire chunk, and the partial-decoder path otherwise
+  - `Partial` forces the partial decoder path even when the whole chunk is requested
+  - `Full` forces a full chunk decode followed by subset extraction
+
+### Changed
+- Bump `zarrs_codec` to 0.2.1
+
 ## [0.23.5] - 2026-03-03
 
 ### Changed
