@@ -328,9 +328,12 @@ fn partial_decode_fixed_array_subset_into(
             )
             .unwrap();
         // SAFETY: chunks represent disjoint array subsets
-        let mut subchunk_view: ArrayBytesFixedDisjointView<'_> = unsafe { output_view.subdivide(overlap_subset.clone())? };
+        let mut subchunk_view: ArrayBytesFixedDisjointView<'_> =
+            unsafe { output_view.subdivide(overlap_subset.clone())? };
         if offset == u64::MAX && size == u64::MAX {
-            subchunk_view.fill(fill_value.as_ne_bytes()).map_err(CodecError::from)
+            subchunk_view
+                .fill(fill_value.as_ne_bytes())
+                .map_err(CodecError::from)
         } else {
             // Partially decode the subchunk
             let inner_partial_decoder = get_subchunk_partial_decoder(
@@ -343,14 +346,13 @@ fn partial_decode_fixed_array_subset_into(
                 offset,
                 size,
             )?;
-            inner_partial_decoder
-                .partial_decode_into(
-                    &chunk_subset_overlap
-                        .relative_to(chunk_subset.start())
-                        .unwrap(),
-                        ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
-                    &options,
-                )
+            inner_partial_decoder.partial_decode_into(
+                &chunk_subset_overlap
+                    .relative_to(chunk_subset.start())
+                    .unwrap(),
+                ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
+                &options,
+            )
         }
     };
 
