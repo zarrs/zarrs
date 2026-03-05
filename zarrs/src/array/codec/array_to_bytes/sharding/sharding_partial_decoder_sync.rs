@@ -281,12 +281,11 @@ fn partial_decode_fixed_array_subset_into(
     options: &CodecOptions,
     output_view: &mut ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
-    let data_type_size = data_type.fixed_size().expect("called on fixed data type");
     let Some(shard_index) = shard_index else {
         output_view.copy_from_slice(
             &super::partial_decode_empty_shard(data_type, fill_value, array_subset)?
                 .into_fixed()?,
-        );
+        )?;
         return Ok(());
     };
     let chunks_per_shard =
