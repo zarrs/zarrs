@@ -175,6 +175,46 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         }
     }
 
+    /// Return the region at the subset
+    ///
+    /// Creates an array subset starting at `self.start()` - `offset`.
+    ///
+    /// # Errors
+    /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality,
+    /// or if `offset` is greater than `start` in any dimension.
+    fn subset(&self, subset: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArraySubsetError> {
+        if subset.start().len() != self.start().len()
+            || std::iter::zip(self.shape().iter(), subset.shape().iter())
+                .any(|(&self_shape, &other_shape)| self_shape < other_shape)
+        {
+            panic!(
+                "first {:?} {:?} {:?} {:?}",
+                self.shape(),
+                subset.shape(),
+                self.start(),
+                subset.start()
+            );
+        }
+        if std::iter::zip(self.shape().iter(), subset.start().iter())
+            .any(|(&self_shape, &other_start)| self_shape < other_start)
+        {
+            panic!(
+                "second {:?} {:?} {:?} {:?}",
+                self.shape(),
+                subset.shape(),
+                self.start(),
+                subset.start()
+            );
+        } else {
+            ArraySubset::new_with_start_shape(
+                std::iter::zip(self.start().iter(), subset.start().iter())
+                    .map(|(&start, offset)| start + offset)
+                    .collect::<Vec<_>>(),
+                subset.shape().into_owned(),
+            )
+        }
+    }
+
     /// Converts to an owned `ArraySubset`.
     fn to_array_subset(&self) -> ArraySubset {
         ArraySubset::new_with_start_shape(self.start().into_owned(), self.shape().into_owned())

@@ -331,6 +331,14 @@ impl ArraySubset {
         ArraySubsetTraits::relative_to(self, offset)
     }
 
+    /// Return a subset of this subset
+    ///
+    /// # Errors
+    /// Returns [`ArraySubsetError`] if the length of `start` does not match the dimensionality of this array subset.
+    pub fn subset(&self, subset_other: &dyn ArraySubsetTraits) -> Result<Self, ArraySubsetError> {
+        ArraySubsetTraits::subset(self, subset_other)
+    }
+
     /// Returns true if this array subset is within the bounds of `subset`.
     #[must_use]
     pub fn inbounds(&self, subset: &dyn ArraySubsetTraits) -> bool {
