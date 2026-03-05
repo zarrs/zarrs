@@ -318,9 +318,19 @@ fn partial_decode_fixed_array_subset_into(
             .subset(&chunk_indices)
             .expect("matching dimensionality");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-
-        let decoded_bytes = if offset == u64::MAX && size == u64::MAX {
-            ArrayBytes::new_fill_value(data_type, chunk_subset_overlap.num_elements(), fill_value)?
+        // The subset of the output view
+        let overlap_subset = output_view
+            .subset()
+            .subset(
+                &chunk_subset_overlap
+                    .relative_to(&array_subset_start)
+                    .unwrap(),
+            )
+            .unwrap();
+        // SAFETY: chunks represent disjoint array subsets
+        let mut subchunk_view: ArrayBytesFixedDisjointView<'_> = unsafe { output_view.subdivide(overlap_subset.clone())? };
+        if offset == u64::MAX && size == u64::MAX {
+            subchunk_view.fill(fill_value.as_ne_bytes()).map_err(CodecError::from)
         } else {
             // Partially decode the subchunk
             let inner_partial_decoder = get_subchunk_partial_decoder(
@@ -334,29 +344,14 @@ fn partial_decode_fixed_array_subset_into(
                 size,
             )?;
             inner_partial_decoder
-                .partial_decode(
+                .partial_decode_into(
                     &chunk_subset_overlap
                         .relative_to(chunk_subset.start())
                         .unwrap(),
+                        ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
                     &options,
-                )?
-                .into_owned()
-        };
-        let decoded_bytes = decoded_bytes.into_fixed()?;
-        // The subset of the output view
-        let overlap_subset = output_view
-            .subset()
-            .subset(
-                &chunk_subset_overlap
-                    .relative_to(&array_subset_start)
-                    .unwrap(),
-            )
-            .unwrap();
-        // SAFETY: chunks represent disjoint array subsets
-        let mut subchunk_subset = unsafe { output_view.subdivide(overlap_subset.clone())? };
-        subchunk_subset
-            .copy_from_slice(&decoded_bytes)
-            .map_err(CodecError::from)
+                )
+        }
     };
 
     let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
