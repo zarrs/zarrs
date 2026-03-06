@@ -4,6 +4,7 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_chunk_grid::ArraySubset;
 use zarrs_data_type::FillValue;
 
 use super::{ShardingIndexLocation, calculate_chunks_per_shard};
@@ -11,9 +12,7 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
 use crate::array::{
-    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
-    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
-    IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices, ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -131,7 +130,18 @@ pub(crate) fn partial_decode(
     match data_type.size() {
         DataTypeSize::Fixed(_data_type_size) => {
             if let Some(subset) = indexer.as_array_subset() {
-                partial_decode_fixed_array_subset(
+                let data_type_size = data_type.fixed_size().expect("called on fixed data type");
+                let array_shape = subset.shape();
+                let array_subset_size = subset.num_elements_usize() * data_type_size;
+                let mut out_array_subset = vec![0; array_subset_size];
+                let out_array_subset_slice = UnsafeCellSlice::new(out_array_subset.as_mut_slice());
+                let mut output_view = unsafe {ArrayBytesFixedDisjointView::new(
+                    out_array_subset_slice,
+                    data_type_size,
+                    &array_shape,
+                    ArraySubset::new_with_shape(array_shape.to_vec()),
+                )? };
+                partial_decode_fixed_array_subset_into(
                     input_handle,
                     data_type,
                     fill_value,
@@ -141,7 +151,9 @@ pub(crate) fn partial_decode(
                     shard_index,
                     subset,
                     options,
-                )
+                    &mut output_view
+                )?;
+                Ok(ArrayBytes::from(out_array_subset))
             } else {
                 partial_decode_fixed_indexer(
                     input_handle,
@@ -398,107 +410,6 @@ fn get_subchunk_partial_decoder(
                 err
             }
         })
-}
-
-#[expect(clippy::too_many_arguments)]
-fn partial_decode_fixed_array_subset(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
-    shard_shape: &[NonZeroU64],
-    subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
-    shard_index: Option<&[u64]>,
-    array_subset: &dyn ArraySubsetTraits,
-    options: &CodecOptions,
-) -> Result<ArrayBytes<'static>, CodecError> {
-    let data_type_size = data_type.fixed_size().expect("called on fixed data type");
-    let Some(shard_index) = shard_index else {
-        return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
-    };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
-        inner_codecs,
-        data_type,
-        subchunk_shape,
-        &chunks_per_shard,
-        options,
-    )?;
-
-    let array_subset_size = array_subset.num_elements_usize() * data_type_size;
-    let mut out_array_subset = vec![0; array_subset_size];
-    let out_array_subset_slice = UnsafeCellSlice::new(out_array_subset.as_mut_slice());
-
-    let shard_chunk_grid = RegularChunkGrid::new(
-        bytemuck::must_cast_slice(shard_shape).to_vec(),
-        subchunk_shape.to_vec(),
-    )
-    .map_err(Into::<IncompatibleDimensionalityError>::into)?;
-
-    let array_subset_start = array_subset.start();
-    let array_subset_shape = array_subset.shape();
-    let decode_subchunk_subset_into_slice = |chunk_indices: ArrayIndicesTinyVec| {
-        let shard_index_idx =
-            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
-        let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
-        let offset = shard_index[shard_index_idx * 2];
-        let size = shard_index[shard_index_idx * 2 + 1];
-
-        // Get the subset of bytes from the chunk which intersect the array
-        let chunk_subset = shard_chunk_grid
-            .subset(&chunk_indices)
-            .expect("matching dimensionality");
-        let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-
-        let decoded_bytes = if offset == u64::MAX && size == u64::MAX {
-            ArrayBytes::new_fill_value(data_type, chunk_subset_overlap.num_elements(), fill_value)?
-        } else {
-            // Partially decode the subchunk
-            let inner_partial_decoder = get_subchunk_partial_decoder(
-                input_handle,
-                data_type,
-                fill_value,
-                subchunk_shape,
-                inner_codecs,
-                &options,
-                offset,
-                size,
-            )?;
-            inner_partial_decoder
-                .partial_decode(
-                    &chunk_subset_overlap
-                        .relative_to(chunk_subset.start())
-                        .unwrap(),
-                    &options,
-                )?
-                .into_owned()
-        };
-        let decoded_bytes = decoded_bytes.into_fixed()?;
-        let mut output_view = unsafe {
-            // SAFETY: chunks represent disjoint array subsets
-            ArrayBytesFixedDisjointView::new(
-                out_array_subset_slice,
-                data_type_size,
-                &array_subset_shape,
-                chunk_subset_overlap
-                    .relative_to(&array_subset_start)
-                    .unwrap(),
-            )?
-        };
-        output_view
-            .copy_from_slice(&decoded_bytes)
-            .map_err(CodecError::from)
-    };
-
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
-    crate::iter_concurrent_limit!(
-        subchunk_concurrent_limit,
-        chunks.indices(),
-        try_for_each,
-        decode_subchunk_subset_into_slice
-    )?;
-    Ok(ArrayBytes::from(out_array_subset))
 }
 
 #[expect(clippy::too_many_arguments)]
