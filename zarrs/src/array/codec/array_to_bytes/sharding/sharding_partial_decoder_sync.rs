@@ -12,7 +12,9 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
 use crate::array::{
-    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices, ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
+    ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
+    IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -135,12 +137,14 @@ pub(crate) fn partial_decode(
                 let array_subset_size = subset.num_elements_usize() * data_type_size;
                 let mut out_array_subset = vec![0; array_subset_size];
                 let out_array_subset_slice = UnsafeCellSlice::new(out_array_subset.as_mut_slice());
-                let mut output_view = unsafe {ArrayBytesFixedDisjointView::new(
-                    out_array_subset_slice,
-                    data_type_size,
-                    &array_shape,
-                    ArraySubset::new_with_shape(array_shape.to_vec()),
-                )? };
+                let mut output_view = unsafe {
+                    ArrayBytesFixedDisjointView::new(
+                        out_array_subset_slice,
+                        data_type_size,
+                        &array_shape,
+                        ArraySubset::new_with_shape(array_shape.to_vec()),
+                    )?
+                };
                 partial_decode_fixed_array_subset_into(
                     input_handle,
                     data_type,
@@ -151,7 +155,7 @@ pub(crate) fn partial_decode(
                     shard_index,
                     subset,
                     options,
-                    &mut output_view
+                    &mut output_view,
                 )?;
                 Ok(ArrayBytes::from(out_array_subset))
             } else {
