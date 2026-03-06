@@ -369,10 +369,8 @@ fn partial_decode_fixed_array_subset_into(
         let chunk_output_zero_origin_overlap_subset = output_view_subset_zero_origin
             .subset(
                 &chunk_subset_overlap
-                    .relative_to(&array_subset_start)
-                    .unwrap(),
-            )
-            .unwrap();
+                    .relative_to(&array_subset_start)?
+            )?;
 
         // Finally, reproject to the original output view start
         let chunk_output_overlap_subset = chunk_output_zero_origin_overlap_subset.offset(output_view_subset.start())?;
