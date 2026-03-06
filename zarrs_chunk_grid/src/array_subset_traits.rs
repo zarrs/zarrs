@@ -175,6 +175,23 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         }
     }
 
+    /// Return the region relative to `offset`.
+    ///
+    /// Creates an array subset starting at `self.start()` - `offset`.
+    ///
+    /// # Errors
+    /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality,
+    /// or if `offset` is greater than `start` in any dimension.
+    fn offset(&self, offset: &[u64]) -> Result<ArraySubset, ArraySubsetError> {
+        let self_start = self.start();
+        ArraySubset::new_with_start_shape(
+        std::iter::zip(self_start.iter(), offset)
+            .map(|(&start, offset)| start + offset)
+            .collect::<Vec<_>>(),
+        self.shape().into_owned(),
+        )
+    }
+
     /// Return the region at the subset
     ///
     /// Creates an array subset starting at `self.start()` - `offset`.
