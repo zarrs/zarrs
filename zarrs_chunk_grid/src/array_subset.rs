@@ -437,6 +437,16 @@ mod tests {
             array_subset0.relative_to(&[1, 1]).unwrap(),
             ArraySubset::new_with_ranges(&[0..4, 1..5])
         );
+
+        assert_eq!(
+            array_subset0.subset(&ArraySubset::new_with_ranges(&[0..2, 1..3])).unwrap(),
+            ArraySubset::new_with_ranges(&[1..3, 3..5])
+        );
+        assert!(array_subset0.subset(&ArraySubset::new_with_ranges(&[0..6, 1..3])).is_err());
+        assert_eq!(
+            array_subset0.offset(&[3, 5]).unwrap(),
+            ArraySubset::new_with_ranges(&[4..8, 7..11])
+        );
         assert!(array_subset0.relative_to(&[1, 1, 1]).is_err());
         assert!(array_subset0.inbounds_shape(&[10, 10]));
         assert!(!array_subset0.inbounds_shape(&[2, 2]));
