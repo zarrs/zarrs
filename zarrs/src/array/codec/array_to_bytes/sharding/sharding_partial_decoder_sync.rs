@@ -274,7 +274,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     }
 }
 
-
 #[expect(clippy::too_many_arguments)]
 fn get_subchunk_partial_decoder(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
@@ -363,17 +362,17 @@ fn partial_decode_fixed_array_subset_into(
 
         // First get the output view 0-start subset:
         let output_view_subset = output_view.subset();
-        let output_view_subset_zero_origin = output_view.subset().relative_to(output_view_subset.start())?;
+        let output_view_subset_zero_origin = output_view
+            .subset()
+            .relative_to(output_view_subset.start())?;
 
         // Next generate the position of the chunk inside the view with zero start
         let chunk_output_zero_origin_overlap_subset = output_view_subset_zero_origin
-            .subset(
-                &chunk_subset_overlap
-                    .relative_to(&array_subset_start)?
-            )?;
+            .subset(&chunk_subset_overlap.relative_to(&array_subset_start)?)?;
 
         // Finally, reproject to the original output view start
-        let chunk_output_overlap_subset = chunk_output_zero_origin_overlap_subset.offset(output_view_subset.start())?;
+        let chunk_output_overlap_subset =
+            chunk_output_zero_origin_overlap_subset.offset(output_view_subset.start())?;
         // SAFETY: chunks represent disjoint array subsets
         let mut subchunk_view: ArrayBytesFixedDisjointView<'_> =
             unsafe { output_view.subdivide(chunk_output_overlap_subset)? };

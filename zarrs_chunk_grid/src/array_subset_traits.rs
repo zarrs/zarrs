@@ -185,10 +185,10 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     fn offset(&self, offset: &[u64]) -> Result<ArraySubset, ArraySubsetError> {
         let self_start = self.start();
         ArraySubset::new_with_start_shape(
-        std::iter::zip(self_start.iter(), offset)
-            .map(|(&start, offset)| start + offset)
-            .collect::<Vec<_>>(),
-        self.shape().into_owned(),
+            std::iter::zip(self_start.iter(), offset)
+                .map(|(&start, offset)| start + offset)
+                .collect::<Vec<_>>(),
+            self.shape().into_owned(),
         )
     }
 
@@ -200,9 +200,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality,
     /// or if `offset` is greater than `start` in any dimension.
     fn subset(&self, subset: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArraySubsetError> {
-        if subset.start().len() != self.start().len()
-            || !subset.inbounds_shape(&self.shape())
-        {
+        if subset.start().len() != self.start().len() || !subset.inbounds_shape(&self.shape()) {
             Err(ArraySubsetError::IncompatibleOffset {
                 start: subset.start().to_vec(),
                 offset: subset.start().to_vec(),

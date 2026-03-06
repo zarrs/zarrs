@@ -340,7 +340,7 @@ impl ArraySubset {
     }
 
     /// Offsets this subset by the start, the "inverse" of [`ArraySubset::relative_to()`]
-    /// 
+    ///
     /// Creates an array subset starting at [`ArraySubset::start()`] + `offset`.
     ///
     /// # Errors
