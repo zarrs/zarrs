@@ -439,10 +439,16 @@ mod tests {
         );
 
         assert_eq!(
-            array_subset0.subset(&ArraySubset::new_with_ranges(&[0..2, 1..3])).unwrap(),
+            array_subset0
+                .subset(&ArraySubset::new_with_ranges(&[0..2, 1..3]))
+                .unwrap(),
             ArraySubset::new_with_ranges(&[1..3, 3..5])
         );
-        assert!(array_subset0.subset(&ArraySubset::new_with_ranges(&[0..6, 1..3])).is_err());
+        assert!(
+            array_subset0
+                .subset(&ArraySubset::new_with_ranges(&[0..6, 1..3]))
+                .is_err()
+        );
         assert_eq!(
             array_subset0.offset(&[3, 5]).unwrap(),
             ArraySubset::new_with_ranges(&[4..8, 7..11])
