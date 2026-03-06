@@ -184,10 +184,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// or if `offset` is greater than `start` in any dimension.
     fn subset(&self, subset: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArraySubsetError> {
         if subset.start().len() != self.start().len()
-            || std::iter::zip(self.shape().iter(), subset.shape().iter())
-                .any(|(&self_shape, &other_shape)| self_shape < other_shape)
-            || std::iter::zip(self.shape().iter(), subset.start().iter())
-                .any(|(&self_shape, &other_start)| self_shape < other_start)
+            || !subset.inbounds_shape(&self.shape())
         {
             Err(ArraySubsetError::IncompatibleOffset {
                 start: subset.start().to_vec(),
