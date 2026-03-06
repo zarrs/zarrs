@@ -186,25 +186,13 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         if subset.start().len() != self.start().len()
             || std::iter::zip(self.shape().iter(), subset.shape().iter())
                 .any(|(&self_shape, &other_shape)| self_shape < other_shape)
+            || std::iter::zip(self.shape().iter(), subset.start().iter())
+                .any(|(&self_shape, &other_start)| self_shape < other_start)
         {
-            panic!(
-                "first {:?} {:?} {:?} {:?}",
-                self.shape(),
-                subset.shape(),
-                self.start(),
-                subset.start()
-            );
-        }
-        if std::iter::zip(self.shape().iter(), subset.start().iter())
-            .any(|(&self_shape, &other_start)| self_shape < other_start)
-        {
-            panic!(
-                "second {:?} {:?} {:?} {:?}",
-                self.shape(),
-                subset.shape(),
-                self.start(),
-                subset.start()
-            );
+            Err(ArraySubsetError::IncompatibleOffset {
+                start: subset.start().to_vec(),
+                offset: subset.start().to_vec(),
+            })
         } else {
             ArraySubset::new_with_start_shape(
                 std::iter::zip(self.start().iter(), subset.start().iter())
