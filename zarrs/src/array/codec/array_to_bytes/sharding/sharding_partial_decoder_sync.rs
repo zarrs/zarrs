@@ -274,6 +274,43 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     }
 }
 
+
+#[expect(clippy::too_many_arguments)]
+fn get_subchunk_partial_decoder(
+    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
+    data_type: &DataType,
+    fill_value: &FillValue,
+    subchunk_shape: &[NonZeroU64],
+    inner_codecs: &Arc<CodecChain>,
+    options: &CodecOptions,
+    byte_offset: ByteOffset,
+    byte_length: ByteLength,
+) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+    inner_codecs
+        .clone()
+        .partial_decoder(
+            Arc::new(ByteIntervalPartialDecoder::new(
+                input_handle.clone(),
+                byte_offset,
+                byte_length,
+            )),
+            subchunk_shape,
+            data_type,
+            fill_value,
+            options,
+        )
+        .map_err(|err| {
+            if let CodecError::InvalidByteRangeError(_) = err {
+                CodecError::Other(
+                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                        .to_string(),
+                )
+            } else {
+                err
+            }
+        })
+}
+
 #[expect(clippy::too_many_arguments)]
 fn partial_decode_fixed_array_subset_into(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
@@ -368,42 +405,6 @@ fn partial_decode_fixed_array_subset_into(
         decode_subchunk_subset_into_slice
     )?;
     Ok(())
-}
-
-#[expect(clippy::too_many_arguments)]
-fn get_subchunk_partial_decoder(
-    input_handle: &Arc<dyn BytesPartialDecoderTraits>,
-    data_type: &DataType,
-    fill_value: &FillValue,
-    subchunk_shape: &[NonZeroU64],
-    inner_codecs: &Arc<CodecChain>,
-    options: &CodecOptions,
-    byte_offset: ByteOffset,
-    byte_length: ByteLength,
-) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-    inner_codecs
-        .clone()
-        .partial_decoder(
-            Arc::new(ByteIntervalPartialDecoder::new(
-                input_handle.clone(),
-                byte_offset,
-                byte_length,
-            )),
-            subchunk_shape,
-            data_type,
-            fill_value,
-            options,
-        )
-        .map_err(|err| {
-            if let CodecError::InvalidByteRangeError(_) = err {
-                CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                )
-            } else {
-                err
-            }
-        })
 }
 
 #[expect(clippy::too_many_arguments)]
