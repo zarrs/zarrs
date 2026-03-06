@@ -12,7 +12,7 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
 use crate::array::{
-    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
+    ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
     ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, DataType, DataTypeSize,
     IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
@@ -247,35 +247,25 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
             )
             .into());
         }
-        match &self.data_type.size() {
-            DataTypeSize::Fixed(_data_type_size) => {
-                if let Some(subset) = indexer.as_array_subset() {
-                    match output_target {
-                        ArrayBytesDecodeIntoTarget::Fixed(output_view) => {
-                            partial_decode_fixed_array_subset_into(
-                                &self.input_handle,
-                                &self.data_type,
-                                &self.fill_value,
-                                &self.shard_shape,
-                                &self.subchunk_shape,
-                                &self.inner_codecs,
-                                self.shard_index.as_deref(),
-                                subset,
-                                options,
-                                output_view,
-                            )
-                        }
-                        ArrayBytesDecodeIntoTarget::Optional(_, __) => todo!("optional"),
-                    }
-                } else {
-                    let decoded_value = self.partial_decode(indexer, options)?;
-                    decode_into_array_bytes_target(&decoded_value, output_target)
-                }
-            }
-            DataTypeSize::Variable => {
-                let decoded_value = self.partial_decode(indexer, options)?;
-                decode_into_array_bytes_target(&decoded_value, output_target)
-            }
+        if let DataTypeSize::Fixed(_data_type_size) = &self.data_type.size()
+            && let Some(subset) = indexer.as_array_subset()
+            && let ArrayBytesDecodeIntoTarget::Fixed(output_view) = output_target
+        {
+            partial_decode_fixed_array_subset_into(
+                &self.input_handle,
+                &self.data_type,
+                &self.fill_value,
+                &self.shard_shape,
+                &self.subchunk_shape,
+                &self.inner_codecs,
+                self.shard_index.as_deref(),
+                subset,
+                options,
+                output_view,
+            )
+        } else {
+            let decoded_value = self.partial_decode(indexer, options)?;
+            decode_into_array_bytes_target(&decoded_value, output_target)
         }
     }
 
