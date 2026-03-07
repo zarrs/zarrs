@@ -130,9 +130,8 @@ pub(crate) fn partial_decode(
     }
 
     match data_type.size() {
-        DataTypeSize::Fixed(_data_type_size) => {
+        DataTypeSize::Fixed(data_type_size) => {
             if let Some(subset) = indexer.as_array_subset() {
-                let data_type_size = data_type.fixed_size().expect("called on fixed data type");
                 let array_shape = subset.shape();
                 let array_subset_size = subset.num_elements_usize() * data_type_size;
                 let mut out_array_subset = vec![0; array_subset_size];
