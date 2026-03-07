@@ -331,14 +331,6 @@ impl ArraySubset {
         ArraySubsetTraits::relative_to(self, offset)
     }
 
-    /// Return a subset of this subset
-    ///
-    /// # Errors
-    /// Returns [`ArraySubsetError`] if the length of `start` does not match the dimensionality of this array subset.
-    pub fn subset(&self, subset_other: &dyn ArraySubsetTraits) -> Result<Self, ArraySubsetError> {
-        ArraySubsetTraits::subset(self, subset_other)
-    }
-
     /// Offsets this subset by the start, the "inverse" of [`ArraySubset::relative_to()`]
     ///
     /// Creates an array subset starting at [`ArraySubset::start()`] + `offset`.
@@ -436,18 +428,6 @@ mod tests {
         assert_eq!(
             array_subset0.relative_to(&[1, 1]).unwrap(),
             ArraySubset::new_with_ranges(&[0..4, 1..5])
-        );
-
-        assert_eq!(
-            array_subset0
-                .subset(&ArraySubset::new_with_ranges(&[0..2, 1..3]))
-                .unwrap(),
-            ArraySubset::new_with_ranges(&[1..3, 3..5])
-        );
-        assert!(
-            array_subset0
-                .subset(&ArraySubset::new_with_ranges(&[0..6, 1..3]))
-                .is_err()
         );
         assert_eq!(
             array_subset0.offset(&[3, 5]).unwrap(),

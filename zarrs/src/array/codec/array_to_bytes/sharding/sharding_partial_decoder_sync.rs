@@ -358,21 +358,9 @@ fn partial_decode_fixed_array_subset_into(
             .subset(&chunk_indices)
             .expect("matching dimensionality");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
-        // The subset of the output view
-
-        // First get the output view 0-start subset:
-        let output_view_subset = output_view.subset();
-        let output_view_subset_zero_origin = output_view
-            .subset()
-            .relative_to(output_view_subset.start())?;
-
-        // Next generate the position of the chunk inside the view with zero start
-        let chunk_output_zero_origin_overlap_subset = output_view_subset_zero_origin
-            .subset(&chunk_subset_overlap.relative_to(&array_subset_start)?)?;
-
-        // Finally, reproject to the original output view start
-        let chunk_output_overlap_subset =
-            chunk_output_zero_origin_overlap_subset.offset(output_view_subset.start())?;
+        // Calculate the chunk's position in the output view coordinate space
+        let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
+        let chunk_output_overlap_subset = chunk_relative.offset(output_view.subset().start())?;
         // SAFETY: chunks represent disjoint array subsets
         let mut subchunk_view: ArrayBytesFixedDisjointView<'_> =
             unsafe { output_view.subdivide(chunk_output_overlap_subset)? };

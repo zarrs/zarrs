@@ -175,42 +175,26 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
         }
     }
 
-    /// Return the region relative to `offset`.
+    /// Return the region offset by `offset`.
     ///
-    /// Creates an array subset starting at `self.start()` - `offset`.
+    /// Creates an array subset starting at `self.start()` + `offset`.
     ///
     /// # Errors
-    /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality,
-    /// or if `offset` is greater than `start` in any dimension.
+    /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality.
     fn offset(&self, offset: &[u64]) -> Result<ArraySubset, ArraySubsetError> {
         let self_start = self.start();
-        ArraySubset::new_with_start_shape(
-            std::iter::zip(self_start.iter(), offset)
-                .map(|(&start, offset)| start + offset)
-                .collect::<Vec<_>>(),
-            self.shape().into_owned(),
-        )
-    }
-
-    /// Return the region at the subset
-    ///
-    /// Creates an array subset starting at `self.start()` - `offset`.
-    ///
-    /// # Errors
-    /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality,
-    /// or if `offset` is greater than `start` in any dimension.
-    fn subset(&self, subset: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArraySubsetError> {
-        if subset.start().len() != self.start().len() || !subset.inbounds_shape(&self.shape()) {
+        if offset.len() != self_start.len()
+        {
             Err(ArraySubsetError::IncompatibleOffset {
-                start: subset.start().to_vec(),
-                offset: subset.start().to_vec(),
+                start: self_start.to_vec(),
+                offset: offset.to_vec(),
             })
         } else {
             ArraySubset::new_with_start_shape(
-                std::iter::zip(self.start().iter(), subset.start().iter())
+                std::iter::zip(self_start.iter(), offset)
                     .map(|(&start, offset)| start + offset)
                     .collect::<Vec<_>>(),
-                subset.shape().into_owned(),
+                self.shape().into_owned(),
             )
         }
     }
