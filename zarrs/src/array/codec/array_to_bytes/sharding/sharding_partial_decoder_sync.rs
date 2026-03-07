@@ -330,11 +330,7 @@ fn partial_decode_fixed_array_subset_into(
         .into());
     }
     let Some(shard_index) = shard_index else {
-        output_view.copy_from_slice(
-            &super::partial_decode_empty_shard(data_type, fill_value, array_subset)?
-                .into_fixed()?,
-        )?;
-        return Ok(());
+        return output_view.fill(fill_value.as_ne_bytes()).map_err(CodecError::from);
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
