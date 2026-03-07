@@ -330,7 +330,9 @@ fn partial_decode_fixed_array_subset_into(
         .into());
     }
     let Some(shard_index) = shard_index else {
-        return output_view.fill(fill_value.as_ne_bytes()).map_err(CodecError::from);
+        return output_view
+            .fill(fill_value.as_ne_bytes())
+            .map_err(CodecError::from);
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
