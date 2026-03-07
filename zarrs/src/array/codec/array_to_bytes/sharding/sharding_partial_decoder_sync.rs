@@ -322,6 +322,13 @@ fn partial_decode_fixed_array_subset_into(
     options: &CodecOptions,
     output_view: &mut ArrayBytesFixedDisjointView<'_>,
 ) -> Result<(), CodecError> {
+    if array_subset.len() != output_view.num_elements() {
+        return Err(InvalidNumberOfElementsError::new(
+            array_subset.len(),
+            output_view.num_elements(),
+        )
+        .into());
+    }
     let Some(shard_index) = shard_index else {
         output_view.copy_from_slice(
             &super::partial_decode_empty_shard(data_type, fill_value, array_subset)?
