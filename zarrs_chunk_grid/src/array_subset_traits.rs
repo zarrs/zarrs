@@ -183,8 +183,7 @@ pub trait ArraySubsetTraits: Indexer + private::Sealed {
     /// Returns [`ArraySubset`] if the length of `offset` does not match the dimensionality.
     fn offset(&self, offset: &[u64]) -> Result<ArraySubset, ArraySubsetError> {
         let self_start = self.start();
-        if offset.len() != self_start.len()
-        {
+        if offset.len() != self_start.len() {
             Err(ArraySubsetError::IncompatibleOffset {
                 start: self_start.to_vec(),
                 offset: offset.to_vec(),
