@@ -9,9 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Avoid a potential copy in `ShardingPartialDecoder::partial_decode_into`
-
-### Added
-- Add `ArraySubset::offset` for offsetting by an `offset` (i.e., a new start at `self.start() + offset`).
+- Bump `zarrs_chunk_grid` to 0.5.1
 
 ## [0.23.5] - 2026-03-03
 
