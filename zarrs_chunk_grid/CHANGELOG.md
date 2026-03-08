@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-02-08
+
 ### Added
 - Add `ArraySubset::offset` for offsetting by an `offset` (i.e., a new start at `self.start() + offset`).
 
@@ -83,7 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: Change return type `ChunkGridTraits::{array_shape,grid_shape}()` to `&[u64]` instead of `&ArrayShape`
 - **Breaking**: Change `ChunkGridPlugin::new()` `create_fn` signature from `fn(&(MetadataV3, ArrayShape))` to `fn(&MetadataV3, &ArrayShape)`
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_grid-v0.5.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_chunk_grid-v0.5.1...HEAD
+[0.5.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_grid-v0.5.1
 [0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_chunk_grid-v0.5.0
 [0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.4.1
 [0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_chunk_grid-v0.4.0
