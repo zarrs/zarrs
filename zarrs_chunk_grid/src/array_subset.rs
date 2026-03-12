@@ -331,6 +331,16 @@ impl ArraySubset {
         ArraySubsetTraits::relative_to(self, offset)
     }
 
+    /// Offsets this subset by the start, the "inverse" of [`ArraySubset::relative_to()`]
+    ///
+    /// Creates an array subset starting at [`ArraySubset::start()`] + `offset`.
+    ///
+    /// # Errors
+    /// Returns [`ArraySubsetError`] if the length of `start` does not match the dimensionality of this array subset.
+    pub fn offset(&self, offset: &[u64]) -> Result<Self, ArraySubsetError> {
+        ArraySubsetTraits::offset(self, offset)
+    }
+
     /// Returns true if this array subset is within the bounds of `subset`.
     #[must_use]
     pub fn inbounds(&self, subset: &dyn ArraySubsetTraits) -> bool {
@@ -418,6 +428,10 @@ mod tests {
         assert_eq!(
             array_subset0.relative_to(&[1, 1]).unwrap(),
             ArraySubset::new_with_ranges(&[0..4, 1..5])
+        );
+        assert_eq!(
+            array_subset0.offset(&[3, 5]).unwrap(),
+            ArraySubset::new_with_ranges(&[4..8, 7..11])
         );
         assert!(array_subset0.relative_to(&[1, 1, 1]).is_err());
         assert!(array_subset0.inbounds_shape(&[10, 10]));

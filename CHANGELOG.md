@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sharding codec partial decoder: coalesce adjacent inner-chunk byte ranges into a single I/O read
 - Bump `unsafe_cell_slice` to 0.2.2
 
+## [0.23.6] - 2026-03-08
+
+### Changed
+- Avoid a potential copy in `ShardingPartialDecoder::partial_decode_into`
+- Bump `zarrs_chunk_grid` to 0.5.1
+
 ## [0.23.5] - 2026-03-03
 
 ### Changed
@@ -2061,7 +2067,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.5...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.6...HEAD
+[0.23.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.6
 [0.23.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.5
 [0.23.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.4
 [0.23.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.3
