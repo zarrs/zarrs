@@ -8,6 +8,7 @@
 /// - `concurrent_target`: number of threads available to Rayon
 /// - `chunk_concurrent_minimum`: `4`
 /// - `experimental_partial_encoding`: `false`
+/// - 'subchunk_write_order`:  random ordering
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     validate_checksums: bool,
@@ -15,6 +16,7 @@ pub struct CodecOptions {
     concurrent_target: usize,
     chunk_concurrent_minimum: usize,
     experimental_partial_encoding: bool,
+    subchunk_write_order: SubchunkWriteOrder
 }
 
 impl Default for CodecOptions {
@@ -25,8 +27,18 @@ impl Default for CodecOptions {
             concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             experimental_partial_encoding: false,
+            subchunk_write_order: SubchunkWriteOrder::Random
         }
     }
+}
+
+/// Write order for subchunks within a shard
+#[derive(Debug, Clone, Copy)]
+pub enum SubchunkWriteOrder {
+    /// Random order
+    Random,
+    /// C order i.e., rowm-major
+    C,
 }
 
 impl CodecOptions {
@@ -95,6 +107,25 @@ impl CodecOptions {
     #[must_use]
     pub fn chunk_concurrent_minimum(&self) -> usize {
         self.chunk_concurrent_minimum
+    }
+
+    /// Set the subchunk ordering.
+    #[must_use]
+    pub fn with_subchunk_write_order(mut self, subchunk_write_order: SubchunkWriteOrder) -> Self {
+        self.subchunk_write_order = subchunk_write_order;
+        self
+    }
+
+    /// Set the subchunk ordering.
+    pub fn set_subchunk_write_order(&mut self, subchunk_write_order: SubchunkWriteOrder) -> &mut Self {
+        self.subchunk_write_order = subchunk_write_order;
+        self
+    }
+
+    /// Return the subchunk ordering.
+    /// #[must_use]
+    pub fn subchunk_write_order(&self) -> SubchunkWriteOrder {
+        self.subchunk_write_order
     }
 
     /// Set the chunk concurrent minimum.

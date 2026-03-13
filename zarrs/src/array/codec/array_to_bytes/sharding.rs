@@ -289,7 +289,7 @@ mod tests {
     use super::*;
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::BytesToBytesCodecTraits;
+    use zarrs_codec::{BytesToBytesCodecTraits, SubchunkWriteOrder};
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {
@@ -402,20 +402,22 @@ mod tests {
 
     #[test]
     fn codec_sharding_round_trip1() {
-        for index_at_end in [true, false] {
-            for all_fill_value in [true, false] {
-                for unbounded in [true, false] {
-                    for parallel in [true, false] {
-                        let concurrent_target = get_concurrent_target(parallel);
-                        let options =
-                            CodecOptions::default().with_concurrent_target(concurrent_target);
-                        codec_sharding_round_trip_impl(
-                            &options,
-                            unbounded,
-                            all_fill_value,
-                            index_at_end,
-                            vec![],
-                        );
+        for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+            for index_at_end in [true, false] {
+                for all_fill_value in [true, false] {
+                    for unbounded in [true, false] {
+                        for parallel in [true, false] {
+                            let concurrent_target = get_concurrent_target(parallel);
+                            let options =
+                                CodecOptions::default().with_concurrent_target(concurrent_target).with_subchunk_write_order(write_subchunk_order);
+                            codec_sharding_round_trip_impl(
+                                &options,
+                                unbounded,
+                                all_fill_value,
+                                index_at_end,
+                                vec![],
+                            );
+                        }
                     }
                 }
             }
@@ -427,24 +429,25 @@ mod tests {
     #[test]
     fn codec_sharding_round_trip2() {
         use crate::array::codec::{Crc32cCodec, GzipCodec};
-
-        for index_at_end in [true, false] {
-            for all_fill_value in [true, false] {
-                for unbounded in [true, false] {
-                    for parallel in [true, false] {
-                        let concurrent_target = get_concurrent_target(parallel);
-                        let options =
-                            CodecOptions::default().with_concurrent_target(concurrent_target);
-                        codec_sharding_round_trip_impl(
-                            &options,
-                            unbounded,
-                            all_fill_value,
-                            index_at_end,
-                            vec![
-                                Arc::new(GzipCodec::new(5).unwrap()),
-                                Arc::new(Crc32cCodec::new()),
-                            ],
-                        );
+        for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+            for index_at_end in [true, false] {
+                for all_fill_value in [true, false] {
+                    for unbounded in [true, false] {
+                        for parallel in [true, false] {
+                            let concurrent_target = get_concurrent_target(parallel);
+                            let options =
+                                CodecOptions::default().with_concurrent_target(concurrent_target).with_subchunk_write_order(write_subchunk_order);
+                            codec_sharding_round_trip_impl(
+                                &options,
+                                unbounded,
+                                all_fill_value,
+                                index_at_end,
+                                vec![
+                                    Arc::new(GzipCodec::new(5).unwrap()),
+                                    Arc::new(Crc32cCodec::new()),
+                                ],
+                            );
+                        }
                     }
                 }
             }
