@@ -718,7 +718,7 @@ impl ShardingCodec {
         // Allocate the decoded shard index
         let mut shard_index = vec![u64::MAX; index_shape.num_elements_usize()];
         let encoded_shard_offset: usize = match self.index_location {
-            ShardingIndexLocation::Start => index_encoded_size.into(),
+            ShardingIndexLocation::Start => index_encoded_size,
             ShardingIndexLocation::End => 0,
         };
 
@@ -810,7 +810,9 @@ impl ShardingCodec {
                             bytemuck::must_cast_slice(shard_shape),
                             data_type,
                         )?;
-                        if !bytes.is_fill_value(fill_value) {
+                        if bytes.is_fill_value(fill_value) {
+                            Ok(None)
+                        } else {
                             let chunk_encoded = self.inner_codecs.encode(
                                 bytes,
                                 subchunk_shape,
@@ -819,8 +821,6 @@ impl ShardingCodec {
                                 &options,
                             )?;
                             Ok(Some(chunk_encoded.into_owned()))
-                        } else {
-                            Ok(None)
                         }
                     }
                 )
@@ -857,7 +857,7 @@ impl ShardingCodec {
 
                                 shard_slice
                                     .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
-                                    .copy_from_slice(&chunk_encoded);
+                                    .copy_from_slice(chunk_encoded);
                             }
                         }
                     }

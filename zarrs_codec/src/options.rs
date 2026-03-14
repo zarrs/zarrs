@@ -8,7 +8,7 @@
 /// - `concurrent_target`: number of threads available to Rayon
 /// - `chunk_concurrent_minimum`: `4`
 /// - `experimental_partial_encoding`: `false`
-/// - 'subchunk_write_order`:  random ordering
+/// - `subchunk_write_order`:  random ordering
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     validate_checksums: bool,
