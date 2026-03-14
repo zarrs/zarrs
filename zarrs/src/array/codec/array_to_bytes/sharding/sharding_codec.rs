@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::num::NonZeroU64;
+use std::ops::IndexMut;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
@@ -731,18 +732,17 @@ impl ShardingCodec {
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
-        let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
-        let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
         let n_chunks = chunks_per_shard
             .as_slice()
             .iter()
             .map(|i| usize::try_from(i.get()).unwrap())
             .product::<usize>();
-
+        let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
         // Encode the shards and update the shard index
         let encoded_shard_offset = match options.subchunk_write_order() {
             SubchunkWriteOrder::Random => {
                 let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
+                let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                 crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     (0..n_chunks),
@@ -824,8 +824,7 @@ impl ShardingCodec {
                         let chunk_len_usize = chunk.len();
                         let chunk_length = u64::try_from(chunk_len_usize).unwrap();
                         let chunk_offset = u64::try_from(acc).unwrap();
-                        let shard_index_unsafe =
-                            unsafe { shard_index_slice.index_mut(i * 2..i * 2 + 2) };
+                        let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
                         shard_index_unsafe[0] = chunk_offset;
                         shard_index_unsafe[1] = chunk_length;
                         acc + chunk_len_usize
@@ -841,10 +840,9 @@ impl ShardingCodec {
                         let chunk = encoded_chunks.get(chunk_index).unwrap();
                         if let Some(chunk_encoded) = chunk {
                             unsafe {    
-                                let shard_index_unsafe =
-                                    shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2);
-                                let chunk_offset = usize::try_from(shard_index_unsafe[0]).unwrap();
-                                let chunk_encoded_len = usize::try_from(shard_index_unsafe[1]).unwrap();
+                                let shard_index_loc = &shard_index[chunk_index * 2..chunk_index * 2 + 2];
+                                let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
+                                let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
 
                                 shard_slice
                                     .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
