@@ -1077,3 +1077,42 @@ impl ShardingCodec {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::array::{ArrayBuilder, data_type};
+    use zarrs_storage::ReadableStorageTraits;
+    use zarrs_storage::store::MemoryStore;
+
+    #[test]
+    fn test_c_order() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let array = ArrayBuilder::new(
+            vec![16, 16, 16],
+            vec![16, 16, 16],
+            data_type::uint16(),
+            0u16,
+        ).subchunk_shape(vec![2, 2, 2]).build(store.clone(), array_path)?;
+        let data: Vec<u16> = (0..array.shape().iter().product())
+            .map(|i| i as u16)
+            .collect();
+
+        array.store_array_subset_opt(&array.subset_all(), &data, &CodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C))?;
+        let codecs = array.codecs();
+        let shard_codec = codecs.array_to_bytes_codec()
+            .as_any()
+            .downcast_ref::<ShardingCodec>()
+            .unwrap();
+        let shard_key = array.chunk_key(&[0, 0, 0]);
+        let shard_bytes = store.get(&shard_key)?.unwrap();
+
+        let index = shard_codec.decode_index(&shard_bytes, &[NonZeroU64::new(8).unwrap(), NonZeroU64::new(8).unwrap(), NonZeroU64::new(8).unwrap()], &CodecOptions::default())?;
+        let mut offset_with_len = index.chunks(2).collect::<Vec<&[u64]>>();
+        offset_with_len.sort_by_key(|x| x[0]);
+        // The shard index has the chunks in row-major/C order already so sorting by the offset should not alter the layout because the offset is C-ordered.
+        assert_eq!(offset_with_len.into_iter().map(|e| e.to_vec().into_iter()).flatten().collect::<Vec<u64>>(), index);
+        Ok(())
+    }
+}
