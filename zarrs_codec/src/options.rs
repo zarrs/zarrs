@@ -127,7 +127,7 @@ impl CodecOptions {
     }
 
     /// Return the subchunk ordering.
-    /// #[must_use]
+    #[must_use]
     pub fn subchunk_write_order(&self) -> SubchunkWriteOrder {
         self.subchunk_write_order
     }
