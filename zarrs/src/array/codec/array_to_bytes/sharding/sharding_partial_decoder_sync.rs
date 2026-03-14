@@ -21,7 +21,10 @@ use crate::array::{
     IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices, unravel_index,
 };
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError, CodecOptions, InvalidNumberOfElementsError, RecommendedConcurrency, decode_into_array_bytes_target
+    ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
+    ArrayToBytesCodecTraits, ByteIntervalPartialDecoder, BytesPartialDecoderTraits, CodecError,
+    CodecOptions, InvalidNumberOfElementsError, RecommendedConcurrency,
+    decode_into_array_bytes_target,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;
@@ -467,13 +470,16 @@ fn partial_decode_fixed_array_subset_into(
 
     // Helper: compute the overlap of chunk `chunk_indices_nd` with `array_subset`,
     // relative to subset origin.
-    let chunk_output_overlap_subset = |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
-        let chunk_subset = shard_chunk_grid
-            .subset(chunk_indices_nd)
-            .expect("matching dimensionality");
-        let overlap = array_subset.overlap(&chunk_subset)?;
-        overlap.relative_to(&array_subset.start()).map_err(CodecError::from)
-    };
+    let chunk_output_overlap_subset =
+        |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
+            let chunk_subset = shard_chunk_grid
+                .subset(chunk_indices_nd)
+                .expect("matching dimensionality");
+            let overlap = array_subset.overlap(&chunk_subset)?;
+            overlap
+                .relative_to(&array_subset.start())
+                .map_err(CodecError::from)
+        };
 
     // Phase 3a: Fill chunks in parallel (disjoint output regions, no I/O).
     let fill_element_bytes = fill_value.as_ne_bytes();
@@ -530,15 +536,14 @@ fn partial_decode_fixed_array_subset_into(
             let end = start + usize::try_from(size).unwrap();
             if overlap.num_elements() == subchunk_num_elements {
                 // Fast path: the overlap covers the full subchunk — decode directly.
-                inner_codecs
-                    .decode_into(
-                        Cow::Borrowed(&coalesced_bytes[start..end]),
-                        subchunk_shape,
-                        data_type,
-                        fill_value,
-                        ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
-                        &codec_options,
-                    )
+                inner_codecs.decode_into(
+                    Cow::Borrowed(&coalesced_bytes[start..end]),
+                    subchunk_shape,
+                    data_type,
+                    fill_value,
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
+                    &codec_options,
+                )
             } else {
                 // Slow path: partial subchunk
                 // Compute the overlap region in chunk-local coordinates in a single pass,
@@ -564,7 +569,11 @@ fn partial_decode_fixed_array_subset_into(
                     offset - group.start,
                     size,
                 )?
-                .partial_decode_into(&chunk_subset_overlap_in_chunk, ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),&codec_options)
+                .partial_decode_into(
+                    &chunk_subset_overlap_in_chunk,
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut subchunk_view),
+                    &codec_options,
+                )
             }
         };
 
