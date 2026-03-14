@@ -1189,9 +1189,12 @@ mod tests {
             &CodecOptions::default(),
         )?;
         // The sorted index with unwritten elements filtered matches that of the real index
-        let mut offset_with_len = index
+        let filtered_index = index
+                .into_iter()
+                .filter(|e| *e != u64::MAX)
+                .collect::<Vec<u64>>();
+        let mut offset_with_len = filtered_index
             .chunks(2)
-            .filter(|e| e[0] != u64::MAX && e[1] != u64::MAX)
             .collect::<Vec<&[u64]>>();
         offset_with_len.sort_by_key(|x| x[0]);
         assert_eq!(
@@ -1200,11 +1203,12 @@ mod tests {
                 .map(|e| e.to_vec().into_iter())
                 .flatten()
                 .collect::<Vec<u64>>(),
-            index
-                .into_iter()
-                .filter(|e| *e != u64::MAX)
-                .collect::<Vec<u64>>()
+            filtered_index
         );
+        // Assert the number of chunks written in the shard is correct.
+        // In this case, 3 chunks ((4..6) (6..8) and (10..12)) along the first axis, and then the full 8 along the others.
+        // 2 times that for offset + len per chunk.
+        assert_eq!(filtered_index.len(), 2 * (3 * 8 * 8));
         Ok(())
     }
 }
