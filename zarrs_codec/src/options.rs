@@ -39,6 +39,7 @@ pub enum SubchunkWriteOrder {
     Random,
     /// C order i.e., rowm-major
     C,
+    // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
 }
 
 impl CodecOptions {
