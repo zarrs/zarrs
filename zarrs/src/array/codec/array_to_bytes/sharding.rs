@@ -408,8 +408,9 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options =
-                                CodecOptions::default().with_concurrent_target(concurrent_target).with_subchunk_write_order(write_subchunk_order);
+                            let options = CodecOptions::default()
+                                .with_concurrent_target(concurrent_target)
+                                .with_subchunk_write_order(write_subchunk_order);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 unbounded,
@@ -435,8 +436,9 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options =
-                                CodecOptions::default().with_concurrent_target(concurrent_target).with_subchunk_write_order(write_subchunk_order);
+                            let options = CodecOptions::default()
+                                .with_concurrent_target(concurrent_target)
+                                .with_subchunk_write_order(write_subchunk_order);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 unbounded,
