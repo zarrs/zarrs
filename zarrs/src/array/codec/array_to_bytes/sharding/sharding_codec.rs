@@ -1092,22 +1092,26 @@ impl ShardingCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{ArrayBuilder, data_type};
+    use crate::array::{Array, ArrayBuilder, ArrayCreateError, data_type};
     use zarrs_storage::ReadableStorageTraits;
     use zarrs_storage::store::MemoryStore;
 
-    #[test]
-    fn test_c_order() -> Result<(), Box<dyn std::error::Error>> {
-        let store = Arc::new(MemoryStore::default());
+    fn build_array(store: Arc<MemoryStore>) -> Result<Array<MemoryStore>, ArrayCreateError> {
         let array_path = "/array";
-        let array = ArrayBuilder::new(
+        ArrayBuilder::new(
             vec![16, 16, 16],
             vec![16, 16, 16],
             data_type::uint16(),
             0u16,
         )
         .subchunk_shape(vec![2, 2, 2])
-        .build(store.clone(), array_path)?;
+        .build(store, array_path)
+    }
+
+    #[test]
+    fn test_c_order_full() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array = build_array(store.clone())?;
         let data: Vec<u16> = (0..array.shape().iter().product())
             .map(|i| i as u16)
             .collect();
@@ -1145,6 +1149,61 @@ mod tests {
                 .flatten()
                 .collect::<Vec<u64>>(),
             index
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_c_order_partial() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array = build_array(store.clone())?;
+        let data: Vec<u16> = (0..(16 * 16 * 2)).map(|i| i as u16).collect();
+
+        array.store_array_subset_opt(
+            &[5..7, 0..16, 0..16],
+            &data,
+            &CodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+        )?;
+
+        array.store_array_subset_opt(
+            &[10..12, 0..16, 0..16],
+            &data,
+            &CodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+        )?;
+        let codecs = array.codecs();
+        let shard_codec = codecs
+            .array_to_bytes_codec()
+            .as_any()
+            .downcast_ref::<ShardingCodec>()
+            .unwrap();
+        let shard_key = array.chunk_key(&[0, 0, 0]);
+        let shard_bytes = store.get(&shard_key)?.unwrap();
+
+        let index = shard_codec.decode_index(
+            &shard_bytes,
+            &[
+                NonZeroU64::new(8).unwrap(),
+                NonZeroU64::new(8).unwrap(),
+                NonZeroU64::new(8).unwrap(),
+            ],
+            &CodecOptions::default(),
+        )?;
+        // The sorted index with unwritten elements filtered matches that of the real index
+        let mut offset_with_len = index
+            .chunks(2)
+            .filter(|e| e[0] != u64::MAX && e[1] != u64::MAX)
+            .collect::<Vec<&[u64]>>();
+        offset_with_len.sort_by_key(|x| x[0]);
+        assert_eq!(
+            offset_with_len
+                .into_iter()
+                .map(|e| e.to_vec().into_iter())
+                .flatten()
+                .collect::<Vec<u64>>(),
+            index
+                .into_iter()
+                .filter(|e| *e != u64::MAX)
+                .collect::<Vec<u64>>()
         );
         Ok(())
     }
