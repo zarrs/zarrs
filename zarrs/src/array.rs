@@ -68,9 +68,9 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, StoragePartialDecoder,
-    copy_fill_value_into, update_array_bytes,
+    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
+    StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -609,6 +609,27 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Set the codec options.
     pub fn set_codec_options(&mut self, codec_options: CodecOptions) -> &mut Self {
         self.codec_options = codec_options;
+        self
+    }
+
+    /// Reconfigure the codec chain with codec-specific options and return the updated array.
+    ///
+    /// Each codec in the chain may read its own options type from `opts` and return a
+    /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
+    /// This replaces the array's codec chain with the reconfigured version.
+    #[must_use]
+    pub fn with_codec_specific_options(mut self, opts: &CodecSpecificOptions) -> Self {
+        self.codecs = Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts));
+        self
+    }
+
+    /// Reconfigure the codec chain with codec-specific options.
+    ///
+    /// Each codec in the chain may read its own options type from `opts` and return a
+    /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
+    /// This replaces the array's codec chain with the reconfigured version.
+    pub fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self {
+        self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts));
         self
     }
 
