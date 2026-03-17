@@ -683,6 +683,51 @@ impl ShardingCodec {
         num_chunks * chunk_encoded_size + index_encoded_size
     }
 
+    /// Encode an inner chunk from the `decoded_value` or return None.
+    #[expect(clippy::too_many_arguments)]
+    fn encode_inner_by_chunk_index(
+        &self,
+        chunk_index: usize,
+        decoded_value: &ArrayBytes,
+        shard_shape: &[NonZeroU64],
+        chunks_per_shard: &[NonZeroU64],
+        fill_value: &FillValue,
+        data_type: &DataType,
+        subchunk_shape: &[NonZeroU64],
+        options_inner: &CodecOptions,
+    ) -> Option<Result<(usize, Vec<u8>), CodecError>> {
+        let chunk_subset = self
+            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
+            .expect("inbounds chunk");
+
+        let bytes = decoded_value.extract_array_subset(
+            &chunk_subset,
+            bytemuck::must_cast_slice(shard_shape),
+            data_type,
+        );
+        let bytes = match bytes {
+            Ok(bytes) => bytes,
+            Err(err) => return Some(Err(err)),
+        };
+
+        let is_fill_value = bytes.is_fill_value(fill_value);
+        if is_fill_value {
+            None
+        } else {
+            let encoded_chunk = self.inner_codecs.encode(
+                bytes,
+                subchunk_shape,
+                data_type,
+                fill_value,
+                options_inner,
+            );
+            match encoded_chunk {
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
+                Err(err) => Some(Err(err)),
+            }
+        }
+    }
+
     /// Preallocate shard, encode and write chunks (in parallel), then truncate shard
     #[allow(clippy::too_many_lines)]
     #[expect(clippy::too_many_arguments)]
@@ -748,23 +793,19 @@ impl ShardingCodec {
                     (0..n_chunks),
                     try_for_each,
                     |chunk_index: usize| {
-                        let chunk_subset = self
-                            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                            .expect("inbounds chunk");
-                        let bytes = decoded_value.extract_array_subset(
-                            &chunk_subset,
-                            bytemuck::must_cast_slice(shard_shape),
+                        let maybe_chunk_encoded_with_id = self.encode_inner_by_chunk_index(
+                            chunk_index,
+                            decoded_value,
+                            shard_shape,
+                            chunks_per_shard.as_slice(),
+                            fill_value,
                             data_type,
-                        )?;
-                        if !bytes.is_fill_value(fill_value) {
-                            let chunk_encoded = self.inner_codecs.encode(
-                                bytes,
-                                subchunk_shape,
-                                data_type,
-                                fill_value,
-                                &options,
-                            )?;
-
+                            subchunk_shape,
+                            &options,
+                        );
+                        if let Some(chunk_encoded_with_id) = maybe_chunk_encoded_with_id {
+                            // We don't need to worry about the id because the order here is random.
+                            let chunk_encoded = chunk_encoded_with_id?.1;
                             let chunk_offset = encoded_shard_offset_atomic.fetch_add(
                                 chunk_encoded.len(),
                                 std::sync::atomic::Ordering::Relaxed,
@@ -797,67 +838,51 @@ impl ShardingCodec {
             SubchunkWriteOrder::C => {
                 // TODO: Replace this chunk order with the desired order i.e., a `Vec` of the ids i.e., for morton order.
                 let chunk_order = 0..n_chunks;
-                let encoded_chunk_ids_and_chunks = crate::iter_concurrent_limit!(
-                    shard_concurrent_limit,
-                    chunk_order,
-                    map,
-                    |chunk_index: usize| {
-                        let chunk_subset = self
-                            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                            .expect("inbounds chunk");
-                        let bytes = decoded_value.extract_array_subset(
-                            &chunk_subset,
-                            bytemuck::must_cast_slice(shard_shape),
-                            data_type,
-                        )?;
-                        if bytes.is_fill_value(fill_value) {
-                            Ok((chunk_index, None))
-                        } else {
-                            let chunk_encoded = self.inner_codecs.encode(
-                                bytes,
-                                subchunk_shape,
-                                data_type,
+                let encoded_chunk_ids_and_chunks: Vec<(usize, Vec<u8>)> =
+                    crate::iter_concurrent_limit!(
+                        shard_concurrent_limit,
+                        chunk_order,
+                        filter_map,
+                        |chunk_index: usize| {
+                            self.encode_inner_by_chunk_index(
+                                chunk_index,
+                                decoded_value,
+                                shard_shape,
+                                chunks_per_shard.as_slice(),
                                 fill_value,
+                                data_type,
+                                subchunk_shape,
                                 &options,
-                            )?;
-                            Ok((chunk_index, Some(chunk_encoded.into_owned())))
+                            )
                         }
-                    }
-                )
-                .collect::<Result<Vec<(usize, Option<Vec<u8>>)>, CodecError>>()?;
+                    )
+                    .collect::<Result<Vec<_>, _>>()?;
                 let total_offset = encoded_chunk_ids_and_chunks.iter().fold(
                     encoded_shard_offset,
-                    |acc, (i, chunk)| {
-                        if let Some(chunk) = chunk {
-                            let chunk_len_usize = chunk.len();
-                            let chunk_length = u64::try_from(chunk_len_usize).unwrap();
-                            let chunk_offset = u64::try_from(acc).unwrap();
-                            let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
-                            shard_index_unsafe[0] = chunk_offset;
-                            shard_index_unsafe[1] = chunk_length;
-                            acc + chunk_len_usize
-                        } else {
-                            acc
-                        }
+                    |acc: usize, (i, chunk)| {
+                        let chunk_len_usize = chunk.len();
+                        let chunk_length = u64::try_from(chunk_len_usize).unwrap();
+                        let chunk_offset = u64::try_from(acc).unwrap();
+                        let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
+                        shard_index_unsafe[0] = chunk_offset;
+                        shard_index_unsafe[1] = chunk_length;
+                        acc + chunk_len_usize
                     },
                 );
                 crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     encoded_chunk_ids_and_chunks,
                     for_each,
-                    |(chunk_index, chunk): (usize, Option<Vec<u8>>)| {
-                        if let Some(chunk_encoded) = chunk {
-                            unsafe {
-                                let shard_index_loc =
-                                    &shard_index[chunk_index * 2..chunk_index * 2 + 2];
-                                let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
-                                let chunk_encoded_len =
-                                    usize::try_from(shard_index_loc[1]).unwrap();
+                    |(chunk_index, chunk): (usize, Vec<u8>)| {
+                        unsafe {
+                            let shard_index_loc =
+                                &shard_index[chunk_index * 2..chunk_index * 2 + 2];
+                            let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
+                            let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
 
-                                shard_slice
-                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
-                                    .copy_from_slice(&chunk_encoded);
-                            }
+                            shard_slice
+                                .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
+                                .copy_from_slice(&chunk);
                         }
                     }
                 );
@@ -937,39 +962,6 @@ impl ShardingCodec {
         );
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
-        let encode_chunk = |chunk_index| {
-            let chunk_subset = self
-                .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                .expect("inbounds chunk");
-
-            let bytes = decoded_value.extract_array_subset(
-                &chunk_subset,
-                bytemuck::must_cast_slice(shard_shape),
-                data_type,
-            );
-            let bytes = match bytes {
-                Ok(bytes) => bytes,
-                Err(err) => return Some(Err(err)),
-            };
-
-            let is_fill_value = bytes.is_fill_value(fill_value);
-            if is_fill_value {
-                None
-            } else {
-                let encoded_chunk = self.inner_codecs.encode(
-                    bytes,
-                    subchunk_shape,
-                    data_type,
-                    fill_value,
-                    &options_inner,
-                );
-                match encoded_chunk {
-                    Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
-                    Err(err) => Some(Err(err)),
-                }
-            }
-        };
-
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = (0..n_chunks).into_par_iter();
         #[cfg(target_arch = "wasm32")]
@@ -979,7 +971,16 @@ impl ShardingCodec {
             shard_concurrent_limit,
             iterator,
             filter_map,
-            encode_chunk
+            |chunk_index| self.encode_inner_by_chunk_index(
+                chunk_index,
+                decoded_value,
+                shard_shape,
+                chunks_per_shard.as_slice(),
+                fill_value,
+                data_type,
+                subchunk_shape,
+                &options_inner
+            )
         )
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -1189,12 +1190,10 @@ mod tests {
         )?;
         // The sorted index with unwritten elements filtered matches that of the real index
         let filtered_index = index
-                .into_iter()
-                .filter(|e| *e != u64::MAX)
-                .collect::<Vec<u64>>();
-        let mut offset_with_len = filtered_index
-            .chunks(2)
-            .collect::<Vec<&[u64]>>();
+            .into_iter()
+            .filter(|e| *e != u64::MAX)
+            .collect::<Vec<u64>>();
+        let mut offset_with_len = filtered_index.chunks(2).collect::<Vec<&[u64]>>();
         offset_with_len.sort_by_key(|x| x[0]);
         assert_eq!(
             offset_with_len
