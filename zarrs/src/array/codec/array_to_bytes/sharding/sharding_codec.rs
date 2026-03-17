@@ -983,7 +983,7 @@ impl ShardingCodec {
             )
         )
         .collect::<Result<Vec<_>, _>>()?;
-    
+
         // Allocate the shard
         let encoded_chunk_length = encoded_chunks
             .iter()
@@ -1000,12 +1000,11 @@ impl ShardingCodec {
         };
         let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
 
-
         // Write shard and update shard index
         if !encoded_chunks.is_empty() {
             match options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => {
-                    let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into(); 
+                    let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                     let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
                     let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                     crate::iter_concurrent_limit!(
@@ -1013,11 +1012,13 @@ impl ShardingCodec {
                         encoded_chunks,
                         for_each,
                         |(chunk_index, chunk_encoded): (usize, Vec<u8>)| {
-                            let chunk_offset = encoded_shard_offset_atomic
-                                .fetch_add(chunk_encoded.len(), std::sync::atomic::Ordering::Relaxed);
+                            let chunk_offset = encoded_shard_offset_atomic.fetch_add(
+                                chunk_encoded.len(),
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
                             unsafe {
-                                let shard_index_unsafe =
-                                    shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2);
+                                let shard_index_unsafe = shard_index_slice
+                                    .index_mut(chunk_index * 2..chunk_index * 2 + 2);
                                 shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
                                 shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
 
@@ -1027,11 +1028,11 @@ impl ShardingCodec {
                             }
                         }
                     );
-                },
+                }
                 SubchunkWriteOrder::C => {
-                    encoded_chunks.iter().fold(
-                        encoded_shard_offset,
-                        |acc: usize, (i, chunk)| {
+                    encoded_chunks
+                        .iter()
+                        .fold(encoded_shard_offset, |acc: usize, (i, chunk)| {
                             let chunk_len_usize = chunk.len();
                             let chunk_length = u64::try_from(chunk_len_usize).unwrap();
                             let chunk_offset = u64::try_from(acc).unwrap();
@@ -1039,8 +1040,7 @@ impl ShardingCodec {
                             shard_index_unsafe[0] = chunk_offset;
                             shard_index_unsafe[1] = chunk_length;
                             acc + chunk_len_usize
-                        },
-                    );
+                        });
                     crate::iter_concurrent_limit!(
                         options.concurrent_target(),
                         encoded_chunks,
@@ -1050,7 +1050,8 @@ impl ShardingCodec {
                                 let shard_index_loc =
                                     &shard_index[chunk_index * 2..chunk_index * 2 + 2];
                                 let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
-                                let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
+                                let chunk_encoded_len =
+                                    usize::try_from(shard_index_loc[1]).unwrap();
 
                                 shard_slice
                                     .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
@@ -1059,7 +1060,7 @@ impl ShardingCodec {
                         }
                     );
                 }
-            }            
+            }
         }
 
         // Write shard index

@@ -351,7 +351,7 @@ mod tests {
     enum FillValueAmount {
         PartialFill,
         AllFill,
-        NoFill
+        NoFill,
     }
 
     fn codec_sharding_round_trip_impl(
@@ -375,22 +375,29 @@ mod tests {
             FillValueAmount::PartialFill => {
                 // Two separate subsets, one entirely within a subchunk, other other crossing a boundary.
                 // Three total chunks thus are written two..
-                let subset1 = ArraySubset::new_with_ranges(&[(0..2 as u64), (0..2 as u64), (0..2 as u64)]);
-                let subset2 = ArraySubset::new_with_ranges(&[(5..7 as u64), (0..2 as u64), (0..2 as u64)]);
+                let subset1 =
+                    ArraySubset::new_with_ranges(&[(0..2 as u64), (0..2 as u64), (0..2 as u64)]);
+                let subset2 =
+                    ArraySubset::new_with_ranges(&[(5..7 as u64), (0..2 as u64), (0..2 as u64)]);
                 let mut data = vec![0u16; chunk_shape.num_elements_usize()];
-                subset1.iter_contiguous_byte_ranges(&[chunk_size; NUM_AXES], 2).unwrap().for_each(|r| {
-                    let start = r.start as usize / elem_size;
-                    let end = r.end as usize / elem_size;
-                    data[start..end].fill(1);
-                    
-                });
-                subset2.iter_contiguous_byte_ranges(&[chunk_size; NUM_AXES], 2).unwrap().for_each(|r| {
-                    let start = r.start as usize / elem_size;
-                    let end = r.end as usize / elem_size;
-                    data[start..end].fill(1);
-                });
+                subset1
+                    .iter_contiguous_byte_ranges(&[chunk_size; NUM_AXES], 2)
+                    .unwrap()
+                    .for_each(|r| {
+                        let start = r.start as usize / elem_size;
+                        let end = r.end as usize / elem_size;
+                        data[start..end].fill(1);
+                    });
+                subset2
+                    .iter_contiguous_byte_ranges(&[chunk_size; NUM_AXES], 2)
+                    .unwrap()
+                    .for_each(|r| {
+                        let start = r.start as usize / elem_size;
+                        let end = r.end as usize / elem_size;
+                        data[start..end].fill(1);
+                    });
                 data
-            },
+            }
             FillValueAmount::NoFill => (1..(1 + chunk_shape.num_elements_usize() as u16)).collect(),
         };
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -428,11 +435,13 @@ mod tests {
             .unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
-        let index = codec.decode_index(
-            &encoded,
-            &[NonZeroU64::new(chunk_size / subchunk_size).unwrap(); NUM_AXES],
-            options,
-        ).unwrap();
+        let index = codec
+            .decode_index(
+                &encoded,
+                &[NonZeroU64::new(chunk_size / subchunk_size).unwrap(); NUM_AXES],
+                options,
+            )
+            .unwrap();
         match fill_value_amount {
             FillValueAmount::NoFill => match options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => (),
@@ -472,17 +481,20 @@ mod tests {
                     // 2 times that for offset + len per chunk.
                     assert_eq!(filtered_index.len(), 6);
                 }
-            }
-            FillValueAmount::AllFill => assert_eq!(index, vec![u64::MAX; 8 * 8 * 8 * 2])
+            },
+            FillValueAmount::AllFill => assert_eq!(index, vec![u64::MAX; 8 * 8 * 8 * 2]),
         }
-        
     }
 
     #[test]
     fn codec_sharding_round_trip1() {
         for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
             for index_at_end in [true, false] {
-                for fill_value_amount in [FillValueAmount::AllFill, FillValueAmount::NoFill, FillValueAmount::PartialFill] {
+                for fill_value_amount in [
+                    FillValueAmount::AllFill,
+                    FillValueAmount::NoFill,
+                    FillValueAmount::PartialFill,
+                ] {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
@@ -510,7 +522,11 @@ mod tests {
         use crate::array::codec::{Crc32cCodec, GzipCodec};
         for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
             for index_at_end in [true, false] {
-                for fill_value_amount in [FillValueAmount::AllFill, FillValueAmount::NoFill, FillValueAmount::PartialFill] {
+                for fill_value_amount in [
+                    FillValueAmount::AllFill,
+                    FillValueAmount::NoFill,
+                    FillValueAmount::PartialFill,
+                ] {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
