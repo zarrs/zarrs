@@ -795,9 +795,9 @@ impl ShardingCodec {
                 )
             }
             SubchunkWriteOrder::C => {
-                // TODO: Simply replacing this variable with the desired order (i.e., morton) should ensure that the collected encoded_chunks are in the write-order.
+                // TODO: Replace this chunk order with the desired order i.e., a `Vec` of the ids i.e., for morton order.
                 let chunk_order = 0..n_chunks;
-                let encoded_chunks = crate::iter_concurrent_limit!(
+                let encoded_chunk_ids_and_chunks = crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
                     chunk_order,
                     map,
@@ -811,7 +811,7 @@ impl ShardingCodec {
                             data_type,
                         )?;
                         if bytes.is_fill_value(fill_value) {
-                            Ok(None)
+                            Ok((chunk_index, None))
                         } else {
                             let chunk_encoded = self.inner_codecs.encode(
                                 bytes,
@@ -820,12 +820,12 @@ impl ShardingCodec {
                                 fill_value,
                                 &options,
                             )?;
-                            Ok(Some(chunk_encoded.into_owned()))
+                            Ok((chunk_index, Some(chunk_encoded.into_owned())))
                         }
                     }
                 )
-                .collect::<Result<Vec<Option<Vec<u8>>>, CodecError>>()?;
-                let total_offset = encoded_chunks.iter().enumerate().fold(
+                .collect::<Result<Vec<(usize, Option<Vec<u8>>)>, CodecError>>()?;
+                let total_offset = encoded_chunk_ids_and_chunks.iter().fold(
                     encoded_shard_offset,
                     |acc, (i, chunk)| {
                         if let Some(chunk) = chunk {
@@ -843,10 +843,9 @@ impl ShardingCodec {
                 );
                 crate::iter_concurrent_limit!(
                     shard_concurrent_limit,
-                    (0..n_chunks),
+                    encoded_chunk_ids_and_chunks,
                     for_each,
-                    |chunk_index: usize| {
-                        let chunk = encoded_chunks.get(chunk_index).unwrap();
+                    |(chunk_index, chunk): (usize, Option<Vec<u8>>)| {
                         if let Some(chunk_encoded) = chunk {
                             unsafe {
                                 let shard_index_loc =
@@ -857,7 +856,7 @@ impl ShardingCodec {
 
                                 shard_slice
                                     .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
-                                    .copy_from_slice(chunk_encoded);
+                                    .copy_from_slice(&chunk_encoded);
                             }
                         }
                     }
