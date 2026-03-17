@@ -1093,6 +1093,9 @@ impl ShardingCodec {
     ///
     /// # Errors
     /// Returns [`CodecError`] if the decoded shard index is not valid.
+    /// 
+    /// # Panics
+    /// Panics if the enoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
     pub fn decode_index(
         &self,
         encoded_shard: &[u8],
