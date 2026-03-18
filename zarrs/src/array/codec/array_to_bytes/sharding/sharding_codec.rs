@@ -961,18 +961,14 @@ impl ShardingCodec {
                 .recommended_concurrency(subchunk_shape, data_type)?,
         );
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
-        
+
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = match options.subchunk_write_order() {
-            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {       
-                (0..n_chunks).into_par_iter()
-            }
+            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
         };
         #[cfg(target_arch = "wasm32")]
         let iterator = match options.subchunk_write_order() {
-            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {       
-                0..n_chunks
-            }
+            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
