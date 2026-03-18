@@ -371,7 +371,6 @@ mod tests {
         let elem_size = std::mem::size_of::<u16>();
         let elements: Vec<u16> = match fill_value_amount {
             FillValueAmount::AllFill => vec![0u16; chunk_shape.num_elements_usize()],
-            // Put filled chunks in two separate parts of the array
             FillValueAmount::PartialFill => {
                 // Two separate subsets, one entirely within a subchunk, other other crossing a boundary.
                 // Three total chunks thus are written two..
