@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Subchunks can now be written in C-major order via `CodecOptions.{set_,with_,}subchunk_write_order`
+
 ## [0.23.6] - 2026-03-08
 
 ### Changed
