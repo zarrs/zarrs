@@ -888,7 +888,7 @@ impl ShardingCodec {
                 );
                 Ok(total_offset)
             }
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         }?;
 
         // Truncate shard
@@ -966,12 +966,12 @@ impl ShardingCodec {
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = match options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         };
         #[cfg(target_arch = "wasm32")]
         let iterator = match options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
@@ -1037,17 +1037,15 @@ impl ShardingCodec {
                 }
                 SubchunkWriteOrder::C => {
                     let mut offset = encoded_shard_offset;
-                    encoded_chunks
-                        .iter()
-                        .for_each(|(i, chunk)| {
-                            let chunk_len_usize = chunk.len();
-                            let chunk_length = u64::try_from(chunk_len_usize).unwrap();
-                            let chunk_offset = u64::try_from(offset).unwrap();
-                            let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
-                            shard_index_unsafe[0] = chunk_offset;
-                            shard_index_unsafe[1] = chunk_length;
-                            offset += chunk_len_usize
-                        });
+                    for (i, chunk) in encoded_chunks.iter() {
+                        let chunk_len_usize = chunk.len();
+                        let chunk_length = u64::try_from(chunk_len_usize).unwrap();
+                        let chunk_offset = u64::try_from(offset).unwrap();
+                        let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
+                        shard_index_unsafe[0] = chunk_offset;
+                        shard_index_unsafe[1] = chunk_length;
+                        offset += chunk_len_usize;
+                    }
                     crate::iter_concurrent_limit!(
                         options.concurrent_target(),
                         encoded_chunks,
@@ -1066,7 +1064,7 @@ impl ShardingCodec {
                             }
                         }
                     );
-                },
+                }
                 _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
             }
         }
