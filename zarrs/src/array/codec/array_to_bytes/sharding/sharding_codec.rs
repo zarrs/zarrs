@@ -1037,7 +1037,7 @@ impl ShardingCodec {
                 }
                 SubchunkWriteOrder::C => {
                     let mut offset = encoded_shard_offset;
-                    for (i, chunk) in encoded_chunks.iter() {
+                    for (i, chunk) in &encoded_chunks {
                         let chunk_len_usize = chunk.len();
                         let chunk_length = u64::try_from(chunk_len_usize).unwrap();
                         let chunk_offset = u64::try_from(offset).unwrap();
