@@ -888,6 +888,7 @@ impl ShardingCodec {
                 );
                 Ok(total_offset)
             }
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
         }?;
 
         // Truncate shard
@@ -965,10 +966,12 @@ impl ShardingCodec {
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = match options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
         };
         #[cfg(target_arch = "wasm32")]
         let iterator = match options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
+            _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
@@ -1062,7 +1065,8 @@ impl ShardingCodec {
                             }
                         }
                     );
-                }
+                },
+                _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
             }
         }
 

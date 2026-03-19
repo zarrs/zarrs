@@ -456,7 +456,8 @@ mod tests {
                             .collect::<Vec<u64>>(),
                         index
                     );
-                }
+                },
+                _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
             },
             FillValueAmount::PartialFill => match options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => (),
@@ -479,7 +480,8 @@ mod tests {
                     // Assert the number of chunks written in the shard is correct.
                     // 2 times that for offset + len per chunk.
                     assert_eq!(filtered_index.len(), 6);
-                }
+                },
+                _ => unreachable!("C and Random order are the only supported subchunk wrie orders")
             },
             FillValueAmount::AllFill => assert_eq!(index, vec![u64::MAX; 8 * 8 * 8 * 2]),
         }
