@@ -1036,16 +1036,17 @@ impl ShardingCodec {
                     );
                 }
                 SubchunkWriteOrder::C => {
+                    let mut offset = encoded_shard_offset;
                     encoded_chunks
                         .iter()
-                        .fold(encoded_shard_offset, |acc: usize, (i, chunk)| {
+                        .for_each(|(i, chunk)| {
                             let chunk_len_usize = chunk.len();
                             let chunk_length = u64::try_from(chunk_len_usize).unwrap();
-                            let chunk_offset = u64::try_from(acc).unwrap();
+                            let chunk_offset = u64::try_from(offset).unwrap();
                             let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
                             shard_index_unsafe[0] = chunk_offset;
                             shard_index_unsafe[1] = chunk_length;
-                            acc + chunk_len_usize
+                            offset += chunk_len_usize
                         });
                     crate::iter_concurrent_limit!(
                         options.concurrent_target(),
