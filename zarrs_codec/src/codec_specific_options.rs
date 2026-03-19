@@ -55,3 +55,64 @@ impl CodecSpecificOptions {
         self.map.get(&TypeId::of::<T>())?.downcast_ref::<T>()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CodecSpecificOptions;
+
+    #[derive(Debug, Clone, Default, PartialEq)]
+    struct FooOptions {
+        value: u32,
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq)]
+    struct BarOptions {
+        enabled: bool,
+    }
+
+    #[test]
+    fn get_returns_none_when_not_set() {
+        let opts = CodecSpecificOptions::default();
+        assert!(opts.get_option::<FooOptions>().is_none());
+    }
+
+    #[test]
+    fn get_returns_value_after_set() {
+        let opts = CodecSpecificOptions::default().with_option(FooOptions { value: 42 });
+        assert_eq!(opts.get_option::<FooOptions>().unwrap().value, 42);
+    }
+
+    #[test]
+    fn second_set_replaces_first() {
+        let opts = CodecSpecificOptions::default()
+            .with_option(FooOptions { value: 1 })
+            .with_option(FooOptions { value: 2 });
+        assert_eq!(opts.get_option::<FooOptions>().unwrap().value, 2);
+    }
+
+    #[test]
+    fn multiple_types_stored_independently() {
+        let opts = CodecSpecificOptions::default()
+            .with_option(FooOptions { value: 7 })
+            .with_option(BarOptions { enabled: true });
+        assert_eq!(opts.get_option::<FooOptions>().unwrap().value, 7);
+        assert!(opts.get_option::<BarOptions>().unwrap().enabled);
+    }
+
+    #[test]
+    fn clone_is_independent() {
+        let opts = CodecSpecificOptions::default().with_option(FooOptions { value: 3 });
+        let opts2 = opts.clone().with_option(FooOptions { value: 99 });
+        assert_eq!(opts.get_option::<FooOptions>().unwrap().value, 3);
+        assert_eq!(opts2.get_option::<FooOptions>().unwrap().value, 99);
+    }
+
+    #[test]
+    fn debug_shows_entry_count() {
+        let opts = CodecSpecificOptions::default()
+            .with_option(FooOptions::default())
+            .with_option(BarOptions::default());
+        let s = format!("{opts:?}");
+        assert!(s.contains("2 entries"), "got: {s}");
+    }
+}
