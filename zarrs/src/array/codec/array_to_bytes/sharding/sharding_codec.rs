@@ -582,6 +582,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             &self.index_codecs,
             self.index_location,
             options,
+            self.options.clone(),
         )?))
     }
 
@@ -605,6 +606,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 &self.index_codecs,
                 self.index_location,
                 options,
+                self.options.clone(),
             )
             .await?,
         ))
@@ -629,6 +631,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.index_codecs.clone(),
                 self.index_location,
                 options,
+                self.options.clone(),
             )?,
         ))
     }

@@ -5,14 +5,14 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-/// Codec-specific options, keyed by type.
+/// Codec-specific options.
 ///
-/// This is a type map for codec-specific runtime configuration that is applied once at
-/// array creation or opening time and baked into the codec's state.
-/// It is separate from [`CodecOptions`](super::CodecOptions), which carries per-operation settings.
+/// This is a type map for codec-specific runtime configuration that is set once and baked into
+/// a codec's state (e.g. when opening or creating an array).
+/// It is distinct from [`CodecOptions`](super::CodecOptions), which carries per-operation settings passed at each encode/decode call.
 ///
-/// Each codec defines its own options type and retrieves it via [`CodecSpecificOptions::get_option`].
-/// `zarrs_codec` itself has no knowledge of any specific codec type.
+/// Codecs may define their own options type (e.g. `ShardingCodecOptions`) and retrieve it via [`get_option`](CodecSpecificOptions::get_option).
+/// `zarrs_codec` itself has no knowledge of any specific codec options type.
 ///
 /// # Example
 /// ```rust

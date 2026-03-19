@@ -1,19 +1,6 @@
 //! Runtime options for the sharding codec.
 
 /// Runtime options for the [`ShardingCodec`](super::ShardingCodec).
-///
-/// Set these via [`CodecSpecificOptions`](zarrs_codec::CodecSpecificOptions) when opening or
-/// creating an array:
-///
-/// ```rust,ignore
-/// use zarrs::array::codec::ShardingCodecOptions;
-/// use zarrs_codec::CodecSpecificOptions;
-///
-/// let opts = CodecSpecificOptions::default()
-///     .with_option(ShardingCodecOptions::default());
-///
-/// array.set_codec_specific_options(&opts);
-/// ```
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ShardingCodecOptions {

@@ -7,7 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ArraySubset;
 use zarrs_data_type::FillValue;
 
-use super::{ShardingIndexLocation, calculate_chunks_per_shard};
+use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
@@ -34,6 +34,8 @@ pub(crate) struct ShardingPartialDecoder {
     subchunk_shape: ChunkShape,
     inner_codecs: Arc<CodecChain>,
     shard_index: Option<Vec<u64>>,
+    #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
+    sharding_options: ShardingCodecOptions,
 }
 
 impl ShardingPartialDecoder {
@@ -49,6 +51,7 @@ impl ShardingPartialDecoder {
         index_codecs: &CodecChain,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
+        sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
         let shard_index = super::decode_shard_index_partial_decoder(
             &*input_handle,
@@ -67,6 +70,7 @@ impl ShardingPartialDecoder {
             subchunk_shape,
             inner_codecs,
             shard_index,
+            sharding_options,
         })
     }
 
