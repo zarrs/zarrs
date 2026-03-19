@@ -1162,7 +1162,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ///
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
-    #[expect(unused)]
+    #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
@@ -1390,7 +1390,7 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ///
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
-    #[expect(unused)]
+    #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
@@ -1601,7 +1601,7 @@ pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     ///
     /// The default implementation returns the codec unchanged.
     /// Override this to read your codec's options type from [`CodecSpecificOptions`].
-    #[expect(unused)]
+    #[expect(unused_variables)]
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
