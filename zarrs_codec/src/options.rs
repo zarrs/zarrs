@@ -38,7 +38,7 @@ impl Default for CodecOptions {
 pub enum SubchunkWriteOrder {
     /// Random order
     Random,
-    /// C order i.e., rowm-major
+    /// C order i.e., row-major
     C,
     // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
 }
