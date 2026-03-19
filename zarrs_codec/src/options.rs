@@ -34,6 +34,7 @@ impl Default for CodecOptions {
 
 /// Write order for subchunks within a shard
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum SubchunkWriteOrder {
     /// Random order
     Random,
