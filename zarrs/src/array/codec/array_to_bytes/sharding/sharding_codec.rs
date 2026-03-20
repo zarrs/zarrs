@@ -11,9 +11,9 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
-    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
-    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_shape, sharding_partial_encoder,
+    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
+    ShardingIndexLocation, calculate_chunks_per_shard, compute_index_encoded_size,
+    decode_shard_index, sharding_index_shape, sharding_partial_encoder,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
@@ -25,8 +25,9 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -44,6 +45,8 @@ pub struct ShardingCodec {
     pub(crate) index_codecs: Arc<CodecChain>,
     /// Specifies whether the shard index is located at the beginning or end of the file.
     pub(crate) index_location: ShardingIndexLocation,
+    /// Runtime options applied at array creation/opening time.
+    pub(crate) options: ShardingCodecOptions,
 }
 
 impl ShardingCodec {
@@ -60,6 +63,7 @@ impl ShardingCodec {
             inner_codecs,
             index_codecs,
             index_location,
+            options: ShardingCodecOptions::default(),
         }
     }
 
@@ -147,6 +151,19 @@ impl ArrayCodecTraits for ShardingCodec {
 impl ArrayToBytesCodecTraits for ShardingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
+            let mut codec = self;
+            Arc::make_mut(&mut codec).options = sharding_opts.clone();
+            codec
+        } else {
+            self.into_dyn()
+        }
     }
 
     fn encode<'a>(
@@ -565,6 +582,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             &self.index_codecs,
             self.index_location,
             options,
+            self.options.clone(),
         )?))
     }
 
@@ -588,6 +606,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 &self.index_codecs,
                 self.index_location,
                 options,
+                self.options.clone(),
             )
             .await?,
         ))
@@ -612,6 +631,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.index_codecs.clone(),
                 self.index_location,
                 options,
+                self.options.clone(),
             )?,
         ))
     }

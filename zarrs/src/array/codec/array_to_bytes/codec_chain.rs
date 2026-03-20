@@ -154,6 +154,26 @@ impl CodecChain {
         )
     }
 
+    /// Return a new codec chain with each codec reconfigured using `opts`.
+    ///
+    /// Each codec in the chain is given the opportunity to read its own options type
+    /// from `opts` and return a new instance. Codecs that do not recognise any option
+    /// in `opts` are returned unchanged (default behaviour).
+    #[must_use]
+    pub fn with_codec_specific_options(self, opts: &zarrs_codec::CodecSpecificOptions) -> Self {
+        Self::new(
+            self.array_to_array
+                .into_iter()
+                .map(|c| c.with_codec_specific_options(opts))
+                .collect(),
+            self.array_to_bytes.with_codec_specific_options(opts),
+            self.bytes_to_bytes
+                .into_iter()
+                .map(|c| c.with_codec_specific_options(opts))
+                .collect(),
+        )
+    }
+
     /// Create codec chain metadata.
     ///
     /// # Panics

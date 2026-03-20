@@ -54,6 +54,7 @@
 
 mod sharding_codec;
 mod sharding_codec_builder;
+mod sharding_options;
 #[cfg(feature = "async")]
 mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
@@ -70,6 +71,7 @@ use crate::array::{
 };
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
+pub use sharding_options::ShardingCodecOptions;
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;

@@ -7,7 +7,9 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
+mod codec_specific_options;
 mod options;
+pub use codec_specific_options::CodecSpecificOptions;
 
 mod codec_partial_default;
 pub use codec_partial_default::CodecPartialDefault;
@@ -1156,6 +1158,18 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits>;
 
+    /// Return a version of this codec reconfigured with the provided codec-specific options.
+    ///
+    /// The default implementation returns the codec unchanged.
+    /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    #[expect(unused_variables)]
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToArrayCodecTraits> {
+        self.into_dyn()
+    }
+
     /// Returns the encoded data type for a given decoded data type.
     ///
     /// # Errors
@@ -1372,6 +1386,18 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits>;
 
+    /// Return a version of this codec reconfigured with the provided codec-specific options.
+    ///
+    /// The default implementation returns the codec unchanged.
+    /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    #[expect(unused_variables)]
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self.into_dyn()
+    }
+
     /// Returns the size of the encoded representation given a size of the decoded representation.
     ///
     /// # Errors
@@ -1570,6 +1596,18 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 pub trait BytesToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// Return a dynamic version of the codec.
     fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits>;
+
+    /// Return a version of this codec reconfigured with the provided codec-specific options.
+    ///
+    /// The default implementation returns the codec unchanged.
+    /// Override this to read your codec's options type from [`CodecSpecificOptions`].
+    #[expect(unused_variables)]
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Arc<dyn BytesToBytesCodecTraits> {
+        self.into_dyn()
+    }
 
     /// Return the maximum internal concurrency supported for the requested decoded representation.
     ///
