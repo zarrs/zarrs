@@ -393,6 +393,7 @@ fn coalesce_chunks(
 }
 
 #[expect(clippy::too_many_arguments)]
+#[expect(clippy::too_many_lines)]
 fn partial_decode_fixed_array_subset_into(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     data_type: &DataType,
@@ -419,7 +420,7 @@ fn partial_decode_fixed_array_subset_into(
     };
     let chunks_per_shard =
         calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
-    let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
+    let (_subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
         inner_codecs,
         data_type,
         subchunk_shape,
@@ -432,7 +433,6 @@ fn partial_decode_fixed_array_subset_into(
     )
     .map_err(Into::<IncompatibleDimensionalityError>::into)?;
 
-    let array_subset_shape = array_subset.shape();
     let subchunk_shape_u64: &[u64] = bytemuck::must_cast_slice(subchunk_shape);
 
     // Phase 1: Collect 1-D chunk indices for all inner chunks overlapping the subset.
