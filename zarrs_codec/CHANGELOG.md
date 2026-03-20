@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `CodecSpecificOptions` for codec-specific runtime configuration
+- Add `with_codec_specific_options` default method to `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, and `BytesToBytesCodecTraits`
+
 ## [0.2.0] - 2026-02-02
 
 ### Added

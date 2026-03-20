@@ -175,6 +175,7 @@ impl AsyncArrayShardedReadableExtCache {
                     &sharding_codec.index_codecs,
                     sharding_codec.index_location,
                     &array.codec_options,
+                    sharding_codec.options.clone(),
                 )
                 .await?,
             ));

@@ -68,9 +68,9 @@ pub use zarrs_codec::{
     ArrayBytesVariableLength, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
-    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency, StoragePartialDecoder,
-    copy_fill_value_into, update_array_bytes,
+    BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
+    StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -185,9 +185,14 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`store_array_subset`](Array::store_array_subset)
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
-/// Many `retrieve` and `store` methods have a standard and an `_opt` variant.
-/// The latter has an additional [`CodecOptions`] parameter for fine-grained concurrency control and more.
+/// `async_` prefix variants can be used with async stores (requires `async` feature).
 ///
+/// Additional [`Array`] methods are offered by extension traits:
+///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
+///
+/// [`ChunkCache`](chunk_cache::ChunkCache) implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
+///
+/// ### Store/Retrieve Element Representations
 /// Array `retrieve_*` methods are generic over the return type.
 /// For example, the following variants are available for retrieving chunks or array subsets:
 /// - Raw bytes variants: [`ArrayBytes`]
@@ -197,12 +202,28 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///
 /// Similarly, array `store_*` methods are generic over the input type.
 ///
-/// `async_` prefix variants can be used with async stores (requires `async` feature).
+/// ### Codec Options
+/// Many `retrieve` and `store` methods have a standard and an `_opt` variant.
+/// The latter has an additional [`CodecOptions`] parameter for fine-grained concurrency control and more.
+/// Codec-specific options (e.g. [`ShardingCodecOptions`](codec::array_to_bytes::sharding::ShardingCodecOptions)) are set via [`CodecSpecificOptions`] and set at the array level with [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
 ///
-/// Additional [`Array`] methods are offered by extension traits:
-///  - [`ArrayShardedExt`] and [`ArrayShardedReadableExt`]: see [Reading Sharded Arrays](#reading-sharded-arrays).
+/// - **[`CodecOptions`]** — per-operation settings passed at each encode/decode call.
+///   Controls things like concurrency limits, checksum validation, and partial encoding.
+///   Use the `_opt` method variants to supply a non-default [`CodecOptions`].
 ///
-/// [`ChunkCache`](chunk_cache::ChunkCache) implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
+/// - **[`CodecSpecificOptions`]** — codec-specific configuration set once and baked into the codec's state.
+///   Used to pass options that are specific to a particular codec, such as [`ShardingCodecOptions`](codec::ShardingCodecOptions).
+///   Apply these via [`with_codec_specific_options`](Array::with_codec_specific_options) or [`set_codec_specific_options`](Array::set_codec_specific_options).
+///
+///   ```rust,ignore
+///   use zarrs::array::{CodecSpecificOptions, codec::ShardingCodecOptions};
+///   
+///   let opts = CodecSpecificOptions::default().with_option(
+///     ShardingCodecOptions::default().with_some_option(...)
+///   );
+///   
+///   array.set_codec_specific_options(&opts);
+///   ```
 ///
 /// ### Chunks and Array Subsets
 /// Several convenience methods are available for querying the underlying chunk grid:
@@ -609,6 +630,53 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// Set the codec options.
     pub fn set_codec_options(&mut self, codec_options: CodecOptions) -> &mut Self {
         self.codec_options = codec_options;
+        self
+    }
+
+    /// Reconfigure the codec chain with codec-specific options and return the updated array.
+    ///
+    /// Each codec in the chain may read its own options type from `opts` and return a
+    /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
+    /// This replaces the array's codec chain with the reconfigured version.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use zarrs::array::Array;
+    /// use zarrs::array::codec::ShardingCodecOptions;
+    /// use zarrs_codec::CodecSpecificOptions;
+    /// # let store = Arc::new(zarrs::storage::store::MemoryStore::new());
+    /// # let array = Array::open(store, "/group/array")?;
+    /// let opts = CodecSpecificOptions::default()
+    ///     .with_option(ShardingCodecOptions::default());
+    /// let array = array.with_codec_specific_options(&opts);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn with_codec_specific_options(mut self, opts: &CodecSpecificOptions) -> Self {
+        self.codecs = Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts));
+        self
+    }
+
+    /// Reconfigure the codec chain with codec-specific options.
+    ///
+    /// Refer to [`with_codec_specific_options`](Array::with_codec_specific_options) for details.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use std::sync::Arc;
+    /// # use zarrs::array::Array;
+    /// use zarrs::array::codec::ShardingCodecOptions;
+    /// use zarrs_codec::CodecSpecificOptions;
+    /// # let store = Arc::new(zarrs_filesystem::FilesystemStore::new("tests/data/array_write_read.zarr")?);
+    /// # let mut array = Array::open(store, "/group/array")?;
+    /// let opts = CodecSpecificOptions::default()
+    ///     .with_option(ShardingCodecOptions::default());
+    /// array.set_codec_specific_options(&opts);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self {
+        self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts));
         self
     }
 

@@ -1,6 +1,9 @@
 //! Codec options for encoding and decoding.
 
-/// Codec options for encoding/decoding.
+/// Per-operation codec options for encoding and decoding.
+///
+/// These are passed at each encode/decode call and control runtime behaviour such as concurrency limits and checksum validation.
+/// They are distinct from [`CodecSpecificOptions`](super::CodecSpecificOptions), which carry codec-specific configuration.
 ///
 /// The default values are:
 /// - `validate_checksums`: `true`
