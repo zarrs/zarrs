@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Subchunks can now be written in C-major order via `CodecOptions.{set_,with_,}subchunk_write_order`
+- Subchunks can now be written in C-major order via `ShardingCodecOptions.{set_,with_,}subchunk_write_order`
 - Add `Array::with_codec_specific_options` and `Array::set_codec_specific_options` to reconfigure codec chains with `CodecSpecificOptions`
 - Add `ShardingCodecOptions` for runtime configuration of the sharding codec
 - Add `CodecChain::with_codec_specific_options`
