@@ -12,9 +12,9 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
-    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingIndexLocation,
-    calculate_chunks_per_shard, compute_index_encoded_size, decode_shard_index,
-    sharding_index_shape, sharding_partial_encoder,
+    CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
+    ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
+    compute_index_encoded_size, decode_shard_index, sharding_index_shape, sharding_partial_encoder,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
@@ -26,8 +26,9 @@ use crate::array::{
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
     ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency, SubchunkWriteOrder,
+    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -45,6 +46,8 @@ pub struct ShardingCodec {
     pub(crate) index_codecs: Arc<CodecChain>,
     /// Specifies whether the shard index is located at the beginning or end of the file.
     pub(crate) index_location: ShardingIndexLocation,
+    /// Runtime options applied at array creation/opening time.
+    pub(crate) options: ShardingCodecOptions,
 }
 
 impl ShardingCodec {
@@ -61,6 +64,7 @@ impl ShardingCodec {
             inner_codecs,
             index_codecs,
             index_location,
+            options: ShardingCodecOptions::default(),
         }
     }
 
@@ -148,6 +152,19 @@ impl ArrayCodecTraits for ShardingCodec {
 impl ArrayToBytesCodecTraits for ShardingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn with_codec_specific_options(
+        self: Arc<Self>,
+        opts: &CodecSpecificOptions,
+    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
+            let mut codec = self;
+            Arc::make_mut(&mut codec).options = sharding_opts.clone();
+            codec
+        } else {
+            self.into_dyn()
+        }
     }
 
     fn encode<'a>(
@@ -566,6 +583,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
             &self.index_codecs,
             self.index_location,
             options,
+            self.options.clone(),
         )?))
     }
 
@@ -589,6 +607,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 &self.index_codecs,
                 self.index_location,
                 options,
+                self.options.clone(),
             )
             .await?,
         ))
@@ -613,6 +632,7 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
                 self.index_codecs.clone(),
                 self.index_location,
                 options,
+                self.options.clone(),
             )?,
         ))
     }
@@ -784,7 +804,7 @@ impl ShardingCodec {
             .product::<usize>();
         let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
         // Encode the shards and update the shard index
-        let encoded_shard_offset = match options.subchunk_write_order() {
+        let encoded_shard_offset = match self.options.subchunk_write_order() {
             SubchunkWriteOrder::Random => {
                 let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                 let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
@@ -888,7 +908,6 @@ impl ShardingCodec {
                 );
                 Ok(total_offset)
             }
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         }?;
 
         // Truncate shard
@@ -964,14 +983,12 @@ impl ShardingCodec {
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = match options.subchunk_write_order() {
+        let iterator = match self.options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         };
         #[cfg(target_arch = "wasm32")]
-        let iterator = match options.subchunk_write_order() {
+        let iterator = match self.options.subchunk_write_order() {
             SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
-            _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
@@ -1009,7 +1026,7 @@ impl ShardingCodec {
 
         // Write shard and update shard index
         if !encoded_chunks.is_empty() {
-            match options.subchunk_write_order() {
+            match self.options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => {
                     let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                     let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
@@ -1065,7 +1082,6 @@ impl ShardingCodec {
                         }
                     );
                 }
-                _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
             }
         }
 

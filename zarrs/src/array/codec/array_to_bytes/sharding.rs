@@ -54,6 +54,7 @@
 
 mod sharding_codec;
 mod sharding_codec_builder;
+mod sharding_options;
 #[cfg(feature = "async")]
 mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
@@ -70,6 +71,7 @@ use crate::array::{
 };
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
+pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 #[cfg(feature = "async")]
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
@@ -290,7 +292,7 @@ mod tests {
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
     use zarrs_chunk_grid::Indexer;
-    use zarrs_codec::{BytesToBytesCodecTraits, SubchunkWriteOrder};
+    use zarrs_codec::{ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecSpecificOptions};
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {
@@ -360,6 +362,7 @@ mod tests {
         index_at_end: bool,
         fill_value_amount: &FillValueAmount,
         mut bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
+        subchunk_write_order: SubchunkWriteOrder,
     ) {
         const NUM_AXES: usize = 3;
         let chunk_size = 16;
@@ -405,7 +408,7 @@ mod tests {
         if unbounded {
             bytes_to_bytes_codecs.push(Arc::new(TestUnboundedCodec::new()));
         }
-        let codec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
+        let codec: ShardingCodec = ShardingCodecBuilder::new(subchunk_shape, &data_type::uint16())
             .index_location(if index_at_end {
                 ShardingIndexLocation::End
             } else {
@@ -414,7 +417,10 @@ mod tests {
             .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
             .build();
 
-        let encoded = codec
+        let encoded = Arc::new(codec.clone())
+            .with_codec_specific_options(&CodecSpecificOptions::default().with_option(
+                ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
+            ))
             .encode(
                 bytes.clone(),
                 &chunk_shape,
@@ -442,7 +448,7 @@ mod tests {
             )
             .unwrap();
         match fill_value_amount {
-            FillValueAmount::NoFill => match options.subchunk_write_order() {
+            FillValueAmount::NoFill => match codec.options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => (),
                 SubchunkWriteOrder::C => {
                     let mut offset_with_len = index.chunks(2).collect::<Vec<&[u64]>>();
@@ -457,9 +463,11 @@ mod tests {
                         index
                     );
                 }
-                _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
+                _ => {
+                    unreachable!("C and Random order are the only supported subchunk write orders")
+                }
             },
-            FillValueAmount::PartialFill => match options.subchunk_write_order() {
+            FillValueAmount::PartialFill => match codec.options.subchunk_write_order() {
                 SubchunkWriteOrder::Random => (),
                 SubchunkWriteOrder::C => {
                     // The sorted index with unwritten elements filtered matches that of the real index
@@ -481,7 +489,9 @@ mod tests {
                     // 2 times that for offset + len per chunk.
                     assert_eq!(filtered_index.len(), 6);
                 }
-                _ => unreachable!("C and Random order are the only supported subchunk wrie orders"),
+                _ => {
+                    unreachable!("C and Random order are the only supported subchunk write orders")
+                }
             },
             FillValueAmount::AllFill => assert_eq!(index, vec![u64::MAX; 8 * 8 * 8 * 2]),
         }
@@ -489,7 +499,7 @@ mod tests {
 
     #[test]
     fn codec_sharding_round_trip1() {
-        for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
             for index_at_end in [true, false] {
                 for fill_value_amount in [
                     FillValueAmount::AllFill,
@@ -499,15 +509,15 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options = CodecOptions::default()
-                                .with_concurrent_target(concurrent_target)
-                                .with_subchunk_write_order(write_subchunk_order);
+                            let options =
+                                CodecOptions::default().with_concurrent_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 unbounded,
                                 index_at_end,
                                 &fill_value_amount,
                                 vec![],
+                                subchunk_write_order,
                             );
                         }
                     }
@@ -521,7 +531,7 @@ mod tests {
     #[test]
     fn codec_sharding_round_trip2() {
         use crate::array::codec::{Crc32cCodec, GzipCodec};
-        for write_subchunk_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
             for index_at_end in [true, false] {
                 for fill_value_amount in [
                     FillValueAmount::AllFill,
@@ -531,9 +541,8 @@ mod tests {
                     for unbounded in [true, false] {
                         for parallel in [true, false] {
                             let concurrent_target = get_concurrent_target(parallel);
-                            let options = CodecOptions::default()
-                                .with_concurrent_target(concurrent_target)
-                                .with_subchunk_write_order(write_subchunk_order);
+                            let options =
+                                CodecOptions::default().with_concurrent_target(concurrent_target);
                             codec_sharding_round_trip_impl(
                                 &options,
                                 unbounded,
@@ -543,6 +552,7 @@ mod tests {
                                     Arc::new(GzipCodec::new(5).unwrap()),
                                     Arc::new(Crc32cCodec::new()),
                                 ],
+                                subchunk_write_order,
                             );
                         }
                     }

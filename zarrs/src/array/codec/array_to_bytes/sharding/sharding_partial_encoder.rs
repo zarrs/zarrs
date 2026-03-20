@@ -8,7 +8,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_data_type::FillValue;
 
-use super::{ShardingIndexLocation, sharding_index_shape};
+use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
@@ -36,6 +36,8 @@ pub(crate) struct ShardingPartialEncoder {
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
     shard_index: Arc<Mutex<Vec<u64>>>,
+    #[expect(dead_code)] // TODO: Remove when sharding-specific options are added
+    sharding_options: ShardingCodecOptions,
 }
 
 impl ShardingPartialEncoder {
@@ -51,6 +53,7 @@ impl ShardingPartialEncoder {
         index_codecs: Arc<CodecChain>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
+        sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
         let chunks_per_shard = calculate_chunks_per_shard(&shard_shape, &subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
@@ -87,6 +90,7 @@ impl ShardingPartialEncoder {
             index_location,
             index_shape,
             shard_index: Arc::new(Mutex::new(shard_index)),
+            sharding_options,
         })
     }
 }

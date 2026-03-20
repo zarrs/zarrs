@@ -154,6 +154,7 @@ impl ArrayShardedReadableExtCache {
                     &sharding_codec.index_codecs,
                     sharding_codec.index_location,
                     &CodecOptions::default(),
+                    sharding_codec.options.clone(),
                 )?));
             // // TODO: Trait upcasting
             // let partial_decoder = array
