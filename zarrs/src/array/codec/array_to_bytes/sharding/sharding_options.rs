@@ -4,7 +4,9 @@
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum SubchunkWriteOrder {
-    /// Random order
+    /// Random order.
+    /// This setting means that there is no order guarantee, and not that the order will be guranteed to be random.
+    /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
     Random,
     /// C order i.e., row-major
     C,
