@@ -984,9 +984,7 @@ impl ShardingCodec {
 
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::C => {
-                (0..n_chunks).into_par_iter()
-            }
+            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
         };
         #[cfg(target_arch = "wasm32")]
         let iterator = match self.options.subchunk_write_order() {
