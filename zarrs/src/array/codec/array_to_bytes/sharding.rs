@@ -447,7 +447,7 @@ mod tests {
             .unwrap();
         match fill_value_amount {
             FillValueAmount::None => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Random => (),
+                SubchunkWriteOrder::NoGuarantee => (),
                 SubchunkWriteOrder::C => {
                     let mut offset_with_len = index.chunks(2).collect::<Vec<&[u64]>>();
                     offset_with_len.sort_by_key(|x| x[0]);
@@ -462,7 +462,7 @@ mod tests {
                 }
             },
             FillValueAmount::Partial => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Random => (),
+                SubchunkWriteOrder::NoGuarantee => (),
                 SubchunkWriteOrder::C => {
                     // The sorted index with unwritten elements filtered matches that of the real index
                     let filtered_index = index
@@ -489,7 +489,7 @@ mod tests {
 
     #[test]
     fn codec_sharding_round_trip1() {
-        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::NoGuarantee] {
             for index_at_end in [true, false] {
                 for fill_value_amount in [
                     FillValueAmount::All,
@@ -521,7 +521,7 @@ mod tests {
     #[test]
     fn codec_sharding_round_trip2() {
         use crate::array::codec::{Crc32cCodec, GzipCodec};
-        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::Random] {
+        for subchunk_write_order in [SubchunkWriteOrder::C, SubchunkWriteOrder::NoGuarantee] {
             for index_at_end in [true, false] {
                 for fill_value_amount in [
                     FillValueAmount::All,
