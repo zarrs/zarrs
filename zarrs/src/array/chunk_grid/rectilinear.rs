@@ -8,7 +8,7 @@
 //! None
 //!
 //! # Specification
-//! - <https://github.com/d-v-b/zarr-extensions/tree/main/chunk-grids/rectilinear>
+//! - <https://github.com/zarr-developers/zarr-extensions/tree/main/chunk-grids/rectilinear>
 //!
 //! # Chunk Grid `name` Aliases (Zarr V3)
 //! - `rectilinear`
