@@ -179,7 +179,7 @@ impl RectilinearChunkGrid {
                 }
                 RectilinearChunkGridDimension::Varying(chunks) => {
                     let last = chunks.last()?;
-                    if *array_size == last.offset + last.size.get() {
+                    if last.offset + last.size.get() >= *array_size {
                         Some(chunks.len() as u64)
                     } else {
                         None
@@ -456,6 +456,46 @@ mod tests {
         assert!(RectilinearChunkGrid::new(vec![100; 3], &chunk_shapes).is_err()); // incompatible dimensionality
         assert!(RectilinearChunkGrid::new(vec![123, 100], &chunk_shapes).is_err());
         // incompatible chunk sizes
+    }
+
+    #[test]
+    fn chunk_grid_rectilinear_overflow() {
+        // The spec says the sum of edge lengths must equal or exceed the array size.
+        // Overflowing by multiple chunks is permitted.
+        // E.g. shape=6, chunk_shapes=[[4, 4, 4]] -> sum=12 > 6, must be accepted.
+        let array_shape: ArrayShape = vec![6, 6];
+        let chunk_shapes: Vec<ChunkEdgeLengths> = vec![
+            ChunkEdgeLengths::Varying(from_slice_u64(&[4, 4, 4]).unwrap()),
+            ChunkEdgeLengths::Varying(from_slice_u64(&[3, 3, 3]).unwrap()),
+        ];
+        let chunk_grid = RectilinearChunkGrid::new(array_shape, &chunk_shapes).unwrap();
+
+        // Grid shape reflects the number of explicit chunks, not ceil(L/chunk)
+        assert_eq!(chunk_grid.grid_shape(), &[3, 3]);
+
+        // In-bounds array index resolves to a chunk
+        assert_eq!(
+            chunk_grid.chunk_indices(&[5, 5]).unwrap(),
+            Some(vec![1, 1])
+        );
+
+        // array_indices_inbounds respects array shape, not chunk extent
+        assert!(chunk_grid.array_indices_inbounds(&[5, 5]));
+        assert!(!chunk_grid.array_indices_inbounds(&[6, 0]));
+
+        // Exact-match still works
+        let exact_shapes: Vec<ChunkEdgeLengths> = vec![
+            ChunkEdgeLengths::Varying(from_slice_u64(&[3, 3]).unwrap()),
+            ChunkEdgeLengths::Varying(from_slice_u64(&[3, 3]).unwrap()),
+        ];
+        assert!(RectilinearChunkGrid::new(vec![6, 6], &exact_shapes).is_ok());
+
+        // Sum strictly less than L must be rejected
+        let short_shapes: Vec<ChunkEdgeLengths> = vec![
+            ChunkEdgeLengths::Varying(from_slice_u64(&[2, 2]).unwrap()),
+            ChunkEdgeLengths::Varying(from_slice_u64(&[3, 3]).unwrap()),
+        ];
+        assert!(RectilinearChunkGrid::new(vec![6, 6], &short_shapes).is_err());
     }
 
     #[test]
