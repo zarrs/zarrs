@@ -1,8 +1,5 @@
 //! The `rectilinear` chunk grid.
 //!
-//! <div class="warning">
-//! This chunk grid is experimental and may be incompatible with other Zarr V3 implementations.
-//! </div>
 //!
 //! # Compatible Implementations
 //! None
@@ -226,7 +223,6 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
         metadata: &MetadataV3,
         array_shape: &ArrayShape,
     ) -> Result<ChunkGrid, PluginCreateError> {
-        crate::warn_experimental_extension(metadata.name(), "chunk grid");
         let configuration: RectilinearChunkGridConfiguration = metadata.to_typed_configuration()?;
         let chunk_shapes = match &configuration {
             RectilinearChunkGridConfiguration::Inline { chunk_shapes } => chunk_shapes.clone(),

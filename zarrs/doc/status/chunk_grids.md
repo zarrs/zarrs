@@ -1,7 +1,7 @@
 | Chunk Grid                   | ZEP               | V3      | V2      | Feature Flag |
 | ---------------------------- | ----------------- | ------- | ------- | ------------ |
 | [`regular`]                  | [ZEP0001]         | &check; | &check; |              |
-| 🚧[`rectilinear`]            |                   | &check; | &check; |              |
+| [`rectilinear`]              |                   | &check; |         |              |
 | 🚧~~[`rectangular`]~~        | [ZEP0003] (draft) | &check; |         |              |
 | 🚧[`zarrs.regular_bounded`]  |                   | &check; |         |              |
 
