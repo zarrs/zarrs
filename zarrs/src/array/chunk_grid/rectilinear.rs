@@ -70,45 +70,21 @@ use itertools::Itertools;
 use std::num::NonZeroU64;
 use thiserror::Error;
 
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectilinear::{
     ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement,
 };
-use zarrs_registry::chunk_grid::RECTILINEAR;
 
-use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
-use crate::array_subset::IncompatibleDimensionalityError;
-use crate::metadata::v3::MetadataV3;
-use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
+use zarrs_plugin::PluginCreateError;
+
+zarrs_plugin::impl_extension_aliases!(RectilinearChunkGrid, v3: "rectilinear");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RECTILINEAR, is_name_rectilinear, create_chunk_grid_rectilinear)
-}
-
-fn is_name_rectilinear(name: &str) -> bool {
-    name.eq(RECTILINEAR)
-}
-
-/// Create a `rectilinear` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
-pub(crate) fn create_chunk_grid_rectilinear(
-    metadata_and_array_shape: &(MetadataV3, ArrayShape),
-) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata_and_array_shape.0.name(), "chunk grid");
-    let (metadata, array_shape) = metadata_and_array_shape;
-    let configuration: RectilinearChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(RECTILINEAR, "chunk grid", metadata.to_string())
-        })?;
-    let chunk_shape = match &configuration {
-        RectilinearChunkGridConfiguration::Inline { chunk_shapes } => chunk_shapes,
-    };
-    let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), chunk_shape)
-        .map_err(|err| PluginCreateError::Other(err.to_string()))?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RectilinearChunkGrid>()
 }
 
 /// A `rectilinear` chunk grid.
@@ -246,7 +222,21 @@ fn compress_run_length(sizes: &[NonZeroU64]) -> Vec<RunLengthElement> {
 }
 
 unsafe impl ChunkGridTraits for RectilinearChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk grid");
+        let configuration: RectilinearChunkGridConfiguration = metadata.to_typed_configuration()?;
+        let chunk_shapes = match &configuration {
+            RectilinearChunkGridConfiguration::Inline { chunk_shapes } => chunk_shapes.clone(),
+        };
+        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes)
+            .map_err(|err| PluginCreateError::Other(err.to_string()))?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
+    fn configuration(&self) -> Configuration {
         let chunk_shapes = self
             .chunks
             .iter()
@@ -258,20 +248,18 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                 }
             })
             .collect();
-        let configuration = RectilinearChunkGridConfiguration::Inline { chunk_shapes };
-        MetadataV3::new_with_serializable_configuration(RECTILINEAR.to_string(), &configuration)
-            .unwrap()
+        RectilinearChunkGridConfiguration::Inline { chunk_shapes }.into()
     }
 
     fn dimensionality(&self) -> usize {
         self.chunks.len()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         &self.array_shape
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
     }
 
@@ -298,8 +286,7 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
                     }
                 }
             })
-            .collect::<Option<Vec<_>>>()
-            .map(std::convert::Into::into))
+            .collect::<Option<Vec<_>>>())
     }
 
     fn chunk_shape_u64(
@@ -435,7 +422,7 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
 
 #[cfg(test)]
 mod tests {
-    use crate::array_subset::ArraySubset;
+    use crate::array::ArraySubset;
 
     use super::*;
 
@@ -467,9 +454,7 @@ mod tests {
         );
 
         assert_eq!(
-            chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..5, 2..6]))
-                .unwrap(),
+            chunk_grid.chunks_subset(&[1..5, 2..6]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[5..45, 20..60]))
         );
         assert!(RectilinearChunkGrid::new(vec![100; 3], &chunk_shapes).is_err()); // incompatible dimensionality
@@ -531,7 +516,7 @@ mod tests {
         // The RLE [[5, 3], [15, 2], 20, 35] should expand to [5, 5, 5, 15, 15, 20, 35]
         // Total = 5+5+5+15+15+20+35 = 100
         let array_shape: ArrayShape = vec![100, 100];
-        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+        let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), chunk_shapes).unwrap();
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
 
@@ -557,9 +542,9 @@ mod tests {
         ];
         let chunk_grid = RectilinearChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
-        // Get the metadata
-        let metadata = chunk_grid.create_metadata();
-        let config: RectilinearChunkGridConfiguration = metadata.to_configuration().unwrap();
+        // Get the configuration
+        let config: RectilinearChunkGridConfiguration =
+            chunk_grid.configuration().to_typed().unwrap();
 
         // Verify the metadata is run-length encoded
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = config;
@@ -626,7 +611,10 @@ mod tests {
         // Test chunk shape for unlimited dimension
         assert_eq!(
             chunk_grid.chunk_shape(&[6, 100]).unwrap(),
-            Some(vec![NonZeroU64::new(35).unwrap(), NonZeroU64::new(10).unwrap()].into())
+            Some(vec![
+                NonZeroU64::new(35).unwrap(),
+                NonZeroU64::new(10).unwrap()
+            ])
         );
     }
 
@@ -657,11 +645,17 @@ mod tests {
         // Test chunk shape for scalar chunks (all chunks same size)
         assert_eq!(
             chunk_grid.chunk_shape(&[0, 0]).unwrap(),
-            Some(vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(20).unwrap()].into())
+            Some(vec![
+                NonZeroU64::new(10).unwrap(),
+                NonZeroU64::new(20).unwrap()
+            ])
         );
         assert_eq!(
             chunk_grid.chunk_shape(&[9, 4]).unwrap(),
-            Some(vec![NonZeroU64::new(10).unwrap(), NonZeroU64::new(20).unwrap()].into())
+            Some(vec![
+                NonZeroU64::new(10).unwrap(),
+                NonZeroU64::new(20).unwrap()
+            ])
         );
 
         // Test chunk element indices
@@ -702,8 +696,8 @@ mod tests {
         let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
 
         // Serialize and deserialize
-        let metadata = chunk_grid.create_metadata();
-        let config: RectilinearChunkGridConfiguration = metadata.to_configuration().unwrap();
+        let config: RectilinearChunkGridConfiguration =
+            chunk_grid.configuration().to_typed().unwrap();
         let RectilinearChunkGridConfiguration::Inline { chunk_shapes } = &config;
 
         // Round-trip: verify scalar is preserved and grid is identical
@@ -728,7 +722,7 @@ mod tests {
         let chunk_grid = RectilinearChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
 
         // Test from_metadata
-        let metadata = chunk_grid.create_metadata();
+        let metadata = ChunkGrid::new(chunk_grid.clone()).metadata();
         let reconstructed_grid = ChunkGrid::from_metadata(&metadata, &array_shape)
             .expect("Failed to create chunk grid from metadata");
 

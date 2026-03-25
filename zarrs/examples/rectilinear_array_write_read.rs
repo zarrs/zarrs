@@ -135,17 +135,17 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Read the whole array
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
+    let data_all: ndarray::ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a chunk back from the store
     let chunk_indices = vec![1, 0];
-    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
+    let data_chunk: ndarray::ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2: ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
+    let data_4x2: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     // Show the hierarchy
