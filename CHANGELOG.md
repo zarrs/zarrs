@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.8] - 2026-03-26
+
+### Added
+- Add `rectilinear` chunk grid
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.2
+
 ## [0.23.7] - 2026-03-21
 
 ### Added
