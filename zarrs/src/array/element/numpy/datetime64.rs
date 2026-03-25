@@ -1,21 +1,23 @@
 #![allow(unused_imports)]
 
+use crate::array::data_type::NumpyDateTime64DataType;
 use crate::array::{
-    convert_from_bytes_slice, ArrayBytes, ArrayError, DataType, Element, ElementOwned,
+    ArrayBytes, DataType, Element, ElementError, ElementOwned, convert_from_bytes_slice,
 };
 
 #[cfg(feature = "chrono")]
 impl Element for chrono::DateTime<chrono::Utc> {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         use chrono::DateTime;
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
-            return Err(ArrayError::IncompatibleElementType);
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
+            return Err(ElementError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
         let scale_factor = i64::from(scale_factor.get());
         for element in elements {
@@ -25,11 +27,11 @@ impl Element for chrono::DateTime<chrono::Utc> {
                 let value = super::chrono_timedelta_to_int(
                     // why is this API self?
                     (*element).signed_duration_since(DateTime::UNIX_EPOCH),
-                    *unit,
+                    unit,
                     scale_factor,
                 )
                 .ok_or_else(|| {
-                    ArrayError::Other("unsupported chrono::DateTime unit or offset".to_string())
+                    ElementError::Other("unsupported chrono::DateTime unit or offset".to_string())
                 })?;
                 bytes.extend_from_slice(&value.to_ne_bytes());
             }
@@ -37,17 +39,18 @@ impl Element for chrono::DateTime<chrono::Utc> {
         Ok(bytes.into())
     }
 
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if matches!(
-            data_type,
-            DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _
-            }
-        ) {
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ElementError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        if data_type.is::<NumpyDateTime64DataType>() {
             Ok(())
         } else {
-            Err(ArrayError::IncompatibleElementType)
+            Err(ElementError::IncompatibleElementType)
         }
     }
 }
@@ -57,12 +60,13 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         use chrono::{DateTime, NaiveDateTime};
 
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
-            return Err(ArrayError::IncompatibleElementType);
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
+            return Err(ElementError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
 
         let bytes = bytes.into_fixed()?;
         let elements = convert_from_bytes_slice::<i64>(&bytes);
@@ -74,9 +78,9 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
                 if i == i64::MIN {
                     Ok(Self::MIN_UTC)
                 } else {
-                    let timedelta = super::int_to_chrono_timedelta(i, *unit, scale_factor)
+                    let timedelta = super::int_to_chrono_timedelta(i, unit, scale_factor)
                         .ok_or_else(|| {
-                            ArrayError::Other(
+                            ElementError::Other(
                                 "unsupported chrono::DateTime unit or offset".to_string(),
                             )
                         })?;
@@ -84,7 +88,7 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
                     Ok(Self::default() + timedelta)
                 }
             })
-            .collect::<Result<Vec<_>, ArrayError>>()?;
+            .collect::<Result<Vec<_>, ElementError>>()?;
 
         Ok(datetimes)
     }
@@ -92,18 +96,19 @@ impl ElementOwned for chrono::DateTime<chrono::Utc> {
 
 #[cfg(feature = "jiff")]
 impl Element for jiff::Timestamp {
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<ArrayBytes<'a>, ArrayError> {
+    ) -> Result<ArrayBytes<'a>, ElementError> {
         use jiff::{Span, Timestamp, Unit};
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
-            return Err(ArrayError::IncompatibleElementType);
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
+            return Err(ElementError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len() * size_of::<u64>());
-        let error = |e: jiff::Error| ArrayError::Other(e.to_string());
+        let error = |e: jiff::Error| ElementError::Other(e.to_string());
         let scale_factor = i64::from(scale_factor.get());
         for element in elements {
             if element == &Timestamp::MIN {
@@ -111,7 +116,7 @@ impl Element for jiff::Timestamp {
             } else {
                 let value = super::jiff_duration_to_int(
                     element.duration_since(Timestamp::UNIX_EPOCH),
-                    *unit,
+                    unit,
                     scale_factor,
                 )
                 .map_err(error)?;
@@ -121,17 +126,18 @@ impl Element for jiff::Timestamp {
         Ok(bytes.into())
     }
 
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        if matches!(
-            data_type,
-            DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _
-            }
-        ) {
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<ArrayBytes<'static>, ElementError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
+    }
+
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        if data_type.is::<NumpyDateTime64DataType>() {
             Ok(())
         } else {
-            Err(ArrayError::IncompatibleElementType)
+            Err(ElementError::IncompatibleElementType)
         }
     }
 }
@@ -141,13 +147,14 @@ impl ElementOwned for jiff::Timestamp {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         use jiff::{SignedDuration, Span, Timestamp};
 
         // Self::validate_data_type(data_type)?;
-        let DataType::NumpyDateTime64 { unit, scale_factor } = data_type else {
-            return Err(ArrayError::IncompatibleElementType);
+        let Some(dt) = data_type.downcast_ref::<NumpyDateTime64DataType>() else {
+            return Err(ElementError::IncompatibleElementType);
         };
+        let (unit, scale_factor) = (dt.unit, dt.scale_factor);
 
         let bytes = bytes.into_fixed()?;
         let elements = convert_from_bytes_slice::<i64>(&bytes);
@@ -158,11 +165,11 @@ impl ElementOwned for jiff::Timestamp {
                 if i == i64::MIN {
                     Ok(Timestamp::MIN)
                 } else {
-                    Timestamp::from_duration(super::int_to_jiff_duration(i, *unit, scale_factor)?)
+                    Timestamp::from_duration(super::int_to_jiff_duration(i, unit, scale_factor)?)
                 }
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| ArrayError::Other(e.to_string()))?;
+            .map_err(|e| ElementError::Other(e.to_string()))?;
         Ok(timestamps)
     }
 }

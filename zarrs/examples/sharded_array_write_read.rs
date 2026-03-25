@@ -1,26 +1,19 @@
 #![allow(missing_docs)]
 
 use itertools::Itertools;
-use zarrs::{
-    array::{bytes_to_ndarray, codec::CodecOptions},
-    storage::{
-        storage_adapter::usage_log::UsageLogStorageAdapter, ReadableWritableListableStorage,
-    },
-};
+use ndarray::ArrayD;
+use zarrs::array::bytes_to_ndarray;
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
+use zarrs_codec::CodecOptions;
 
 fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
-    use zarrs::{
-        array::{
-            codec::{self, array_to_bytes::sharding::ShardingCodecBuilder},
-            DataType,
-        },
-        array_subset::ArraySubset,
-        node::Node,
-        storage::store,
-    };
+    use std::sync::Arc;
 
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-    use std::sync::Arc;
+    use zarrs::array::{ArraySubset, codec, data_type};
+    use zarrs::node::Node;
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
@@ -30,17 +23,17 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/sharded_array_write_read.zarr")?,
     // );
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -58,21 +51,18 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an array
     let array_path = "/group/array";
-    let shard_shape = vec![4, 8];
-    let inner_chunk_shape = vec![4, 4];
-    let mut sharding_codec_builder =
-        ShardingCodecBuilder::new(inner_chunk_shape.as_slice().try_into()?);
-    sharding_codec_builder.bytes_to_bytes_codecs(vec![
-        #[cfg(feature = "gzip")]
-        Arc::new(codec::GzipCodec::new(5)?),
-    ]);
+    let subchunk_shape = vec![4, 4];
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
-        shard_shape,
-        DataType::UInt16,
+        vec![4, 8], // chunk (shard) shape
+        data_type::uint16(),
         0u16,
     )
-    .array_to_bytes_codec(Arc::new(sharding_codec_builder.build()))
+    .subchunk_shape(subchunk_shape.clone())
+    .bytes_to_bytes_codecs(vec![
+        #[cfg(feature = "gzip")]
+        Arc::new(codec::GzipCodec::new(5)?),
+    ])
     .dimension_names(["y", "x"].into())
     // .storage_transformers(vec![].into())
     .build(store.clone(), array_path)?;
@@ -105,7 +95,7 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
                         + ij[1] as u64) as u16
                 },
             );
-            array.store_chunk_ndarray(&chunk_indices, chunk_array)
+            array.store_chunk(&chunk_indices, chunk_array)
         } else {
             Err(zarrs::array::ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -114,39 +104,38 @@ fn sharded_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     // Read the whole array
-    let data_all = array.retrieve_array_subset_ndarray::<u16>(&array.subset_all())?;
+    let data_all: ArrayD<u16> = array.retrieve_array_subset(&array.subset_all())?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a shard back from the store
     let shard_indices = vec![1, 0];
-    let data_shard = array.retrieve_chunk_ndarray::<u16>(&shard_indices)?;
+    let data_shard: ArrayD<u16> = array.retrieve_chunk(&shard_indices)?;
     println!("Shard [1,0] is:\n{data_shard}\n");
 
-    // Read an inner chunk from the store
+    // Read a subchunk from the store
     let subset_chunk_1_0 = ArraySubset::new_with_ranges(&[4..8, 0..4]);
-    let data_chunk = array.retrieve_array_subset_ndarray::<u16>(&subset_chunk_1_0)?;
+    let data_chunk: ArrayD<u16> = array.retrieve_array_subset(&subset_chunk_1_0)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2 = array.retrieve_array_subset_ndarray::<u16>(&subset_4x2)?;
+    let data_4x2: ArrayD<u16> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
-    // Decode inner chunks
-    // In some cases, it might be preferable to decode inner chunks in a shard directly.
+    // Decode subchunks
+    // In some cases, it might be preferable to decode subchunks in a shard directly.
     // If using the partial decoder, then the shard index will only be read once from the store.
     let partial_decoder = array.partial_decoder(&[0, 0])?;
-    println!("Decoded inner chunks:");
-    for inner_chunk_subset in [
-        ArraySubset::new_with_start_shape(vec![0, 0], inner_chunk_shape.clone())?,
-        ArraySubset::new_with_start_shape(vec![0, 4], inner_chunk_shape.clone())?,
+    println!("Decoded subchunks:");
+    for subchunk_subset in [
+        ArraySubset::new_with_start_shape(vec![0, 0], subchunk_shape.clone())?,
+        ArraySubset::new_with_start_shape(vec![0, 4], subchunk_shape.clone())?,
     ] {
-        println!("{inner_chunk_subset}");
-        let decoded_inner_chunk_bytes =
-            partial_decoder.partial_decode(&inner_chunk_subset, &options)?;
+        println!("{subchunk_subset}");
+        let decoded_subchunk_bytes = partial_decoder.partial_decode(&subchunk_subset, &options)?;
         let ndarray = bytes_to_ndarray::<u16>(
-            &inner_chunk_shape,
-            decoded_inner_chunk_bytes.into_fixed()?.into_owned(),
+            &subchunk_shape,
+            decoded_subchunk_bytes.into_fixed()?.into_owned(),
         )?;
         println!("{ndarray}\n");
     }

@@ -55,99 +55,106 @@
 //! ```rust
 //! # let JSON = r#"
 //! {
-//!     "data_codecs": [
-//!             {
-//!                     "name": "bytes"
-//!             },
-//!             {
-//!                     "name": "blosc",
-//!                     "configuration": {
-//!                             "cname": "zstd",
-//!                             "clevel": 5,
-//!                             "shuffle": "bitshuffle",
-//!                             "typesize": 1,
-//!                             "blocksize": 0
-//!                     }
-//!             }
-//!     ],
-//!     "index_codecs": [
-//!             {
-//!                     "name": "bytes",
-//!                     "configuration": {
-//!                             "endian": "little"
-//!                     }
-//!             },
-//!             {
-//!                     "name": "blosc",
-//!                     "configuration": {
-//!                             "cname": "zstd",
-//!                             "clevel": 5,
-//!                             "shuffle": "shuffle",
-//!                             "typesize": 4,
-//!                             "blocksize": 0
-//!                     }
-//!             }
-//!     ],
-//!     "index_data_type": "uint32",
-//!     "index_location": "end"
+//!   "data_codecs": [
+//!     {
+//!       "name": "bytes"
+//!     },
+//!     {
+//!       "name": "blosc",
+//!       "configuration": {
+//!         "cname": "zstd",
+//!         "clevel": 5,
+//!         "shuffle": "bitshuffle",
+//!         "typesize": 1,
+//!         "blocksize": 0
+//!       }
+//!     }
+//!   ],
+//!   "index_codecs": [
+//!     {
+//!       "name": "bytes",
+//!       "configuration": {
+//!         "endian": "little"
+//!       }
+//!     },
+//!     {
+//!       "name": "blosc",
+//!       "configuration": {
+//!         "cname": "zstd",
+//!         "clevel": 5,
+//!         "shuffle": "shuffle",
+//!         "typesize": 4,
+//!         "blocksize": 0
+//!       }
+//!     }
+//!   ],
+//!   "index_data_type": "uint32",
+//!   "index_location": "end"
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::vlen::VlenCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::vlen::VlenCodecConfiguration;
 //! # let configuration: VlenCodecConfiguration = serde_json::from_str(JSON).unwrap();
 
 mod vlen_codec;
 mod vlen_partial_decoder;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
-use itertools::Itertools;
-use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
-
+use super::bytes::reverse_endianness;
 use crate::array::{
-    codec::{ArrayToBytesCodecTraits, CodecError, CodecOptions, InvalidBytesLengthError},
-    convert_from_bytes_slice, ChunkRepresentation, CodecChain, DataType, Endianness, RawBytes,
+    ArrayBytesRaw, ChunkShape, ChunkShapeTraits, CodecChain, Endianness, convert_from_bytes_slice,
+    data_type,
 };
+use itertools::Itertools;
+pub use vlen_codec::VlenCodec;
+use zarrs_codec::{
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
+    InvalidBytesLengthError,
+};
+use zarrs_data_type::FillValue;
+use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::vlen::{
     VlenCodecConfiguration, VlenCodecConfigurationV0, VlenCodecConfigurationV0_1,
 };
-use zarrs_registry::codec::VLEN;
+use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
+use zarrs_plugin::PluginCreateError;
 
-pub use vlen_codec::VlenCodec;
+zarrs_plugin::impl_extension_aliases!(VlenCodec,
+    v3: "zarrs.vlen", ["https://codec.zarrs.dev/array_to_bytes/vlen"]
+);
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
-
-use super::bytes::reverse_endianness;
-
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(VLEN, is_identifier_vlen, create_codec_vlen)
+    CodecPluginV3::new::<VlenCodec>()
 }
 
-fn is_identifier_vlen(identifier: &str) -> bool {
-    identifier == VLEN
-}
-
-pub(crate) fn create_codec_vlen(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: VlenCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(VLEN, "codec", metadata.to_string()))?;
-    let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV3 for VlenCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: VlenCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(VlenCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
 fn get_vlen_bytes_and_offsets(
-    index_chunk_representation: &ChunkRepresentation,
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
+    shape: &[NonZeroU64],
+    index_data_type: VlenIndexDataType,
     index_codecs: &CodecChain,
     data_codecs: &CodecChain,
     index_location: VlenIndexLocation,
     options: &CodecOptions,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
+    let index_shape = ChunkShape::from(vec![
+        NonZeroU64::try_from(shape.num_elements_u64() + 1).unwrap(),
+    ]);
+    let (data_type, fill_value) = match index_data_type {
+        VlenIndexDataType::UInt32 => (data_type::uint32(), FillValue::from(0u32)),
+        VlenIndexDataType::UInt64 => (data_type::uint64(), FillValue::from(0u64)),
+    };
+
     // Get the index length
     if bytes.len() < size_of::<u64>() {
         return Err(InvalidBytesLengthError::new(bytes.len(), size_of::<u64>()).into());
@@ -174,30 +181,26 @@ fn get_vlen_bytes_and_offsets(
 
     // Decode the index
     let mut index = index_codecs
-        .decode(index_enc.into(), index_chunk_representation, options)?
+        .decode(
+            index_enc.into(),
+            &index_shape,
+            &data_type,
+            &fill_value,
+            options,
+        )?
         .into_fixed()?;
     if Endianness::Big.is_native() {
-        reverse_endianness(index.to_mut(), &DataType::UInt64);
+        reverse_endianness(index.to_mut(), &data_type::uint64());
     }
-    #[allow(clippy::wildcard_enum_match_arm)]
-    let index = match index_chunk_representation.data_type() {
-        // DataType::UInt8 => {
-        //     let index = convert_from_bytes_slice::<u8>(&index);
-        //     offsets_u8_to_usize(index)
-        // }
-        // DataType::UInt16 => {
-        //     let index = convert_from_bytes_slice::<u16>(&index);
-        //     offsets_u16_to_usize(index)
-        // }
-        DataType::UInt32 => {
+    let index = match index_data_type {
+        VlenIndexDataType::UInt32 => {
             let index = convert_from_bytes_slice::<u32>(&index);
             offsets_u32_to_usize(index)
         }
-        DataType::UInt64 => {
+        VlenIndexDataType::UInt64 => {
             let index = convert_from_bytes_slice::<u64>(&index);
             offsets_u64_to_usize(index)
         }
-        _ => unreachable!("other data types are not part of VlenIndexDataType"),
     };
 
     // Get the data length
@@ -212,14 +215,9 @@ fn get_vlen_bytes_and_offsets(
         data_codecs
             .decode(
                 data_enc.into(),
-                &unsafe {
-                    // SAFETY: data type and fill value are compatible
-                    ChunkRepresentation::new_unchecked(
-                        vec![data_len_expected],
-                        DataType::UInt8,
-                        0u8,
-                    )
-                },
+                &[data_len_expected],
+                &data_type::uint8(),
+                &0u8.into(),
                 options,
             )?
             .into_fixed()?

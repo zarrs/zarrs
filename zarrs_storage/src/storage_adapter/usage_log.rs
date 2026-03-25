@@ -1,23 +1,20 @@
 //! A storage transformer which prints function calls.
 
-use std::{
-    io::Write,
-    sync::{Arc, Mutex},
-};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 use itertools::Itertools;
 
-use crate::{
-    byte_range::{ByteOffset, ByteRange, ByteRangeIterator},
-    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
-};
-
+use crate::byte_range::{ByteOffset, ByteRange, ByteRangeIterator};
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
+};
+use crate::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync,
+    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
+    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
 };
 
 /// This trait combines `Write`, `MaybeSend`, and `MaybeSync`
@@ -495,10 +492,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
 #[cfg(test)]
 mod tests {
-    use crate::{store::MemoryStore, store_test};
     use std::sync::{Arc, Mutex};
 
     use super::*;
+    use crate::store::MemoryStore;
+    use crate::store_test;
 
     #[test]
     fn usage_log() {
@@ -514,5 +512,6 @@ mod tests {
         store_test::store_write(&store).unwrap();
         store_test::store_read(&store).unwrap();
         store_test::store_list(&store).unwrap();
+        store_test::store_list_size(&store).unwrap();
     }
 }

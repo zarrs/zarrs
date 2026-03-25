@@ -1,9 +1,8 @@
 #![allow(missing_docs)]
 
-use std::env;
-use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::{env, fs};
 
 fn main() {
     let major_version = env::var("CARGO_PKG_VERSION_MAJOR").unwrap();

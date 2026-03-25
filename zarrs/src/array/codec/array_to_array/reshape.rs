@@ -16,7 +16,7 @@
 //! - `reshape`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `reshape`
+//! None
 //!
 //! ### Codec `configuration` Example - [`ReshapeCodecConfiguration`]:
 //! ```rust
@@ -25,28 +25,26 @@
 //!     "shape": [[0, 1], -1, [3], 10]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::reshape::ReshapeCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::reshape::ReshapeCodecConfiguration;
 //! # let configuration: ReshapeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
 mod reshape_codec;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use num::Integer;
-// use itertools::Itertools;
 pub use reshape_codec::ReshapeCodec;
-use zarrs_metadata::ChunkShape;
+use zarrs_metadata::v3::MetadataV3;
+
+// use itertools::Itertools;
+use crate::array::ChunkShape;
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeDim, ReshapeShape,
 };
-use zarrs_registry::codec::RESHAPE;
-
-use crate::{
-    array::codec::{Codec, CodecError, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use zarrs_plugin::PluginCreateError;
 
 fn get_encoded_shape(
     reshape_shape: &ReshapeShape,
@@ -85,46 +83,41 @@ fn get_encoded_shape(
         if rem == 0 {
             encoded_shape[fill_index] = NonZeroU64::new(quot).unwrap();
         } else {
-            return Err(CodecError::Other(
-                format!("reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."),
-            ));
+            return Err(CodecError::Other(format!(
+                "reshape codec no substitution for dim {fill_index} can satisfy decoded_shape {decoded_shape:?} == encoded_shape {encoded_shape:?}."
+            )));
         }
     } else if num_elements_input != num_elements_output {
-        return Err(CodecError::Other(
-                format!("reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."),
-            ));
+        return Err(CodecError::Other(format!(
+            "reshape codec encoded/decoded number of elements differ: decoded_shape {decoded_shape:?} ({num_elements_input}) encoded_shape {encoded_shape:?} ({num_elements_output})."
+        )));
     }
 
-    Ok(encoded_shape.into())
+    Ok(encoded_shape)
 }
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(ReshapeCodec, v3: "reshape");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(RESHAPE, is_identifier_reshape, create_codec_reshape)
+    CodecPluginV3::new::<ReshapeCodec>()
 }
 
-fn is_identifier_reshape(identifier: &str) -> bool {
-    identifier == RESHAPE
-}
-
-pub(crate) fn create_codec_reshape(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ReshapeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(RESHAPE, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for ReshapeCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ReshapeCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ReshapeCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
 
-    use crate::array::{
-        codec::{ArrayToArrayCodecTraits, CodecOptions},
-        ArrayBytes, ChunkRepresentation, DataType, FillValue,
-    };
-
     use super::*;
+    use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
 
     fn codec_reshape_round_trip_impl(
         json: &str,
@@ -132,34 +125,34 @@ mod tests {
         fill_value: FillValue,
         output_shape: Vec<NonZeroU64>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let chunk_representation = ChunkRepresentation::new(
-            vec![
-                NonZeroU64::new(5).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-            ],
-            data_type,
-            fill_value,
-        )?;
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let shape = vec![
+            NonZeroU64::new(5).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
+        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ReshapeCodecConfiguration = serde_json::from_str(json)?;
         let codec = ReshapeCodec::new_with_configuration(&configuration)?;
-        assert_eq!(
-            codec.encoded_shape(chunk_representation.shape())?,
-            output_shape.into()
-        );
+        assert_eq!(codec.encoded_shape(&shape)?, output_shape);
 
         let encoded = codec.encode(
             bytes.clone(),
-            &chunk_representation,
+            &shape,
+            &data_type,
+            &fill_value,
             &CodecOptions::default(),
         )?;
-        let decoded = codec.decode(encoded, &chunk_representation, &CodecOptions::default())?;
+        let decoded = codec.decode(
+            encoded,
+            &shape,
+            &data_type,
+            &fill_value,
+            &CodecOptions::default(),
+        )?;
         assert_eq!(bytes, decoded);
         Ok(())
     }
@@ -174,13 +167,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -193,13 +188,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -208,13 +205,15 @@ mod tests {
             "shape": [[0, 1, 2], 3]
         }"#;
         let output_shape = vec![NonZeroU64::new(80).unwrap(), NonZeroU64::new(3).unwrap()];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -227,13 +226,15 @@ mod tests {
             NonZeroU64::new(4).unwrap(),
             NonZeroU64::new(12).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -246,13 +247,15 @@ mod tests {
             NonZeroU64::new(16).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -266,13 +269,15 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_ok());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -286,13 +291,15 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_err());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -306,12 +313,14 @@ mod tests {
             NonZeroU64::new(2).unwrap(),
             NonZeroU64::new(3).unwrap(),
         ];
-        assert!(codec_reshape_round_trip_impl(
-            JSON,
-            DataType::UInt32,
-            FillValue::from(0u32),
-            output_shape
-        )
-        .is_err());
+        assert!(
+            codec_reshape_round_trip_impl(
+                JSON,
+                data_type::uint32(),
+                FillValue::from(0u32),
+                output_shape
+            )
+            .is_err()
+        );
     }
 }

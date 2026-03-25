@@ -28,7 +28,7 @@
 //!   "elementsize": 2
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::shuffle::ShuffleCodecConfiguration;
 //! # serde_json::from_str::<ShuffleCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -42,44 +42,49 @@ pub use shuffle_codec::ShuffleCodec;
 pub use zarrs_metadata_ext::codec::shuffle::{
     ShuffleCodecConfiguration, ShuffleCodecConfigurationV1,
 };
-use zarrs_registry::codec::SHUFFLE;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use zarrs_codec::Codec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::PluginCreateError;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(ShuffleCodec,
+    v3: "numcodecs.shuffle", [],
+    v2: "shuffle", []
+);
+
 inventory::submit! {
-    CodecPlugin::new(SHUFFLE, is_identifier_shuffle, create_codec_shuffle)
+    zarrs_codec::CodecPluginV3::new::<ShuffleCodec>()
+}
+inventory::submit! {
+    zarrs_codec::CodecPluginV2::new::<ShuffleCodec>()
 }
 
-fn is_identifier_shuffle(identifier: &str) -> bool {
-    identifier == SHUFFLE
+impl zarrs_codec::CodecTraitsV3 for ShuffleCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_shuffle(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SHUFFLE, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl zarrs_codec::CodecTraitsV2 for ShuffleCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ShuffleCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{"elementsize":2}"#;
 
@@ -136,9 +141,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -182,9 +189,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

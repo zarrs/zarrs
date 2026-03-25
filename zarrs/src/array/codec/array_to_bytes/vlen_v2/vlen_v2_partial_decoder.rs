@@ -1,58 +1,63 @@
 // TODO: Support actual partial decoding, coalescing required
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use zarrs_storage::StorageError;
-
-use crate::array::{
-    array_bytes::extract_decoded_regions_vlen,
-    codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions},
-    ArrayBytes, ArraySize, ChunkRepresentation, DataType, DataTypeSize, FillValue, RawBytes,
-};
-
+use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
+use crate::array::{ArrayBytes, ArrayBytesRaw, DataType, FillValue};
+use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.
 pub(crate) struct VlenV2PartialDecoder {
     input_handle: Arc<dyn BytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl VlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: Vec<NonZeroU64>,
+        data_type: DataType,
+        fill_value: FillValue,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
         }
     }
 }
 
 fn decode_vlen_bytes<'a>(
-    bytes: Option<RawBytes>,
-    indexer: &dyn crate::indexer::Indexer,
-    data_type_size: DataTypeSize,
+    bytes: Option<ArrayBytesRaw>,
+    indexer: &dyn crate::array::Indexer,
+    data_type: &DataType,
     fill_value: &FillValue,
-    shape: &[u64],
+    shape: &[NonZeroU64],
 ) -> Result<ArrayBytes<'a>, CodecError> {
     if let Some(bytes) = bytes {
-        let num_elements = usize::try_from(shape.iter().product::<u64>()).unwrap();
+        let num_elements =
+            usize::try_from(shape.iter().copied().map(NonZeroU64::get).product::<u64>()).unwrap();
         let (bytes, offsets) = super::get_interleaved_bytes_and_offsets(num_elements, &bytes)?;
-        extract_decoded_regions_vlen(&bytes, &offsets, indexer, shape)
+        Ok(ArrayBytes::Variable(extract_decoded_regions_vlen(
+            &bytes, &offsets, indexer, shape,
+        )?))
     } else {
         // Chunk is empty, all decoded regions are empty
-        let array_size = ArraySize::new(data_type_size, indexer.len());
-        Ok(ArrayBytes::new_fill_value(array_size, fill_value))
+        ArrayBytes::new_fill_value(data_type, indexer.len(), fill_value).map_err(CodecError::from)
     }
 }
 
 impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -65,7 +70,7 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
@@ -73,9 +78,9 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
         decode_vlen_bytes(
             bytes,
             indexer,
-            self.decoded_representation.data_type().size(),
-            self.decoded_representation.fill_value(),
-            &self.decoded_representation.shape_u64(),
+            &self.data_type,
+            &self.fill_value,
+            &self.shape,
         )
     }
 
@@ -88,7 +93,9 @@ impl ArrayPartialDecoderTraits for VlenV2PartialDecoder {
 /// Asynchronous partial decoder for the `bytes` codec.
 pub(crate) struct AsyncVlenV2PartialDecoder {
     input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-    decoded_representation: ChunkRepresentation,
+    shape: Vec<NonZeroU64>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 #[cfg(feature = "async")]
@@ -96,11 +103,15 @@ impl AsyncVlenV2PartialDecoder {
     /// Create a new partial decoder for the `bytes` codec.
     pub(crate) fn new(
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: ChunkRepresentation,
+        shape: Vec<NonZeroU64>,
+        data_type: DataType,
+        fill_value: FillValue,
     ) -> Self {
         Self {
             input_handle,
-            decoded_representation,
+            shape,
+            data_type,
+            fill_value,
         }
     }
 }
@@ -110,7 +121,7 @@ impl AsyncVlenV2PartialDecoder {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -123,7 +134,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get all of the input bytes (cached due to PartialDecoderCapability.partial_read == false)
@@ -131,9 +142,9 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenV2PartialDecoder {
         decode_vlen_bytes(
             bytes,
             indexer,
-            self.decoded_representation.data_type().size(),
-            self.decoded_representation.fill_value(),
-            &self.decoded_representation.shape_u64(),
+            &self.data_type,
+            &self.fill_value,
+            &self.shape,
         )
     }
 

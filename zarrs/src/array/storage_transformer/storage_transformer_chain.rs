@@ -1,21 +1,18 @@
 //! A sequence of storage transformers.
 
 use derive_more::From;
-use zarrs_storage::StorageError;
 
-use crate::{
-    metadata::v3::MetadataV3,
-    node::NodePath,
-    plugin::PluginCreateError,
-    storage::{ListableStorage, ReadableStorage, ReadableWritableStorage, WritableStorage},
-};
-
+use super::{StorageTransformer, try_create_storage_transformer};
+use crate::node::NodePath;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::PluginCreateError;
 #[cfg(feature = "async")]
-use crate::storage::{
+use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
 };
-
-use super::{try_create_storage_transformer, StorageTransformer};
+use zarrs_storage::{
+    ListableStorage, ReadableStorage, ReadableWritableStorage, StorageError, WritableStorage,
+};
 
 /// Configuration for a storage transformer chain.
 #[derive(Debug, Clone, Default, From)]
@@ -31,7 +28,6 @@ impl StorageTransformerChain {
     /// Create a storage transformer chain from configurations.
     ///
     /// # Errors
-    ///
     /// Returns [`PluginCreateError`] if there is a configuration issue or attempt to create an unregistered storage transformer.
     pub fn from_metadata(
         metadatas: &[MetadataV3],
@@ -55,11 +51,20 @@ impl StorageTransformerChain {
     }
 
     /// Create storage transformer chain metadata.
+    ///
+    /// # Panics
+    /// Panics if any storage transformer does not have a V3 name.
     #[must_use]
     pub fn create_metadatas(&self) -> Vec<MetadataV3> {
         self.0
             .iter()
-            .map(|storage_transformer| storage_transformer.create_metadata())
+            .map(|storage_transformer| {
+                let name = storage_transformer
+                    .name_v3()
+                    .expect("storage transformer must have a V3 name")
+                    .into_owned();
+                MetadataV3::new_with_configuration(name, storage_transformer.configuration())
+            })
             .collect()
     }
 }

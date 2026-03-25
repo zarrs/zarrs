@@ -1,22 +1,14 @@
-use std::{borrow::Cow, sync::Arc};
-
-use zarrs_storage::StorageError;
-
-use crate::{
-    array::{
-        codec::{
-            bytes_to_bytes::blosc::blosc_nbytes, BytesPartialDecoderTraits, CodecError,
-            CodecOptions,
-        },
-        RawBytes,
-    },
-    storage::byte_range::ByteRangeIterator,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use super::{blosc_decompress_bytes_partial, blosc_typesize, blosc_validate};
+use crate::array::ArrayBytesRaw;
+use crate::array::codec::bytes_to_bytes::blosc::blosc_nbytes;
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::ByteRangeIterator;
 
 /// Partial decoder for the `blosc` codec.
 pub(crate) struct BloscPartialDecoder {
@@ -42,7 +34,7 @@ impl BytesPartialDecoderTraits for BloscPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options)?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);
@@ -101,7 +93,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncBloscPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let encoded_value = self.input_handle.decode(options).await?;
         let Some(encoded_value) = encoded_value else {
             return Ok(None);

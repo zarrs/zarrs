@@ -1,16 +1,17 @@
 | Codec Type     | V3 `name`                          | V2 `id`                             | Feature Flag* |
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
-| Array to Array | [`transpose`]                      | `transpose`                         | **transpose** |
+| Array to Array | [`transpose`]                      | (implicit with `"order": "F"`)      | **transpose** |
 |                | 🚧[`reshape`]                      | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
-| Array to Bytes | [`bytes`]                          | -                                   |               |
+| Array to Bytes | [`bytes`]                          | (implicit array-to-bytes)           |               |
+|                | 🚧[`zarrs.optional`]               | -                                   |               |
 |                | [`sharding_indexed`]               | -                                   | **sharding**  |
 |                | 🚧[`vlen-array`]                   | `vlen-array`                        |               |
 |                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
 |                | [`vlen-utf8`]                      | `vlen-utf8`                         |               |
-|                | [`packbits`]                       | `packbits`                          |               |
+|                | [`packbits`]                       | -                                   |               |
 |                | 🚧[`numcodecs.pcodec`]             | `pcodec`                            | pcodec        |
 |                | 🚧[`numcodecs.zfpy`]               | `zfpy`                              | zfp           |
 |                | 🚧[`zarrs.vlen`]                   | -                                   |               |
@@ -49,6 +50,7 @@
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze
 
 [`bytes`]: crate::array::codec::array_to_bytes::bytes
+[`zarrs.optional`]: crate::array::codec::array_to_bytes::optional
 [`vlen-array`]: crate::array::codec::array_to_bytes::vlen_array
 [`vlen-bytes`]: crate::array::codec::array_to_bytes::vlen_bytes
 [`vlen-utf8`]: crate::array::codec::array_to_bytes::vlen_utf8
@@ -65,7 +67,7 @@
 [`gzip`]: crate::array::codec::bytes_to_bytes::gzip
 [`zstd`]: crate::array::codec::bytes_to_bytes::zstd
 [`numcodecs.adler32`]: crate::array::codec::bytes_to_bytes::adler32
-[`numcodecs.bz2`]: crate::array::codec::bytes_to_bytes::gzip
+[`numcodecs.bz2`]: crate::array::codec::bytes_to_bytes::bz2
 [`numcodecs.fletcher32`]: crate::array::codec::bytes_to_bytes::fletcher32
 [`numcodecs.shuffle`]: crate::array::codec::bytes_to_bytes::shuffle
 [`numcodecs.zlib`]: crate::array::codec::bytes_to_bytes::zlib

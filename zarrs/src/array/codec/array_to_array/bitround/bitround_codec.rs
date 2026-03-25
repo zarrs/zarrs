@@ -1,24 +1,21 @@
 use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::BITROUND;
-
-use crate::array::{
-    codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-        ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    ChunkRepresentation, DataType,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
-    bitround_codec_partial, round_bytes, BitroundCodecConfiguration, BitroundCodecConfigurationV1,
+    BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
+    bitround_codec_partial, round_bytes,
 };
+use crate::array::{DataType, FillValue};
+use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_metadata::Configuration;
 
 /// A `bitround` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -54,13 +51,13 @@ impl BitroundCodec {
 }
 
 impl CodecTraits for BitroundCodec {
-    fn identifier(&self) -> &str {
-        BITROUND
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         if options.codec_store_metadata_if_encode_only() {
@@ -90,7 +87,8 @@ impl CodecTraits for BitroundCodec {
 impl ArrayCodecTraits for BitroundCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: bitround is well suited to multithread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -110,22 +108,22 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let mut bytes = bytes.into_fixed()?;
-        round_bytes(
-            bytes.to_mut(),
-            decoded_representation.data_type(),
-            self.keepbits,
-        )?;
+        round_bytes(bytes.to_mut(), data_type, self.keepbits)?;
         Ok(ArrayBytes::from(bytes))
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         Ok(bytes)
@@ -134,12 +132,14 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_handle,
-            decoded_representation.data_type(),
+            data_type,
             self.keepbits,
         )?))
     }
@@ -147,12 +147,14 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     fn partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_output_handle,
-            decoded_representation.data_type(),
+            data_type,
             self.keepbits,
         )?))
     }
@@ -161,12 +163,14 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_handle,
-            decoded_representation.data_type(),
+            data_type,
             self.keepbits,
         )?))
     }
@@ -175,23 +179,20 @@ impl ArrayToArrayCodecTraits for BitroundCodec {
     async fn async_partial_encoder(
         self: Arc<Self>,
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
         Ok(Arc::new(bitround_codec_partial::BitroundCodecPartial::new(
             input_output_handle,
-            decoded_representation.data_type(),
+            data_type,
             self.keepbits,
         )?))
     }
 
     fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
-        match decoded_data_type {
-            super::supported_dtypes!() => Ok(decoded_data_type.clone()),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                decoded_data_type.clone(),
-                BITROUND.to_string(),
-            )),
-        }
+        decoded_data_type.codec_bitround()?;
+        Ok(decoded_data_type.clone())
     }
 }

@@ -21,7 +21,7 @@
 //! - `https://codec.zarrs.dev/array_to_bytes/zfpy`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `zfp`
+//! - `zfpy`
 //!
 //! ### Codec `configuration` Example - [`ZfpyCodecConfiguration`]:
 //! #### Encode in fixed rate mode with 10.5 compressed bits per value
@@ -32,7 +32,7 @@
 //!     "rate": 10.5
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
 //! # let configuration: ZfpyCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -44,7 +44,7 @@
 //!     "precision": 19
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
 //! # let configuration: ZfpyCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 //!
@@ -56,37 +56,50 @@
 //!     "tolerance": 0.05
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zfpy::ZfpyCodecConfiguration;
 //! # let configuration: ZfpyCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
-pub use zarrs_metadata_ext::codec::zfpy::{
-    ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
-};
+mod zfpy_codec;
 
 use std::sync::Arc;
 
-use crate::array::codec::{Codec, CodecPlugin};
-
+use zarrs_metadata::v2::MetadataV2;
 use zarrs_metadata::v3::MetadataV3;
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_registry::codec::ZFPY;
+use zarrs_plugin::PluginCreateError;
 
-use super::zfp::ZfpCodec;
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
+pub use zarrs_metadata_ext::codec::zfpy::{
+    ZfpyCodecConfiguration, ZfpyCodecConfigurationNumcodecs,
+};
+pub use zfpy_codec::ZfpyCodec;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(ZfpyCodec,
+    v3: "numcodecs.zfpy", ["https://codec.zarrs.dev/array_to_bytes/zfpy"],
+    v2: "zfpy"
+);
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(ZFPY, is_identifier_zfpy, create_codec_zfpy)
+    CodecPluginV3::new::<ZfpyCodec>()
+}
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<ZfpyCodec>()
 }
 
-fn is_identifier_zfpy(identifier: &str) -> bool {
-    identifier == ZFPY
+impl CodecTraitsV3 for ZfpyCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_zfpy(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZfpyCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZFPY, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ZfpCodec::new_with_configuration_zfpy(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
+impl CodecTraitsV2 for ZfpyCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: ZfpyCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(ZfpyCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
 }

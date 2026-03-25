@@ -4,16 +4,14 @@
 use std::borrow::Cow;
 
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
-    Throughput,
+    AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
+    criterion_main,
 };
-use zarrs::array::{
-    codec::{
-        bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode},
-        ArrayToBytesCodecTraits, BloscCodec, BytesCodec, BytesToBytesCodecTraits, CodecOptions,
-    },
-    BytesRepresentation, ChunkRepresentation, DataType, Element, Endianness,
-};
+use zarrs::array::codec::bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode};
+use zarrs::array::codec::{BloscCodec, BytesCodec};
+use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
+use zarrs_codec::{ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions};
+use zarrs_data_type::FillValue;
 
 fn codec_bytes(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
@@ -26,24 +24,24 @@ fn codec_bytes(c: &mut Criterion) {
     #[cfg(target_endian = "little")]
     let codec = BytesCodec::new(Some(Endianness::Big));
 
+    let fill_value = FillValue::from(0u16);
     for size in [32, 64, 128, 256, 512].iter() {
-        let size3 = size * size * size;
-        let num_elements = size3 / 2;
-        let rep = ChunkRepresentation::new(
-            vec![num_elements.try_into().unwrap(); 1],
-            DataType::UInt16,
-            0u16,
-        )
-        .unwrap();
-
-        let data = vec![0u8; size3.try_into().unwrap()];
-        let bytes = Element::into_array_bytes(&DataType::UInt8, &data).unwrap();
-        group.throughput(Throughput::Bytes(size3));
+        let num_elements = size * size * size;
+        let shape = [num_elements.try_into().unwrap(); 1];
+        let data = vec![0u16; num_elements.try_into().unwrap()];
+        let bytes = Element::into_array_bytes(&data_type::uint16(), data).unwrap();
+        group.throughput(Throughput::Bytes(num_elements * 2));
         // encode and decode have the same implementation
-        group.bench_function(BenchmarkId::new("encode_decode", size3), |b| {
+        group.bench_function(BenchmarkId::new("encode_decode", num_elements), |b| {
             b.iter(|| {
                 codec
-                    .encode(bytes.clone(), &rep, &CodecOptions::default())
+                    .encode(
+                        bytes.clone(),
+                        &shape,
+                        &data_type::uint16(),
+                        &fill_value,
+                        &CodecOptions::default(),
+                    )
                     .unwrap()
             });
         });

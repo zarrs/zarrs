@@ -1,9 +1,9 @@
 [package]
 name = "zarrs_plugin"
-version = "0.2.2"
+version = "0.4.1"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
-edition = "2021"
-rust-version = "1.77"
+edition = "2024"
+rust-version = "1.88"
 description = "The plugin API for the zarrs crate"
 homepage = "https://zarrs.dev"
 documentation = "https://docs.rs/zarrs_plugin"
@@ -16,4 +16,7 @@ categories = ["encoding"]
 workspace = true
 
 [dependencies]
+paste = "1.0.15"
+regex = "1.12.2"
+serde_json = "1.0.71"
 thiserror.workspace = true

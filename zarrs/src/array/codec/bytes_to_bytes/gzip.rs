@@ -22,7 +22,7 @@
 //!     "level": 1
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::gzip::GzipCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::gzip::GzipCodecConfiguration;
 //! # serde_json::from_str::<GzipCodecConfiguration>(JSON).unwrap();
 
 mod gzip_codec;
@@ -30,48 +30,53 @@ mod gzip_codec;
 use std::sync::Arc;
 
 pub use gzip_codec::GzipCodec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::gzip::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
-use zarrs_registry::codec::GZIP;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(GzipCodec, v3: "gzip", v2: "gzip");
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(GZIP, is_identifier_gzip, create_codec_gzip)
+    CodecPluginV3::new::<GzipCodec>()
 }
 
-fn is_identifier_gzip(identifier: &str) -> bool {
-    identifier == GZIP
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<GzipCodec>()
 }
 
-pub(crate) fn create_codec_gzip(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: GzipCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(GZIP, "codec", metadata.to_string()))?;
-    let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for GzipCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: GzipCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
+}
+
+impl CodecTraitsV2 for GzipCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: GzipCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(GzipCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
         "level": 1
@@ -152,9 +157,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -198,9 +205,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

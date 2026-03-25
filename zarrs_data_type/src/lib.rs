@@ -7,16 +7,39 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-mod data_type_extension;
-mod data_type_extension_bytes_codec;
-mod data_type_extension_packbits_codec;
+mod codec_support;
+mod data_type;
 mod data_type_plugin;
 mod fill_value;
+mod optional;
 
-pub use data_type_extension::{DataTypeExtension, DataTypeExtensionError};
-pub use data_type_extension_bytes_codec::{
-    DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
+pub mod codec_traits;
+
+pub use data_type::{DataType, DataTypeTraits, DataTypeTraitsV2, DataTypeTraitsV3};
+pub use data_type_plugin::{
+    DATA_TYPE_RUNTIME_REGISTRY_V2, DATA_TYPE_RUNTIME_REGISTRY_V3, DataTypePluginV2,
+    DataTypePluginV3, DataTypeRuntimePluginV2, DataTypeRuntimePluginV3,
+    DataTypeRuntimeRegistryHandleV2, DataTypeRuntimeRegistryHandleV3, register_data_type_v2,
+    register_data_type_v3, unregister_data_type_v2, unregister_data_type_v3,
 };
-pub use data_type_extension_packbits_codec::DataTypeExtensionPackBitsCodec;
-pub use data_type_plugin::DataTypePlugin;
 pub use fill_value::{DataTypeFillValueError, DataTypeFillValueMetadataError, FillValue};
+pub use optional::OptionalDataType;
+
+/// A data type error associated with codec incompatibility, or encode/decode failure.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum DataTypeCodecError {
+    /// The data type does not support the codec.
+    #[error("{data_type} does not support the {codec_name} codec")]
+    UnsupportedDataType {
+        /// The data type.
+        data_type: DataType,
+        /// The codec name.
+        codec_name: &'static str,
+    },
+}
+
+#[doc(inline)]
+pub use _define_data_type_support as define_data_type_support;
+
+#[doc(inline)]
+pub use _register_data_type_extension_codec as register_data_type_extension_codec;

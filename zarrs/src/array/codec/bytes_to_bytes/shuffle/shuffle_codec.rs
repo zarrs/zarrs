@@ -1,18 +1,15 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::SHUFFLE;
-
-use crate::array::{
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{ShuffleCodecConfiguration, ShuffleCodecConfigurationV1};
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
 
 /// A `shuffle` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -46,13 +43,13 @@ impl ShuffleCodec {
 }
 
 impl CodecTraits for ShuffleCodec {
-    fn identifier(&self) -> &str {
-        SHUFFLE
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = ShuffleCodecConfiguration::V1(ShuffleCodecConfigurationV1 {
@@ -75,14 +72,6 @@ impl CodecTraits for ShuffleCodec {
     }
 }
 
-fn is_multiple_of(lhs: usize, rhs: usize) -> bool {
-    match rhs {
-        // prevent division by zero
-        0 => lhs == 0,
-        _ => lhs % rhs == 0,
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -102,10 +91,10 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
-        if !is_multiple_of(decoded_value.len(), self.elementsize) {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        if !decoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 
@@ -123,11 +112,11 @@ impl BytesToBytesCodecTraits for ShuffleCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
-        if !is_multiple_of(encoded_value.len(), self.elementsize) {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        if !encoded_value.len().is_multiple_of(self.elementsize) {
             return Err(CodecError::Other("the shuffle codec expects the input byte length to be an integer multiple of the elementsize".to_string()));
         }
 

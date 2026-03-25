@@ -32,76 +32,40 @@ pub(crate) mod vlen_v2_macros;
 
 use std::sync::Arc;
 
-use zarrs_metadata_ext::codec::vlen_v2::{self};
-
 pub use vlen_v2::{VlenV2CodecConfiguration, VlenV2CodecConfigurationV0};
-
-use crate::array::{
-    codec::{CodecError, InvalidBytesLengthError},
-    RawBytes,
-};
-
 pub use vlen_v2_codec::VlenV2Codec;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::array::ArrayBytesRaw;
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError};
+use zarrs_metadata_ext::codec::vlen_v2::{self};
+use zarrs_plugin::PluginCreateError;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(VlenV2Codec,
+    v3: "zarrs.vlen_v2", ["https://codec.zarrs.dev/array_to_bytes/vlen_v2"]
+);
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(zarrs_registry::codec::VLEN_V2, is_identifier_vlen_v2, create_codec_vlen_v2)
-}
-inventory::submit! {
-    CodecPlugin::new(zarrs_registry::codec::VLEN_ARRAY, is_identifier_vlen_array, create_codec_vlen_v2)
-}
-inventory::submit! {
-    CodecPlugin::new(zarrs_registry::codec::VLEN_BYTES, is_identifier_vlen_bytes, create_codec_vlen_v2)
-}
-inventory::submit! {
-    CodecPlugin::new(zarrs_registry::codec::VLEN_UTF8, is_identifier_vlen_utf8, create_codec_vlen_v2)
+    CodecPluginV3::new::<VlenV2Codec>()
 }
 
-fn is_identifier_vlen_v2(identifier: &str) -> bool {
-    identifier == zarrs_registry::codec::VLEN_V2
-}
+impl CodecTraitsV3 for VlenV2Codec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
 
-fn is_identifier_vlen_array(identifier: &str) -> bool {
-    identifier == zarrs_registry::codec::VLEN_ARRAY
-}
-
-fn is_identifier_vlen_bytes(identifier: &str) -> bool {
-    identifier == zarrs_registry::codec::VLEN_BYTES
-}
-
-fn is_identifier_vlen_utf8(identifier: &str) -> bool {
-    identifier == zarrs_registry::codec::VLEN_UTF8
-}
-
-pub(crate) fn create_codec_vlen_v2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    match metadata.name() {
-        zarrs_registry::codec::VLEN_V2 | zarrs_registry::codec::VLEN_ARRAY => {
-            crate::warn_experimental_extension(metadata.name(), "codec");
+        if metadata.configuration().is_none_or(|c| c.is_empty()) {
+            let codec = Arc::new(VlenV2Codec::new());
+            Ok(Codec::ArrayToBytes(codec))
+        } else {
+            Err(metadata.to_string().into())
         }
-        _ => {}
-    }
-    if metadata.configuration_is_none_or_empty() {
-        let codec = Arc::new(VlenV2Codec::new());
-        Ok(Codec::ArrayToBytes(codec))
-    } else {
-        Err(PluginMetadataInvalidError::new(
-            zarrs_registry::codec::VLEN_V2,
-            "codec",
-            metadata.to_string(),
-        )
-        .into())
     }
 }
 
 fn get_interleaved_bytes_and_offsets(
     num_elements: usize,
-    bytes: &RawBytes,
+    bytes: &ArrayBytesRaw,
 ) -> Result<(Vec<u8>, Vec<usize>), CodecError> {
     // Validate the bytes is long enough to contain header and element lengths
     let header_length = size_of::<u32>() * (1 + num_elements);

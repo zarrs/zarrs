@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-03-03
+
+### Fixed
+- `MemoryStore`: avoid unnecessary value cloning in `get` and `get_partial_many`
+
+## [0.4.2] - 2026-01-13
+
+### Added
+- Add `test::[async_]store_list_size` to check size aggregation methods return expected values for uncompressed stores
+
+### Fixed
+- Move size aggregation tests out of `test::[async_]store_list`, as these are not applicable to stores that compress data (e.g. `zarrs_zip`)
+
+## [0.4.1] - 2025-12-31
+
 ### Fixed
 - Replace use of removed `doc_auto_cfg` feature with `doc_cfg` (fixes `docs.rs` build)
+- Remove unused `parking_lot` dependency
 
 ## [0.4.0] - 2025-09-18
 
@@ -137,9 +153,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `storage` module of `zarrs` 0.17.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.0...HEAD
-[0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.4.0
-[0.3.4]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.4
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_storage-v0.4.3...HEAD
+[0.4.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.3
+[0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.2
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.4.0
+[0.3.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs_storage-v0.3.4
 [0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.3
 [0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.2
 [0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_storage-v0.3.1

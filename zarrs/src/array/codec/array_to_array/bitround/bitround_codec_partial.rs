@@ -1,19 +1,13 @@
 use std::sync::Arc;
 
-use zarrs_registry::codec::BITROUND;
-use zarrs_storage::StorageError;
-
-use crate::array::{
-    codec::{
-        ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
-    },
-    DataType,
+use super::{BitroundDataTypeExt, round_bytes};
+use crate::array::DataType;
+use zarrs_codec::{
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
 };
-
 #[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
-
-use super::round_bytes;
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
+use zarrs_storage::StorageError;
 
 /// Generic partial codec for the bitround codec.
 pub(crate) struct BitroundCodecPartial<T: ?Sized> {
@@ -29,17 +23,12 @@ impl<T: ?Sized> BitroundCodecPartial<T> {
         data_type: &DataType,
         keepbits: u32,
     ) -> Result<Self, CodecError> {
-        match data_type {
-            super::supported_dtypes!() => Ok(Self {
-                input_output_handle,
-                data_type: data_type.clone(),
-                keepbits,
-            }),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                BITROUND.to_string(),
-            )),
-        }
+        data_type.codec_bitround()?;
+        Ok(Self {
+            input_output_handle,
+            data_type: data_type.clone(),
+            keepbits,
+        })
     }
 }
 
@@ -61,7 +50,7 @@ where
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
         // Bytes codec does pass-through decoding
@@ -87,7 +76,7 @@ where
 
     fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
@@ -126,7 +115,7 @@ where
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Bytes codec does pass-through decoding
@@ -157,7 +146,7 @@ where
 
     async fn partial_encode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {

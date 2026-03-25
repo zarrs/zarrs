@@ -4,15 +4,18 @@
 
 use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use zarrs_registry::{
-    ExtensionAliasesCodecV2, ExtensionAliasesCodecV3, ExtensionAliasesDataTypeV2,
-    ExtensionAliasesDataTypeV3,
-};
+use serde::{Deserialize, Serialize};
 
-#[cfg(doc)]
-use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
+use crate::array::ArrayMetadataOptions;
+use crate::group::GroupMetadataOptions;
+use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 
 /// Global configuration options for the `zarrs` crate.
+///
+/// <div class="warning">
+/// Serialisation/deserialisation of the config does NOT currently include the extension alias maps.
+/// This will be addressed in a future breaking release.
+/// </div>
 ///
 /// Retrieve the global [`Config`] with [`global_config`] and modify it with [`global_config_mut`].
 ///
@@ -59,7 +62,7 @@ use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 /// > default: [`false`]
 ///
 /// If `true`, [`Array::store_chunk_subset`](crate::array::Array::store_chunk_subset) and [`Array::store_array_subset`](crate::array::Array::store_array_subset) and variants can use partial encoding.
-/// This is relevant when using the sharding codec, as it enables inner chunks to be written without reading and writing entire shards.
+/// This is relevant when using the sharding codec, as it enables subchunks to be written without reading and writing entire shards.
 ///
 /// This is an experimental feature for now until it has more comprehensively tested and support is added in the async API.
 ///
@@ -100,35 +103,12 @@ use crate::array::{codec::CodecOptions, ArrayMetadataOptions};
 ///  }
 /// ```
 ///
-/// ### Codec Aliases
-/// > default: see [`ExtensionAliasesCodecV3::default`] and [`ExtensionAliasesCodecV2::default`].
-///
-/// The default codec `name`s used when serialising codecs, and recognised codec `name` aliases when deserialising codecs.
-/// Codec default `name`s and aliases can be modified at runtime.
-///
-/// Note that the [`NamedCodec`](crate::array::codec::NamedCodec) mechanism means that a serialised codec `name` can differ from the default `name`.
-/// By default, updating and storing the metadata of an array will NOT convert aliased codec names to the default codec name.
-/// This behaviour can be changed with the [convert aliased extension names](#convert-aliased-extension-names) configuration option.
-///
-/// The codec maps enable support for unstandardised codecs, such as:
-/// - codecs registered in the official [`zarr-extensions`](https://github.com/zarr-developers/zarr-extensions) repository that are compatible with `zarrs`,
-/// - `zarrs` experimental codecs with `name`s that have since changed, and
-/// - user-defined custom codecs.
-///
-/// If a codec is not present in the codec maps, the `name` will be inferred as the unique codec identifier.
-/// Codecs registered for that identifier work without any changes required for the codec maps.
-///
-/// ### Data Type Aliases
-/// > default: see [`ExtensionAliasesDataTypeV3::default`] and [`ExtensionAliasesDataTypeV2::default`].
-///
-/// These operate similarly to codec maps, but for data types.
-///
 /// ### Convert Aliased Extension Names
 /// > default: [`false`]
 ///
 /// If true, then aliased extension names will be replaced by the standard name if metadata is resaved.
 /// This sets the default for the association option of [`crate::array::ArrayMetadataOptions`].
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     validate_checksums: bool,
@@ -139,10 +119,6 @@ pub struct Config {
     metadata_convert_version: MetadataConvertVersion,
     metadata_erase_version: MetadataEraseVersion,
     include_zarrs_metadata: bool,
-    codec_aliases_v3: ExtensionAliasesCodecV3,
-    codec_aliases_v2: ExtensionAliasesCodecV2,
-    data_type_aliases_v3: ExtensionAliasesDataTypeV3,
-    data_type_aliases_v2: ExtensionAliasesDataTypeV2,
     experimental_partial_encoding: bool,
     convert_aliased_extension_names: bool,
 }
@@ -156,13 +132,9 @@ impl Default for Config {
             codec_concurrent_target: rayon::current_num_threads(),
             chunk_concurrent_minimum: 4,
             codec_store_metadata_if_encode_only: true,
-            metadata_convert_version: MetadataConvertVersion::Default,
-            metadata_erase_version: MetadataEraseVersion::Default,
+            metadata_convert_version: MetadataConvertVersion::default(),
+            metadata_erase_version: MetadataEraseVersion::default(),
             include_zarrs_metadata: true,
-            codec_aliases_v3: ExtensionAliasesCodecV3::default(),
-            codec_aliases_v2: ExtensionAliasesCodecV2::default(),
-            data_type_aliases_v3: ExtensionAliasesDataTypeV3::default(),
-            data_type_aliases_v2: ExtensionAliasesDataTypeV2::default(),
             experimental_partial_encoding: false,
             convert_aliased_extension_names: false,
         }
@@ -170,6 +142,40 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Get the codec options.
+    #[must_use]
+    pub fn codec_options(&self) -> CodecOptions {
+        CodecOptions::default()
+            .with_validate_checksums(self.validate_checksums)
+            .with_store_empty_chunks(self.store_empty_chunks)
+            .with_concurrent_target(self.codec_concurrent_target)
+            .with_chunk_concurrent_minimum(self.chunk_concurrent_minimum)
+            .with_experimental_partial_encoding(self.experimental_partial_encoding)
+    }
+
+    /// Get the codec metadata options.
+    #[must_use]
+    pub fn codec_metadata_options(&self) -> CodecMetadataOptions {
+        CodecMetadataOptions::default()
+            .with_codec_store_metadata_if_encode_only(self.codec_store_metadata_if_encode_only)
+    }
+
+    /// Get the group metadata options.
+    #[must_use]
+    pub fn group_metadata_options(&self) -> crate::group::GroupMetadataOptions {
+        GroupMetadataOptions::default().with_metadata_convert_version(self.metadata_convert_version)
+    }
+
+    /// Get the array metadata options.
+    #[must_use]
+    pub fn array_metadata_options(&self) -> ArrayMetadataOptions {
+        ArrayMetadataOptions::default()
+            .with_codec_metadata_options(self.codec_metadata_options())
+            .with_metadata_convert_version(self.metadata_convert_version)
+            .with_include_zarrs_metadata(self.include_zarrs_metadata)
+            .with_convert_aliased_extension_names(self.convert_aliased_extension_names)
+    }
+
     /// Get the [validate checksums](#validate-checksums) configuration.
     #[must_use]
     pub fn validate_checksums(&self) -> bool {
@@ -266,50 +272,6 @@ impl Config {
         self
     }
 
-    /// Get the Zarr V3 [codec aliases](#codec-aliases) configuration.
-    #[must_use]
-    pub fn codec_aliases_v3(&self) -> &ExtensionAliasesCodecV3 {
-        &self.codec_aliases_v3
-    }
-
-    /// Get a mutable reference to the Zarr V3 [codec aliases](#codec-aliases) configuration.
-    pub fn codec_aliases_v3_mut(&mut self) -> &mut ExtensionAliasesCodecV3 {
-        &mut self.codec_aliases_v3
-    }
-
-    /// Get the Zarr V3 [data type aliases](#data-type-aliases) configuration.
-    #[must_use]
-    pub fn data_type_aliases_v3(&self) -> &ExtensionAliasesDataTypeV3 {
-        &self.data_type_aliases_v3
-    }
-
-    /// Get a mutable reference to the Zarr V3 [data type aliases](#data-type-aliases) configuration.
-    pub fn data_type_aliases_v3_mut(&mut self) -> &mut ExtensionAliasesDataTypeV3 {
-        &mut self.data_type_aliases_v3
-    }
-
-    /// Get the Zarr V2 [codec aliases](#codec-aliases) configuration.
-    #[must_use]
-    pub fn codec_aliases_v2(&self) -> &ExtensionAliasesCodecV2 {
-        &self.codec_aliases_v2
-    }
-
-    /// Get a mutable reference to the Zarr V2 [codec aliases](#codec-aliases) configuration.
-    pub fn codec_aliases_v2_mut(&mut self) -> &mut ExtensionAliasesCodecV2 {
-        &mut self.codec_aliases_v2
-    }
-
-    /// Get the Zarr V2 [data type aliases](#data-type-aliases) configuration.
-    #[must_use]
-    pub fn data_type_aliases_v2(&self) -> &ExtensionAliasesDataTypeV2 {
-        &self.data_type_aliases_v2
-    }
-
-    /// Get a mutable reference to the Zarr V2 [data type aliases](#data-type-aliases) configuration.
-    pub fn data_type_aliases_v2_mut(&mut self) -> &mut ExtensionAliasesDataTypeV2 {
-        &mut self.data_type_aliases_v2
-    }
-
     /// Get the [experimental partial encoding](#experimental-partial-encoding) configuration.
     #[must_use]
     pub fn experimental_partial_encoding(&self) -> bool {
@@ -372,18 +334,20 @@ pub enum MetadataRetrieveVersion {
 }
 
 /// Version options for [`Array::store_metadata`](crate::array::Array::store_metadata) and [`Group::store_metadata`](crate::group::Group::store_metadata), and their async variants.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataConvertVersion {
     /// Write the same version as the input metadata.
+    #[default]
     Default,
     /// Write Zarr V3 metadata. Zarr V2 metadata will not be automatically removed if it exists.
     V3,
 }
 
 /// Version options for [`Array::erase_metadata`](crate::array::Array::erase_metadata) and [`Group::erase_metadata`](crate::group::Group::erase_metadata), and their async variants.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum MetadataEraseVersion {
     /// Erase the same version as the input metadata.
+    #[default]
     Default,
     /// Erase all metadata.
     All,
@@ -395,13 +359,40 @@ pub enum MetadataEraseVersion {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::*;
 
+    #[ignore]
     #[test]
+    #[serial]
     fn config_validate_checksums() {
+        *global_config_mut() = Config::default();
         assert!(global_config().validate_checksums());
         global_config_mut().set_validate_checksums(false);
         assert!(!global_config().validate_checksums());
         global_config_mut().set_validate_checksums(true);
+        *global_config_mut() = Config::default();
+    }
+
+    #[ignore]
+    #[test]
+    #[serial]
+    fn config_serialize_deserialize_update() {
+        *global_config_mut() = Config::default();
+
+        global_config_mut().set_validate_checksums(false);
+        let serialized = serde_json::to_string(&*global_config()).unwrap();
+
+        global_config_mut().set_validate_checksums(true);
+        assert!(global_config().validate_checksums());
+
+        let restored_config: Config = serde_json::from_str(&serialized).unwrap();
+        assert!(!restored_config.validate_checksums());
+
+        *global_config_mut() = restored_config;
+        assert!(!global_config().validate_checksums());
+
+        *global_config_mut() = Config::default();
     }
 }

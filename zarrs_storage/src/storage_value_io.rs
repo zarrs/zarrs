@@ -1,9 +1,8 @@
-use std::{
-    io::{Read, Seek, SeekFrom},
-    sync::Arc,
-};
+use std::io::{Read, Seek, SeekFrom};
+use std::sync::Arc;
 
-use super::{byte_range::ByteRange, ReadableStorageTraits, StoreKey};
+use super::byte_range::ByteRange;
+use super::{ReadableStorageTraits, StoreKey};
 
 /// Provides a [`Read`] interface to a storage value.
 #[derive(Clone)]

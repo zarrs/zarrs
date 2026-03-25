@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-02
+
+- Add `Crc32cCodecConfiguration::Numcodecs`, `Crc32cCodecConfigurationNumcodecs`, `Crc32cCodecConfigurationLocation`
+
+## [0.4.0] - 2025-12-31
+
+### Removed
+- **Breaking**: Remove `v2_to_v3` module (moved to `zarrs::v2_to_v3`)
+- Dependency on `zarrs_registry`
+
+## [0.3.0] - 2025-12-26
+
+### Added
+- Add `optional` data type
+- Add `optional` codec
+
+### Changed
+- **Breaking**: bump `zarrs_metadata` to 0.7.0
+- Bump `zarrs_registry` to 0.1.9
+- Bump `monostate` to 1.0.2
+
+### Removed
+- Remove unused `half` and `log` dependencies
+
 ## [0.2.2] - 2025-10-26
 
 ### Fixed
@@ -54,11 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - rename `InvalidPermutationError` to `TransposeOrderError`
 - change the suffix of experimental codec configurations from V1 to V0 (`gdeflate`, `squeeze`, `vlen`, `vlen_v2`)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.2.2...HEAD
-[0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.2
-[0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.1
-[0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.2.0
-[0.1.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.1
-[0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_metadata_ext-v0.1.0
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.1...HEAD
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.0
+[0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.3.0
+[0.2.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.2.2
+[0.2.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.2.1
+[0.2.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.2.0
+[0.1.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.1.1
+[0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.1.0
 
 [@jder]: https://github.com/jder

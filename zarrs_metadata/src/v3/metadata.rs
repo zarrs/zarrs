@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
-use serde::{de::DeserializeOwned, ser::SerializeMap, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{Configuration, ConfigurationError};
@@ -8,7 +10,7 @@ use crate::{Configuration, ConfigurationError};
 /// Zarr V3 generic metadata with a `name`, optional `configuration`, and optional `must_understand`.
 ///
 /// Represents most fields in Zarr V3 array metadata (see [`ArrayMetadataV3`](crate::v3::ArrayMetadataV3)) which is either:
-/// - a string name / identifier, or
+/// - a string name, or
 /// - a JSON object with a required `name` field and optional `configuration` and `must_understand` fields.
 ///
 /// `must_understand` is implicitly set to [`true`] if omitted.
@@ -195,10 +197,25 @@ impl MetadataV3 {
         }
     }
 
+    /// Try and convert [`Configuration`] to a specific serializable configuration.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    pub fn to_typed_configuration<TConfiguration: DeserializeOwned>(
+        &self,
+    ) -> Result<TConfiguration, std::sync::Arc<serde_json::Error>> {
+        if let Some(configuration) = &self.configuration {
+            configuration.to_typed()
+        } else {
+            Configuration::default().to_typed()
+        }
+    }
+
     /// Try and convert [`MetadataV3`] to a serializable configuration.
     ///
     /// # Errors
-    /// Returns a [`ConfigurationError`] if the metadata cannot be converted.
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    // TODO: #[deprecated(since = "0.8.0", note = "Use .to_typed() instead")]
     pub fn to_configuration<TConfiguration: DeserializeOwned>(
         &self,
     ) -> Result<TConfiguration, ConfigurationError> {
@@ -361,7 +378,7 @@ mod tests {
     #[test]
     fn metadata_must_understand_implicit_string() {
         let metadata = r#""test""#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -371,7 +388,7 @@ mod tests {
         let metadata = r#"{
     "name": "test"
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -382,7 +399,7 @@ mod tests {
     "name": "test",
     "must_understand": true
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(metadata.must_understand());
     }
@@ -393,7 +410,7 @@ mod tests {
     "name": "test",
     "must_understand": false
 }"#;
-        let metadata: MetadataV3 = serde_json::from_str(&metadata).unwrap();
+        let metadata: MetadataV3 = serde_json::from_str(metadata).unwrap();
         assert!(metadata.name() == "test");
         assert!(!metadata.must_understand());
         assert_ne!(metadata, MetadataV3::new("test".to_string()));

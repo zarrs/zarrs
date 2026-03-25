@@ -28,7 +28,7 @@
 //!     "blocksize": 0
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::blosc::BloscCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::blosc::BloscCodecConfiguration;
 //! # serde_json::from_str::<BloscCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -43,45 +43,52 @@ mod blosc_partial_decoder;
 /// Otherwise, these functions will use one thread regardless of the `numinternalthreads` parameter.
 const MIN_PARALLEL_LENGTH: usize = 4_000_000;
 
-use std::{
-    ffi::{c_char, c_int, c_void},
-    sync::Arc,
-};
+use std::ffi::{c_char, c_int, c_void};
+use std::sync::Arc;
 
 pub use blosc_codec::BloscCodec;
 use blosc_src::{
-    blosc_cbuffer_metainfo, blosc_cbuffer_sizes, blosc_cbuffer_validate, blosc_compress_ctx,
-    blosc_decompress_ctx, blosc_getitem, BLOSC_MAX_OVERHEAD, BLOSC_MAX_THREADS,
+    BLOSC_MAX_OVERHEAD, BLOSC_MAX_THREADS, blosc_cbuffer_metainfo, blosc_cbuffer_sizes,
+    blosc_cbuffer_validate, blosc_compress_ctx, blosc_decompress_ctx, blosc_getitem,
 };
 use derive_more::From;
 use thiserror::Error;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::blosc::{
-    BloscCodecConfiguration, BloscCodecConfigurationV1, BloscCompressionLevel, BloscCompressor,
-    BloscShuffleMode,
+    BloscCodecConfiguration, BloscCodecConfigurationNumcodecs, BloscCodecConfigurationV1,
+    BloscCompressionLevel, BloscCompressor, BloscShuffleMode, BloscShuffleModeNumcodecs,
 };
-use zarrs_registry::codec::BLOSC;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(BloscCodec, v3: "blosc", v2: "blosc");
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(BLOSC, is_identifier_blosc, create_codec_blosc)
+    CodecPluginV3::new::<BloscCodec>()
 }
 
-fn is_identifier_blosc(identifier: &str) -> bool {
-    identifier == BLOSC
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<BloscCodec>()
 }
 
-pub(crate) fn create_codec_blosc(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: BloscCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BLOSC, "codec", metadata.to_string()))?;
-    let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for BloscCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
+}
+
+impl CodecTraitsV2 for BloscCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: BloscCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(BloscCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[derive(Clone, Debug, Error, From)]
@@ -143,11 +150,14 @@ fn blosc_compress_bytes(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     } else {
         let clevel: u8 = clevel.into();
-        Err(BloscError::from(format!("blosc_compress_ctx(clevel: {}, doshuffle: {shuffle_mode:?}, typesize: {typesize}, nbytes: {}, destsize {destsize}, compressor {compressor:?}, bloscksize: {blocksize}) -> {destsize} (failure)", clevel, src.len())))
+        Err(BloscError::from(format!(
+            "blosc_compress_ctx(clevel: {}, doshuffle: {shuffle_mode:?}, typesize: {typesize}, nbytes: {}, destsize {destsize}, compressor {compressor:?}, bloscksize: {blocksize}) -> {destsize} (failure)",
+            clevel,
+            src.len()
+        )))
     }
 }
 
@@ -220,7 +230,6 @@ fn blosc_decompress_bytes(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     } else {
         Err(BloscError::from("blosc_decompress_ctx failed"))
@@ -254,27 +263,20 @@ fn blosc_decompress_bytes_partial(
             #[allow(clippy::cast_sign_loss)]
             dest.set_len(destsize as usize);
         }
-        dest.shrink_to_fit();
         Ok(dest)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use zarrs_storage::byte_range::ByteRange;
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            ArrayRepresentation, BytesRepresentation, DataType,
-        },
-        array_subset::ArraySubset,
-        indexer::Indexer,
-    };
+    use std::borrow::Cow;
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
 {
@@ -369,13 +371,13 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_blosc_partial_decode() {
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = data_type::uint16();
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: BloscCodecConfiguration =
@@ -386,7 +388,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
@@ -405,9 +407,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];
@@ -418,15 +422,15 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_blosc_async_partial_decode() {
-        use crate::indexer::Indexer;
+        use crate::array::Indexer;
 
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = data_type::uint16();
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: BloscCodecConfiguration =
@@ -437,7 +441,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
@@ -457,9 +461,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];

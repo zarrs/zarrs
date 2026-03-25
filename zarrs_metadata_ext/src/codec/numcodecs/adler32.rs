@@ -1,6 +1,5 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `adler32` codec configuration parameters.
@@ -72,7 +71,7 @@ mod tests {
 
     #[test]
     fn codec_adler32_config1() {
-        serde_json::from_str::<Adler32CodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<Adler32CodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

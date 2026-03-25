@@ -1,17 +1,16 @@
 use std::sync::Arc;
 
-use crate::OffsetBytesIterator;
-
-use super::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    ReadableStorageTraits, StorageError, StoreKey, StorePrefix, WritableStorageTraits,
-};
-
+use super::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use super::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
 };
+use super::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
+    StorageError, StoreKey, StorePrefix, WritableStorageTraits,
+};
+use crate::OffsetBytesIterator;
 
 /// A storage handle.
 ///
@@ -203,10 +202,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
 #[cfg(test)]
 mod tests {
-    use crate::{store::MemoryStore, StorageHandle};
+    use std::error::Error;
 
     use super::*;
-    use std::error::Error;
+    use crate::store::MemoryStore;
+    use crate::StorageHandle;
 
     #[test]
     fn memory_storage_handle() -> Result<(), Box<dyn Error>> {
@@ -215,6 +215,7 @@ mod tests {
         crate::store_test::store_write(&store)?;
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
+        crate::store_test::store_list_size(&store)?;
         Ok(())
     }
 }

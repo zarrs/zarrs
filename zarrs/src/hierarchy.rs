@@ -8,25 +8,21 @@
 //!
 //! See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#hierarchy>.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use crate::array::{Array, ArrayMetadata};
+use crate::config::MetadataRetrieveVersion;
+use crate::group::Group;
 use crate::node::get_all_nodes_of;
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
-
-pub use crate::metadata::NodeMetadata;
-
-use crate::{
-    array::{Array, ArrayMetadata},
-    config::MetadataRetrieveVersion,
-    group::Group,
-    storage::{ListableStorageTraits, ReadableStorageTraits},
-};
-
 #[cfg(feature = "async")]
 use crate::{
     node::async_get_all_nodes_of,
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits},
 };
+pub use zarrs_metadata::NodeMetadata;
+use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits};
 
 /// A Zarr hierarchy.
 #[derive(Debug, Clone)]
@@ -268,20 +264,16 @@ impl<TStorage: ?Sized> TryFrom<Array<TStorage>> for Hierarchy {
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_metadata::{
-        v2::{ArrayMetadataV2, GroupMetadataV2},
-        v3::GroupMetadataV3,
-        GroupMetadata,
-    };
+    use super::*;
+    use crate::array::ArrayBuilder;
+    use crate::group::GroupBuilder;
+    use zarrs_metadata::GroupMetadata;
+    use zarrs_metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
+    use zarrs_metadata::v3::GroupMetadataV3;
     #[cfg(feature = "async")]
     use zarrs_storage::AsyncReadableWritableListableStorageTraits;
-
-    use super::*;
-    use crate::{
-        array::ArrayBuilder,
-        group::GroupBuilder,
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
-    };
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{StoreKey, WritableStorageTraits};
 
     const EXPECTED_TREE: &str = "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n";
 
@@ -289,13 +281,13 @@ mod tests {
         let group_builder = GroupBuilder::default();
 
         let root = group_builder
-            .build(store.clone(), &NodePath::root().as_str())
+            .build(store.clone(), NodePath::root().as_str())
             .unwrap();
         let group = group_builder.build(store.clone(), "/group").unwrap();
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_type::float32(),
             0.0f32,
         );
 
@@ -322,7 +314,7 @@ mod tests {
     fn hierarchy_try_from_array() {
         let store = Arc::new(MemoryStore::new());
         let array_builder =
-            ArrayBuilder::new(vec![1], vec![1], crate::array::DataType::Float32, 0.0f32);
+            ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -341,7 +333,7 @@ mod tests {
             object_store::memory::InMemory::new(),
         ));
         let array_builder =
-            ArrayBuilder::new(vec![1], vec![1], crate::array::DataType::Float32, 0.0f32);
+            ArrayBuilder::new(vec![1], vec![1], crate::array::data_type::float32(), 0.0f32);
 
         let array = array_builder
             .build(store, "/store/of/data.zarr/path/to/an/array")
@@ -379,7 +371,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_type::float32(),
             0.0f32,
         )
         .build(store.clone(), "/group/subgroup/array")
@@ -392,7 +384,9 @@ mod tests {
         let hierarchy = Hierarchy::try_from_async_group(&group).await;
         assert!(hierarchy.is_ok());
         let hierarchy = hierarchy.unwrap();
-        assert!("/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string())
+        assert!(
+            "/\n  group\n    subgroup\n      array [10, 10] float32\n" == hierarchy.to_string()
+        );
     }
 
     #[cfg(feature = "async")]
@@ -470,8 +464,10 @@ mod tests {
 
         let hierarchy = Hierarchy::try_from_group(&group).unwrap();
 
-        assert_eq!("/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n"
-                    ,hierarchy.tree());
+        assert_eq!(
+            "/\n  array [10, 10] float32\n  group\n    array [10, 10] float32\n    subgroup\n      mysubarray [10, 10] float32\n",
+            hierarchy.tree()
+        );
 
         let store = Arc::new(MemoryStore::new());
         let groupv2 = Group::new_with_metadata(
@@ -485,10 +481,10 @@ mod tests {
             store.clone(),
             "/groupv2/arrayv2",
             ArrayMetadata::V2(ArrayMetadataV2::new(
-                vec![1].into(),
-                zarrs_metadata::ChunkShape::from(vec![NonZeroU64::new(1).unwrap()]),
+                vec![1],
+                crate::array::ChunkShape::from(vec![NonZeroU64::new(1).unwrap()]),
                 zarrs_metadata::v2::DataTypeMetadataV2::Simple("<f8".into()),
-                zarrs_metadata::v2::FillValueMetadataV2::NaN,
+                zarrs_metadata::FillValueMetadata::from(f64::NAN),
                 None,
                 None,
             )),
@@ -534,13 +530,13 @@ mod tests {
         let group_builder = GroupBuilder::default();
 
         let root = group_builder
-            .build(store.clone(), &NodePath::root().as_str())
+            .build(store.clone(), NodePath::root().as_str())
             .unwrap();
         let group = group_builder.build(store.clone(), "/group").unwrap();
         let array_builder = ArrayBuilder::new(
             vec![10, 10],
             vec![5, 5],
-            crate::array::DataType::Float32,
+            crate::array::data_type::float32(),
             0.0f32,
         );
 

@@ -27,55 +27,61 @@
 //!     "checksum": true
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::zstd::ZstdCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::zstd::ZstdCodecConfiguration;
 //! # serde_json::from_str::<ZstdCodecConfiguration>(JSON).unwrap();
 
 mod zstd_codec;
 
 use std::sync::Arc;
 
-pub use zarrs_metadata_ext::codec::zstd::{
-    ZstdCodecConfiguration, ZstdCodecConfigurationV1, ZstdCompressionLevel,
-};
-use zarrs_registry::codec::ZSTD;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 pub use zstd_codec::ZstdCodec;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
+pub use zarrs_metadata_ext::codec::zstd::{
+    ZstdCodecConfiguration, ZstdCodecConfigurationNumcodecs, ZstdCodecConfigurationV1,
+    ZstdCompressionLevel,
 };
+use zarrs_plugin::PluginCreateError;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(ZstdCodec, v3: "zstd", v2: "zstd");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(ZSTD, is_identifier_zstd, create_codec_zstd)
+    CodecPluginV3::new::<ZstdCodec>()
 }
 
-fn is_identifier_zstd(identifier: &str) -> bool {
-    identifier == ZSTD
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<ZstdCodec>()
 }
 
-pub(crate) fn create_codec_zstd(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: ZstdCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ZSTD, "codec", metadata.to_string()))?;
-    let codec = Arc::new(ZstdCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for ZstdCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: ZstdCodecConfigurationV1 = metadata.to_typed_configuration()?;
+        let codec = ZstdCodec::new(configuration.level.into(), configuration.checksum);
+        Ok(Codec::BytesToBytes(Arc::new(codec)))
+    }
+}
+
+impl CodecTraitsV2 for ZstdCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: ZstdCodecConfigurationNumcodecs = metadata.to_typed_configuration()?;
+        let codec = ZstdCodec::new(configuration.level.into(), false);
+        Ok(Codec::BytesToBytes(Arc::new(codec)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID: &str = r#"{
     "level": 22,
@@ -138,9 +144,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -185,9 +193,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

@@ -25,7 +25,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::adler32::Adler32CodecConfiguration;
+//! # use zarrs::metadata_ext::codec::adler32::Adler32CodecConfiguration;
 //! # serde_json::from_str::<Adler32CodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -34,62 +34,72 @@ mod adler32_codec;
 use std::sync::Arc;
 
 pub use adler32_codec::Adler32Codec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::adler32::{
     Adler32CodecConfiguration, Adler32CodecConfigurationV1,
 };
-use zarrs_registry::codec::ADLER32;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(Adler32Codec,
+    v3: "numcodecs.adler32", [],
+    v2: "adler32"
+);
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(ADLER32, is_identifier_adler32, create_codec_adler32)
+    CodecPluginV3::new::<Adler32Codec>()
+}
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<Adler32Codec>()
 }
 
-fn is_identifier_adler32(identifier: &str) -> bool {
-    identifier == ADLER32
+impl CodecTraitsV3 for Adler32Codec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_adler32(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(ADLER32, "codec", metadata.to_string()))?;
-    let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV2 for Adler32Codec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: Adler32CodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(Adler32Codec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{
-                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
-            },
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
+        CodecTraits,
+    };
+    use zarrs_storage::byte_range::ByteRange;
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
     const JSON2: &str = r#"{"location":"start"}"#;
     const JSON3: &str = r#"{"location":"end"}"#;
 
     #[test]
     fn codec_adler32_configuration_none() {
-        let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
+        let codec_configuration: Adler32CodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Adler32Codec::new_with_configuration(&codec_configuration).unwrap();
-        let configuration = codec.configuration("numcodecs.adler32").unwrap();
-        assert_eq!(serde_json::to_string(&configuration).unwrap(), r#"{}"#);
+        let configuration = codec
+            .configuration_v3(&CodecMetadataOptions::default())
+            .unwrap();
+        assert_eq!(serde_json::to_string(&configuration).unwrap(), r"{}");
     }
 
     #[test]

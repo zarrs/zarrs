@@ -9,7 +9,7 @@
 //! - `packbits`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `packbits`
+//! None
 //!
 //! ### Codec `configuration` Example - [`PackBitsCodecConfiguration`]:
 //! ```rust
@@ -20,196 +20,63 @@
 //!     "last_bit": null
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::packbits::PackBitsCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::packbits::PackBitsCodecConfiguration;
 //! # serde_json::from_str::<PackBitsCodecConfiguration>(JSON).unwrap();
 //! ```
 
+mod data_type_extension_packbits_codec;
 mod packbits_codec;
 mod packbits_partial_decoder;
 
 use std::sync::Arc;
 
-use crate::array::codec::CodecError;
+use num::Integer;
+pub use packbits_codec::PackBitsCodec;
+use zarrs_metadata::v3::MetadataV3;
+
+use crate::array::DataType;
+use zarrs_codec::{Codec, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::packbits::{
     PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
 };
-use zarrs_registry::codec::PACKBITS;
+use zarrs_plugin::PluginCreateError;
 
-use crate::array::DataType;
-use num::Integer;
-pub use packbits_codec::PackBitsCodec;
+zarrs_plugin::impl_extension_aliases!(PackBitsCodec, v3: "packbits");
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+// Register the V3 codec.
+inventory::submit! {
+    CodecPluginV3::new::<PackBitsCodec>()
+}
+
+impl CodecTraitsV3 for PackBitsCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: PackBitsCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToBytes(codec))
+    }
+}
+
+// Re-export extension trait from zarrs_data_type
+pub use zarrs_data_type::codec_traits::packbits::{
+    PackBitsDataTypeExt, PackBitsDataTypePlugin, PackBitsDataTypeTraits,
+    impl_pack_bits_data_type_traits,
 };
 
-// Register the codec.
-inventory::submit! {
-    CodecPlugin::new(PACKBITS, is_identifier_packbits, create_codec_packbits)
-}
-
-fn is_identifier_packbits(identifier: &str) -> bool {
-    identifier == PACKBITS
-}
-
-pub(crate) fn create_codec_packbits(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: PackBitsCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(PACKBITS, "codec", metadata.to_string()))?;
-    let codec = Arc::new(PackBitsCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToBytes(codec))
-}
-
-struct DataTypeExtensionPackBitsCodecComponents {
+struct PackBitsCodecComponents {
     pub component_size_bits: u64,
     pub num_components: u64,
     pub sign_extension: bool,
 }
 
-#[allow(clippy::too_many_lines)]
 fn pack_bits_components(
     data_type: &DataType,
-) -> Result<DataTypeExtensionPackBitsCodecComponents, CodecError> {
-    type DT = DataType;
-    match data_type {
-        DT::Bool => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 1,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::UInt2 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 2,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int2 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 2,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt4 | DT::Float4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int4 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::Float6E2M3FN | DT::Float6E3M2FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 6,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::UInt8
-        | DT::Float8E3M4
-        | DT::Float8E4M3
-        | DT::Float8E4M3B11FNUZ
-        | DT::Float8E4M3FNUZ
-        | DT::Float8E5M2
-        | DT::Float8E5M2FNUZ
-        | DT::Float8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DataType::ComplexFloat4E2M1FN => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 4,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DataType::ComplexFloat6E2M3FN | DataType::ComplexFloat6E3M2FN => {
-            Ok(DataTypeExtensionPackBitsCodecComponents {
-                component_size_bits: 6,
-                num_components: 2,
-                sign_extension: false,
-            })
-        }
-        DataType::ComplexFloat8E3M4
-        | DataType::ComplexFloat8E4M3
-        | DataType::ComplexFloat8E4M3B11FNUZ
-        | DataType::ComplexFloat8E4M3FNUZ
-        | DataType::ComplexFloat8E5M2
-        | DataType::ComplexFloat8E5M2FNUZ
-        | DataType::ComplexFloat8E8M0FNU => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Int8 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 8,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt16 | DT::Float16 | DT::BFloat16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::ComplexBFloat16 | DT::ComplexFloat16 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 16,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::UInt32 | DT::Float32 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int32
-        | DT::NumpyDateTime64 {
-            unit: _,
-            scale_factor: _,
-        }
-        | DT::NumpyTimeDelta64 {
-            unit: _,
-            scale_factor: _,
-        } => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::UInt64 | DT::Float64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 1,
-            sign_extension: false,
-        }),
-        DT::Int64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 1,
-            sign_extension: true,
-        }),
-        DT::Complex64 | DT::ComplexFloat32 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 32,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Complex128 | DT::ComplexFloat64 => Ok(DataTypeExtensionPackBitsCodecComponents {
-            component_size_bits: 64,
-            num_components: 2,
-            sign_extension: false,
-        }),
-        DT::Extension(ext) => {
-            let packbits = ext.codec_packbits()?;
-            Ok(DataTypeExtensionPackBitsCodecComponents {
-                component_size_bits: packbits.component_size_bits(),
-                num_components: packbits.num_components(),
-                sign_extension: packbits.sign_extension(),
-            })
-        }
-        DT::String | DT::Bytes | DT::RawBits(_) => Err(CodecError::UnsupportedDataType(
-            data_type.clone(),
-            PACKBITS.to_string(),
-        )),
-    }
+) -> Result<PackBitsCodecComponents, zarrs_data_type::DataTypeCodecError> {
+    let packbits = data_type.codec_packbits()?;
+    Ok(PackBitsCodecComponents {
+        component_size_bits: packbits.component_size_bits(),
+        num_components: packbits.num_components(),
+        sign_extension: packbits.sign_extension(),
+    })
 }
 
 fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
@@ -222,19 +89,17 @@ fn div_rem_8bit(bit: u64, element_size_bits: u64) -> (u64, u8) {
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use num::Integer;
-    use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
+    use zarrs_data_type::FillValue;
 
-    use crate::{
-        array::{
-            codec::{ArrayToBytesCodecTraits, BytesCodec, BytesPartialDecoderTraits, CodecOptions},
-            element::{Element, ElementOwned},
-            ArrayBytes, ChunkRepresentation, DataType,
-        },
-        array_subset::ArraySubset,
-    };
+    use crate::array::codec::BytesCodec;
+    use crate::array::element::{Element, ElementOwned};
+    use crate::array::{ArrayBytes, ArraySubset, data_type};
+    use zarrs_codec::{ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions};
+    use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
     #[test]
     fn div_rem_8bit() {
@@ -269,14 +134,12 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Bool;
-            let fill_value = false;
-
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::bool();
+            let fill_value = FillValue::from(false);
+
             let elements: Vec<bool> = (0..40).map(|i| i % 3 == 0).collect();
-            let bytes = bool::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = bool::into_array_bytes(&data_type, elements)?.into_owned();
             // T F F T F
             // F T F F T
             // F F T F F
@@ -286,16 +149,20 @@ mod tests {
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
-            assert!((encoded.len() as u64) <= (40 * 1).div_ceil(&8) + 1);
+            assert!((encoded.len() as u64) <= 40.div_ceil(&8) + 1);
 
             // Decoding
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -307,7 +174,9 @@ mod tests {
             let partial_decoder = codec
                 .partial_decoder(
                     input_handle.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -332,19 +201,19 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Float32;
-            let fill_value = 0.0f32;
-
             let chunk_shape = vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::float32();
+            let fill_value = FillValue::from(0.0f32);
+
             let elements: Vec<f32> = (0..40).map(|i| i as f32).collect();
-            let bytes = f32::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = f32::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (40 * 32).div_ceil(&8) + 1);
@@ -353,7 +222,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -363,7 +234,9 @@ mod tests {
             let decoded = BytesCodec::little()
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -385,21 +258,19 @@ mod tests {
                         super::PackBitsCodec::new(encoding, Some(first_bit), Some(last_bit))
                             .unwrap(),
                     );
-                    let data_type = DataType::Int16;
-                    let fill_value = 0i16;
-
                     let chunk_shape =
                         vec![NonZeroU64::new(8).unwrap(), NonZeroU64::new(5).unwrap()];
-                    let chunk_representation =
-                        ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value)
-                            .unwrap();
+                    let data_type = data_type::int16();
+                    let fill_value = FillValue::from(0i16);
                     let elements: Vec<i16> = (-20..20).map(|i| (i as i16) << first_bit).collect();
-                    let bytes = i16::into_array_bytes(&data_type, &elements)?.into_owned();
+                    let bytes = i16::to_array_bytes(&data_type, &elements)?.into_owned();
 
                     // Encoding
                     let encoded = codec.encode(
                         bytes.clone(),
-                        &chunk_representation,
+                        &chunk_shape,
+                        &data_type,
+                        &fill_value,
                         &CodecOptions::default(),
                     )?;
                     assert!(
@@ -410,7 +281,9 @@ mod tests {
                     let decoded = codec
                         .decode(
                             encoded.clone(),
-                            &chunk_representation,
+                            &chunk_shape,
+                            &data_type,
+                            &fill_value,
                             &CodecOptions::default(),
                         )
                         .unwrap();
@@ -429,19 +302,19 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::UInt2;
-            let fill_value = 0u8;
-
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::uint2();
+            let fill_value = FillValue::from(0u8);
+
             let elements: Vec<u8> = (0..4).map(|i| i as u8).collect();
-            let bytes = u8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
@@ -450,7 +323,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -467,19 +342,19 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::UInt4;
-            let fill_value = 0u8;
-
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::uint4();
+            let fill_value = FillValue::from(0u8);
+
             let elements: Vec<u8> = (0..16).map(|i| i as u8).collect();
-            let bytes = u8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = u8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
@@ -488,7 +363,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -505,19 +382,19 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Int2;
-            let fill_value = 0i8;
-
             let chunk_shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::int2();
+            let fill_value = FillValue::from(0i8);
+
             let elements: Vec<i8> = (-2..2).map(|i| i as i8).collect();
-            let bytes = i8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 4).div_ceil(&8) + 1);
@@ -526,7 +403,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -543,19 +422,19 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Int4;
-            let fill_value = 0i8;
-
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::int4();
+            let fill_value = FillValue::from(0i8);
+
             let elements: Vec<i8> = (-8..8).map(|i| i as i8).collect();
-            let bytes = i8::into_array_bytes(&data_type, &elements)?.into_owned();
+            let bytes = i8::to_array_bytes(&data_type, &elements)?.into_owned();
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
@@ -564,7 +443,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -581,18 +462,18 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Float4E2M1FN;
-            let fill_value = 0u8;
-
             let chunk_shape = vec![NonZeroU64::new(16).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::float4_e2m1fn();
+            let fill_value = FillValue::from(0u8);
+
             let bytes = ArrayBytes::new_flen((0..16).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (4 * 16).div_ceil(&8) + 1);
@@ -601,7 +482,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -618,18 +501,18 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Float6E2M3FN;
-            let fill_value = 0u8;
-
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::float6_e2m3fn();
+            let fill_value = FillValue::from(0u8);
+
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
@@ -638,7 +521,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();
@@ -655,18 +540,18 @@ mod tests {
             PackBitsPaddingEncoding::LastByte,
         ] {
             let codec = Arc::new(super::PackBitsCodec::new(encoding, None, None).unwrap());
-            let data_type = DataType::Float6E3M2FN;
-            let fill_value = 0u8;
-
             let chunk_shape = vec![NonZeroU64::new(64).unwrap(), NonZeroU64::new(1).unwrap()];
-            let chunk_representation =
-                ChunkRepresentation::new(chunk_shape, data_type.clone(), fill_value).unwrap();
+            let data_type = data_type::float6_e3m2fn();
+            let fill_value = FillValue::from(0u8);
+
             let bytes = ArrayBytes::new_flen((0..64).map(|i| i as u8).collect::<Vec<u8>>());
 
             // Encoding
             let encoded = codec.encode(
                 bytes.clone(),
-                &chunk_representation,
+                &chunk_shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )?;
             assert!((encoded.len() as u64) <= (6 * 64).div_ceil(&8) + 1);
@@ -675,7 +560,9 @@ mod tests {
             let decoded = codec
                 .decode(
                     encoded.clone(),
-                    &chunk_representation,
+                    &chunk_shape,
+                    &data_type,
+                    &fill_value,
                     &CodecOptions::default(),
                 )
                 .unwrap();

@@ -1,26 +1,26 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use pco::{standalone::guarantee::file_size, ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::pcodec::{
-    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
-};
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::PCODEC;
-
-use crate::array::{
-    codec::{
-        ArrayBytes, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RawBytes,
-        RecommendedConcurrency,
-    },
-    convert_from_bytes_slice, transmute_to_bytes_vec, BytesRepresentation, ChunkRepresentation,
-    DataType,
-};
+use pco::standalone::guarantee::file_size;
+use pco::{ChunkConfig, DeltaSpec, ModeSpec, PagingSpec};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
     PcodecCodecConfiguration, PcodecCodecConfigurationV1, PcodecCompressionLevel,
-    PcodecDeltaEncodingOrder,
+    PcodecDataTypeExt, PcodecDeltaEncodingOrder, PcodecElementType,
+};
+use crate::array::{
+    ChunkShapeTraits, DataType, FillValue, convert_from_bytes_slice, transmute_to_bytes_vec,
+};
+use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::pcodec::{
+    PcodecDeltaSpecConfiguration, PcodecModeSpecConfiguration, PcodecPagingSpecConfiguration,
 };
 
 /// A `pcodec` codec implementation.
@@ -49,7 +49,7 @@ fn configuration_to_chunk_config(configuration: &PcodecCodecConfigurationV1) -> 
     let mode_spec = mode_spec_config_to_pco(configuration.mode_spec);
     let delta_spec = match configuration.delta_spec {
         PcodecDeltaSpecConfiguration::Auto => DeltaSpec::Auto,
-        PcodecDeltaSpecConfiguration::None => DeltaSpec::None,
+        PcodecDeltaSpecConfiguration::None => DeltaSpec::NoOp,
         PcodecDeltaSpecConfiguration::TryConsecutive => DeltaSpec::TryConsecutive(
             configuration
                 .delta_encoding_order
@@ -90,33 +90,32 @@ impl PcodecCodec {
 }
 
 impl CodecTraits for PcodecCodec {
-    fn identifier(&self) -> &str {
-        PCODEC
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let mode_spec = mode_spec_pco_to_config(&self.chunk_config.mode_spec);
         let (delta_spec, delta_encoding_order) = match self.chunk_config.delta_spec {
             DeltaSpec::Auto => (PcodecDeltaSpecConfiguration::Auto, None),
-            DeltaSpec::None => (PcodecDeltaSpecConfiguration::None, None),
+            DeltaSpec::NoOp => (PcodecDeltaSpecConfiguration::None, None),
             DeltaSpec::TryConsecutive(delta_encoding_order) => (
                 PcodecDeltaSpecConfiguration::TryConsecutive,
                 Some(PcodecDeltaEncodingOrder::try_from(delta_encoding_order).expect("valid")),
             ),
             DeltaSpec::TryLookback => (PcodecDeltaSpecConfiguration::TryLookback, None),
-            _ => unimplemented!("unsupported pcodec delta spec"),
+            DeltaSpec::TryConv1(_) | _ => unreachable!("not reachable by any constructor"),
         };
         let (paging_spec, equal_pages_up_to) = match self.chunk_config.paging_spec {
             PagingSpec::EqualPagesUpTo(equal_pages_up_to) => (
                 PcodecPagingSpecConfiguration::EqualPagesUpTo,
                 equal_pages_up_to,
             ),
-            PagingSpec::Exact(_) => unimplemented!("pcodec exact paging spec not supported"),
-            _ => unimplemented!("unsupported pcodec paging spec"),
+            PagingSpec::Exact(_) | _ => unreachable!("not reachable by any constructor"),
         };
 
         let configuration = PcodecCodecConfiguration::V1(PcodecCodecConfigurationV1 {
@@ -149,7 +148,8 @@ impl CodecTraits for PcodecCodec {
 impl ArrayCodecTraits for PcodecCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // pcodec does not support parallel decode
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -169,10 +169,15 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
-        let data_type = decoded_representation.data_type();
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
+        let element_type = pcodec.pcodec_element_type();
+
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
             ( $t:ty ) => {
@@ -185,56 +190,31 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             };
         }
 
-        match data_type {
-            DataType::UInt16 => {
-                pcodec_encode!(u16)
-            }
-            DataType::UInt32 => {
-                pcodec_encode!(u32)
-            }
-            DataType::UInt64 => {
-                pcodec_encode!(u64)
-            }
-            DataType::Int16 => {
-                pcodec_encode!(i16)
-            }
-            DataType::Int32 => {
-                pcodec_encode!(i32)
-            }
-            DataType::Int64
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => {
-                pcodec_encode!(i64)
-            }
-            DataType::Float16 | DataType::ComplexFloat16 => {
-                pcodec_encode!(half::f16)
-            }
-            DataType::Float32 | DataType::Complex64 | DataType::ComplexFloat32 => {
-                pcodec_encode!(f32)
-            }
-            DataType::Float64 | DataType::Complex128 | DataType::ComplexFloat64 => {
-                pcodec_encode!(f64)
-            }
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                PCODEC.to_string(),
-            )),
+        match element_type {
+            PcodecElementType::U16 => pcodec_encode!(u16),
+            PcodecElementType::U32 => pcodec_encode!(u32),
+            PcodecElementType::U64 => pcodec_encode!(u64),
+            PcodecElementType::I16 => pcodec_encode!(i16),
+            PcodecElementType::I32 => pcodec_encode!(i32),
+            PcodecElementType::I64 => pcodec_encode!(i64),
+            PcodecElementType::F16 => pcodec_encode!(half::f16),
+            PcodecElementType::F32 => pcodec_encode!(f32),
+            PcodecElementType::F64 => pcodec_encode!(f64),
         }
     }
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        bytes: ArrayBytesRaw<'a>,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let data_type = decoded_representation.data_type();
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
+        let element_type = pcodec.pcodec_element_type();
+
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
                 pco::standalone::simple_decompress(&bytes)
@@ -243,97 +223,46 @@ impl ArrayToBytesCodecTraits for PcodecCodec {
             };
         }
 
-        let bytes = match data_type {
-            DataType::UInt16 => {
-                pcodec_decode!(u16)
-            }
-            DataType::UInt32 => {
-                pcodec_decode!(u32)
-            }
-            DataType::UInt64 => {
-                pcodec_decode!(u64)
-            }
-            DataType::Int16 => {
-                pcodec_decode!(i16)
-            }
-            DataType::Int32 => {
-                pcodec_decode!(i32)
-            }
-            DataType::Int64
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => {
-                pcodec_decode!(i64)
-            }
-            DataType::Float16 | DataType::ComplexFloat16 => {
-                pcodec_decode!(half::f16)
-            }
-            DataType::Float32 | DataType::Complex64 | DataType::ComplexFloat32 => {
-                pcodec_decode!(f32)
-            }
-            DataType::Float64 | DataType::Complex128 | DataType::ComplexFloat64 => {
-                pcodec_decode!(f64)
-            }
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                PCODEC.to_string(),
-            )),
+        let bytes = match element_type {
+            PcodecElementType::U16 => pcodec_decode!(u16),
+            PcodecElementType::U32 => pcodec_decode!(u32),
+            PcodecElementType::U64 => pcodec_decode!(u64),
+            PcodecElementType::I16 => pcodec_decode!(i16),
+            PcodecElementType::I32 => pcodec_decode!(i32),
+            PcodecElementType::I64 => pcodec_decode!(i64),
+            PcodecElementType::F16 => pcodec_decode!(half::f16),
+            PcodecElementType::F32 => pcodec_decode!(f32),
+            PcodecElementType::F64 => pcodec_decode!(f64),
         }?;
         Ok(ArrayBytes::from(bytes))
     }
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let data_type = decoded_representation.data_type();
-        let mut num_elements = decoded_representation.num_elements_usize();
-        if data_type == &DataType::Complex64 || data_type == &DataType::Complex128 {
-            num_elements *= 2;
-        }
+        // Get element type via codec support
+        let pcodec = data_type.codec_pcodec()?;
+        let element_type = pcodec.pcodec_element_type();
 
-        let size = match data_type {
-            DataType::UInt16 | DataType::Int16 | DataType::Float16 | DataType::ComplexFloat16 => {
-                Ok(
-                    file_size::<u16>(num_elements, &self.chunk_config.paging_spec)
-                        .map_err(|err| CodecError::from(err.to_string()))?,
-                )
+        let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();
+
+        let size = match element_type {
+            PcodecElementType::U16 | PcodecElementType::I16 | PcodecElementType::F16 => {
+                file_size::<u16>(num_elements, &self.chunk_config.paging_spec)
+                    .map_err(|err| CodecError::from(err.to_string()))?
             }
-            DataType::UInt32
-            | DataType::Int32
-            | DataType::Float32
-            | DataType::Complex64
-            | DataType::ComplexFloat32 => Ok(file_size::<u32>(
-                num_elements,
-                &self.chunk_config.paging_spec,
-            )
-            .map_err(|err| CodecError::from(err.to_string()))?),
-            DataType::UInt64
-            | DataType::Int64
-            | DataType::Float64
-            | DataType::Complex128
-            | DataType::ComplexFloat64
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
+            PcodecElementType::U32 | PcodecElementType::I32 | PcodecElementType::F32 => {
+                file_size::<u32>(num_elements, &self.chunk_config.paging_spec)
+                    .map_err(|err| CodecError::from(err.to_string()))?
             }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            } => Ok(
+            PcodecElementType::U64 | PcodecElementType::I64 | PcodecElementType::F64 => {
                 file_size::<u64>(num_elements, &self.chunk_config.paging_spec)
-                    .map_err(|err| CodecError::from(err.to_string()))?,
-            ),
-            super::unsupported_dtypes!() => Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                PCODEC.to_string(),
-            )),
-        }?;
+                    .map_err(|err| CodecError::from(err.to_string()))?
+            }
+        };
         Ok(BytesRepresentation::BoundedSize(
             u64::try_from(size).unwrap(),
         ))

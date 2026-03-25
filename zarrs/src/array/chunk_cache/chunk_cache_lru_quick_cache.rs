@@ -1,14 +1,12 @@
-use super::{
-    atomic, Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits,
-    ChunkCacheType, ChunkIndices,
-};
-
-use std::{
-    num::NonZeroUsize,
-    sync::{Mutex, MutexGuard},
-};
+use std::num::NonZeroUsize;
+use std::sync::{Mutex, MutexGuard};
 
 use lru::LruCache;
+
+use super::{
+    Arc, ArrayError, CacheChunkLimitTraits, CacheSizeLimitTraits, CacheTraits, ChunkCacheType,
+    ChunkIndices, atomic,
+};
 
 pub(super) struct CacheChunkLimit<CT: ChunkCacheType> {
     cache: Mutex<LruCache<ChunkIndices, CT>>,

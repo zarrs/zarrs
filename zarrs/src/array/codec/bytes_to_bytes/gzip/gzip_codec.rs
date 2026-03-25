@@ -1,26 +1,20 @@
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-    sync::Arc,
-};
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 use flate2::bufread::{GzDecoder, GzEncoder};
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::GZIP;
-
-use crate::array::{
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
 
 use super::{
     GzipCodecConfiguration, GzipCodecConfigurationV1, GzipCompressionLevel,
     GzipCompressionLevelError,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 /// A `gzip` codec implementation.
 #[derive(Clone, Debug)]
@@ -57,13 +51,13 @@ impl GzipCodec {
 }
 
 impl CodecTraits for GzipCodec {
-    fn identifier(&self) -> &str {
-        GZIP
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = GzipCodecConfiguration::V1(GzipCodecConfigurationV1 {
@@ -105,9 +99,9 @@ impl BytesToBytesCodecTraits for GzipCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut encoder = GzEncoder::new(
             Cursor::new(decoded_value),
             flate2::Compression::new(self.compression_level.as_u32()),
@@ -119,10 +113,10 @@ impl BytesToBytesCodecTraits for GzipCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut decoder = GzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;

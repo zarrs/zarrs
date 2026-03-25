@@ -1,8 +1,8 @@
 #![allow(missing_docs)]
 
-use zarrs_object_store::AsyncObjectStore;
-
 use std::error::Error;
+
+use zarrs_object_store::AsyncObjectStore;
 
 #[tokio::test]
 async fn memory() -> Result<(), Box<dyn Error>> {
@@ -10,6 +10,7 @@ async fn memory() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::async_store_write(&store).await?;
     zarrs_storage::store_test::async_store_read(&store).await?;
     zarrs_storage::store_test::async_store_list(&store).await?;
+    zarrs_storage::store_test::async_store_list_size(&store).await?;
     Ok(())
 }
 
@@ -23,5 +24,6 @@ async fn filesystem() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::async_store_write(&store).await?;
     zarrs_storage::store_test::async_store_read(&store).await?;
     zarrs_storage::store_test::async_store_list(&store).await?;
+    zarrs_storage::store_test::async_store_list_size(&store).await?;
     Ok(())
 }

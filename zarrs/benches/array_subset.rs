@@ -2,14 +2,14 @@
 #![allow(missing_docs)]
 
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
-    Throughput,
+    AxisScale, BenchmarkId, Criterion, PlotConfiguration, Throughput, criterion_group,
+    criterion_main,
 };
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::ArraySubset;
 
 fn array_subset_indices_iterator(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    let mut group = c.benchmark_group(format!("array_subset_indices_iterator"));
+    let mut group = c.benchmark_group("array_subset_indices_iterator".to_string());
     group.plot_config(plot_config);
 
     for array_subset_size in [4, 16, 64, 256] {

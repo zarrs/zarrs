@@ -3,19 +3,12 @@
 use derive_more::Display;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::ConfigurationSerialize;
 
-use crate::{
-    array::chunk_key_encoding::ChunkKeyEncodingPlugin,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-    storage::StoreKey,
-};
-
-use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
-
-/// Unique identifier for the `default_suffix` chunk key encoding (extension).
-const DEFAULT_SUFFIX: &str = "zarrs.default_suffix"; // TODO: Move to zarrs_registry on stabilisation
+use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkKeySeparator, Configuration, ConfigurationSerialize};
+use zarrs_plugin::PluginCreateError;
+use zarrs_storage::StoreKey;
 
 /// Configuration parameters for a `default_suffix` chunk key encoding.
 // TODO: move to zarrs_metadata_ex on stabilisation
@@ -36,29 +29,13 @@ const fn default_separator() -> ChunkKeySeparator {
     ChunkKeySeparator::Slash
 }
 
+zarrs_plugin::impl_extension_aliases!(DefaultSuffixChunkKeyEncoding,
+    v3: "zarrs.default_suffix", []
+);
+
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(DEFAULT_SUFFIX, is_name_default_suffix, create_chunk_key_encoding_default_suffix)
-}
-
-fn is_name_default_suffix(name: &str) -> bool {
-    name.eq(DEFAULT_SUFFIX)
-}
-
-pub(crate) fn create_chunk_key_encoding_default_suffix(
-    metadata: &MetadataV3,
-) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
-    let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(
-                DEFAULT_SUFFIX,
-                "chunk key encoding",
-                metadata.to_string(),
-            )
-        })?;
-    let default = DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
-    Ok(ChunkKeyEncoding::new(default))
+    ChunkKeyEncodingPlugin::new::<DefaultSuffixChunkKeyEncoding>()
 }
 
 /// A `default_suffix` chunk key encoding.
@@ -83,13 +60,21 @@ impl DefaultSuffixChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = DefaultSuffixChunkKeyEncodingConfiguration {
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk key encoding");
+        let configuration: DefaultSuffixChunkKeyEncodingConfiguration =
+            metadata.to_typed_configuration()?;
+        let default =
+            DefaultSuffixChunkKeyEncoding::new(configuration.separator, configuration.suffix);
+        Ok(default.into())
+    }
+
+    fn configuration(&self) -> Configuration {
+        DefaultSuffixChunkKeyEncodingConfiguration {
             separator: self.separator,
             suffix: self.suffix.clone(),
-        };
-        MetadataV3::new_with_serializable_configuration(DEFAULT_SUFFIX.to_string(), &configuration)
-            .unwrap()
+        }
+        .into()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {
@@ -121,9 +106,8 @@ impl ChunkKeyEncodingTraits for DefaultSuffixChunkKeyEncoding {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::{data_key, NodePath};
-
     use super::*;
+    use crate::node::{NodePath, data_key};
 
     #[test]
     fn slash_nd() {

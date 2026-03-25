@@ -9,43 +9,71 @@
 #![doc = include_str!("../../doc/status/storage_transformers.md")]
 
 mod storage_transformer_chain;
+use std::sync::{Arc, LazyLock};
+
 pub use storage_transformer_chain::StorageTransformerChain;
-use zarrs_plugin::{Plugin, PluginUnsupportedError};
-use zarrs_storage::{MaybeSend, MaybeSync, ReadableWritableStorage};
-
-use std::sync::Arc;
-
-use crate::{
-    metadata::v3::MetadataV3,
-    node::NodePath,
-    plugin::PluginCreateError,
-    storage::{ListableStorage, ReadableStorage, StorageError, WritableStorage},
+use zarrs_plugin::{
+    ExtensionAliases, Plugin2, PluginUnsupportedError, RuntimePlugin2, RuntimeRegistry,
+    ZarrVersion3,
 };
 
+use crate::node::NodePath;
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_plugin::{ExtensionName, PluginCreateError};
 #[cfg(feature = "async")]
-use crate::storage::{
+use zarrs_storage::{
     AsyncListableStorage, AsyncReadableStorage, AsyncReadableWritableStorage, AsyncWritableStorage,
+};
+use zarrs_storage::{
+    ListableStorage, MaybeSend, MaybeSync, ReadableStorage, ReadableWritableStorage, StorageError,
+    WritableStorage,
 };
 
 /// An [`Arc`] wrapped storage transformer.
-pub type StorageTransformer = Arc<dyn StorageTransformerExtension>;
+pub type StorageTransformer = Arc<dyn StorageTransformerTraits>;
 
 /// A storage transformer plugin.
 #[derive(derive_more::Deref)]
-pub struct StorageTransformerPlugin(Plugin<StorageTransformer, (MetadataV3, NodePath)>);
+pub struct StorageTransformerPlugin(Plugin2<StorageTransformer, MetadataV3, NodePath>);
 inventory::collect!(StorageTransformerPlugin);
 
 impl StorageTransformerPlugin {
-    /// Create a new [`StorageTransformerPlugin`].
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(
-            inputs: &(MetadataV3, NodePath),
-        ) -> Result<StorageTransformer, PluginCreateError>,
-    ) -> Self {
-        Self(Plugin::new(identifier, match_name_fn, create_fn))
+    /// Create a new [`StorageTransformerPlugin`] for a type implementing [`ExtensionAliases<ZarrVersion3>`] and [`StorageTransformerTraits`].
+    pub const fn new<T: ExtensionAliases<ZarrVersion3> + StorageTransformerTraits>() -> Self {
+        Self(Plugin2::new(T::matches_name, T::create))
     }
+}
+
+/// A runtime storage transformer plugin for dynamic registration.
+pub type StorageTransformerRuntimePlugin = RuntimePlugin2<StorageTransformer, MetadataV3, NodePath>;
+
+/// Global runtime registry for storage transformer plugins.
+pub static STORAGE_TRANSFORMER_RUNTIME_REGISTRY: LazyLock<
+    RuntimeRegistry<StorageTransformerRuntimePlugin>,
+> = LazyLock::new(RuntimeRegistry::new);
+
+/// A handle to a registered storage transformer plugin.
+pub type StorageTransformerRuntimeRegistryHandle = Arc<StorageTransformerRuntimePlugin>;
+
+/// Register a storage transformer plugin at runtime.
+///
+/// Runtime-registered plugins take precedence over compile-time registered plugins.
+///
+/// # Returns
+/// A handle that can be used to unregister the plugin later.
+pub fn register_storage_transformer(
+    plugin: StorageTransformerRuntimePlugin,
+) -> StorageTransformerRuntimeRegistryHandle {
+    STORAGE_TRANSFORMER_RUNTIME_REGISTRY.register(plugin)
+}
+
+/// Unregister a runtime storage transformer plugin.
+///
+/// # Returns
+/// `true` if the plugin was found and removed, `false` otherwise.
+pub fn unregister_storage_transformer(handle: &StorageTransformerRuntimeRegistryHandle) -> bool {
+    STORAGE_TRANSFORMER_RUNTIME_REGISTRY.unregister(handle)
 }
 
 /// Create a storage transformer from metadata.
@@ -57,9 +85,27 @@ pub fn try_create_storage_transformer(
     metadata: &MetadataV3,
     path: &NodePath,
 ) -> Result<StorageTransformer, PluginCreateError> {
+    let name = metadata.name();
+
+    // Check runtime registry first (higher priority)
+    {
+        let result = STORAGE_TRANSFORMER_RUNTIME_REGISTRY.with_plugins(|plugins| {
+            for plugin in plugins {
+                if plugin.match_name(name) {
+                    return Some(plugin.create(metadata, path));
+                }
+            }
+            None
+        });
+        if let Some(result) = result {
+            return result;
+        }
+    }
+
+    // Fall back to compile-time registered plugins
     for plugin in inventory::iter::<StorageTransformerPlugin> {
-        if plugin.match_name(metadata.name()) {
-            return plugin.create(&(metadata.clone(), path.clone()));
+        if plugin.match_name(name) {
+            return plugin.create(metadata, path);
         }
     }
     Err(PluginUnsupportedError::new(
@@ -69,15 +115,28 @@ pub fn try_create_storage_transformer(
     .into())
 }
 
-/// A storage transformer extension.
+/// A storage transformer extension (Zarr V3 only).
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-pub trait StorageTransformerExtension: core::fmt::Debug + MaybeSend + MaybeSync {
-    /// Create metadata.
-    fn create_metadata(&self) -> MetadataV3;
+pub trait StorageTransformerTraits:
+    ExtensionName + core::fmt::Debug + MaybeSend + MaybeSync
+{
+    /// Create a storage transformer from metadata and path.
+    ///
+    /// # Errors
+    /// Returns [`PluginCreateError`] if the plugin cannot be created.
+    fn create(
+        metadata: &MetadataV3,
+        path: &NodePath,
+    ) -> Result<StorageTransformer, PluginCreateError>
+    where
+        Self: Sized;
+
+    /// Create configuration.
+    fn configuration(&self) -> Configuration;
 
     /// Create a readable transformer.
     ///

@@ -1,20 +1,19 @@
 use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-
-use crate::array::{
-    codec::{
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use zarrs_plugin::ZarrVersion;
 
 use super::test_unbounded_partial_decoder;
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{
+    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+
+zarrs_plugin::impl_extension_aliases!(TestUnboundedCodec, v3: "zarrs.test_unbounded");
 
 /// A `test_unbounded` codec implementation.
 #[derive(Clone, Debug)]
@@ -25,19 +24,26 @@ impl TestUnboundedCodec {
     ///
     /// # Errors
     /// Returns [`TestUnboundedCompressionLevelError`] if `compression_level` is not valid.
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }
 }
 
+impl Default for TestUnboundedCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CodecTraits for TestUnboundedCodec {
-    fn identifier(&self) -> &'static str {
-        "zarrs.test_unbounded"
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         None
@@ -77,18 +83,18 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(decoded_value)
     }
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(encoded_value)
     }
 

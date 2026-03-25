@@ -1,10 +1,7 @@
 //! Benchmark uncompressed unsharded and sharded arrays.
 #![allow(missing_docs)]
 
-use std::sync::Arc;
-
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use zarrs::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 fn array_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_write_all");
@@ -17,14 +14,14 @@ fn array_write_all(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![32; 3],
-                    zarrs::array::DataType::UInt8,
+                    zarrs::array::data_type::uint8(),
                     0u8,
                 )
                 .build(store.into(), "/")
                 .unwrap();
                 let data = vec![1u8; num_elements.try_into().unwrap()];
-                let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset_elements(&subset, &data).unwrap();
+                let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+                array.store_array_subset(&subset, &data).unwrap();
             });
         });
     }
@@ -39,20 +36,18 @@ fn array_write_all_sharded(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             b.iter(|| {
                 let store = zarrs::storage::store::MemoryStore::new();
-                let sharding_codec =
-                    Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![size; 3],
-                    zarrs::array::DataType::UInt16,
+                    zarrs::array::data_type::uint16(),
                     0u16,
                 )
-                .array_to_bytes_codec(sharding_codec)
+                .subchunk_shape(vec![32; 3])
                 .build(store.into(), "/")
                 .unwrap();
                 let data = vec![1u16; num_elements.try_into().unwrap()];
-                let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset_elements(&subset, &data).unwrap();
+                let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+                array.store_array_subset(&subset, &data).unwrap();
             });
         });
     }
@@ -70,18 +65,19 @@ fn array_read_all(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![32; 3],
-                zarrs::array::DataType::UInt16,
+                zarrs::array::data_type::uint16(),
                 0u16,
             )
             .build(store.into(), "/")
             .unwrap();
             let data = vec![1u16; num_elements.try_into().unwrap()];
-            let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset_elements(&subset, &data).unwrap();
+            let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+            array.store_array_subset(&subset, &data).unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes = array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: zarrs::array::ArrayBytes =
+                    array.retrieve_array_subset(&subset).unwrap();
             });
         });
     }
@@ -96,24 +92,23 @@ fn array_read_all_sharded(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             // Write the data
             let store = zarrs::storage::store::MemoryStore::new();
-            let sharding_codec =
-                Arc::new(ShardingCodecBuilder::new(vec![32; 3].try_into().unwrap()).build());
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![size; 3],
-                zarrs::array::DataType::UInt8,
+                zarrs::array::data_type::uint8(),
                 1u8,
             )
-            .array_to_bytes_codec(sharding_codec)
+            .subchunk_shape(vec![32; 3])
             .build(store.into(), "/")
             .unwrap();
             let data = vec![0u8; num_elements.try_into().unwrap()];
-            let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset_elements(&subset, &data).unwrap();
+            let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+            array.store_array_subset(&subset, &data).unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes = array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: zarrs::array::ArrayBytes =
+                    array.retrieve_array_subset(&subset).unwrap();
             });
         });
     }

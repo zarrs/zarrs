@@ -1,18 +1,14 @@
 #![allow(missing_docs)]
 
+use ndarray::ArrayD;
 use std::sync::Arc;
 
-use zarrs::{
-    array::Array,
-    array_subset::ArraySubset,
-    storage::{
-        storage_adapter::{
-            async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-            usage_log::UsageLogStorageAdapter,
-        },
-        ReadableStorage,
-    },
+use zarrs::array::{Array, ArraySubset};
+use zarrs::storage::ReadableStorage;
+use zarrs::storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 struct TokioBlockOn(tokio::runtime::Runtime);
 
@@ -52,17 +48,17 @@ fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(AsyncToSyncStorageAdapter::new(store, block_on))
         }
     };
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Init the existing array, reading metadata
@@ -74,17 +70,17 @@ fn http_array_read(backend: Backend) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Read the whole array
-    let data_all = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
+    let data_all: ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a chunk back from the store
     let chunk_indices = vec![1, 0];
-    let data_chunk = array.retrieve_chunk_ndarray::<f32>(&chunk_indices)?;
+    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2 = array.retrieve_array_subset_ndarray::<f32>(&subset_4x2)?;
+    let data_4x2: ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     Ok(())

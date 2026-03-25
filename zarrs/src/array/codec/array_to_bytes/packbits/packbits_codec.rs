@@ -3,36 +3,36 @@
 // FIXME: This codec was really hacked together.
 // It can probably be written much cleaner and with simpler logic.
 
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use num::Integer;
-use zarrs_metadata::{Configuration, Endianness};
-use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::PACKBITS;
-
-use crate::array::{
-    codec::{
-        array_to_bytes::{bytes::BytesCodecPartial, packbits::div_rem_8bit},
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, BytesCodec,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-    },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, RawBytes,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 #[cfg(feature = "async")]
 use super::packbits_partial_decoder::AsyncPackBitsPartialDecoder;
-
+use super::packbits_partial_decoder::PackBitsPartialDecoder;
 use super::{
-    pack_bits_components, packbits_partial_decoder::PackBitsPartialDecoder,
-    DataTypeExtensionPackBitsCodecComponents, PackBitsCodecConfiguration,
-    PackBitsCodecConfigurationV1,
+    PackBitsCodecComponents, PackBitsCodecConfiguration, PackBitsCodecConfigurationV1,
+    pack_bits_components,
 };
+use crate::array::codec::BytesCodec;
+use crate::array::codec::array_to_bytes::bytes::BytesCodecPartial;
+use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
+use crate::array::{
+    ArrayBytes, ArrayBytesRaw, BytesRepresentation, ChunkShapeTraits, DataType, FillValue,
+};
+use std::num::NonZeroU64;
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata::{Configuration, Endianness};
+use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
 /// A `packbits` codec implementation.
 #[derive(Debug, Clone)]
@@ -51,11 +51,7 @@ impl Default for PackBitsCodec {
 
 fn padding_bits(num_elements: u64, element_size_bits: u64) -> u8 {
     let rem = ((num_elements * element_size_bits) % 8) as u8;
-    if rem == 0 {
-        0
-    } else {
-        8 - rem
-    }
+    if rem == 0 { 0 } else { 8 - rem }
 }
 
 impl PackBitsCodec {
@@ -69,12 +65,12 @@ impl PackBitsCodec {
         first_bit: Option<u64>,
         last_bit: Option<u64>,
     ) -> Result<Self, PluginCreateError> {
-        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit) {
-            if last_bit < first_bit {
-                return Err(PluginCreateError::from(
-                    "packbits codec `last_bit` is less than `first_bit`",
-                ));
-            }
+        if let (Some(first_bit), Some(last_bit)) = (first_bit, last_bit)
+            && last_bit < first_bit
+        {
+            return Err(PluginCreateError::from(
+                "packbits codec `last_bit` is less than `first_bit`",
+            ));
         }
 
         Ok(Self {
@@ -105,13 +101,13 @@ impl PackBitsCodec {
 }
 
 impl CodecTraits for PackBitsCodec {
-    fn identifier(&self) -> &str {
-        PACKBITS
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = PackBitsCodecConfiguration::V1(PackBitsCodecConfigurationV1 {
@@ -139,7 +135,8 @@ impl CodecTraits for PackBitsCodec {
 impl ArrayCodecTraits for PackBitsCodec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -158,14 +155,16 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(decoded_representation.data_type())?;
+        } = pack_bits_components(data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
         let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
@@ -174,13 +173,15 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
             return BytesCodec::new(Some(Endianness::Little)).encode(
                 bytes.clone(),
-                decoded_representation,
+                shape,
+                data_type,
+                fill_value,
                 options,
             );
         }
 
         // Get the component and element size in bits
-        let num_elements = decoded_representation.num_elements();
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =
@@ -188,15 +189,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
 
         // Input checks
         let bytes = bytes.into_fixed()?;
-        let data_type_size_dec =
-            decoded_representation
-                .data_type()
-                .fixed_size()
-                .ok_or_else(|| {
-                    CodecError::Other(
-                        "data type must have a fixed size for the packbits codec".to_string(),
-                    )
-                })?;
+        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
+            CodecError::Other("data type must have a fixed size for the packbits codec".to_string())
+        })?;
         if bytes.len() as u64 != num_elements * data_type_size_dec as u64 {
             return Err(InvalidBytesLengthError::new(
                 bytes.len(),
@@ -238,20 +233,22 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             }
         }
 
-        Ok(RawBytes::from(bytes_enc))
+        Ok(ArrayBytesRaw::from(bytes_enc))
     }
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension,
-        } = pack_bits_components(decoded_representation.data_type())?;
+        } = pack_bits_components(data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
         let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
@@ -260,28 +257,24 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             return BytesCodec::new(Some(Endianness::Little)).decode(
                 bytes.clone(),
-                decoded_representation,
+                shape,
+                data_type,
+                fill_value,
                 options,
             );
         }
 
         // Get the component and element size in bits
-        let num_elements = decoded_representation.num_elements();
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes =
             usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
 
         // Input checks
-        let data_type_size_dec =
-            decoded_representation
-                .data_type()
-                .fixed_size()
-                .ok_or_else(|| {
-                    CodecError::Other(
-                        "data type must have a fixed size for packbits codec".to_string(),
-                    )
-                })?;
+        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
+            CodecError::Other("data type must have a fixed size for packbits codec".to_string())
+        })?;
         let expected_length = elements_size_bytes
             + match self.padding_encoding {
                 PackBitsPaddingEncoding::None => 0,
@@ -355,14 +348,16 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(decoded_representation.data_type())?;
+        } = pack_bits_components(data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
         let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
@@ -371,13 +366,17 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 Some(Endianness::Little),
             )))
         } else {
             Ok(Arc::new(PackBitsPartialDecoder::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape.to_vec(),
+                data_type.clone(),
+                fill_value.clone(),
                 self.padding_encoding,
                 self.first_bit,
                 self.last_bit,
@@ -389,14 +388,16 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(decoded_representation.data_type())?;
+        } = pack_bits_components(data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
         let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
@@ -405,13 +406,17 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape,
+                data_type,
+                fill_value,
                 Some(Endianness::Little),
             )))
         } else {
             Ok(Arc::new(AsyncPackBitsPartialDecoder::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape.to_vec(),
+                data_type.clone(),
+                fill_value.clone(),
                 self.padding_encoding,
                 self.first_bit,
                 self.last_bit,
@@ -421,17 +426,19 @@ impl ArrayToBytesCodecTraits for PackBitsCodec {
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let DataTypeExtensionPackBitsCodecComponents {
+        let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(decoded_representation.data_type())?;
+        } = pack_bits_components(data_type)?;
         let first_bit = self.first_bit.unwrap_or(0);
         let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
-        let num_elements = decoded_representation.num_elements();
+        let num_elements = shape.num_elements_u64();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes = (num_elements * element_size_bits).div_ceil(8);

@@ -1,33 +1,26 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ADLER32;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
-use crate::array::{
-    codec::{
-        bytes_to_bytes::{
-            strip_prefix_partial_decoder::StripPrefixPartialDecoder,
-            strip_suffix_partial_decoder::StripSuffixPartialDecoder,
-        },
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
+use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::array::codec::bytes_to_bytes::strip_prefix_partial_decoder::StripPrefixPartialDecoder;
+use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::{
     strip_prefix_partial_decoder::AsyncStripPrefixPartialDecoder,
     strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder,
 };
-
-use super::{Adler32CodecConfiguration, Adler32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{
+    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
+use zarrs_metadata_ext::codec::adler32::Adler32CodecConfigurationChecksumLocation;
 
 /// A `adler32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -61,13 +54,13 @@ impl Adler32Codec {
 }
 
 impl CodecTraits for Adler32Codec {
-    fn identifier(&self) -> &str {
-        ADLER32
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = Adler32CodecConfiguration::V1(Adler32CodecConfigurationV1 {
@@ -109,9 +102,9 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut adler = simd_adler32::Adler32::new();
         adler.write(&decoded_value);
         let checksum = adler.finish().to_le_bytes();
@@ -132,30 +125,35 @@ impl BytesToBytesCodecTraits for Adler32Codec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             let (decoded_value, checksum) = match self.location {
                 Adler32CodecConfigurationChecksumLocation::Start => {
                     let (checksum, decoded_value) = encoded_value.split_at(CHECKSUM_SIZE);
-                    (decoded_value, checksum)
+                    let checksum: [u8; CHECKSUM_SIZE] = checksum.try_into().unwrap();
+                    (Cow::Owned(decoded_value.to_vec()), checksum)
                 }
                 Adler32CodecConfigurationChecksumLocation::End => {
-                    encoded_value.split_at(encoded_value.len() - CHECKSUM_SIZE)
+                    let mut owned = encoded_value.into_owned();
+                    let checksum_start = owned.len() - CHECKSUM_SIZE;
+                    let checksum: [u8; CHECKSUM_SIZE] = owned[checksum_start..].try_into().unwrap();
+                    owned.truncate(checksum_start);
+                    (Cow::Owned(owned), checksum)
                 }
             };
 
             if options.validate_checksums() {
                 let mut adler = simd_adler32::Adler32::new();
-                adler.write(decoded_value);
+                adler.write(&decoded_value);
                 if adler.finish().to_le_bytes() != checksum {
                     return Err(CodecError::InvalidChecksum);
                 }
             }
 
-            Ok(Cow::Owned(decoded_value.to_vec()))
+            Ok(decoded_value)
         } else {
             Err(CodecError::Other(
                 "adler32 decoder expects a 32 bit input".to_string(),

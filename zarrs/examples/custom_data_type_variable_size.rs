@@ -1,21 +1,22 @@
 #![allow(missing_docs)]
 
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 use derive_more::Deref;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3, RawBytesOffsets,
+    ArrayBuilder, ArrayBytes, ArrayBytesOffsets, DataType, DataTypeSize, Element, ElementError,
+    ElementOwned,
 };
+use zarrs::metadata::v3::MetadataV3;
+use zarrs::metadata::{Configuration, FillValueMetadata};
+use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, Deref)]
 struct CustomDataTypeVariableSizeElement(Option<f32>);
@@ -27,16 +28,17 @@ impl From<Option<f32>> for CustomDataTypeVariableSizeElement {
 }
 
 impl Element for CustomDataTypeVariableSizeElement {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeVariableSize)))
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        data_type
+            .is::<CustomDataTypeVariableSize>()
             .then_some(())
-            .ok_or(ArrayError::IncompatibleElementType)
+            .ok_or(ElementError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes = Vec::new();
         let mut offsets = Vec::with_capacity(elements.len() + 1);
@@ -50,9 +52,16 @@ impl Element for CustomDataTypeVariableSizeElement {
         offsets.push(bytes.len());
         let offsets = unsafe {
             // SAFETY: Constructed correctly above
-            RawBytesOffsets::new_unchecked(offsets)
+            ArrayBytesOffsets::new_unchecked(offsets)
         };
-        Ok(ArrayBytes::Variable(Cow::Owned(bytes), offsets))
+        unsafe { Ok(ArrayBytes::new_vlen_unchecked(bytes, offsets)) }
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ElementError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 
@@ -60,9 +69,9 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let (bytes, offsets) = bytes.into_variable()?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
         let mut elements = Vec::with_capacity(offsets.len().saturating_sub(1));
         for (curr, next) in offsets.iter().tuple_windows() {
@@ -70,7 +79,7 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
             if let Ok(bytes) = <[u8; 4]>::try_from(bytes) {
                 let value = f32::from_le_bytes(bytes);
                 elements.push(CustomDataTypeVariableSizeElement(Some(value)));
-            } else if bytes.len() == 0 {
+            } else if bytes.is_empty() {
                 elements.push(CustomDataTypeVariableSizeElement(None));
             } else {
                 panic!()
@@ -85,38 +94,30 @@ impl ElementOwned for CustomDataTypeVariableSizeElement {
 #[derive(Debug)]
 struct CustomDataTypeVariableSize;
 
-const CUSTOM_NAME: &'static str = "zarrs.test.CustomDataTypeVariableSize";
+const CUSTOM_NAME: &str = "zarrs.test.CustomDataTypeVariableSize";
 
-fn is_custom_dtype(name: &str) -> bool {
-    name == CUSTOM_NAME
-}
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeVariableSize, v3: CUSTOM_NAME);
 
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeVariableSize))
-    } else {
-        Err(PluginMetadataInvalidError::new(CUSTOM_NAME, "codec", metadata.to_string()).into())
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeVariableSize {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
+        Ok(Arc::new(CustomDataTypeVariableSize).into())
     }
 }
 
 inventory::submit! {
-    DataTypePlugin::new(CUSTOM_NAME, is_custom_dtype, create_custom_dtype)
+    DataTypePluginV3::new::<CustomDataTypeVariableSize>()
 }
 
-impl DataTypeExtension for CustomDataTypeVariableSize {
-    fn name(&self) -> String {
-        CUSTOM_NAME.to_string()
-    }
-
-    fn configuration(&self) -> Configuration {
+impl DataTypeTraits for CustomDataTypeVariableSize {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
         if let Some(f) = fill_value_metadata.as_f32() {
             Ok(FillValue::new(f.to_ne_bytes().to_vec()))
@@ -125,30 +126,31 @@ impl DataTypeExtension for CustomDataTypeVariableSize {
         } else if let Some(bytes) = fill_value_metadata.as_bytes() {
             Ok(FillValue::new(bytes))
         } else {
-            Err(DataTypeFillValueMetadataError::new(
-                self.name(),
-                fill_value_metadata.clone(),
-            ))
+            Err(DataTypeFillValueMetadataError)
         }
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let fill_value = fill_value.as_ne_bytes();
-        if fill_value.len() == 0 {
-            Ok(FillValueMetadataV3::Null)
+        if fill_value.is_empty() {
+            Ok(FillValueMetadata::Null)
         } else if fill_value.len() == 4 {
             let value = f32::from_ne_bytes(fill_value.try_into().unwrap());
-            Ok(FillValueMetadataV3::from(value))
+            Ok(FillValueMetadata::from(value))
         } else {
-            Err(DataTypeFillValueError::new(self.name(), fill_value.into()))
+            Err(DataTypeFillValueError)
         }
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Variable
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -158,7 +160,7 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![4, 1], // array shape
         vec![3, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeVariableSize)),
+        Arc::new(CustomDataTypeVariableSize),
         [],
     )
     .array_to_array_codecs(vec![
@@ -183,11 +185,10 @@ fn main() {
         CustomDataTypeVariableSizeElement::from(None),
         CustomDataTypeVariableSizeElement::from(Some(3.0)),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeVariableSizeElement>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeVariableSizeElement> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     assert_eq!(data[0], CustomDataTypeVariableSizeElement::from(Some(1.0)));
     assert_eq!(data[1], CustomDataTypeVariableSizeElement::from(None));

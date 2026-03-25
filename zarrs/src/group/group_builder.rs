@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use crate::metadata::v3::{AdditionalFieldsV3, GroupMetadataV3};
-
 use super::{Group, GroupCreateError};
+use zarrs_metadata::v3::{AdditionalFieldsV3, GroupMetadataV3};
 
 /// A [`Group`] builder.
 pub struct GroupBuilder {
@@ -60,11 +59,9 @@ impl GroupBuilder {
 
 #[cfg(test)]
 mod tests {
-    use zarrs_metadata::GroupMetadata;
-
-    use crate::storage::store::MemoryStore;
-
     use super::*;
+    use zarrs_metadata::GroupMetadata;
+    use zarrs_storage::store::MemoryStore;
 
     #[test]
     fn group_builder() {

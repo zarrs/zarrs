@@ -23,33 +23,27 @@ pub use key::{
 
 #[cfg(feature = "async")]
 mod node_async;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 #[cfg(feature = "async")]
 pub(crate) use node_async::async_get_all_nodes_of;
 #[cfg(feature = "async")]
 pub use node_async::{
     async_get_child_nodes, async_get_child_nodes_opt, async_node_exists, async_node_exists_listable,
 };
-use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
-use zarrs_storage::StorePrefixError;
-
-use std::{collections::HashMap, sync::Arc};
-
-pub use crate::metadata::NodeMetadata;
 use thiserror::Error;
 
-use crate::{
-    array::{ArrayCreateError, ArrayMetadata},
-    config::MetadataRetrieveVersion,
-    group::GroupCreateError,
-    metadata::{
-        v2::{ArrayMetadataV2, GroupMetadataV2},
-        GroupMetadata,
-    },
-    storage::{ListableStorageTraits, ReadableStorageTraits, StorageError},
-};
-
+use crate::array::{ArrayCreateError, ArrayMetadata};
+use crate::config::MetadataRetrieveVersion;
+use crate::group::GroupCreateError;
+use zarrs_metadata::GroupMetadata;
+pub use zarrs_metadata::NodeMetadata;
+use zarrs_metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
+use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
 #[cfg(feature = "async")]
-use crate::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
+use zarrs_storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
+use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefixError};
 
 /// A Zarr hierarchy node.
 ///
@@ -94,8 +88,8 @@ pub enum NodeCreateError {
     #[error("Found V2 metadata in V3 key or vice-versa")]
     MetadataVersionMismatch,
     /// Missing metadata.
-    #[error("Metadata is missing")]
-    MissingMetadata,
+    #[error("Metadata is missing for {0}")]
+    MissingMetadata(String),
 }
 
 impl From<NodeCreateError> for ArrayCreateError {
@@ -107,8 +101,8 @@ impl From<NodeCreateError> for ArrayCreateError {
             NodeCreateError::MetadataVersionMismatch => {
                 StorageError::Other(NodeCreateError::MetadataVersionMismatch.to_string())
             }
-            NodeCreateError::MissingMetadata => {
-                StorageError::Other(NodeCreateError::MissingMetadata.to_string())
+            NodeCreateError::MissingMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
             }
         })
     }
@@ -123,8 +117,8 @@ impl From<NodeCreateError> for GroupCreateError {
             NodeCreateError::MetadataVersionMismatch => {
                 StorageError::Other(NodeCreateError::MetadataVersionMismatch.to_string())
             }
-            NodeCreateError::MissingMetadata => {
-                StorageError::Other(NodeCreateError::MissingMetadata.to_string())
+            NodeCreateError::MissingMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
             }
         })
     }
@@ -185,7 +179,7 @@ impl Node {
         }
 
         // No metadata has been found
-        Err(NodeCreateError::MissingMetadata)
+        Err(NodeCreateError::MissingMetadata(path.to_string()))
     }
 
     #[cfg(feature = "async")]
@@ -247,7 +241,7 @@ impl Node {
         }
 
         // No metadata has been found
-        Err(NodeCreateError::MissingMetadata)
+        Err(NodeCreateError::MissingMetadata(path.to_string()))
     }
 
     /// Open a node at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
@@ -467,13 +461,11 @@ impl Node {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        array::{ArrayBuilder, ArrayMetadataOptions},
-        group::{GroupMetadata, GroupMetadataV3},
-        storage::{store::MemoryStore, StoreKey, WritableStorageTraits},
-    };
-
     use super::*;
+    use crate::array::{ArrayBuilder, ArrayMetadataOptions};
+    use crate::group::{GroupMetadata, GroupMetadataV3};
+    use zarrs_storage::store::MemoryStore;
+    use zarrs_storage::{StoreKey, WritableStorageTraits};
 
     #[test]
     fn node_metadata_array() {
@@ -561,7 +553,7 @@ mod tests {
         let array = ArrayBuilder::new(
             vec![1, 2, 3],
             vec![1, 1, 1],
-            crate::array::DataType::Float32,
+            crate::array::data_type::float32(),
             0.0f32,
         )
         .build(store.clone(), node_path)
@@ -612,7 +604,7 @@ mod tests {
         );
         assert_eq!(
             Node::open(&store, "/node").unwrap_err().to_string(),
-            "Metadata is missing"
+            "Metadata is missing for /node"
         );
     }
 

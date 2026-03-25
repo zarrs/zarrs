@@ -4,7 +4,6 @@ use derive_more::{Display, From};
 use monostate::MustBe;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of Reshape codec configuration parameters.

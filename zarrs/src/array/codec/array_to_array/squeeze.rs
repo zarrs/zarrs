@@ -16,76 +16,72 @@
 //! - `zarrs.squeeze`
 //!
 //! ### Codec `id` Aliases (Zarr V2)
-//! - `zarrs.squeeze`
+//! None
 //!
 //! ### Codec `configuration` Example - [`SqueezeCodecConfiguration`]:
 //! ```rust
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::squeeze::SqueezeCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::squeeze::SqueezeCodecConfiguration;
 //! # let configuration: SqueezeCodecConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
 mod squeeze_codec;
 mod squeeze_codec_partial;
 
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
+use std::sync::Arc;
 
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 pub use squeeze_codec::SqueezeCodec;
+use zarrs_metadata::v3::MetadataV3;
+
+use crate::array::{ArrayIndices, ArraySubset, ArraySubsetTraits, Indexer, IndexerError};
+use zarrs_codec::{Codec, CodecError, CodecPluginV3, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::squeeze::{
     SqueezeCodecConfiguration, SqueezeCodecConfigurationV0,
 };
-use zarrs_registry::codec::SQUEEZE;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::{
-        codec::{Codec, CodecError, CodecPlugin},
-        ArrayIndices,
-    },
-    array_subset::ArraySubset,
-    indexer::{IncompatibleIndexerError, Indexer},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(SqueezeCodec,
+  v3: "zarrs.squeeze", []
+);
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(SQUEEZE, is_identifier_squeeze, create_codec_squeeze)
+    CodecPluginV3::new::<SqueezeCodec>()
 }
 
-fn is_identifier_squeeze(identifier: &str) -> bool {
-    identifier == SQUEEZE
-}
-
-pub(crate) fn create_codec_squeeze(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    crate::warn_experimental_extension(metadata.name(), "codec");
-    let configuration: SqueezeCodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(SQUEEZE, "codec", metadata.to_string()))?;
-    let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV3 for SqueezeCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "codec");
+        let configuration: SqueezeCodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration)?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
 fn get_squeezed_array_subset(
-    decoded_region: &ArraySubset,
+    decoded_region: &dyn ArraySubsetTraits,
     shape: &[NonZeroU64],
 ) -> Result<ArraySubset, CodecError> {
     if decoded_region.dimensionality() != shape.len() {
-        return Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+        return Err(IndexerError::new_incompatible_dimensionality(
             decoded_region.dimensionality(),
             shape.len(),
         )
         .into());
     }
 
+    let decoded_region_start = decoded_region.start();
+    let decoded_region_shape = decoded_region.shape();
     let ranges = izip!(
-        decoded_region.start().iter(),
-        decoded_region.shape().iter(),
+        decoded_region_start.iter(),
+        decoded_region_shape.iter(),
         shape.iter()
     )
-    .filter(|(_, _, &shape)| shape.get() > 1)
+    .filter(|&(_, _, shape)| shape.get() > 1)
     .map(|(rstart, rshape, _)| *rstart..rstart + rshape);
 
     let decoded_region_squeeze = ArraySubset::from(ranges);
@@ -108,7 +104,7 @@ fn get_squeezed_indexer(
                     )
                     .collect_vec())
             } else {
-                Err(IncompatibleIndexerError::new_incompatible_dimensionality(
+                Err(IndexerError::new_incompatible_dimensionality(
                     indices.len(),
                     shape.len(),
                 ))
@@ -121,80 +117,67 @@ fn get_squeezed_indexer(
 
 #[cfg(test)]
 mod tests {
-    use std::{num::NonZeroU64, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesCodec, CodecOptions},
-            ArrayBytes, ChunkRepresentation, DataType, FillValue,
-        },
-        array_subset::ArraySubset,
-    };
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::codec::BytesCodec;
+    use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
 
     fn codec_squeeze_round_trip_impl(
         json: &str,
         data_type: DataType,
         fill_value: impl Into<FillValue>,
     ) {
-        let chunk_representation = ChunkRepresentation::new(
-            vec![
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(2).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(3).unwrap(),
-            ],
-            data_type,
-            fill_value,
-        )
-        .unwrap();
-        let size = chunk_representation.num_elements_usize()
-            * chunk_representation.data_type().fixed_size().unwrap();
+        let shape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
+        let fill_value = fill_value.into();
+        let size = shape.num_elements_usize() * data_type.fixed_size().unwrap();
         let bytes: Vec<u8> = (0..size).map(|s| s as u8).collect();
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: SqueezeCodecConfiguration = serde_json::from_str(json).unwrap();
         let codec = SqueezeCodec::new_with_configuration(&configuration).unwrap();
         assert_eq!(
-            codec.encoded_shape(chunk_representation.shape()).unwrap(),
+            codec.encoded_shape(&shape).unwrap(),
             vec![
                 NonZeroU64::new(2).unwrap(),
                 NonZeroU64::new(2).unwrap(),
                 NonZeroU64::new(3).unwrap(),
             ]
-            .into()
         );
 
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         assert_eq!(bytes, decoded);
-
-        // let array = ndarray::ArrayViewD::from_shape(array_representation.shape(), &bytes).unwrap();
-        // let array_representation_squeeze =
-        //     ArrayRepresentation::new(vec![2, 3, 2], data_type.clone(), fill_value.clone()).unwrap();
-        // let encoded_array = ndarray::ArrayViewD::from_shape(
-        //     array_representation_squeeze.shape().to_vec(),
-        //     &encoded,
-        // )
-        // .unwrap();
-        // let decoded_array =
-        //     ndarray::ArrayViewD::from_shape(array_representation.shape(), &decoded).unwrap();
     }
 
     #[test]
     fn codec_squeeze_round_trip_array1() {
-        const JSON: &str = r#"{}"#;
-        codec_squeeze_round_trip_impl(JSON, DataType::UInt8, 0u8);
+        const JSON: &str = r"{}";
+        codec_squeeze_round_trip_impl(JSON, data_type::uint8(), 0u8);
     }
 
     #[test]
@@ -202,37 +185,47 @@ mod tests {
         let codec = Arc::new(SqueezeCodec::new());
 
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let chunk_representation = ChunkRepresentation::new(
-            vec![
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-                NonZeroU64::new(4).unwrap(),
-                NonZeroU64::new(1).unwrap(),
-            ],
-            DataType::Float32,
-            0.0f32,
-        )
-        .unwrap();
+        let shape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+            NonZeroU64::new(1).unwrap(),
+        ];
+        let data_type = data_type::float32();
+        let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
         let encoded = codec
-            .encode(bytes, &chunk_representation, &CodecOptions::default())
+            .encode(
+                bytes,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
+        let (encoded_shape, encoded_data_type, encoded_fill_value) = codec
+            .encoded_representation(&shape, &data_type, &fill_value)
+            .unwrap();
         let input_handle = bytes_codec
             .partial_decoder(
                 input_handle,
-                &codec.encoded_representation(&chunk_representation).unwrap(),
+                &encoded_shape,
+                &encoded_data_type,
+                &encoded_fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let partial_decoder = codec
             .partial_decoder(
                 input_handle.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();

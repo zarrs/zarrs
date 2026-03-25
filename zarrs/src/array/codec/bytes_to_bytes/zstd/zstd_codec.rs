@@ -1,19 +1,16 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::ZSTD;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 use zstd::zstd_safe;
 
-use crate::array::{
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
-
 use super::{ZstdCodecConfiguration, ZstdCodecConfigurationV1};
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
@@ -56,13 +53,13 @@ impl ZstdCodec {
 }
 
 impl CodecTraits for ZstdCodec {
-    fn identifier(&self) -> &str {
-        ZSTD
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = ZstdCodecConfiguration::V1(ZstdCodecConfigurationV1 {
@@ -106,9 +103,9 @@ impl BytesToBytesCodecTraits for ZstdCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut compressor = zstd::bulk::Compressor::new(self.compression)?;
         compressor.include_checksum(self.checksum)?;
         // compressor.include_contentsize(true);
@@ -119,15 +116,14 @@ impl BytesToBytesCodecTraits for ZstdCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let upper_bound = zstd::bulk::Decompressor::upper_bound(&encoded_value); // requires zstd experimental feature
         if let Some(upper_bound) = upper_bound {
             // Bulk decompression
-            let mut result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
-            result.shrink_to_fit();
+            let result = zstd::bulk::decompress(&encoded_value, upper_bound)?;
             Ok(Cow::Owned(result))
         } else {
             // Streaming decompression (slower)

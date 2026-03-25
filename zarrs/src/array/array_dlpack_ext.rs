@@ -1,173 +1,109 @@
-use std::{ffi::c_void, sync::Arc};
+use std::ffi::c_void;
 
-use crate::array::DataType;
-use derive_more::Display;
-use dlpark::{ffi::Device, ShapeAndStrides, ToTensor};
-use thiserror::Error;
+use dlpark::ffi::Device;
+use dlpark::traits::{RowMajorCompactLayout, TensorLike};
+use std::any::TypeId;
 
-use super::{ChunkRepresentation, RawBytes};
+use super::{DataType, Tensor, TensorError};
+use crate::array::data_type as dt;
 
-mod array_dlpack_ext_async;
-mod array_dlpack_ext_sync;
-
-pub use array_dlpack_ext_async::AsyncArrayDlPackExt;
-pub use array_dlpack_ext_sync::ArrayDlPackExt;
-
-/// [`RawBytes`] for use in a [`dlpark::ManagerCtx`].
-pub struct RawBytesDlPack {
-    bytes: Arc<RawBytes<'static>>,
-    dtype: dlpark::ffi::DataType,
-    shape: Vec<i64>,
-}
-
-/// Errors related to [`[Async]ArrayDlPackExt`](ArrayDlPackExt) methods.
-#[derive(Clone, Debug, Display, Error)]
-#[non_exhaustive]
-pub enum ArrayDlPackExtError {
-    /// The Zarr data type is not supported by `DLPack`.
-    UnsupportedDataType,
-}
-
-macro_rules! unsupported_dtypes {
-    // TODO: Add support for extensions?
-    () => {
-        DataType::Int2
-            | DataType::Int4
-            | DataType::UInt2
-            | DataType::UInt4
-            | DataType::Float4E2M1FN
-            | DataType::Float6E2M3FN
-            | DataType::Float6E3M2FN
-            | DataType::Float8E3M4
-            | DataType::Float8E4M3
-            | DataType::Float8E4M3B11FNUZ
-            | DataType::Float8E4M3FNUZ
-            | DataType::Float8E5M2
-            | DataType::Float8E5M2FNUZ
-            | DataType::Float8E8M0FNU
-            | DataType::ComplexBFloat16
-            | DataType::ComplexFloat16
-            | DataType::ComplexFloat32
-            | DataType::ComplexFloat64
-            | DataType::ComplexFloat4E2M1FN
-            | DataType::ComplexFloat6E2M3FN
-            | DataType::ComplexFloat6E3M2FN
-            | DataType::ComplexFloat8E3M4
-            | DataType::ComplexFloat8E4M3
-            | DataType::ComplexFloat8E4M3B11FNUZ
-            | DataType::ComplexFloat8E4M3FNUZ
-            | DataType::ComplexFloat8E5M2
-            | DataType::ComplexFloat8E5M2FNUZ
-            | DataType::ComplexFloat8E8M0FNU
-            | DataType::Complex64
-            | DataType::Complex128
-            | DataType::RawBits(_)
-            | DataType::String
-            | DataType::Bytes
-            | DataType::NumpyDateTime64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::NumpyTimeDelta64 {
-                unit: _,
-                scale_factor: _,
-            }
-            | DataType::Extension(_)
-    };
-}
-
-impl RawBytesDlPack {
-    /// Create a new [`RawBytesDlPack`].
-    ///
-    /// # Errors
-    /// Returns [`ArrayDlPackExtError::UnsupportedDataType`] if the data type is not supported.
-    ///
-    /// # Panics
-    /// Panics if an element in the shape cannot be encoded in a `i64`.
-    pub fn new(
-        bytes: Arc<RawBytes<'static>>,
-        representation: &ChunkRepresentation,
-    ) -> Result<Self, ArrayDlPackExtError> {
-        let dtype = match representation.data_type() {
-            DataType::Bool => dlpark::ffi::DataType::BOOL,
-            DataType::Int8 => dlpark::ffi::DataType::I8,
-            DataType::Int16 => dlpark::ffi::DataType::I16,
-            DataType::Int32 => dlpark::ffi::DataType::I32,
-            DataType::Int64 => dlpark::ffi::DataType::I64,
-            DataType::UInt8 => dlpark::ffi::DataType::U8,
-            DataType::UInt16 => dlpark::ffi::DataType::U16,
-            DataType::UInt32 => dlpark::ffi::DataType::U32,
-            DataType::UInt64 => dlpark::ffi::DataType::U64,
-            DataType::Float16 => dlpark::ffi::DataType::F16,
-            DataType::Float32 => dlpark::ffi::DataType::F32,
-            DataType::Float64 => dlpark::ffi::DataType::F64,
-            DataType::BFloat16 => dlpark::ffi::DataType::BF16,
-            unsupported_dtypes!() => Err(ArrayDlPackExtError::UnsupportedDataType)?,
-        };
-        let shape = representation
-            .shape()
-            .iter()
-            .map(|s| i64::try_from(s.get()).unwrap())
-            .collect();
-        Ok(Self {
-            bytes,
-            dtype,
-            shape,
-        })
+/// Convert a zarrs [`DataType`] to a [`dlpark::ffi::DataType`].
+///
+/// # Errors
+/// Returns [`TensorError::UnsupportedDataType`] if the data type is not supported.
+fn data_type_to_dlpack(data_type: &DataType) -> Result<dlpark::ffi::DataType, TensorError> {
+    let type_id = data_type.as_any().type_id();
+    // https://github.com/rust-lang/rust/issues/70861 for match?
+    if type_id == TypeId::of::<dt::BoolDataType>() {
+        Ok(dlpark::ffi::DataType::BOOL)
+    } else if type_id == TypeId::of::<dt::Int8DataType>() {
+        Ok(dlpark::ffi::DataType::I8)
+    } else if type_id == TypeId::of::<dt::Int16DataType>() {
+        Ok(dlpark::ffi::DataType::I16)
+    } else if type_id == TypeId::of::<dt::Int32DataType>() {
+        Ok(dlpark::ffi::DataType::I32)
+    } else if type_id == TypeId::of::<dt::Int64DataType>() {
+        Ok(dlpark::ffi::DataType::I64)
+    } else if type_id == TypeId::of::<dt::UInt8DataType>() {
+        Ok(dlpark::ffi::DataType::U8)
+    } else if type_id == TypeId::of::<dt::UInt16DataType>() {
+        Ok(dlpark::ffi::DataType::U16)
+    } else if type_id == TypeId::of::<dt::UInt32DataType>() {
+        Ok(dlpark::ffi::DataType::U32)
+    } else if type_id == TypeId::of::<dt::UInt64DataType>() {
+        Ok(dlpark::ffi::DataType::U64)
+    } else if type_id == TypeId::of::<dt::Float16DataType>() {
+        Ok(dlpark::ffi::DataType::F16)
+    } else if type_id == TypeId::of::<dt::Float32DataType>() {
+        Ok(dlpark::ffi::DataType::F32)
+    } else if type_id == TypeId::of::<dt::Float64DataType>() {
+        Ok(dlpark::ffi::DataType::F64)
+    } else if type_id == TypeId::of::<dt::BFloat16DataType>() {
+        Ok(dlpark::ffi::DataType::BF16)
+    } else {
+        Err(TensorError::UnsupportedDataType(data_type.clone()))
     }
 }
 
-impl ToTensor for RawBytesDlPack {
+impl TensorLike<RowMajorCompactLayout> for Tensor {
+    type Error = TensorError;
+
     fn data_ptr(&self) -> *mut c_void {
-        self.bytes.as_ptr().cast::<c_void>().cast_mut()
+        self.bytes().as_ptr().cast::<c_void>().cast_mut()
+    }
+
+    fn memory_layout(&self) -> RowMajorCompactLayout {
+        let shape: Vec<i64> = self
+            .shape()
+            .iter()
+            .map(|s| i64::try_from(*s).unwrap())
+            .collect();
+        RowMajorCompactLayout::new(shape)
     }
 
     fn byte_offset(&self) -> u64 {
         0
     }
 
-    fn device(&self) -> Device {
-        Device::CPU
+    fn device(&self) -> Result<Device, Self::Error> {
+        Ok(Device::CPU)
     }
 
-    fn dtype(&self) -> dlpark::ffi::DataType {
-        self.dtype
-    }
-
-    fn shape_and_strides(&self) -> ShapeAndStrides {
-        ShapeAndStrides::new_contiguous(&self.shape)
+    fn data_type(&self) -> Result<dlpark::ffi::DataType, Self::Error> {
+        data_type_to_dlpack(self.data_type())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use dlpark::{IntoDLPack, ManagedTensor};
-    use zarrs_storage::store::MemoryStore;
+    // use dlpark::{IntoDLPack, ManagedTensor};
 
-    use crate::{
-        array::{codec::CodecOptions, ArrayBuilder, ArrayDlPackExt, DataType},
-        array_subset::ArraySubset,
-    };
+    use crate::array::{ArrayBuilder, ArraySubset, Tensor, data_type, transmute_to_bytes};
+    use zarrs_codec::CodecOptions;
+    use zarrs_storage::store::MemoryStore;
 
     #[test]
     fn array_dlpack_ext_sync() {
         let store = MemoryStore::new();
-        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], DataType::Float32, -1.0f32)
+        let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::float32(), -1.0f32)
             .build(store.into(), "/")
             .unwrap();
         array
-            .store_chunk_elements::<f32>(&[0, 0], &[0.0, 1.0, 2.0, 3.0])
+            .store_chunk(&[0, 0], &[0.0f32, 1.0, 2.0, 3.0])
             .unwrap();
-        let tensor = array
-            .retrieve_chunks_dlpack(
+        let tensor: Tensor = array
+            .retrieve_chunks_opt(
                 &ArraySubset::new_with_shape(vec![1, 2]),
                 &CodecOptions::default(),
             )
             .unwrap();
 
+        let managed_tensor = dlpark::versioned::SafeManagedTensorVersioned::new(tensor).unwrap();
+        let bytes: &[u8] = &managed_tensor;
+
         assert_eq!(
-            ManagedTensor::new(tensor.into_dlpack()).as_slice::<f32>(),
-            &[0.0, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0]
+            bytes,
+            transmute_to_bytes(&[0.0f32, 1.0, -1.0, -1.0, 2.0, 3.0, -1.0, -1.0])
         );
     }
 }

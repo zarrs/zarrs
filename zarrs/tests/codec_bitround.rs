@@ -1,20 +1,23 @@
 #![allow(missing_docs)]
 #![cfg(feature = "bitround")]
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
-use zarrs::{
-    array::{codec::BitroundCodec, ArrayBuilder, ArrayMetadataOptions, DataType},
-    array_subset::ArraySubset,
-};
+use zarrs::array::codec::BitroundCodec;
+use zarrs::array::{ArrayBuilder, ArrayMetadataOptions, ArraySubset, data_type};
+use zarrs::metadata_ext::codec::bitround::BitroundCodecConfiguration;
 use zarrs_filesystem::FilesystemStore;
-use zarrs_metadata_ext::codec::bitround::BitroundCodecConfiguration;
 
 /// Helper function to print binary representation table
 fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
     println!("\n## Bitround float32 Encoding (keepbits={})", keepbits);
-    println!("| Original           | Rounded           | Original (0b)                      | Rounded (0b)                       |");
-    println!("|--------------------|-------------------|------------------------------------|------------------------------------|");
+    println!(
+        "| Original           | Rounded           | Original (0b)                      | Rounded (0b)                       |"
+    );
+    println!(
+        "|--------------------|-------------------|------------------------------------|------------------------------------|"
+    );
 
     for (orig, round) in original.iter().zip(rounded.iter()) {
         let orig_bits = orig.to_bits();
@@ -37,6 +40,7 @@ fn print_bitround_table_f32(original: &[f32], rounded: &[f32], keepbits: u8) {
     println!();
 }
 
+#[allow(clippy::single_range_in_vec_init)]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
@@ -71,7 +75,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![test_data.len() as u64],
         vec![test_data.len() as u64],
-        DataType::Float32,
+        data_type::float32(),
         0.0f32,
     );
 
@@ -89,10 +93,10 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store the test data
     let subset = ArraySubset::new_with_ranges(&[0..test_data.len() as u64]);
-    array.store_array_subset_elements(&subset, &test_data)?;
+    array.store_array_subset(&subset, &test_data)?;
 
     // Retrieve the data
-    let retrieved: Vec<f32> = array.retrieve_array_subset_elements(&subset)?;
+    let retrieved: Vec<f32> = array.retrieve_array_subset(&subset)?;
 
     // Print the comparison table
     print_bitround_table_f32(&test_data, &retrieved, keepbits);
@@ -127,6 +131,7 @@ fn test_codec_bitround_float32() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[allow(clippy::single_range_in_vec_init)]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
@@ -150,7 +155,7 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = ArrayBuilder::new(
         vec![test_data_u8.len() as u64],
         vec![test_data_u8.len() as u64],
-        DataType::UInt8,
+        data_type::uint8(),
         0u8,
     );
 
@@ -167,8 +172,8 @@ fn test_codec_bitround_uint8() -> Result<(), Box<dyn std::error::Error>> {
 
     // Store and retrieve
     let subset = ArraySubset::new_with_ranges(&[0..test_data_u8.len() as u64]);
-    array.store_array_subset_elements(&subset, &test_data_u8)?;
-    let retrieved: Vec<u8> = array.retrieve_array_subset_elements(&subset)?;
+    array.store_array_subset(&subset, &test_data_u8)?;
+    let retrieved: Vec<u8> = array.retrieve_array_subset(&subset)?;
 
     println!("\n## Bitround uint8 Encoding (keepbits={})\n", keepbits);
     println!("| Original | Rounded | Original (0b) | Rounded (0b) |");

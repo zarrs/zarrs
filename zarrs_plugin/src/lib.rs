@@ -16,19 +16,43 @@
 
 use thiserror::Error;
 
-mod maybe;
+mod macros;
 
+mod maybe;
 pub use maybe::{MaybeSend, MaybeSync};
 
-/// A plugin.
-pub struct Plugin<TPlugin, TInputs> {
-    /// the identifier of the plugin.
-    identifier: &'static str,
-    /// Tests if the name is a match for this plugin.
-    match_name_fn: fn(name: &str) -> bool,
-    /// Create an implementation of this plugin from metadata.
-    create_fn: fn(inputs: &TInputs) -> Result<TPlugin, PluginCreateError>,
-}
+mod plugin;
+pub use plugin::{Plugin, Plugin2};
+
+mod runtime_plugin;
+pub use runtime_plugin::{RuntimePlugin, RuntimePlugin2};
+
+mod runtime_registry;
+pub use runtime_registry::{RuntimeRegistry, RuntimeRegistryHandle};
+
+mod extension_name;
+pub use extension_name::{ExtensionName, ExtensionNameStatic};
+
+mod extension_aliases;
+pub use extension_aliases::{
+    ExtensionAliases, ExtensionAliasesConfig, ExtensionAliasesV2, ExtensionAliasesV3,
+};
+
+mod extension_type;
+pub use extension_type::{
+    ExtensionType, ExtensionTypeChunkGrid, ExtensionTypeChunkKeyEncoding, ExtensionTypeCodec,
+    ExtensionTypeDataType, ExtensionTypeStorageTransformer,
+};
+
+/// Re-export of [`regex::Regex`] for use in extension alias configurations.
+pub use regex::Regex;
+
+/// Re-export of [`paste`] for use in the [`impl_extension_aliases`] macro.
+#[doc(hidden)]
+pub use paste;
+
+mod zarr_version;
+pub use zarr_version::{ZarrVersion, ZarrVersion2, ZarrVersion3, ZarrVersionTraits};
 
 /// An unsupported plugin error
 #[derive(Clone, Debug, Error)]
@@ -48,22 +72,17 @@ impl PluginUnsupportedError {
 
 /// An invalid plugin metadata error.
 #[derive(Clone, Debug, Error)]
-#[error("{plugin_type} {identifier} is unsupported with metadata: {metadata}")]
-pub struct PluginMetadataInvalidError {
-    identifier: &'static str,
-    plugin_type: &'static str,
-    metadata: String,
+#[error("configuration is unsupported: {reason}")]
+// FIXME: Remove on next major release
+pub struct PluginConfigurationInvalidError {
+    reason: String,
 }
 
-impl PluginMetadataInvalidError {
-    /// Create a new [`PluginMetadataInvalidError`].
+impl PluginConfigurationInvalidError {
+    /// Create a new [`PluginConfigurationInvalidError`].
     #[must_use]
-    pub fn new(identifier: &'static str, plugin_type: &'static str, metadata: String) -> Self {
-        Self {
-            identifier,
-            plugin_type,
-            metadata,
-        }
+    pub fn new(reason: String) -> Self {
+        Self { reason }
     }
 }
 
@@ -74,12 +93,22 @@ pub enum PluginCreateError {
     /// An unsupported plugin.
     #[error(transparent)]
     Unsupported(#[from] PluginUnsupportedError),
-    /// Invalid metadata.
+    /// Invalid name.
+    #[error("invalid name: {name}")]
+    NameInvalid { name: String },
+    /// Invalid configuration.
     #[error(transparent)]
-    MetadataInvalid(#[from] PluginMetadataInvalidError),
+    ConfigurationInvalid(#[from] PluginConfigurationInvalidError),
+    // ConfigurationInvalid(#[from] std::sync::Arc<serde_json::Error>), // FIXME: Remove on next major release
     /// Other
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<std::sync::Arc<serde_json::Error>> for PluginCreateError {
+    fn from(err: std::sync::Arc<serde_json::Error>) -> Self {
+        Self::ConfigurationInvalid(PluginConfigurationInvalidError::new(err.to_string()))
+    }
 }
 
 impl From<&str> for PluginCreateError {
@@ -91,78 +120,5 @@ impl From<&str> for PluginCreateError {
 impl From<String> for PluginCreateError {
     fn from(err_string: String) -> Self {
         Self::Other(err_string)
-    }
-}
-
-impl<TPlugin, TInputs> Plugin<TPlugin, TInputs> {
-    /// Create a new plugin for registration.
-    pub const fn new(
-        identifier: &'static str,
-        match_name_fn: fn(name: &str) -> bool,
-        create_fn: fn(inputs: &TInputs) -> Result<TPlugin, PluginCreateError>,
-    ) -> Self {
-        Self {
-            identifier,
-            match_name_fn,
-            create_fn,
-        }
-    }
-
-    /// Create a `TPlugin` plugin from `inputs`.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PluginCreateError`] if plugin creation fails due to either:
-    ///  - metadata name being unregistered,
-    ///  - or the configuration is invalid, or
-    ///  - some other reason specific to the plugin.
-    pub fn create(&self, inputs: &TInputs) -> Result<TPlugin, PluginCreateError> {
-        (self.create_fn)(inputs)
-    }
-
-    /// Returns true if this plugin is associated with `name`.
-    #[must_use]
-    pub fn match_name(&self, name: &str) -> bool {
-        (self.match_name_fn)(name)
-    }
-
-    /// Returns the identifier of the plugin.
-    #[must_use]
-    pub const fn identifier(&self) -> &'static str {
-        self.identifier
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct TestPlugin;
-
-    // plugin can be an arbitraty input, usually zarrs_metadata::MetadataV3.
-    enum Input {
-        Accept,
-        Reject,
-    }
-
-    fn is_test(name: &str) -> bool {
-        name == "test"
-    }
-
-    fn create_test(input: &Input) -> Result<TestPlugin, PluginCreateError> {
-        match input {
-            Input::Accept => Ok(TestPlugin),
-            Input::Reject => Err(PluginCreateError::from("rejected".to_string())),
-        }
-    }
-
-    #[test]
-    fn plugin() {
-        let plugin = Plugin::new("test", is_test, create_test);
-        assert!(!plugin.match_name("fail"));
-        assert!(plugin.match_name("test"));
-        assert_eq!(plugin.identifier(), "test");
-        assert!(plugin.create(&Input::Accept).is_ok());
-        assert!(plugin.create(&Input::Reject).is_err());
     }
 }

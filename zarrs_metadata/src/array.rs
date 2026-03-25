@@ -8,12 +8,6 @@ pub use chunk_key_separator::ChunkKeySeparator;
 /// A dimension name.
 pub type DimensionName = Option<String>;
 
-/// An array shape.
-pub type ArrayShape = Vec<u64>;
-
-mod chunk_shape;
-pub use chunk_shape::ChunkShape;
-
 mod endianness;
 pub use endianness::Endianness;
 

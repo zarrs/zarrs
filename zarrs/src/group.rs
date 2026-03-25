@@ -29,34 +29,34 @@ mod group_metadata_options;
 use std::sync::Arc;
 
 use derive_more::Display;
+pub use group_metadata_options::GroupMetadataOptions;
 use thiserror::Error;
-use zarrs_metadata::NodeMetadata;
-use zarrs_metadata::{v2::GroupMetadataV2, v3::AdditionalFieldV3};
-use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
-use zarrs_storage::ListableStorageTraits;
 
-use crate::{
-    array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError},
-    config::{
-        global_config, MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion,
-    },
-    node::{
-        get_all_nodes_of, get_child_nodes, meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
-        Node, NodeCreateError, NodePath, NodePathError,
-    },
-    storage::{ReadableStorageTraits, StorageError, StorageHandle, WritableStorageTraits},
+pub use self::group_builder::GroupBuilder;
+use crate::array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError};
+use crate::config::{
+    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
 };
-use zarrs_metadata_ext::v2_to_v3::group_metadata_v2_to_v3;
-
+use crate::convert::group_metadata_v2_to_v3;
+use crate::node::{
+    Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
+    meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
+};
 #[cfg(feature = "async")]
 use crate::{
     node::{async_get_all_nodes_of, async_get_child_nodes},
     storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits, AsyncWritableStorageTraits},
 };
-
-pub use self::group_builder::GroupBuilder;
-pub use crate::metadata::{v3::GroupMetadataV3, GroupMetadata};
-pub use group_metadata_options::GroupMetadataOptions;
+pub use zarrs_metadata::GroupMetadata;
+use zarrs_metadata::NodeMetadata;
+use zarrs_metadata::v2::GroupMetadataV2;
+use zarrs_metadata::v3::AdditionalFieldV3;
+pub use zarrs_metadata::v3::GroupMetadataV3;
+use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
+use zarrs_storage::{
+    ListableStorageTraits, ReadableStorageTraits, StorageError, StorageHandle,
+    WritableStorageTraits,
+};
 
 /// A group.
 #[derive(Clone, Debug, Display)]
@@ -73,6 +73,8 @@ pub struct Group<TStorage: ?Sized> {
     path: NodePath,
     /// The metadata.
     metadata: GroupMetadata,
+    metadata_options: GroupMetadataOptions,
+    metadata_erase_version: MetadataEraseVersion,
 }
 
 impl<TStorage: ?Sized> Group<TStorage> {
@@ -88,10 +90,19 @@ impl<TStorage: ?Sized> Group<TStorage> {
         metadata: GroupMetadata,
     ) -> Result<Self, GroupCreateError> {
         let path = NodePath::new(path)?;
+        let (metadata_options, metadata_erase_version) = {
+            let config = global_config();
+            (
+                config.group_metadata_options(),
+                config.metadata_erase_version(),
+            )
+        };
         Ok(Self {
             storage,
             path,
             metadata,
+            metadata_options,
+            metadata_erase_version,
         })
     }
 
@@ -156,12 +167,11 @@ impl<TStorage: ?Sized> Group<TStorage> {
             if let Some(consolidated_metadata) = group_metadata
                 .additional_fields
                 .get("consolidated_metadata")
-            {
-                if let Ok(consolidated_metadata) = serde_json::from_value::<ConsolidatedMetadata>(
+                && let Ok(consolidated_metadata) = serde_json::from_value::<ConsolidatedMetadata>(
                     consolidated_metadata.as_value().clone(),
-                ) {
-                    return Some(consolidated_metadata);
-                }
+                )
+            {
+                return Some(consolidated_metadata);
             }
             None
         } else {
@@ -202,6 +212,8 @@ impl<TStorage: ?Sized> Group<TStorage> {
                 storage: self.storage,
                 path: self.path,
                 metadata,
+                metadata_options: self.metadata_options,
+                metadata_erase_version: self.metadata_erase_version,
             }
         } else {
             self
@@ -620,7 +632,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
     pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&GroupMetadataOptions::default())
+        self.store_metadata_opt(&self.metadata_options)
     }
 
     /// Store metadata with non-default [`GroupMetadataOptions`].
@@ -673,8 +685,7 @@ impl<TStorage: ?Sized + WritableStorageTraits> Group<TStorage> {
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.erase_metadata_opt(erase_version)
+        self.erase_metadata_opt(self.metadata_erase_version)
     }
 
     /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
@@ -712,8 +723,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`store_metadata`](Group::store_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&GroupMetadataOptions::default())
-            .await
+        self.async_store_metadata_opt(&self.metadata_options).await
     }
 
     /// Async variant of [`store_metadata_opt`](Group::store_metadata_opt).
@@ -763,8 +773,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
     /// Async variant of [`erase_metadata`](Group::erase_metadata).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        let erase_version = global_config().metadata_erase_version();
-        self.async_erase_metadata_opt(erase_version).await
+        self.async_erase_metadata_opt(self.metadata_erase_version)
+            .await
     }
 
     /// Async variant of [`erase_metadata_opt`](Group::erase_metadata_opt).
@@ -810,9 +820,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> Group<TStorage> {
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::{store::MemoryStore, StoreKey};
+    use std::collections::HashSet;
 
     use super::*;
+    use zarrs_storage::StoreKey;
+    use zarrs_storage::store::MemoryStore;
 
     const JSON_VALID1: &str = r#"{
     "zarr_format": 3,
@@ -895,11 +907,13 @@ mod tests {
         )
         .unwrap();
         assert!(group_metadata.additional_fields.len() == 1);
-        assert!(group_metadata
-            .additional_fields
-            .get("unknown")
-            .unwrap()
-            .must_understand());
+        assert!(
+            group_metadata
+                .additional_fields
+                .get("unknown")
+                .unwrap()
+                .must_understand()
+        );
 
         // Permit manual creation of group with unsupported metadata
         let storage = Arc::new(MemoryStore::new());
@@ -924,7 +938,7 @@ mod tests {
         let group_copy = Group::open(store, group_path).unwrap();
         assert_eq!(group_copy.metadata(), group.metadata());
         let group_metadata_str = group.metadata().to_string();
-        println!("{}", group_metadata_str);
+        println!("{group_metadata_str}");
         assert!(
             group_metadata_str == r#"{"node_type":"group","zarr_format":3}"#
                 || group_metadata_str == r#"{"zarr_format":3,"node_type":"group"}"#
@@ -1003,21 +1017,27 @@ mod tests {
 
         assert!(root.store_metadata().is_ok());
 
-        assert!(builder
-            .build(store.clone(), "/group")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup/leafgroup")
-            .unwrap()
-            .store_metadata()
-            .is_ok());
+        assert!(
+            builder
+                .build(store.clone(), "/group")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup/leafgroup")
+                .unwrap()
+                .store_metadata()
+                .is_ok()
+        );
 
         let nodes = root.traverse();
         assert!(nodes.is_ok());
@@ -1029,9 +1049,8 @@ mod tests {
             nodes
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
-                .collect::<Vec<&str>>()
-                .sort(),
-            vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
+                .collect::<HashSet<_>>(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].into()
         );
     }
 
@@ -1051,24 +1070,30 @@ mod tests {
 
         assert!(root.async_store_metadata().await.is_ok());
 
-        assert!(builder
-            .build(store.clone(), "/group")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
-        assert!(builder
-            .build(store.clone(), "/group/subgroup/leafgroup")
-            .unwrap()
-            .async_store_metadata()
-            .await
-            .is_ok());
+        assert!(
+            builder
+                .build(store.clone(), "/group")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
+        assert!(
+            builder
+                .build(store.clone(), "/group/subgroup/leafgroup")
+                .unwrap()
+                .async_store_metadata()
+                .await
+                .is_ok()
+        );
 
         let nodes = root.async_traverse().await;
         assert!(nodes.is_ok());
@@ -1080,9 +1105,8 @@ mod tests {
             nodes
                 .iter()
                 .map(|(path, _metadata)| path.as_str())
-                .collect::<Vec<&str>>()
-                .sort(),
-            vec!["/group", "/group/subgroup", "/group/subgroup/leafgroup"].sort()
+                .collect::<HashSet<_>>(),
+            ["/group", "/group/subgroup", "/group/subgroup/leafgroup"].into()
         );
     }
 }

@@ -1,69 +1,82 @@
 macro_rules! vlen_v2_module {
-    ($module:ident, $module_codec:ident, $struct:ident, $identifier:ident) => {
+    ($module:ident, $module_codec:ident, $struct:ident) => {
         mod $module_codec;
 
         use std::sync::Arc;
 
         pub use $module_codec::$struct;
 
-        use crate::{
-            array::codec::{Codec, CodecPlugin},
-            metadata::v3::MetadataV3,
-            plugin::{PluginCreateError, PluginMetadataInvalidError},
-        };
-        use zarrs_registry::codec::$identifier;
+        use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
+        use zarrs_metadata::v2::MetadataV2;
+        use zarrs_metadata::v3::MetadataV3;
+        use zarrs_plugin::PluginCreateError;
 
-        // Register the codec.
+        // Register the V3 codec.
         inventory::submit! {
-            CodecPlugin::new($identifier, is_name, create_codec)
+            CodecPluginV3::new::<$struct>()
+        }
+        // Register the V2 codec.
+        inventory::submit! {
+            CodecPluginV2::new::<$struct>()
         }
 
-        fn is_name(name: &str) -> bool {
-            name.eq($identifier)
+        impl CodecTraitsV3 for $struct {
+            fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+                if metadata.configuration().is_none_or(|c| c.is_empty()) {
+                    let codec = Arc::new($struct::new());
+                    Ok(Codec::ArrayToBytes(codec))
+                } else {
+                    Err(metadata.to_string().into())
+                }
+            }
         }
 
-        fn create_codec(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-            if metadata.configuration_is_none_or_empty() {
-                let codec = Arc::new($struct::new());
-                Ok(Codec::ArrayToBytes(codec))
-            } else {
-                Err(
-                    PluginMetadataInvalidError::new($identifier, "codec", metadata.to_string())
-                        .into(),
-                )
+        impl CodecTraitsV2 for $struct {
+            fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+                if metadata.configuration().is_empty() {
+                    let codec = Arc::new($struct::new());
+                    Ok(Codec::ArrayToBytes(codec))
+                } else {
+                    Err(format!("{metadata:?}").into())
+                }
             }
         }
     };
 }
 
 macro_rules! vlen_v2_codec {
-    ($struct:ident,$identifier:ident) => {
+    ($struct:ident, $default_name:literal) => {
         use std::sync::Arc;
-
-        use zarrs_metadata::Configuration;
-
-        use crate::array::{
-            codec::{
-                array_to_bytes::vlen_v2::VlenV2Codec, ArrayPartialDecoderTraits,
-                ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-                BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
-                CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-            },
-            ArrayBytes, ArrayCodecTraits, BytesRepresentation, ChunkRepresentation, RawBytes,
-            RecommendedConcurrency,
-        };
+        use std::sync::{LazyLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
         #[cfg(feature = "async")]
-        use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+        use zarrs_codec::{
+            ArrayCodecTraits,
+            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+            BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+            CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+            PartialEncoderCapability,
+        };
+        use crate::array::{
+            codec::VlenV2Codec,
+            ArrayBytes, ArrayBytesRaw, BytesRepresentation,
+            RecommendedConcurrency,
+        };
+        use zarrs_metadata::Configuration;
+        use zarrs_plugin::{
+            ExtensionAliasesConfig, ExtensionAliases,
+            ZarrVersion2, ZarrVersion3,
+        };
 
-        #[doc = concat!("The `", stringify!($identifier), "` codec implementation.")]
+        #[doc = concat!("The `", $default_name, "` codec implementation.")]
         #[derive(Debug, Clone)]
         pub struct $struct {
             inner: Arc<VlenV2Codec>,
         }
 
         impl $struct {
-            #[doc = concat!("Create a new `", stringify!($identifier), "` codec.")]
+            #[doc = concat!("Create a new `", $default_name, "` codec.")]
             #[must_use]
             pub fn new() -> Self {
                 Self {
@@ -79,16 +92,16 @@ macro_rules! vlen_v2_codec {
         }
 
         impl CodecTraits for $struct {
-            fn identifier(&self) -> &str {
-                $identifier
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
             }
 
-            fn configuration_opt(
+            fn configuration(
                 &self,
-                name: &str,
+                version: zarrs_plugin::ZarrVersion,
                 options: &CodecMetadataOptions,
             ) -> Option<Configuration> {
-                self.inner.configuration_opt(name, options)
+                self.inner.configuration(version, options)
             }
 
             fn partial_decoder_capability(&self) -> PartialDecoderCapability {
@@ -103,9 +116,10 @@ macro_rules! vlen_v2_codec {
         impl ArrayCodecTraits for $struct {
             fn recommended_concurrency(
                 &self,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
             ) -> Result<RecommendedConcurrency, CodecError> {
-                self.inner.recommended_concurrency(decoded_representation)
+                self.inner.recommended_concurrency(shape, data_type)
             }
         }
 
@@ -122,41 +136,57 @@ macro_rules! vlen_v2_codec {
             fn encode<'a>(
                 &self,
                 bytes: ArrayBytes<'a>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
-            ) -> Result<RawBytes<'a>, CodecError> {
-                self.inner.encode(bytes, decoded_representation, options)
+            ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+                self.inner
+                    .encode(bytes, shape, data_type, fill_value, options)
             }
 
             fn decode<'a>(
                 &self,
-                bytes: RawBytes<'a>,
-                decoded_representation: &ChunkRepresentation,
+                bytes: ArrayBytesRaw<'a>,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<ArrayBytes<'a>, CodecError> {
-                self.inner.decode(bytes, decoded_representation, options)
+                self.inner
+                    .decode(bytes, shape, data_type, fill_value, options)
             }
 
             fn partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn BytesPartialDecoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-                self.inner
-                    .clone()
-                    .partial_decoder(input_handle, decoded_representation, options)
+                self.inner.clone().partial_decoder(
+                    input_handle,
+                    shape,
+                    data_type,
+                    fill_value,
+                    options,
+                )
             }
 
             fn partial_encoder(
                 self: Arc<Self>,
                 input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
                 self.inner.clone().partial_encoder(
                     input_output_handle,
-                    decoded_representation,
+                    shape,
+                    data_type,
+                    fill_value,
                     options,
                 )
             }
@@ -165,21 +195,78 @@ macro_rules! vlen_v2_codec {
             async fn async_partial_decoder(
                 self: Arc<Self>,
                 input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
                 options: &CodecOptions,
             ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
                 self.inner
                     .clone()
-                    .async_partial_decoder(input_handle, decoded_representation, options)
+                    .async_partial_decoder(input_handle, shape, data_type, fill_value, options)
                     .await
             }
 
             fn encoded_representation(
                 &self,
-                decoded_representation: &ChunkRepresentation,
+                shape: &[std::num::NonZeroU64],
+                data_type: &crate::array::DataType,
+                fill_value: &crate::array::FillValue,
             ) -> Result<BytesRepresentation, CodecError> {
-                self.inner.encoded_representation(decoded_representation)
+                self.inner
+                    .encoded_representation(shape, data_type, fill_value)
             }
+        }
+
+        paste::paste! {
+            static [<$struct:upper _ALIASES_V3>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
+                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($default_name, vec![], vec![])));
+
+            static [<$struct:upper _ALIASES_V2>]: LazyLock<RwLock<ExtensionAliasesConfig>> =
+                LazyLock::new(|| RwLock::new(ExtensionAliasesConfig::new($default_name, vec![], vec![])));
+
+            impl ExtensionAliases<ZarrVersion3> for $struct {
+                fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+                    [<$struct:upper _ALIASES_V3>].read().unwrap()
+                }
+
+                fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+                    [<$struct:upper _ALIASES_V3>].write().unwrap()
+                }
+            }
+
+            impl ExtensionAliases<ZarrVersion2> for $struct {
+                fn aliases() -> RwLockReadGuard<'static, ExtensionAliasesConfig> {
+                    [<$struct:upper _ALIASES_V2>].read().unwrap()
+                }
+
+                fn aliases_mut() -> RwLockWriteGuard<'static, ExtensionAliasesConfig> {
+                    [<$struct:upper _ALIASES_V2>].write().unwrap()
+                }
+            }
+
+            impl zarrs_plugin::ExtensionNameStatic for $struct {
+                const DEFAULT_NAME_FN: fn(zarrs_plugin::ZarrVersion) -> ::core::option::Option<::std::borrow::Cow<'static, str>> = |version| {
+                    match version {
+                        zarrs_plugin::ZarrVersion::V2 => {
+                            let aliases = [<$struct:upper _ALIASES_V2>].read().unwrap();
+                            if aliases.default_name.is_empty() {
+                                ::core::option::Option::None
+                            } else {
+                                ::core::option::Option::Some(aliases.default_name.clone())
+                            }
+                        }
+                        zarrs_plugin::ZarrVersion::V3 => {
+                            let aliases = [<$struct:upper _ALIASES_V3>].read().unwrap();
+                            if aliases.default_name.is_empty() {
+                                ::core::option::Option::None
+                            } else {
+                                ::core::option::Option::Some(aliases.default_name.clone())
+                            }
+                        }
+                    }
+                };
+            }
+
         }
     };
 }

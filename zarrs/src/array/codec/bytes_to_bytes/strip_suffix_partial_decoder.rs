@@ -1,17 +1,12 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use zarrs_storage::StorageError;
-
-use crate::{
-    array::{
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-        RawBytes,
-    },
-    storage::byte_range::{ByteRange, ByteRangeIterator},
-};
-
+use crate::array::ArrayBytesRaw;
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
 /// Partial decoder for stripping a suffix (e.g. checksum).
 pub(crate) struct StripSuffixPartialDecoder {
@@ -45,7 +40,7 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         decoded_regions
             .map(|decoded_region| {
                 let bytes = self.input_handle.partial_decode(decoded_region, options)?;
@@ -53,12 +48,16 @@ impl BytesPartialDecoderTraits for StripSuffixPartialDecoder {
                     ByteRange::FromStart(_, Some(_)) => bytes,
                     ByteRange::FromStart(_, None) => {
                         let length = bytes.len() - self.suffix_size;
-                        Cow::Owned(bytes[..length].to_vec())
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Cow::Owned(bytes)
                     }
                     ByteRange::Suffix(_) => {
                         let length = bytes.len() as u64 - (self.suffix_size as u64);
                         let length = usize::try_from(length).unwrap();
-                        Cow::Owned(bytes[..length].to_vec())
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Cow::Owned(bytes)
                     }
                 }))
             })
@@ -107,7 +106,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         use futures::{StreamExt, TryStreamExt};
 
         let futures = decoded_regions.map(|decoded_region| async move {
@@ -124,7 +123,9 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripSuffixPartialDecoder {
                         .await?;
                     if let Some(bytes) = bytes {
                         let length = bytes.len() - self.suffix_size;
-                        Ok(Some(Cow::Owned(bytes[..length].to_vec())))
+                        let mut bytes = bytes.into_owned();
+                        bytes.truncate(length);
+                        Ok(Some(Cow::Owned(bytes)))
                     } else {
                         Ok(None)
                     }

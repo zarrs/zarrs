@@ -1,22 +1,16 @@
-use std::{
-    borrow::Cow,
-    io::{Cursor, Read},
-    sync::Arc,
-};
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
+use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::BZ2;
-
-use crate::array::{
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel};
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
 
 /// A `bz2` codec implementation.
 #[derive(Clone, Debug)]
@@ -49,13 +43,13 @@ impl Bz2Codec {
 }
 
 impl CodecTraits for Bz2Codec {
-    fn identifier(&self) -> &str {
-        BZ2
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = Bz2CodecConfiguration::V1(Bz2CodecConfigurationV1 {
@@ -99,9 +93,9 @@ impl BytesToBytesCodecTraits for Bz2Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut encoder = bzip2::read::BzEncoder::new(Cursor::new(decoded_value), self.compression);
         let mut out: Vec<u8> = Vec::new();
         encoder.read_to_end(&mut out)?;
@@ -110,10 +104,10 @@ impl BytesToBytesCodecTraits for Bz2Codec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let mut decoder = bzip2::read::BzDecoder::new(Cursor::new(encoded_value));
         let mut out: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut out)?;
@@ -127,9 +121,9 @@ impl BytesToBytesCodecTraits for Bz2Codec {
         decoded_representation
             .size()
             .map_or(BytesRepresentation::UnboundedSize, |size| {
-                // https://en.wikipedia.org/wiki/Bzip2#Implementation
-                // TODO: Below assumes a maximum expansion of 1.25 for the blocks + header (4 byte) + footer (11 byte), but need to read spec
-                BytesRepresentation::BoundedSize(4 + 11 + size + size.div_ceil(4))
+                // via https://github.com/amd/aocl-compression/blob/AOCL-Sep2025-b2/algos/bzip2/bzlib.c#L110-L122
+                const MIN_PAD_SIZE: u64 = 1024;
+                BytesRepresentation::BoundedSize(size + (size / 8) + MIN_PAD_SIZE)
             })
     }
 }

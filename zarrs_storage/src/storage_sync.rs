@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use auto_impl::auto_impl;
 
+use super::byte_range::{ByteRange, ByteRangeIterator};
 use super::{
-    byte_range::{ByteRange, ByteRangeIterator},
     Bytes, MaybeBytes, MaybeBytesIterator, MaybeSend, MaybeSync, OffsetBytesIterator, StorageError,
     StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix, StorePrefixes,
 };

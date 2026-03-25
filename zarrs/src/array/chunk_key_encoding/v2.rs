@@ -1,36 +1,19 @@
 //! The `v2` chunk key encoding.
 
 use itertools::Itertools;
+
+use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingPlugin, ChunkKeyEncodingTraits};
+use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ChunkKeySeparator, Configuration};
 pub use zarrs_metadata_ext::chunk_key_encoding::v2::V2ChunkKeyEncodingConfiguration;
-use zarrs_registry::chunk_key_encoding::V2;
+use zarrs_plugin::PluginCreateError;
+use zarrs_storage::StoreKey;
 
-use crate::{
-    array::chunk_key_encoding::ChunkKeyEncodingPlugin,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-    storage::StoreKey,
-};
-
-use super::{ChunkKeyEncoding, ChunkKeyEncodingTraits, ChunkKeySeparator};
+zarrs_plugin::impl_extension_aliases!(V2ChunkKeyEncoding, v3: "v2");
 
 // Register the chunk key encoding.
 inventory::submit! {
-    ChunkKeyEncodingPlugin::new(V2, is_name_v2, create_chunk_key_encoding_v2)
-}
-
-fn is_name_v2(name: &str) -> bool {
-    name.eq(V2)
-}
-
-pub(crate) fn create_chunk_key_encoding_v2(
-    metadata: &MetadataV3,
-) -> Result<ChunkKeyEncoding, PluginCreateError> {
-    let configuration: V2ChunkKeyEncodingConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(V2, "chunk key encoding", metadata.to_string())
-        })?;
-    let v2 = V2ChunkKeyEncoding::new(configuration.separator);
-    Ok(ChunkKeyEncoding::new(v2))
+    ChunkKeyEncodingPlugin::new::<V2ChunkKeyEncoding>()
 }
 
 /// A `v2` chunk key encoding.
@@ -79,11 +62,17 @@ impl Default for V2ChunkKeyEncoding {
 }
 
 impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = V2ChunkKeyEncodingConfiguration {
+    fn create(metadata: &MetadataV3) -> Result<ChunkKeyEncoding, PluginCreateError> {
+        let configuration: V2ChunkKeyEncodingConfiguration = metadata.to_typed_configuration()?;
+        let v2 = V2ChunkKeyEncoding::new(configuration.separator);
+        Ok(v2.into())
+    }
+
+    fn configuration(&self) -> Configuration {
+        V2ChunkKeyEncodingConfiguration {
             separator: self.separator,
-        };
-        MetadataV3::new_with_serializable_configuration(V2.to_string(), &configuration).unwrap()
+        }
+        .into()
     }
 
     fn encode(&self, chunk_grid_indices: &[u64]) -> StoreKey {
@@ -110,9 +99,8 @@ impl ChunkKeyEncodingTraits for V2ChunkKeyEncoding {
 
 #[cfg(test)]
 mod tests {
-    use crate::node::{data_key, NodePath};
-
     use super::*;
+    use crate::node::{NodePath, data_key};
 
     #[test]
     fn slash_nd() {

@@ -1,24 +1,25 @@
 #![allow(missing_docs)]
 
-use std::{error::Error, sync::Arc};
+use std::error::Error;
+use std::sync::Arc;
 
-use zarrs_storage::{
-    storage_adapter::{
-        async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-        sync_to_async::{SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter},
-    },
-    store::MemoryStore,
+use zarrs_storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
+use zarrs_storage::storage_adapter::sync_to_async::{
+    SyncToAsyncSpawnBlocking, SyncToAsyncStorageAdapter,
+};
+use zarrs_storage::store::MemoryStore;
 
 struct TokioSpawnBlocking;
 
 impl SyncToAsyncSpawnBlocking for TokioSpawnBlocking {
-    fn spawn_blocking<F, R>(&self, f: F) -> impl std::future::Future<Output = R> + Send
+    async fn spawn_blocking<F, R>(&self, f: F) -> R
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        async move { tokio::task::spawn_blocking(f).await.unwrap() }
+        tokio::task::spawn_blocking(f).await.unwrap()
     }
 }
 
@@ -37,6 +38,7 @@ async fn sync_to_async_memory_store() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::async_store_write(&store).await?;
     zarrs_storage::store_test::async_store_read(&store).await?;
     zarrs_storage::store_test::async_store_list(&store).await?;
+    zarrs_storage::store_test::async_store_list_size(&store).await?;
     Ok(())
 }
 
@@ -51,4 +53,5 @@ fn async_to_sync_memory_store() {
     zarrs_storage::store_test::store_write(&store).unwrap();
     zarrs_storage::store_test::store_read(&store).unwrap();
     zarrs_storage::store_test::store_list(&store).unwrap();
+    zarrs_storage::store_test::store_list_size(&store).unwrap();
 }

@@ -2,126 +2,102 @@
 //!
 //! It accepts uint compatible fill values.
 
-use std::{borrow::Cow, sync::Arc};
+use std::any::Any;
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use serde::Deserialize;
-use zarrs::{
-    array::{
-        ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-        FillValueMetadataV3,
-    },
-    array_subset::ArraySubset,
+use zarrs::array::{
+    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
+    FillValueMetadata,
 };
+use zarrs::metadata::Configuration;
+use zarrs::metadata::v3::MetadataV3;
+use zarrs::storage::store::MemoryStore;
+use zarrs_data_type::codec_traits::packbits::PackBitsDataTypeTraits;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeExtensionPackBitsCodec, DataTypeFillValueError,
-    DataTypeFillValueMetadataError, DataTypePlugin, FillValue,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
+    FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
-/// A unique identifier for  the custom data type.
-const UINT4: &'static str = "zarrs.test.uint4";
+/// A name for  the custom data type.
+const UINT4: &str = "zarrs.test.uint4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeUInt4;
 
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeUInt4, v3: UINT4);
+
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeUInt4 {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
+        Ok(Arc::new(CustomDataTypeUInt4).into())
+    }
+}
+
+// Register the data type so that it can be recognised when opening arrays.
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeUInt4>()
+}
+
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 struct CustomDataTypeUInt4Element(u8);
 
-// Register the data type so that it can be recognised when opening arrays.
-inventory::submit! {
-    DataTypePlugin::new(UINT4, is_custom_dtype, create_custom_dtype)
-}
-
-fn is_custom_dtype(name: &str) -> bool {
-    name == UINT4
-}
-
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeUInt4))
-    } else {
-        Err(PluginMetadataInvalidError::new(UINT4, "codec", metadata.to_string()).into())
-    }
-}
-
 /// Implement the core data type extension methods
-impl DataTypeExtension for CustomDataTypeUInt4 {
-    fn name(&self) -> String {
-        UINT4.to_string()
-    }
-
-    fn configuration(&self) -> Configuration {
+impl DataTypeTraits for CustomDataTypeUInt4 {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || DataTypeFillValueMetadataError::new(self.name(), fill_value_metadata.clone());
-        let element_metadata: u64 = fill_value_metadata.as_u64().ok_or_else(err)?;
-        let element = CustomDataTypeUInt4Element::try_from(element_metadata).map_err(|_| {
-            DataTypeFillValueMetadataError::new(UINT4.to_string(), fill_value_metadata.clone())
-        })?;
-        Ok(FillValue::new(element.to_ne_bytes().to_vec()))
+        let element_metadata: u64 = fill_value_metadata
+            .as_u64()
+            .ok_or(DataTypeFillValueMetadataError)?;
+        let element = CustomDataTypeUInt4Element::try_from(element_metadata)
+            .map_err(|_| DataTypeFillValueMetadataError)?;
+        Ok(FillValue::new(element.into_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let element = CustomDataTypeUInt4Element::from_ne_bytes(
             fill_value
                 .as_ne_bytes()
                 .try_into()
-                .map_err(|_| DataTypeFillValueError::new(self.name(), fill_value.clone()))?,
+                .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadataV3::from(element.as_u8()))
+        Ok(FillValueMetadata::from(element.into_u8()))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
-    fn codec_packbits(
-        &self,
-    ) -> Result<&dyn DataTypeExtensionPackBitsCodec, DataTypeExtensionError> {
-        Ok(self)
+    /// Allow u8 as compatible element type.
+    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+        const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<u8>()];
+        &TYPES
     }
 }
 
-/// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeUInt4 {
-    fn encode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
-        Ok(bytes)
-    }
-
-    fn decode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
-        Ok(bytes)
-    }
-}
+// Add support for the `bytes` codec using the helper macro (component size 1 = passthrough).
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(CustomDataTypeUInt4, 1);
 
 /// Add support for the `packbits` codec.
-impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
+impl PackBitsDataTypeTraits for CustomDataTypeUInt4 {
     fn component_size_bits(&self) -> u64 {
         4
     }
@@ -134,6 +110,13 @@ impl DataTypeExtensionPackBitsCodec for CustomDataTypeUInt4 {
         false
     }
 }
+
+// Register packbits codec support
+zarrs_data_type::register_data_type_extension_codec!(
+    CustomDataTypeUInt4,
+    zarrs_data_type::codec_traits::packbits::PackBitsDataTypePlugin,
+    zarrs_data_type::codec_traits::packbits::PackBitsDataTypeTraits
+);
 
 impl TryFrom<u64> for CustomDataTypeUInt4Element {
     type Error = u64;
@@ -148,38 +131,46 @@ impl TryFrom<u64> for CustomDataTypeUInt4Element {
 }
 
 impl CustomDataTypeUInt4Element {
-    fn to_ne_bytes(&self) -> [u8; 1] {
+    fn into_ne_bytes(self) -> [u8; 1] {
         [self.0]
     }
 
-    fn from_ne_bytes(bytes: &[u8; 1]) -> Self {
+    fn from_ne_bytes(bytes: [u8; 1]) -> Self {
         Self(bytes[0])
     }
 
-    fn as_u8(&self) -> u8 {
+    fn into_u8(self) -> u8 {
         self.0
     }
 }
 
 /// This defines how an in-memory CustomDataTypeUInt4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeUInt4Element {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeUInt4)))
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        // Check if the data type matches our custom data type
+        data_type
+            .is::<CustomDataTypeUInt4>()
             .then_some(())
-            .ok_or(ArrayError::IncompatibleElementType)
+            .ok_or(ElementError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let mut bytes: Vec<u8> =
-            Vec::with_capacity(elements.len() * size_of::<CustomDataTypeUInt4Element>());
+        let mut bytes: Vec<u8> = Vec::with_capacity(std::mem::size_of_val(elements));
         for element in elements {
             bytes.push(element.0);
         }
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ElementError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 
@@ -188,7 +179,7 @@ impl ElementOwned for CustomDataTypeUInt4Element {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();
@@ -207,8 +198,8 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeUInt4)),
-        FillValue::new(fill_value.to_ne_bytes().to_vec()),
+        Arc::new(CustomDataTypeUInt4),
+        FillValue::new(fill_value.into_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -235,14 +226,13 @@ fn main() {
         CustomDataTypeUInt4Element::try_from(4).unwrap(),
         CustomDataTypeUInt4Element::try_from(5).unwrap(),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeUInt4Element>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for f in &data {
-        println!("uint4: {:08b} u8: {}", f.as_u8(), f.as_u8());
+        println!("uint4: {:08b} u8: {}", f.into_u8(), f.into_u8());
     }
 
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(1).unwrap());
@@ -252,11 +242,7 @@ fn main() {
     assert_eq!(data[4], CustomDataTypeUInt4Element::try_from(5).unwrap());
     assert_eq!(data[5], CustomDataTypeUInt4Element::try_from(15).unwrap());
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeUInt4Element>(
-            &ArraySubset::new_with_ranges(&[1..3, 0..1]),
-        )
-        .unwrap();
+    let data: Vec<CustomDataTypeUInt4Element> = array.retrieve_array_subset(&[1..3, 0..1]).unwrap();
     assert_eq!(data[0], CustomDataTypeUInt4Element::try_from(2).unwrap());
     assert_eq!(data[1], CustomDataTypeUInt4Element::try_from(3).unwrap());
 }

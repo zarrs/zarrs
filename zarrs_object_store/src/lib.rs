@@ -35,21 +35,20 @@
 //! - the Apache License, Version 2.0 [LICENSE-APACHE](https://docs.rs/crate/zarrs_object_store/latest/source/LICENCE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0> or
 //! - the MIT license [LICENSE-MIT](https://docs.rs/crate/zarrs_object_store/latest/source/LICENCE-MIT) or <http://opensource.org/licenses/MIT>, at your option.
 
+use futures::{StreamExt, TryStreamExt, stream};
 pub use object_store;
-
-use futures::{stream, StreamExt, TryStreamExt};
+use object_store::ObjectStoreExt;
 use object_store::path::Path;
-
+use zarrs_storage::byte_range::ByteRangeIterator;
 use zarrs_storage::{
-    async_store_set_partial_many, byte_range::ByteRangeIterator, AsyncListableStorageTraits,
-    AsyncMaybeBytesIterator, AsyncReadableStorageTraits, AsyncWritableStorageTraits, Bytes,
-    MaybeBytes, OffsetBytesIterator, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes,
-    StorePrefix,
+    AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
+    AsyncWritableStorageTraits, Bytes, MaybeBytes, OffsetBytesIterator, StorageError, StoreKey,
+    StoreKeys, StoreKeysPrefixes, StorePrefix, async_store_set_partial_many,
 };
 
 /// Maps a [`StoreKey`] to an [`object_store`] path.
-fn key_to_path(key: &StoreKey) -> object_store::path::Path {
-    object_store::path::Path::from(key.as_str())
+fn key_to_path(key: &StoreKey) -> Path {
+    Path::from(key.as_str())
 }
 
 /// Map [`object_store::Error::NotFound`] to None, pass through other errors
@@ -168,7 +167,7 @@ impl<T: object_store::ObjectStore> AsyncWritableStorageTraits for AsyncObjectSto
     }
 
     async fn erase_prefix(&self, prefix: &StorePrefix) -> Result<(), StorageError> {
-        let prefix: object_store::path::Path = prefix.as_str().into();
+        let prefix: Path = prefix.as_str().into();
         let locations = self
             .object_store
             .list(Some(&prefix))
@@ -212,7 +211,7 @@ impl<T: object_store::ObjectStore> AsyncListableStorageTraits for AsyncObjectSto
 
     async fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
         // TODO: Check if this is outputting everything under prefix, or just one level under
-        let path: object_store::path::Path = prefix.as_str().into();
+        let path: Path = prefix.as_str().into();
         let mut list = handle_result(
             self.object_store
                 .list(Some(&path))
@@ -232,7 +231,7 @@ impl<T: object_store::ObjectStore> AsyncListableStorageTraits for AsyncObjectSto
     }
 
     async fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
-        let path: object_store::path::Path = prefix.as_str().into();
+        let path: Path = prefix.as_str().into();
         let list_result = handle_result(self.object_store.list_with_delimiter(Some(&path)).await)?;
         let mut prefixes = list_result
             .common_prefixes
@@ -256,7 +255,7 @@ impl<T: object_store::ObjectStore> AsyncListableStorageTraits for AsyncObjectSto
     }
 
     async fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
-        let prefix: object_store::path::Path = prefix.as_str().into();
+        let prefix: Path = prefix.as_str().into();
         let mut locations = self.object_store.list(Some(&prefix));
         let mut size = 0;
         while let Some(item) = locations.next().await {

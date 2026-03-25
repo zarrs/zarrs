@@ -9,17 +9,13 @@ pub use test_unbounded_codec::TestUnboundedCodec;
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     #[test]
     fn codec_test_unbounded_round_trip1() {
@@ -73,9 +69,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);
@@ -84,7 +82,7 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_test_unbounded_async_partial_decode() {
-        use crate::array::codec::CodecOptions;
+        use zarrs_codec::CodecOptions;
 
         let elements: Vec<u16> = (0..8).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
@@ -120,9 +118,11 @@ mod tests {
             .concat();
 
         let decoded_partial_chunk: Vec<u16> = decoded_partial_chunk
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
         let answer: Vec<u16> = vec![2, 3, 5];
         assert_eq!(answer, decoded_partial_chunk);

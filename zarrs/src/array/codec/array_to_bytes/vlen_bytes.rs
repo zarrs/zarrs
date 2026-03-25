@@ -19,9 +19,8 @@
 //! ```
 
 use crate::array::codec::array_to_bytes::vlen_v2::vlen_v2_macros;
-
 pub use zarrs_metadata_ext::codec::vlen_bytes::{
     VlenBytesCodecConfiguration, VlenBytesCodecConfigurationV1,
 };
 
-vlen_v2_macros::vlen_v2_module!(vlen_bytes, vlen_bytes_codec, VlenBytesCodec, VLEN_BYTES);
+vlen_v2_macros::vlen_v2_module!(vlen_bytes, vlen_bytes_codec, VlenBytesCodec);

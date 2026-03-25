@@ -29,3 +29,6 @@ mutants.out
 
 # MacOS files
 .DS_Store
+
+# Benchmark fixture data (generated on first run)
+zarrs/benches/data/

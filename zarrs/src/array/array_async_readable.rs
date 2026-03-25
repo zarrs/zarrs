@@ -1,31 +1,32 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
-use zarrs_storage::{MaybeSend, MaybeSync};
-
-use crate::{
-    array_subset::ArraySubset,
-    config::MetadataRetrieveVersion,
-    node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3, NodePath},
-    storage::{AsyncReadableStorageTraits, Bytes, StorageError, StorageHandle},
-};
-
+use super::concurrency::concurrency_chunks_and_codec;
+use super::element::ElementOwned;
 use super::{
-    array_bytes::{copy_fill_value_into, merge_chunks_vlen},
-    codec::{
-        ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
-        CodecOptions,
-    },
-    concurrency::concurrency_chunks_and_codec,
-    element::ElementOwned,
-    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayMetadata,
-    ArrayMetadataV2, ArrayMetadataV3, ArraySize, DataTypeSize,
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError,
+    ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataV2, ArrayMetadataV3, ChunkShapeTraits,
+    DataType, FromArrayBytes,
+};
+use crate::array::{ArraySubset, ArraySubsetTraits};
+use crate::config::MetadataRetrieveVersion;
+use crate::node::{NodePath, meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
+    AsyncStoragePartialDecoder, CodecError, CodecOptions, InvalidNumberOfElementsError,
+    copy_fill_value_into,
 };
 
-#[cfg(feature = "ndarray")]
-use super::elements_to_ndarray;
+use super::array_bytes_internal::{
+    build_nested_optional_target, extract_target_views, merge_chunks_vlen,
+    merge_chunks_vlen_optional, optional_nesting_depth,
+};
+use zarrs_storage::{
+    AsyncReadableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
+};
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`open`](Array::open).
@@ -90,14 +91,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`retrieve_chunk_if_exists`](Array::retrieve_chunk_if_exists).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_if_exists(
+    pub async fn async_retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<ArrayBytes<'_>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
+    ) -> Result<Option<T>, ArrayError> {
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
+    #[deprecated(since = "0.23.0", note = "Use async_retrieve_chunk_if_exists instead")]
     /// Async variant of [`retrieve_chunk_elements_if_exists`](Array::retrieve_chunk_elements_if_exists).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_elements_if_exists<
@@ -106,18 +108,22 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<Vec<T>>, ArrayError> {
-        self.async_retrieve_chunk_elements_if_exists_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_if_exists::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_ndarray_if_exists`](Array::retrieve_chunk_ndarray_if_exists).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_ndarray_if_exists<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.async_retrieve_chunk_ndarray_if_exists_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -143,136 +149,171 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`retrieve_chunk`](Array::retrieve_chunk).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk(
+    pub async fn async_retrieve_chunk<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
+    ) -> Result<T, ArrayError> {
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_elements`](Array::retrieve_chunk_elements).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_elements<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_elements_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_ndarray`](Array::retrieve_chunk_ndarray).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_ndarray_opt(chunk_indices, &CodecOptions::default())
+        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
             .await
     }
 
     /// Async variant of [`retrieve_chunks`](Array::retrieve_chunks).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunks(
+    pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
-        chunks: &ArraySubset,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &CodecOptions::default())
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunks::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunks_elements`](Array::retrieve_chunks_elements).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunks_elements<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunks_elements_opt(chunks, &CodecOptions::default())
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunks::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunks_ndarray`](Array::retrieve_chunks_ndarray).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunks_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunks_ndarray_opt(chunks, &CodecOptions::default())
+        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
 
     /// Async variant of [`retrieve_chunk_subset`](Array::retrieve_chunk_subset).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_subset(
+    pub async fn async_retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
+        chunk_subset: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
             .await
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_subset::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_subset_elements`](Array::retrieve_chunk_subset_elements).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_subset_elements<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_elements_opt(
-            chunk_indices,
-            chunk_subset,
-            &CodecOptions::default(),
-        )
-        .await
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
+            .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_subset::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_subset_ndarray`](Array::retrieve_chunk_subset_ndarray).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_subset_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_ndarray_opt(
-            chunk_indices,
-            chunk_subset,
-            &CodecOptions::default(),
-        )
-        .await
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
+            .await
     }
 
     /// Async variant of [`retrieve_array_subset`](Array::retrieve_array_subset).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_array_subset(
+    pub async fn async_retrieve_array_subset<T: FromArrayBytes>(
         &self,
-        array_subset: &ArraySubset,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &CodecOptions::default())
+        array_subset: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
+    /// Async variant of [`retrieve_array_subset_into`](Array::retrieve_array_subset_into).
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn async_retrieve_array_subset_into(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Result<(), ArrayError> {
+        self.async_retrieve_array_subset_into_opt(array_subset, output_target, &self.codec_options)
+            .await
+    }
+
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_array_subset::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_array_subset_elements`](Array::retrieve_array_subset_elements).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_array_subset_elements<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_array_subset_elements_opt(array_subset, &CodecOptions::default())
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_array_subset::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_array_subset_ndarray`](Array::retrieve_array_subset_ndarray).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_array_subset_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_array_subset_ndarray_opt(array_subset, &CodecOptions::default())
+        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
@@ -282,7 +323,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, ArrayError> {
-        self.async_partial_decoder_opt(chunk_indices, &CodecOptions::default())
+        self.async_partial_decoder_opt(chunk_indices, &self.codec_options)
             .await
     }
 
@@ -292,11 +333,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`retrieve_chunk_if_exists_opt`](Array::retrieve_chunk_if_exists_opt).
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_if_exists_opt(
+    pub async fn async_retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Option<ArrayBytes<'_>>, ArrayError> {
+    ) -> Result<Option<T>, ArrayError> {
         if chunk_indices.len() != self.dimensionality() {
             return Err(ArrayError::InvalidChunkGridIndicesError(
                 chunk_indices.to_vec(),
@@ -312,17 +353,23 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_encoded: Vec<u8> = chunk_encoded.into();
-            let chunk_representation = self.chunk_array_representation(chunk_indices)?;
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
                 .codecs()
-                .decode(Cow::Owned(chunk_encoded), &chunk_representation, options)
+                .decode(
+                    Cow::Owned(chunk_encoded.into()),
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )
                 .map_err(ArrayError::CodecError)?;
-            bytes.validate(
-                chunk_representation.num_elements(),
-                chunk_representation.data_type().size(),
-            )?;
-            Ok(Some(bytes))
+            bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
+            Ok(Some(T::from_array_bytes(
+                bytes.into_owned(),
+                bytemuck::must_cast_slice(&chunk_shape),
+                self.data_type(),
+            )?))
         } else {
             Ok(None)
         }
@@ -330,21 +377,30 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
     #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_opt(
+    pub async fn async_retrieve_chunk_opt<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let chunk = self
-            .async_retrieve_chunk_if_exists_opt(chunk_indices, options)
-            .await?;
-        if let Some(chunk) = chunk {
+    ) -> Result<T, ArrayError> {
+        if let Some(chunk) = self
+            .async_retrieve_chunk_if_exists_opt::<T>(chunk_indices, options)
+            .await?
+        {
             Ok(chunk)
         } else {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            let array_size =
-                ArraySize::new(self.data_type().size(), chunk_shape.num_elements_u64());
-            Ok(ArrayBytes::new_fill_value(array_size, self.fill_value()))
+            let bytes = ArrayBytes::new_fill_value(
+                self.data_type(),
+                chunk_shape.num_elements_u64(),
+                self.fill_value(),
+            )
+            .map_err(CodecError::from)
+            .map_err(ArrayError::from)?;
+            T::from_array_bytes(
+                bytes,
+                bytemuck::must_cast_slice(&chunk_shape),
+                self.data_type(),
+            )
         }
     }
 
@@ -352,7 +408,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     async fn async_retrieve_chunk_into(
         &self,
         chunk_indices: &[u64],
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         if chunk_indices.len() != self.dimensionality() {
@@ -370,22 +426,27 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            let chunk_encoded: Vec<u8> = chunk_encoded.into();
-            let chunk_representation = self.chunk_array_representation(chunk_indices)?;
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
             self.codecs()
                 .decode_into(
-                    Cow::Owned(chunk_encoded),
-                    &chunk_representation,
-                    output_view,
+                    Cow::Owned(chunk_encoded.into()),
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    output_target,
                     options,
                 )
                 .map_err(ArrayError::CodecError)
         } else {
-            copy_fill_value_into(self.data_type(), self.fill_value(), output_view)
+            copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
                 .map_err(ArrayError::CodecError)
         }
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_if_exists_opt::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_elements_if_exists_opt`](Array::retrieve_chunk_elements_if_exists_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_elements_if_exists_opt<
@@ -395,17 +456,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<Vec<T>>, ArrayError> {
-        if let Some(bytes) = self
-            .async_retrieve_chunk_if_exists_opt(chunk_indices, options)
-            .await?
-        {
-            let elements = T::from_array_bytes(self.data_type(), bytes)?;
-            Ok(Some(elements))
-        } else {
-            Ok(None)
-        }
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, options)
+            .await
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_opt::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_elements_opt`](Array::retrieve_chunk_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
@@ -413,14 +471,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        let bytes = self
-            .async_retrieve_chunk_opt(chunk_indices, options)
-            .await?;
-        let elements = T::from_array_bytes(self.data_type(), bytes)?;
-        Ok(elements)
+        self.async_retrieve_chunk_opt(chunk_indices, options).await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_if_exists_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_ndarray_if_exists_opt`](Array::retrieve_chunk_ndarray_if_exists_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_ndarray_if_exists_opt<
@@ -430,22 +488,15 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        // validate_element_size::<T>(self.data_type())?; in // async_retrieve_chunk_elements_if_exists
-        let shape = self
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        let elements = self
-            .async_retrieve_chunk_elements_if_exists_opt(chunk_indices, options)
-            .await?;
-        if let Some(elements) = elements {
-            Ok(Some(elements_to_ndarray(&shape, elements)?))
-        } else {
-            Ok(None)
-        }
+        self.async_retrieve_chunk_if_exists_opt(chunk_indices, options)
+            .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_ndarray_opt`](Array::retrieve_chunk_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
@@ -453,15 +504,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        // validate_element_size::<T>(self.data_type())?; // in async_retrieve_chunk_elements
-        let shape = self
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        let elements = self
-            .async_retrieve_chunk_elements_opt(chunk_indices, options)
-            .await?;
-        elements_to_ndarray(&shape, elements)
+        self.async_retrieve_chunk_opt(chunk_indices, options).await
     }
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.
@@ -473,7 +516,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     #[allow(clippy::missing_panics_doc)]
     pub async fn async_retrieve_encoded_chunks(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<Option<Bytes>>, StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -482,7 +525,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .create_async_readable_transformer(storage_handle)
             .await?;
 
-        let retrieve_encoded_chunk = |chunk_indices: Vec<u64>| {
+        let retrieve_encoded_chunk = |chunk_indices: ArrayIndicesTinyVec| {
             let storage_transformer = storage_transformer.clone();
             async move {
                 storage_transformer
@@ -501,14 +544,14 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
     /// Async variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunks_opt(
+    pub async fn async_retrieve_chunks_opt<T: FromArrayBytes>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<T, ArrayError> {
         if chunks.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
-                chunks.clone(),
+                chunks.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -518,44 +561,221 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunks_opt::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunks_elements_opt`](Array::retrieve_chunks_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        let bytes = self.async_retrieve_chunks_opt(chunks, options).await?;
-        let elements = T::from_array_bytes(self.data_type(), bytes)?;
-        Ok(elements)
+        self.async_retrieve_chunks_opt(chunks, options).await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunks_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunks_ndarray_opt`](Array::retrieve_chunks_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
-        chunks: &ArraySubset,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        let array_subset = self.chunks_subset(chunks)?;
-        let elements = self
-            .async_retrieve_chunks_elements_opt(chunks, options)
-            .await?;
-        elements_to_ndarray(array_subset.shape(), elements)
+        self.async_retrieve_chunks_opt(chunks, options).await
+    }
+
+    /// Helper method to retrieve multiple chunks with variable-length data types (async).
+    /// Also handles optional data types with variable-length inner types (including nested optionals).
+    async fn async_retrieve_multi_chunk_variable(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        chunks: &dyn ArraySubsetTraits,
+        data_type: &DataType,
+        chunk_concurrent_limit: usize,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, ArrayError> {
+        let nesting_depth = optional_nesting_depth(data_type);
+        let array_subset_start = array_subset.start();
+        let array_subset_shape = array_subset.shape();
+
+        if nesting_depth > 0 {
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+                let array_subset_start = &array_subset_start;
+                async move {
+                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                    Ok::<_, ArrayError>((
+                        self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
+                            &chunk_indices,
+                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                            options,
+                        )
+                        .await?
+                        .into_optional()?,
+                        chunk_subset_overlap.relative_to(array_subset_start)?,
+                    ))
+                }
+            };
+
+            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
+                .map(|chunk_indices| retrieve_chunk(chunk_indices.clone()))
+                .buffered(chunk_concurrent_limit)
+                .try_collect()
+                .await?;
+
+            Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
+                chunk_bytes_and_subsets,
+                &array_subset_shape,
+                nesting_depth,
+            )?))
+        } else {
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+                let array_subset_start = &array_subset_start;
+                async move {
+                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                    Ok::<_, ArrayError>((
+                        self.async_retrieve_chunk_subset_opt::<ArrayBytes>(
+                            &chunk_indices,
+                            &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                            options,
+                        )
+                        .await?
+                        .into_variable()?,
+                        chunk_subset_overlap.relative_to(array_subset_start)?,
+                    ))
+                }
+            };
+
+            let chunk_bytes_and_subsets: Vec<_> = futures::stream::iter(chunks.indices().iter())
+                .map(|chunk_indices| retrieve_chunk(chunk_indices.clone()))
+                .buffered(chunk_concurrent_limit)
+                .try_collect()
+                .await?;
+
+            Ok(ArrayBytes::Variable(merge_chunks_vlen(
+                chunk_bytes_and_subsets,
+                &array_subset_shape,
+            )))
+        }
+    }
+
+    /// Helper method to retrieve multiple chunks with fixed-length data types (async).
+    /// Also handles optional data types with fixed-length inner types.
+    async fn async_retrieve_multi_chunk_fixed(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        chunks: &dyn ArraySubsetTraits,
+        data_type: &DataType,
+        chunk_concurrent_limit: usize,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, ArrayError> {
+        // Allocate data buffer and mask buffers for each level of optional nesting
+        let data_type_size = data_type
+            .fixed_size()
+            .expect("data_type must have fixed size");
+        let num_elements = array_subset.num_elements_usize();
+        let size_output = num_elements * data_type_size;
+        let nesting_depth = optional_nesting_depth(data_type);
+        let mut data_output = Vec::with_capacity(size_output);
+        let mut mask_outputs: Vec<Vec<u8>> = (0..nesting_depth)
+            .map(|_| Vec::with_capacity(num_elements))
+            .collect();
+
+        {
+            let data_output_slice =
+                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
+            let mask_output_slices: Vec<_> = mask_outputs
+                .iter_mut()
+                .map(UnsafeCellSlice::new_from_vec_with_spare_capacity)
+                .collect();
+            let mask_output_slices = mask_output_slices.as_slice();
+            let array_subset_start = array_subset.start();
+            let array_subset_shape = array_subset.shape();
+
+            let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+                let array_subset_start = &array_subset_start;
+                let array_subset_shape = &array_subset_shape;
+                async move {
+                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                    let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                    let chunk_subset_in_array =
+                        chunk_subset_overlap.relative_to(array_subset_start)?;
+
+                    let mut data_view = unsafe {
+                        // SAFETY: chunks represent disjoint array subsets
+                        ArrayBytesFixedDisjointView::new(
+                            data_output_slice,
+                            data_type_size,
+                            array_subset_shape,
+                            chunk_subset_in_array.clone(),
+                        )?
+                    };
+
+                    // Create mask views for each nesting level
+                    let mut mask_views: Vec<ArrayBytesFixedDisjointView<'_>> = mask_output_slices
+                        .iter()
+                        .map(|mask_slice| unsafe {
+                            // SAFETY: chunks represent disjoint array subsets
+                            ArrayBytesFixedDisjointView::new(
+                                *mask_slice,
+                                1, // 1 byte per element for mask
+                                array_subset_shape,
+                                chunk_subset_in_array.clone(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    // Build the nested decode target
+                    let target =
+                        build_nested_optional_target(&mut data_view, mask_views.as_mut_slice());
+
+                    self.async_retrieve_chunk_subset_into(
+                        &chunk_indices,
+                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                        target,
+                        options,
+                    )
+                    .await?;
+                    Ok::<_, ArrayError>(())
+                }
+            };
+
+            futures::stream::iter(&chunks.indices())
+                .map(Ok)
+                .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
+                .await?;
+        }
+
+        unsafe { data_output.set_len(size_output) };
+        for mask in &mut mask_outputs {
+            unsafe { mask.set_len(num_elements) };
+        }
+
+        // Build nested ArrayBytes with masks (innermost first, so reverse order)
+        let mut array_bytes = ArrayBytes::new_flen(data_output);
+        for mask in mask_outputs.into_iter().rev() {
+            array_bytes = array_bytes.with_optional_mask(mask);
+        }
+        Ok(array_bytes)
     }
 
     /// Async variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    #[allow(clippy::too_many_lines)]
-    pub async fn async_retrieve_array_subset_opt(
+    pub async fn async_retrieve_array_subset_opt<T: FromArrayBytes>(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
+    ) -> Result<T, ArrayError> {
         if array_subset.dimensionality() != self.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
@@ -564,23 +784,29 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         let chunks = self.chunks_in_array_subset(array_subset)?;
         let Some(chunks) = chunks else {
             return Err(ArrayError::InvalidArraySubset(
-                array_subset.clone(),
+                array_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         };
 
         // Retrieve chunk bytes
         let num_chunks = chunks.num_elements_usize();
+        let array_subset_shape = array_subset.shape();
         match num_chunks {
             0 => {
-                let array_size =
-                    ArraySize::new(self.data_type().size(), array_subset.num_elements());
-                Ok(ArrayBytes::new_fill_value(array_size, self.fill_value()))
+                let bytes = ArrayBytes::new_fill_value(
+                    self.data_type(),
+                    array_subset.num_elements(),
+                    self.fill_value(),
+                )
+                .map_err(CodecError::from)
+                .map_err(ArrayError::from)?;
+                T::from_array_bytes(bytes, &array_subset_shape, self.data_type())
             }
             1 => {
                 let chunk_indices = chunks.start();
                 let chunk_subset = self.chunk_subset(chunk_indices)?;
-                if &chunk_subset == array_subset {
+                if chunk_subset == array_subset {
                     // Single chunk fast path if the array subset domain matches the chunk domain
                     self.async_retrieve_chunk_opt(chunk_indices, options).await
                 } else {
@@ -596,10 +822,9 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             }
             _ => {
                 // Calculate chunk/codec concurrency
-                let chunk_representation =
-                    self.chunk_array_representation(&vec![0; self.dimensionality()])?;
+                let chunk_shape = self.chunk_shape(chunks.start())?;
                 let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_representation)?;
+                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,
@@ -607,163 +832,241 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                     &codec_concurrency,
                 );
 
-                match chunk_representation.data_type().size() {
-                    DataTypeSize::Variable => {
-                        let retrieve_chunk = |chunk_indices: Vec<u64>| {
-                            let options = options.clone();
-                            async move {
-                                let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-                                Ok::<_, ArrayError>((
-                                    self.async_retrieve_chunk_subset_opt(
-                                        &chunk_indices,
-                                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                        &options,
-                                    )
-                                    .await?,
-                                    chunk_subset_overlap.relative_to(array_subset.start())?,
-                                ))
-                            }
-                        };
-
-                        // TODO: chunk_concurrent_limit
-                        let chunk_bytes_and_subsets = futures::future::try_join_all(
-                            chunks.indices().iter().map(retrieve_chunk),
-                        )
-                        .await?;
-
-                        Ok(merge_chunks_vlen(
-                            chunk_bytes_and_subsets,
-                            array_subset.shape(),
-                        )?)
-                    }
-                    DataTypeSize::Fixed(data_type_size) => {
-                        let size_output =
-                            usize::try_from(array_subset.num_elements() * data_type_size as u64)
-                                .unwrap();
-                        if size_output == 0 {
-                            return Ok(ArrayBytes::new_flen(vec![]));
-                        }
-                        let mut output = Vec::with_capacity(size_output);
-                        {
-                            let output =
-                                UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut output);
-                            let retrieve_chunk = |chunk_indices: Vec<u64>| {
-                                let options = options.clone();
-                                async move {
-                                    let chunk_subset = self.chunk_subset(&chunk_indices)?;
-                                    let chunk_subset_overlap =
-                                        chunk_subset.overlap(array_subset)?;
-
-                                    let mut output_view = unsafe {
-                                        // SAFETY: chunks represent disjoint array subsets
-                                        ArrayBytesFixedDisjointView::new(
-                                            output,
-                                            data_type_size,
-                                            array_subset.shape(),
-                                            chunk_subset_overlap
-                                                .relative_to(array_subset.start())
-                                                .unwrap(),
-                                        )
-                                    }?;
-                                    self.async_retrieve_chunk_subset_into(
-                                        &chunk_indices,
-                                        &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                                        &mut output_view,
-                                        &options,
-                                    )
-                                    .await?;
-                                    // let chunk_subset_bytes = self
-                                    //     .async_retrieve_chunk_subset_opt(
-                                    //         &chunk_indices,
-                                    //         &chunk_subset_overlap
-                                    //             .relative_to(chunk_subset.start())?,
-                                    //         &options,
-                                    //     )
-                                    //     .await?;
-                                    // let chunk_subset_bytes = chunk_subset_bytes.into_fixed()?;
-                                    // let output = unsafe { output.as_mut_slice() };
-                                    // update_bytes_flen(
-                                    //     output,
-                                    //     array_subset.shape(),
-                                    //     &chunk_subset_bytes,
-                                    //     &chunk_subset_overlap.relative_to(array_subset.start())?,
-                                    //     data_type_size,
-                                    // );
-                                    Ok::<_, ArrayError>(())
-                                }
-                            };
-
-                            futures::stream::iter(&chunks.indices())
-                                .map(Ok)
-                                .try_for_each_concurrent(
-                                    Some(chunk_concurrent_limit),
-                                    retrieve_chunk,
-                                )
-                                .await?;
-                        }
-                        unsafe { output.set_len(size_output) };
-                        Ok(ArrayBytes::from(output))
-                    }
-                }
+                // Delegate to appropriate helper based on data type size
+                let bytes = if self.data_type().is_fixed() {
+                    self.async_retrieve_multi_chunk_fixed(
+                        array_subset,
+                        &chunks,
+                        self.data_type(),
+                        chunk_concurrent_limit,
+                        &options,
+                    )
+                    .await?
+                } else {
+                    self.async_retrieve_multi_chunk_variable(
+                        array_subset,
+                        &chunks,
+                        self.data_type(),
+                        chunk_concurrent_limit,
+                        &options,
+                    )
+                    .await?
+                };
+                T::from_array_bytes(bytes.into_owned(), &array_subset_shape, self.data_type())
             }
         }
     }
 
+    /// Async variant of [`retrieve_array_subset_into_opt`](Array::retrieve_array_subset_into_opt).
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    pub async fn async_retrieve_array_subset_into_opt(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        if array_subset.dimensionality() != self.dimensionality() {
+            return Err(ArrayError::InvalidArraySubset(
+                array_subset.to_array_subset(),
+                self.shape().to_vec(),
+            ));
+        }
+
+        if !self.data_type().is_fixed() {
+            return Err(ArrayError::CodecError(CodecError::Other(
+                "retrieve_array_subset_into does not support variable-length data types"
+                    .to_string(),
+            )));
+        }
+
+        if output_target.num_elements() != array_subset.num_elements() {
+            return Err(ArrayError::CodecError(
+                InvalidNumberOfElementsError::new(
+                    output_target.num_elements(),
+                    array_subset.num_elements(),
+                )
+                .into(),
+            ));
+        }
+
+        let chunks = self.chunks_in_array_subset(array_subset)?;
+        let Some(chunks) = chunks else {
+            return Err(ArrayError::InvalidArraySubset(
+                array_subset.to_array_subset(),
+                self.shape().to_vec(),
+            ));
+        };
+
+        let num_chunks = chunks.num_elements_usize();
+        match num_chunks {
+            0 => copy_fill_value_into(self.data_type(), self.fill_value(), output_target)
+                .map_err(ArrayError::CodecError),
+            1 => {
+                let chunk_indices = chunks.start();
+                let chunk_subset = self.chunk_subset(chunk_indices)?;
+                if chunk_subset == array_subset {
+                    self.async_retrieve_chunk_into(chunk_indices, output_target, options)
+                        .await
+                } else {
+                    let array_subset_in_chunk_subset =
+                        array_subset.relative_to(chunk_subset.start())?;
+                    self.async_retrieve_chunk_subset_into(
+                        chunk_indices,
+                        &array_subset_in_chunk_subset,
+                        output_target,
+                        options,
+                    )
+                    .await
+                }
+            }
+            _ => {
+                let chunk_shape = self.chunk_shape(chunks.start())?;
+                let codec_concurrency =
+                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
+                    options.concurrent_target(),
+                    num_chunks,
+                    options,
+                    &codec_concurrency,
+                );
+
+                self.async_retrieve_multi_chunk_fixed_into(
+                    array_subset,
+                    &chunks,
+                    chunk_concurrent_limit,
+                    &output_target,
+                    &options,
+                )
+                .await
+            }
+        }
+    }
+
+    async fn async_retrieve_multi_chunk_fixed_into(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        chunks: &dyn ArraySubsetTraits,
+        chunk_concurrent_limit: usize,
+        output_target: &ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError> {
+        let (data_view_ref, mask_view_refs) = extract_target_views(output_target);
+        let parent_start = data_view_ref.subset().start().to_vec();
+        let array_subset_start = array_subset.start();
+
+        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            let array_subset_start = &array_subset_start;
+            let parent_start = &parent_start;
+            let mask_view_refs = &mask_view_refs;
+            async move {
+                let chunk_subset = self.chunk_subset(&chunk_indices)?;
+                let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+                let chunk_subset_in_array = chunk_subset_overlap.relative_to(array_subset_start)?;
+
+                // Translate to the view's coordinate space
+                let chunk_start_in_view: Vec<u64> = chunk_subset_in_array
+                    .start()
+                    .iter()
+                    .zip(parent_start.iter())
+                    .map(|(&c, &p)| c + p)
+                    .collect();
+                let chunk_subset_in_view = ArraySubset::new_with_start_shape(
+                    chunk_start_in_view,
+                    chunk_subset_in_array.shape().to_vec(),
+                )?;
+
+                let mut data_sub = unsafe {
+                    // SAFETY: chunks represent disjoint array subsets
+                    data_view_ref.subdivide(chunk_subset_in_view.clone())?
+                };
+
+                let mut mask_subs: Vec<ArrayBytesFixedDisjointView<'_>> = mask_view_refs
+                    .iter()
+                    .map(|mask_view| unsafe {
+                        // SAFETY: chunks represent disjoint array subsets
+                        mask_view.subdivide(chunk_subset_in_view.clone())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let target = build_nested_optional_target(&mut data_sub, mask_subs.as_mut_slice());
+
+                self.async_retrieve_chunk_subset_into(
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    target,
+                    options,
+                )
+                .await?;
+                Ok::<_, ArrayError>(())
+            }
+        };
+
+        futures::stream::iter(&chunks.indices())
+            .map(Ok)
+            .try_for_each_concurrent(Some(chunk_concurrent_limit), retrieve_chunk)
+            .await?;
+
+        Ok(())
+    }
+
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_array_subset_opt::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_array_subset_elements_opt`](Array::retrieve_array_subset_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_array_subset_elements_opt<
         T: ElementOwned + MaybeSend + MaybeSync,
     >(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        let bytes = self
-            .async_retrieve_array_subset_opt(array_subset, options)
-            .await?;
-        let elements = T::from_array_bytes(self.data_type(), bytes)?;
-        Ok(elements)
+        self.async_retrieve_array_subset_opt(array_subset, options)
+            .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_array_subset_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_array_subset_ndarray_opt`](Array::retrieve_array_subset_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_array_subset_ndarray_opt<
         T: ElementOwned + MaybeSend + MaybeSync,
     >(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        let elements = self
-            .async_retrieve_array_subset_elements_opt(array_subset, options)
-            .await?;
-        elements_to_ndarray(array_subset.shape(), elements)
+        self.async_retrieve_array_subset_opt(array_subset, options)
+            .await
     }
 
     /// Async variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_subset_opt(
+    pub async fn async_retrieve_chunk_subset_opt<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ArrayBytes<'_>, ArrayError> {
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-        if !chunk_subset.inbounds_shape(&chunk_representation.shape_u64()) {
+    ) -> Result<T, ArrayError> {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
 
-        let bytes = if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_representation.shape_u64()
+        let chunk_subset_shape = chunk_subset.shape();
+        if chunk_subset.start().iter().all(|&o| o == 0)
+            && chunk_subset_shape.as_ref() == chunk_shape_u64
         {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.async_retrieve_chunk_opt(chunk_indices, options)
-                .await?
+            self.async_retrieve_chunk_opt(chunk_indices, options).await
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
             let storage_transformer = self
@@ -774,38 +1077,46 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 storage_transformer,
                 self.chunk_key(chunk_indices),
             ));
-            self.codecs
+            let bytes = self
+                .codecs
                 .clone()
-                .async_partial_decoder(input_handle, &chunk_representation, options)
+                .async_partial_decoder(
+                    input_handle,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )
                 .await?
                 .partial_decode(chunk_subset, options)
                 .await?
-                .into_owned()
-        };
-        bytes.validate(chunk_subset.num_elements(), self.data_type().size())?;
-        Ok(bytes)
+                .into_owned();
+            bytes.validate(chunk_subset.num_elements(), self.data_type())?;
+            T::from_array_bytes(bytes, &chunk_subset_shape, self.data_type())
+        }
     }
 
     async fn async_retrieve_chunk_subset_into(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
-        output_view: &mut ArrayBytesFixedDisjointView<'_>,
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
-        if !chunk_subset.inbounds_shape(&chunk_representation.shape_u64()) {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        let chunk_shape_u64 = bytemuck::must_cast_slice(&chunk_shape);
+        if !chunk_subset.inbounds_shape(chunk_shape_u64) {
             return Err(ArrayError::InvalidArraySubset(
-                chunk_subset.clone(),
+                chunk_subset.to_array_subset(),
                 self.shape().to_vec(),
             ));
         }
 
         if chunk_subset.start().iter().all(|&o| o == 0)
-            && chunk_subset.shape() == chunk_representation.shape_u64()
+            && chunk_subset.shape().as_ref() == chunk_shape_u64
         {
             // Fast path if `chunk_subset` encompasses the whole chunk
-            self.async_retrieve_chunk_into(chunk_indices, output_view, options)
+            self.async_retrieve_chunk_into(chunk_indices, output_target, options)
                 .await
         } else {
             let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -820,14 +1131,24 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
 
             self.codecs
                 .clone()
-                .async_partial_decoder(input_handle, &chunk_representation, options)
+                .async_partial_decoder(
+                    input_handle,
+                    &chunk_shape,
+                    self.data_type(),
+                    self.fill_value(),
+                    options,
+                )
                 .await?
-                .partial_decode_into(chunk_subset, output_view, options)
+                .partial_decode_into(chunk_subset, output_target, options)
                 .await?;
             Ok(())
         }
     }
 
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_subset_opt::<Vec<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_subset_elements_opt`](Array::retrieve_chunk_subset_elements_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_subset_elements_opt<
@@ -835,17 +1156,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<Vec<T>, ArrayError> {
-        let bytes = self
-            .async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
-            .await?;
-        let elements = T::from_array_bytes(self.data_type(), bytes)?;
-        Ok(elements)
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
+            .await
     }
 
     #[cfg(feature = "ndarray")]
+    #[deprecated(
+        since = "0.23.0",
+        note = "Use async_retrieve_chunk_subset_opt::<ndarray::ArrayD<T>>() instead"
+    )]
     /// Async variant of [`retrieve_chunk_subset_ndarray_opt`](Array::retrieve_chunk_subset_ndarray_opt).
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_retrieve_chunk_subset_ndarray_opt<
@@ -853,13 +1175,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     >(
         &self,
         chunk_indices: &[u64],
-        chunk_subset: &ArraySubset,
+        chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        let elements = self
-            .async_retrieve_chunk_subset_elements_opt(chunk_indices, chunk_subset, options)
-            .await?;
-        elements_to_ndarray(chunk_subset.shape(), elements)
+        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
+            .await
     }
 
     /// Async variant of [`partial_decoder_opt`](Array::partial_decoder_opt).
@@ -878,11 +1198,16 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             storage_transformer,
             self.chunk_key(chunk_indices),
         ));
-        let chunk_representation = self.chunk_array_representation(chunk_indices)?;
         Ok(self
             .codecs
             .clone()
-            .async_partial_decoder(input_handle, &chunk_representation, options)
+            .async_partial_decoder(
+                input_handle,
+                &self.chunk_shape(chunk_indices)?,
+                self.data_type(),
+                self.fill_value(),
+                options,
+            )
             .await?)
     }
 }

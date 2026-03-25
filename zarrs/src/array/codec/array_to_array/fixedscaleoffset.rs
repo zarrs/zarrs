@@ -28,7 +28,7 @@
 //!     "astype": "u1"
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfigurationNumcodecs;
+//! # use zarrs::metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfigurationNumcodecs;
 //! # let configuration: FixedScaleOffsetCodecConfigurationNumcodecs = serde_json::from_str(JSON).unwrap();
 //! ```
 
@@ -37,61 +37,75 @@ mod fixedscaleoffset_codec;
 use std::sync::Arc;
 
 pub use fixedscaleoffset_codec::FixedScaleOffsetCodec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
+
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::fixedscaleoffset::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
 };
-use zarrs_registry::codec::FIXEDSCALEOFFSET;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(FixedScaleOffsetCodec,
+    v3: "numcodecs.fixedscaleoffset", [],
+    v2: "fixedscaleoffset", []
+);
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(FIXEDSCALEOFFSET, is_identifier_fixedscaleoffset, create_codec_fixedscaleoffset)
+    CodecPluginV3::new::<FixedScaleOffsetCodec>()
+}
+inventory::submit! {
+    CodecPluginV2::new::<FixedScaleOffsetCodec>()
 }
 
-fn is_identifier_fixedscaleoffset(identifier: &str) -> bool {
-    identifier == FIXEDSCALEOFFSET
+impl CodecTraitsV3 for FixedScaleOffsetCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: FixedScaleOffsetCodecConfiguration =
+            metadata.to_typed_configuration()?;
+        let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
+            &configuration,
+        )?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
 
-pub(crate) fn create_codec_fixedscaleoffset(
-    metadata: &MetadataV3,
-) -> Result<Codec, PluginCreateError> {
-    let configuration: FixedScaleOffsetCodecConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(FIXEDSCALEOFFSET, "codec", metadata.to_string())
-        })?;
-    let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
-        &configuration,
-    )?);
-    Ok(Codec::ArrayToArray(codec))
+impl CodecTraitsV2 for FixedScaleOffsetCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: FixedScaleOffsetCodecConfiguration =
+            metadata.to_typed_configuration()?;
+        let codec = Arc::new(FixedScaleOffsetCodec::new_with_configuration(
+            &configuration,
+        )?);
+        Ok(Codec::ArrayToArray(codec))
+    }
 }
+
+// Re-export the trait and macro from zarrs_data_type
+pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
+    FixedScaleOffsetDataTypeExt, FixedScaleOffsetDataTypePlugin, FixedScaleOffsetDataTypeTraits,
+    FixedScaleOffsetElementType, FixedScaleOffsetFloatType,
+    impl_fixed_scale_offset_data_type_traits,
+};
 
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
 
-    use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
+    use zarrs_data_type::FillValue;
 
-    use crate::array::{
-        codec::{
-            array_to_array::fixedscaleoffset::FixedScaleOffsetCodec, ArrayToArrayCodecTraits,
-            CodecOptions,
-        },
-        ArrayBytes, ChunkRepresentation, DataType,
-    };
+    use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
+    use crate::array::{ArrayBytes, data_type};
+    use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]
     fn codec_fixedscaleoffset() {
         // 1 sign bit, 8 exponent, 3 mantissa
-        const JSON: &'static str =
-            r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
-        let chunk_representation =
-            ChunkRepresentation::new(vec![NonZeroU64::new(4).unwrap()], DataType::Float64, 0.0f64)
-                .unwrap();
+        const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
+        let shape = [NonZeroU64::new(4).unwrap()];
+        let data_type = data_type::float64();
+        let fill_value = FillValue::from(0.0f64);
         let elements: Vec<f64> = vec![
             1000.,
             1000.11111111,
@@ -114,19 +128,29 @@ mod tests {
         let encoded = codec
             .encode(
                 bytes.clone(),
-                &chunk_representation,
+                &shape,
+                &data_type,
+                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap();
         let decoded = codec
-            .decode(encoded, &chunk_representation, &CodecOptions::default())
+            .decode(
+                encoded,
+                &shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
             decoded.into_fixed().unwrap().into_owned(),
         );
         assert_eq!(
             decoded_elements,
-            &[1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.]
+            &[
+                1000., 1000.1, 1000.2, 1000.3, 1000.4, 1000.6, 1000.7, 1000.8, 1000.9, 1001.
+            ]
         );
     }
 }

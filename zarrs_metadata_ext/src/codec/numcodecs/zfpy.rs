@@ -1,9 +1,8 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zarrs_metadata::ConfigurationSerialize;
 
 use crate::codec::zfp::{ZfpCodecConfigurationV1, ZfpMode};
-
-use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `zfpy` codec configuration parameters.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Display, From)]
@@ -144,9 +143,8 @@ pub fn codec_zfpy_v2_numcodecs_to_v3(
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::zfp::ZfpCodecConfigurationV1;
-
     use super::*;
+    use crate::codec::zfp::ZfpCodecConfigurationV1;
 
     #[test]
     fn codec_zfpy_fixed_rate() {
@@ -166,7 +164,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedRate { rate } = mode {
             assert_eq!(rate, 0.123);
-        };
+        }
     }
 
     #[test]
@@ -187,7 +185,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedPrecision { precision } = mode {
             assert_eq!(precision, 10);
-        };
+        }
     }
 
     #[test]
@@ -208,7 +206,7 @@ mod tests {
         let ZfpCodecConfigurationV1 { mode } = codec_zfpy_v2_numcodecs_to_v3(&v2);
         if let ZfpMode::FixedAccuracy { tolerance } = mode {
             assert_eq!(tolerance, 0.123);
-        };
+        }
     }
 
     #[test]

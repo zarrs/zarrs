@@ -1,21 +1,21 @@
 //! A synchronous in-memory store.
 
-use bytes::BytesMut;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
+use bytes::BytesMut;
+
+use crate::byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError};
 use crate::{
-    byte_range::{ByteOffset, ByteRangeIterator, InvalidByteRangeError},
     Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
     ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
     WritableStorageTraits,
 };
 
-use std::collections::{BTreeMap, BTreeSet};
-
 /// A synchronous in-memory store.
 #[derive(Debug)]
 pub struct MemoryStore {
-    data_map: Mutex<BTreeMap<StoreKey, BytesMut>>,
+    data_map: Mutex<BTreeMap<StoreKey, Bytes>>,
 }
 
 impl Default for MemoryStore {
@@ -35,12 +35,16 @@ impl MemoryStore {
 
     fn set_impl(&self, key: &StoreKey, value: &[u8], offset: ByteOffset, truncate: bool) {
         let mut data_map = self.data_map.lock().unwrap();
-        let data = data_map.entry(key.clone()).or_default();
+        let entry = data_map.entry(key.clone()).or_default();
 
-        if offset == 0 && data.is_empty() {
-            data.extend_from_slice(value);
+        if offset == 0 && entry.is_empty() {
+            *entry = Bytes::copy_from_slice(value);
         } else {
             let length = usize::try_from(offset + value.len() as u64).unwrap();
+            // Take ownership so try_into_mut can succeed when there are no other clones.
+            let mut data = std::mem::take(entry)
+                .try_into_mut()
+                .unwrap_or_else(|b: Bytes| BytesMut::from(b.as_ref()));
             if data.len() < length {
                 data.resize(length, 0);
             } else if truncate {
@@ -48,6 +52,7 @@ impl MemoryStore {
             }
             let offset = usize::try_from(offset).unwrap();
             data[offset..offset + value.len()].copy_from_slice(value);
+            *entry = data.freeze();
         }
     }
 }
@@ -55,12 +60,7 @@ impl MemoryStore {
 impl ReadableStorageTraits for MemoryStore {
     fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
         let data_map = self.data_map.lock().unwrap();
-        let data = data_map.get(key);
-        if let Some(data) = data {
-            Ok(Some(data.clone().freeze()))
-        } else {
-            Ok(None)
-        }
+        Ok(data_map.get(key).cloned())
     }
 
     fn get_partial_many<'a>(
@@ -71,7 +71,7 @@ impl ReadableStorageTraits for MemoryStore {
         let data_map = self.data_map.lock().unwrap();
         let data = data_map.get(key);
         if let Some(data) = data {
-            let data = data.clone().freeze();
+            let data = data.clone();
             let out = Box::new(byte_ranges.map(move |byte_range| {
                 let start = usize::try_from(byte_range.start(data.len() as u64)).unwrap();
                 let end = usize::try_from(byte_range.end(data.len() as u64)).unwrap();
@@ -191,10 +191,11 @@ impl ListableStorageTraits for MemoryStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::ReadableWritableListableStorageTraits;
+    use std::error::Error;
+    use std::sync::Arc;
 
     use super::*;
-    use std::{error::Error, sync::Arc};
+    use crate::ReadableWritableListableStorageTraits;
 
     #[test]
     fn memory() -> Result<(), Box<dyn Error>> {
@@ -202,6 +203,7 @@ mod tests {
         crate::store_test::store_write(&store)?;
         crate::store_test::store_read(&store)?;
         crate::store_test::store_list(&store)?;
+        crate::store_test::store_list_size(&store)?;
         Ok(())
     }
 
@@ -211,6 +213,7 @@ mod tests {
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable())?;
         crate::store_test::store_list(&store.clone().listable())?;
+        crate::store_test::store_list_size(&store.clone().listable())?;
         Ok(())
     }
 
@@ -228,6 +231,7 @@ mod tests {
         crate::store_test::store_write(&store.clone().writable())?;
         crate::store_test::store_read(&store.clone().readable_listable().readable())?;
         crate::store_test::store_list(&store.clone().readable_listable().listable())?;
+        crate::store_test::store_list_size(&store.clone().readable_listable().listable())?;
         Ok(())
     }
 }

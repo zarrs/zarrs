@@ -1,8 +1,10 @@
-use derive_more::{derive::From, Display};
+use derive_more::derive::From;
+use derive_more::Display;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
-use crate::{v2::MetadataV2, ArrayShape, ChunkKeySeparator, ChunkShape, Endianness};
+use crate::v2::MetadataV2;
+use crate::{ArrayShape, ChunkKeySeparator, ChunkShape, Endianness};
 
 /// Zarr V2 array metadata.
 ///
@@ -183,13 +185,15 @@ impl From<DataTypeMetadataV2Structured> for DataTypeMetadataV2StructuredTuple {
 }
 
 /// Zarr V2 data type metadata.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, From)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, From, Display)]
 #[serde(untagged)]
 pub enum DataTypeMetadataV2 {
     /// A simple data type.
     #[from(String, &str)]
+    #[display("{_0}")]
     Simple(String),
     /// A structured data type.
+    #[display("{}", serde_json::to_string(self).unwrap_or_default())]
     Structured(Vec<DataTypeMetadataV2Structured>),
 }
 
@@ -224,70 +228,7 @@ pub fn data_type_metadata_v2_to_endianness(
 }
 
 /// Zarr V2 fill value metadata.
-///
-/// Provides the default value to use for uninitialized portions of the array, or null if a default fill value is to be used.
-///
-/// Note that the Zarr V2 specification states that `null` fill values are not defined.
-/// However, undefined fill values cannot be represented in Zarr V3.
-/// In `zarr-python` 2.x and potentially other Zarr implementations, unwritten and partially written chunks could indeed have completely undefined values.
-/// This could lead to poor compression performance, and undefined values in partially written chunks cannot be distinguished from real data.
-///
-/// Implementations such as `zarrs` (0.22.0+) and `zarr-python` (3.0.3+) map `null` fill values to a data type dependent default fill value.
-/// There is an active proposal [zarr-python #3084](https://github.com/zarr-developers/zarr-python/issues/3084) to stop writing `null` fill values by default for Zarr V2 arrays.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum FillValueMetadataV2 {
-    /// No fill value.
-    Null,
-    /// NaN (not-a-number).
-    NaN,
-    /// Positive infinity.
-    Infinity,
-    /// Negative infinity.
-    NegInfinity,
-    /// A number.
-    Number(serde_json::Number),
-    /// A string.
-    String(String),
-}
-
-impl<'de> serde::Deserialize<'de> for FillValueMetadataV2 {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum FillValueMetadataV2Type {
-            String(String),
-            Number(serde_json::Number),
-            Null,
-        }
-        let fill_value = FillValueMetadataV2Type::deserialize(d)?;
-        match fill_value {
-            FillValueMetadataV2Type::String(string) => match string.as_str() {
-                "NaN" => Ok(Self::NaN),
-                "Infinity" => Ok(Self::Infinity),
-                "-Infinity" => Ok(Self::NegInfinity),
-                _ => Ok(Self::String(string)),
-            },
-            FillValueMetadataV2Type::Number(number) => Ok(Self::Number(number)),
-            FillValueMetadataV2Type::Null => Ok(Self::Null),
-        }
-    }
-}
-
-impl Serialize for FillValueMetadataV2 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Self::Null => serializer.serialize_none(),
-            Self::NaN => serializer.serialize_str("NaN"),
-            Self::Infinity => serializer.serialize_str("Infinity"),
-            Self::NegInfinity => serializer.serialize_str("-Infinity"),
-            Self::Number(number) => number.serialize(serializer),
-            Self::String(string) => string.serialize(serializer),
-        }
-    }
-}
+pub type FillValueMetadataV2 = crate::v3::FillValueMetadataV3;
 
 /// Zarr V2 order metadata. Indicates the layout of bytes within a chunk.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -300,6 +241,8 @@ pub enum ArrayMetadataV2Order {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
+
     use super::*;
 
     #[test]
@@ -307,7 +250,7 @@ mod tests {
         let array = ArrayMetadataV2 {
             zarr_format: monostate::MustBe!(2u64),
             shape: vec![10000, 10000],
-            chunks: vec![1000, 1000].try_into().unwrap(),
+            chunks: vec![NonZeroU64::new(1000).unwrap(); 2],
             dtype: DataTypeMetadataV2::Simple("<f8".to_string()),
             compressor: None,
             fill_value: FillValueMetadataV2::String("NaN".to_string()),

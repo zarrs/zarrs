@@ -3,112 +3,90 @@
 //! It accepts float compatible fill values.
 
 use core::f32;
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use zarrs::array::{
-    ArrayBuilder, ArrayBytes, ArrayError, DataType, DataTypeSize, Element, ElementOwned,
-    FillValueMetadataV3,
+    ArrayBuilder, ArrayBytes, DataType, DataTypeSize, Element, ElementError, ElementOwned,
+    FillValueMetadata,
 };
+use zarrs::metadata::Configuration;
+use zarrs::metadata::v3::MetadataV3;
+use zarrs::storage::store::MemoryStore;
 use zarrs_data_type::{
-    DataTypeExtension, DataTypeExtensionBytesCodec, DataTypeExtensionBytesCodecError,
-    DataTypeExtensionError, DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePlugin,
+    DataTypeFillValueError, DataTypeFillValueMetadataError, DataTypePluginV3, DataTypeTraits,
     FillValue,
 };
-use zarrs_metadata::{v3::MetadataV3, Configuration};
-use zarrs_plugin::{PluginCreateError, PluginMetadataInvalidError};
-use zarrs_storage::store::MemoryStore;
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
-/// A unique identifier for  the custom data type.
-const FLOAT8_E3M4: &'static str = "zarrs.test.float8_e3m4";
+/// A name for  the custom data type.
+const FLOAT8_E3M4: &str = "zarrs.test.float8_e3m4";
 
 /// The data type for an array of the custom data type.
 #[derive(Debug)]
 struct CustomDataTypeFloat8e3m4;
 
+zarrs_plugin::impl_extension_aliases!(CustomDataTypeFloat8e3m4, v3: FLOAT8_E3M4);
+
+impl zarrs_data_type::DataTypeTraitsV3 for CustomDataTypeFloat8e3m4 {
+    fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
+        metadata.to_typed_configuration::<zarrs_metadata::EmptyConfiguration>()?;
+        Ok(Arc::new(CustomDataTypeFloat8e3m4).into())
+    }
+}
+
+// Register the data type so that it can be recognised when opening arrays.
+inventory::submit! {
+    DataTypePluginV3::new::<CustomDataTypeFloat8e3m4>()
+}
+
 /// The in-memory representation of the custom data type.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 struct CustomDataTypeFloat8e3m4Element(u8);
 
-// Register the data type so that it can be recognised when opening arrays.
-inventory::submit! {
-    DataTypePlugin::new(FLOAT8_E3M4, is_custom_dtype, create_custom_dtype)
-}
-
-fn is_custom_dtype(name: &str) -> bool {
-    name == FLOAT8_E3M4
-}
-
-fn create_custom_dtype(
-    metadata: &MetadataV3,
-) -> Result<Arc<dyn DataTypeExtension>, PluginCreateError> {
-    if metadata.configuration_is_none_or_empty() {
-        Ok(Arc::new(CustomDataTypeFloat8e3m4))
-    } else {
-        Err(PluginMetadataInvalidError::new(FLOAT8_E3M4, "codec", metadata.to_string()).into())
-    }
-}
-
 /// Implement the core data type extension methods
-impl DataTypeExtension for CustomDataTypeFloat8e3m4 {
-    fn name(&self) -> String {
-        FLOAT8_E3M4.to_string()
-    }
-
-    fn configuration(&self) -> Configuration {
+impl DataTypeTraits for CustomDataTypeFloat8e3m4 {
+    fn configuration(&self, _version: ZarrVersion) -> Configuration {
         Configuration::default()
     }
 
     fn fill_value(
         &self,
-        fill_value_metadata: &FillValueMetadataV3,
+        fill_value_metadata: &FillValueMetadata,
+        _version: ZarrVersion,
     ) -> Result<FillValue, DataTypeFillValueMetadataError> {
-        let err = || DataTypeFillValueMetadataError::new(self.name(), fill_value_metadata.clone());
-        let element_metadata: f32 = fill_value_metadata.as_f32().ok_or_else(err)?;
+        let element_metadata: f32 = fill_value_metadata
+            .as_f32()
+            .ok_or(DataTypeFillValueMetadataError)?;
         let element = CustomDataTypeFloat8e3m4Element::from(element_metadata);
-        Ok(FillValue::new(element.to_ne_bytes().to_vec()))
+        Ok(FillValue::new(element.into_ne_bytes().to_vec()))
     }
 
     fn metadata_fill_value(
         &self,
         fill_value: &FillValue,
-    ) -> Result<FillValueMetadataV3, DataTypeFillValueError> {
+    ) -> Result<FillValueMetadata, DataTypeFillValueError> {
         let element = CustomDataTypeFloat8e3m4Element::from_ne_bytes(
             fill_value
                 .as_ne_bytes()
                 .try_into()
-                .map_err(|_| DataTypeFillValueError::new(self.name(), fill_value.clone()))?,
+                .map_err(|_| DataTypeFillValueError)?,
         );
-        Ok(FillValueMetadataV3::from(element.as_f32()))
+        Ok(FillValueMetadata::from(element.into_f32()))
     }
 
     fn size(&self) -> zarrs::array::DataTypeSize {
         DataTypeSize::Fixed(1)
     }
 
-    fn codec_bytes(&self) -> Result<&dyn DataTypeExtensionBytesCodec, DataTypeExtensionError> {
-        Ok(self)
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
-/// Add support for the `bytes` codec. This must be implemented for fixed-size data types, even if they just pass-through the data type.
-impl DataTypeExtensionBytesCodec for CustomDataTypeFloat8e3m4 {
-    fn encode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
-        Ok(bytes)
-    }
-
-    fn decode<'a>(
-        &self,
-        bytes: std::borrow::Cow<'a, [u8]>,
-        _endianness: Option<zarrs_metadata::Endianness>,
-    ) -> Result<std::borrow::Cow<'a, [u8]>, DataTypeExtensionBytesCodecError> {
-        Ok(bytes)
-    }
-}
+// Add support for the `bytes` codec using the helper macro (component size 1 = passthrough).
+zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(CustomDataTypeFloat8e3m4, 1);
 
 // FIXME: Not tested for correctness. Prefer a supporting crate.
 fn float32_to_float8_e3m4(val: f32) -> u8 {
@@ -162,37 +140,45 @@ impl From<f32> for CustomDataTypeFloat8e3m4Element {
 }
 
 impl CustomDataTypeFloat8e3m4Element {
-    fn to_ne_bytes(&self) -> [u8; 1] {
+    fn into_ne_bytes(self) -> [u8; 1] {
         [self.0]
     }
 
-    fn from_ne_bytes(bytes: &[u8; 1]) -> Self {
+    fn from_ne_bytes(bytes: [u8; 1]) -> Self {
         Self(bytes[0])
     }
 
-    fn as_f32(&self) -> f32 {
+    fn into_f32(self) -> f32 {
         float8_e3m4_to_float32(self.0)
     }
 }
 
 /// This defines how an in-memory CustomDataTypeFloat8e3m4Element is converted into ArrayBytes before encoding via the codec pipeline.
 impl Element for CustomDataTypeFloat8e3m4Element {
-    fn validate_data_type(data_type: &DataType) -> Result<(), ArrayError> {
-        (data_type == &DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)))
+    fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
+        data_type
+            .is::<CustomDataTypeFloat8e3m4>()
             .then_some(())
-            .ok_or(ArrayError::IncompatibleElementType)
+            .ok_or(ElementError::IncompatibleElementType)
     }
 
-    fn into_array_bytes<'a>(
+    fn to_array_bytes<'a>(
         data_type: &DataType,
         elements: &'a [Self],
-    ) -> Result<zarrs::array::ArrayBytes<'a>, ArrayError> {
+    ) -> Result<zarrs::array::ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
         let mut bytes: Vec<u8> = Vec::with_capacity(elements.len());
         for element in elements {
             bytes.push(element.0);
         }
         Ok(ArrayBytes::Fixed(Cow::Owned(bytes)))
+    }
+
+    fn into_array_bytes(
+        data_type: &DataType,
+        elements: Vec<Self>,
+    ) -> Result<zarrs::array::ArrayBytes<'static>, ElementError> {
+        Ok(Self::to_array_bytes(data_type, &elements)?.into_owned())
     }
 }
 
@@ -201,7 +187,7 @@ impl ElementOwned for CustomDataTypeFloat8e3m4Element {
     fn from_array_bytes(
         data_type: &DataType,
         bytes: ArrayBytes<'_>,
-    ) -> Result<Vec<Self>, ArrayError> {
+    ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
         let bytes = bytes.into_fixed()?;
         let bytes_len = bytes.len();
@@ -221,8 +207,8 @@ fn main() {
     let array = ArrayBuilder::new(
         vec![6, 1], // array shape
         vec![5, 1], // regular chunk shape
-        DataType::Extension(Arc::new(CustomDataTypeFloat8e3m4)),
-        FillValue::new(fill_value.to_ne_bytes().to_vec()),
+        Arc::new(CustomDataTypeFloat8e3m4),
+        FillValue::new(fill_value.into_ne_bytes().to_vec()),
     )
     .array_to_array_codecs(vec![
         #[cfg(feature = "transpose")]
@@ -248,17 +234,16 @@ fn main() {
         CustomDataTypeFloat8e3m4Element::from(f32::NEG_INFINITY),
         CustomDataTypeFloat8e3m4Element::from(f32::NAN),
     ];
-    array.store_chunk_elements(&[0, 0], &data).unwrap();
+    array.store_chunk(&[0, 0], &data).unwrap();
 
-    let data = array
-        .retrieve_array_subset_elements::<CustomDataTypeFloat8e3m4Element>(&array.subset_all())
-        .unwrap();
+    let data: Vec<CustomDataTypeFloat8e3m4Element> =
+        array.retrieve_array_subset(&array.subset_all()).unwrap();
 
     for f in &data {
         println!(
             "float8_e3m4: {:08b} f32: {}",
-            f.to_ne_bytes()[0],
-            f.as_f32()
+            f.into_ne_bytes()[0],
+            f.into_f32()
         );
     }
 

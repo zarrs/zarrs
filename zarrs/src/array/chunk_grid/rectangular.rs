@@ -21,55 +21,30 @@
 //!   "chunk_shape": [[5, 5, 5, 15, 15, 20, 35], 10]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridConfiguration;
+//! # use zarrs::metadata_ext::chunk_grid::rectangular::RectangularChunkGridConfiguration;
 //! # let configuration: RectangularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
+use std::num::NonZeroU64;
+
 use derive_more::From;
 use itertools::Itertools;
-use std::num::NonZeroU64;
 use thiserror::Error;
 
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::chunk_grid::rectangular::{
     RectangularChunkGridConfiguration, RectangularChunkGridDimensionConfiguration,
 };
-use zarrs_registry::chunk_grid::RECTANGULAR;
+use zarrs_plugin::PluginCreateError;
 
-use crate::{
-    array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-        ArrayIndices, ArrayShape, ChunkShape,
-    },
-    array_subset::IncompatibleDimensionalityError,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+zarrs_plugin::impl_extension_aliases!(RectangularChunkGrid, v3: "rectangular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(RECTANGULAR, is_name_rectangular, create_chunk_grid_rectangular)
-}
-
-fn is_name_rectangular(name: &str) -> bool {
-    name.eq(RECTANGULAR)
-}
-
-/// Create a `rectangular` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
-pub(crate) fn create_chunk_grid_rectangular(
-    metadata_and_array_shape: &(MetadataV3, ArrayShape),
-) -> Result<ChunkGrid, PluginCreateError> {
-    crate::warn_experimental_extension(metadata_and_array_shape.0.name(), "chunk grid");
-    let (metadata, array_shape) = metadata_and_array_shape;
-    let configuration: RectangularChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(RECTANGULAR, "chunk grid", metadata.to_string())
-        })?;
-    let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
-        .map_err(|err| PluginCreateError::Other(err.to_string()))?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RectangularChunkGrid>()
 }
 
 /// A `rectangular` chunk grid.
@@ -173,7 +148,18 @@ impl RectangularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RectangularChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        crate::warn_experimental_extension(metadata.name(), "chunk grid");
+        let configuration: RectangularChunkGridConfiguration = metadata.to_typed_configuration()?;
+        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &configuration.chunk_shape)
+            .map_err(|err| PluginCreateError::Other(err.to_string()))?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
+    fn configuration(&self) -> Configuration {
         let chunk_shape = self
             .chunks
             .iter()
@@ -186,26 +172,23 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                         offsets_sizes
                             .iter()
                             .map(|offset_size| offset_size.size)
-                            .collect_vec()
-                            .into(),
+                            .collect_vec(),
                     )
                 }
             })
             .collect();
-        let configuration = RectangularChunkGridConfiguration { chunk_shape };
-        MetadataV3::new_with_serializable_configuration(RECTANGULAR.to_string(), &configuration)
-            .unwrap()
+        RectangularChunkGridConfiguration { chunk_shape }.into()
     }
 
     fn dimensionality(&self) -> usize {
         self.chunks.len()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         &self.array_shape
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
     }
 
@@ -226,8 +209,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
                         }
                     }
                 })
-                .collect::<Option<Vec<_>>>()
-                .map(std::convert::Into::into))
+                .collect::<Option<Vec<_>>>())
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -364,16 +346,24 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
 
 #[cfg(test)]
 mod tests {
-    use crate::array_subset::ArraySubset;
-
     use super::*;
+    use crate::array::ArraySubset;
 
     #[test]
     fn chunk_grid_rectangular() {
         let array_shape: ArrayShape = vec![100, 100];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
@@ -389,9 +379,7 @@ mod tests {
         );
 
         assert_eq!(
-            chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..5, 2..6]))
-                .unwrap(),
+            chunk_grid.chunks_subset(&[1..5, 2..6]).unwrap(),
             Some(ArraySubset::new_with_ranges(&[5..45, 20..60]))
         );
 
@@ -414,8 +402,17 @@ mod tests {
     fn chunk_grid_rectangular_out_of_bounds() {
         let array_shape: ArrayShape = vec![100, 100];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 
@@ -443,8 +440,17 @@ mod tests {
     fn chunk_grid_rectangular_unlimited() {
         let array_shape: ArrayShape = vec![100, 0];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
-            [5, 5, 5, 15, 15, 20, 35].try_into().unwrap(),
-            10.try_into().unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
         ];
         let chunk_grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
 

@@ -1,17 +1,15 @@
 //! A cache for partial decoders.
 
-use zarrs_storage::StorageError;
-
-use crate::array::{ArrayBytes, ChunkRepresentation, DataType};
-
-use super::{ArrayPartialDecoderTraits, ArraySubset, CodecError, CodecOptions};
-
+use crate::array::{ArrayBytes, ArraySubset, ChunkShape, DataType};
 #[cfg(feature = "async")]
-use super::AsyncArrayPartialDecoderTraits;
+use zarrs_codec::AsyncArrayPartialDecoderTraits;
+use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
 
 /// A cache for an [`ArrayPartialDecoderTraits`] partial decoder.
 pub(crate) struct ArrayPartialDecoderCache {
-    decoded_representation: ChunkRepresentation,
+    shape: ChunkShape,
+    data_type: DataType,
     cache: ArrayBytes<'static>,
 }
 
@@ -22,17 +20,19 @@ impl ArrayPartialDecoderCache {
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
     pub(crate) fn new(
         input_handle: &dyn ArrayPartialDecoderTraits,
-        decoded_representation: ChunkRepresentation,
+        shape: ChunkShape,
+        data_type: DataType,
         options: &CodecOptions,
     ) -> Result<Self, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
+                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
                 options,
             )?
             .into_owned();
         Ok(Self {
-            decoded_representation,
+            shape,
+            data_type,
             cache: bytes,
         })
     }
@@ -44,18 +44,20 @@ impl ArrayPartialDecoderCache {
     /// Returns a [`CodecError`] if initialisation of the partial decoder fails.
     pub(crate) async fn async_new(
         input_handle: &dyn AsyncArrayPartialDecoderTraits,
-        decoded_representation: ChunkRepresentation,
+        shape: ChunkShape,
+        data_type: DataType,
         options: &CodecOptions,
     ) -> Result<ArrayPartialDecoderCache, CodecError> {
         let bytes = input_handle
             .partial_decode(
-                &ArraySubset::new_with_shape(decoded_representation.shape_u64()),
+                &ArraySubset::new_with_shape(bytemuck::must_cast_slice(&shape).to_vec()),
                 options,
             )
             .await?
             .into_owned();
         Ok(Self {
-            decoded_representation,
+            shape,
+            data_type,
             cache: bytes,
         })
     }
@@ -71,20 +73,17 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     }
 
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     fn partial_decode(
         &self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        let array_shape = self.decoded_representation.shape_u64();
-        self.cache.extract_array_subset(
-            indexer,
-            &array_shape,
-            self.decoded_representation.data_type(),
-        )
+        let array_shape = bytemuck::must_cast_slice(&self.shape);
+        self.cache
+            .extract_array_subset(indexer, array_shape, &self.data_type)
     }
 
     fn supports_partial_decode(&self) -> bool {
@@ -97,7 +96,7 @@ impl ArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
     fn data_type(&self) -> &DataType {
-        self.decoded_representation.data_type()
+        &self.data_type
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -110,7 +109,7 @@ impl AsyncArrayPartialDecoderTraits for ArrayPartialDecoderCache {
 
     async fn partial_decode<'a>(
         &'a self,
-        indexer: &dyn crate::indexer::Indexer,
+        indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         ArrayPartialDecoderTraits::partial_decode(self, indexer, options)

@@ -1,22 +1,18 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
-use zarrs_metadata::Configuration;
-use zarrs_plugin::PluginCreateError;
-use zarrs_registry::codec::GDEFLATE;
-
-use crate::array::{
-    codec::{
-        BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability,
-    },
-    BytesRepresentation, RawBytes, RecommendedConcurrency,
-};
+use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{
-    gdeflate_decode, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
-    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor,
-    GDEFLATE_STATIC_HEADER_LENGTH,
+    GDEFLATE_STATIC_HEADER_LENGTH, GDeflateCodecConfiguration, GDeflateCodecConfigurationV0,
+    GDeflateCompressionLevel, GDeflateCompressionLevelError, GDeflateCompressor, gdeflate_decode,
 };
+use crate::array::{ArrayBytesRaw, BytesRepresentation, RecommendedConcurrency};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability,
+};
+use zarrs_metadata::Configuration;
 
 /// A `gdeflate` codec implementation.
 #[derive(Clone, Debug)]
@@ -55,13 +51,13 @@ impl GDeflateCodec {
 }
 
 impl CodecTraits for GDeflateCodec {
-    fn identifier(&self) -> &str {
-        GDEFLATE
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = GDeflateCodecConfiguration::V0(GDeflateCodecConfigurationV0 {
@@ -103,9 +99,9 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let compressor = GDeflateCompressor::new(self.compression_level)
             .map_err(|err| CodecError::Other(err.to_string()))?;
         let (page_sizes, encoded_bytes) = compressor
@@ -135,10 +131,10 @@ impl BytesToBytesCodecTraits for GDeflateCodec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         Ok(Cow::Owned(gdeflate_decode(&encoded_value)?))
     }
 

@@ -1,15 +1,15 @@
 #![allow(missing_docs)]
 
 use itertools::Itertools;
-use ndarray::{array, Array2, ArrayD};
-use zarrs::{
-    storage::storage_adapter::usage_log::UsageLogStorageAdapter,
-    storage::ReadableWritableListableStorage,
-};
+use ndarray::{Array2, ArrayD, array};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 
 fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
-    use zarrs::{array::DataType, array_subset::ArraySubset, storage::store};
+
+    use zarrs::array::{ArrayBytes, data_type};
+    use zarrs::storage::store;
 
     // Create a store
     // let path = tempfile::TempDir::new()?;
@@ -19,17 +19,17 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     //     zarrs::filesystem::FilesystemStore::new("zarrs/tests/data/array_write_read.zarr")?,
     // );
     let mut store: ReadableWritableListableStorage = Arc::new(store::MemoryStore::new());
-    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1) {
-        if arg1 == "--usage-log" {
-            let log_writer = Arc::new(std::sync::Mutex::new(
-                // std::io::BufWriter::new(
-                std::io::stdout(),
-                //    )
-            ));
-            store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
-                chrono::Utc::now().format("[%T%.3f] ").to_string()
-            }));
-        }
+    if let Some(arg1) = std::env::args().collect::<Vec<_>>().get(1)
+        && arg1 == "--usage-log"
+    {
+        let log_writer = Arc::new(std::sync::Mutex::new(
+            // std::io::BufWriter::new(
+            std::io::stdout(),
+            //    )
+        ));
+        store = Arc::new(UsageLogStorageAdapter::new(store, log_writer, || {
+            chrono::Utc::now().format("[%T%.3f] ").to_string()
+        }));
     }
 
     // Create the root group
@@ -55,7 +55,7 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![4, 4], // array shape
         vec![2, 2], // regular chunk shape
-        DataType::String,
+        data_type::string(),
         "_",
     )
     // .bytes_to_bytes_codecs(vec![]) // uncompressed
@@ -72,31 +72,28 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Write some chunks
-    array.store_chunk_ndarray(
+    array.store_chunk(
         &[0, 0],
         ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["a", "bb", "ccc", "dddd"]).unwrap(),
     )?;
-    array.store_chunk_ndarray(
+    array.store_chunk(
         &[0, 1],
         ArrayD::<&str>::from_shape_vec(vec![2, 2], vec!["4444", "333", "22", "1"]).unwrap(),
     )?;
     let subset_all = array.subset_all();
-    let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
     println!("store_chunk [0, 0] and [0, 1]:\n{data_all}\n");
 
     // Write a subset spanning multiple chunks, including updating chunks already written
     let ndarray_subset: Array2<&str> = array![["!", "@@"], ["###", "$$$$"]];
-    array.store_array_subset_ndarray(
-        ArraySubset::new_with_ranges(&[1..3, 1..3]).start(),
-        ndarray_subset,
-    )?;
-    let data_all = array.retrieve_array_subset_ndarray::<String>(&subset_all)?;
+    array.store_array_subset(&[1..3, 1..3], ndarray_subset)?;
+    let data_all: ArrayD<String> = array.retrieve_array_subset(&subset_all)?;
     println!("store_array_subset [1..3, 1..3]:\nndarray::ArrayD<String>\n{data_all}");
 
     // Retrieve bytes directly, convert into a single string allocation, create a &str ndarray
     // TODO: Add a convenience function for this?
-    let data_all = array.retrieve_array_subset(&subset_all)?;
-    let (bytes, offsets) = data_all.into_variable()?;
+    let data_all: ArrayBytes = array.retrieve_array_subset(&subset_all)?;
+    let (bytes, offsets) = data_all.into_variable()?.into_parts();
     let string = String::from_utf8(bytes.into_owned())?;
     let elements = offsets
         .iter()
@@ -111,6 +108,6 @@ fn array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() {
     if let Err(err) = array_write_read() {
-        println!("{:?}", err);
+        println!("{err:?}");
     }
 }

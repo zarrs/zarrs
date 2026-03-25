@@ -1,13 +1,14 @@
 #![allow(missing_docs)]
 
-use zarrs_filesystem::FilesystemStore;
-
 use std::error::Error;
+
+use zarrs_filesystem::FilesystemStore;
 
 #[cfg(target_os = "linux")]
 fn try_open_direct_io(path: &str) -> std::io::Result<std::fs::File> {
-    use libc::{open, O_DIRECT, O_RDONLY};
     use std::os::fd::FromRawFd;
+
+    use libc::{open, O_DIRECT, O_RDONLY};
 
     let c_path = std::ffi::CString::new(path).unwrap();
     unsafe {
@@ -40,6 +41,7 @@ fn filesystem() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
+    zarrs_storage::store_test::store_list_size(&store)?;
     Ok(())
 }
 
@@ -57,15 +59,15 @@ fn direct_io_store_test() -> Result<(), Box<dyn Error>> {
     zarrs_storage::store_test::store_write(&store)?;
     zarrs_storage::store_test::store_read(&store)?;
     zarrs_storage::store_test::store_list(&store)?;
+    zarrs_storage::store_test::store_list_size(&store)?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
-    use zarrs_storage::{
-        byte_range::ByteRange, Bytes, ReadableStorageTraits, WritableStorageTraits,
-    };
+    use zarrs_storage::byte_range::ByteRange;
+    use zarrs_storage::{Bytes, ReadableStorageTraits, WritableStorageTraits};
     let tmpfile = tempfile::NamedTempFile::new()?;
     if try_open_direct_io(tmpfile.path().to_str().unwrap()).is_err() {
         // Skip this test if direct I/O is not supported
@@ -108,7 +110,7 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         .to_owned()
         .into();
 
-    store.set(&"big_buff".try_into()?, base_vec.into())?;
+    store.set(&"big_buff".try_into()?, base_vec)?;
     // Mix up ordering of requests to ensure returned order is independent of the underlying coalescing operation
     let expected = vec![
         prefix,
@@ -154,13 +156,10 @@ fn direct_io_coalescing_test() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             e,
             r,
-            "{}",
-            format!(
-                "errored with expected length {} and result length {}",
-                e.len(),
-                r.len()
-            )
-        )
+            "errored with expected length {} and result length {}",
+            e.len(),
+            r.len()
+        );
     });
     Ok(())
 }

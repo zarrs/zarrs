@@ -16,54 +16,29 @@
 //!   "chunk_shape": [100, 100]
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+//! # use zarrs::metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
 //! # let configuration: RegularChunkGridConfiguration = serde_json::from_str(JSON).unwrap();
 //! ```
 
 use std::num::NonZeroU64;
+
 use thiserror::Error;
 
-pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
-use zarrs_registry::chunk_grid::REGULAR;
-
-use crate::{
-    array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-        ArrayIndices, ArrayShape, ChunkShape,
-    },
-    array_subset::{ArraySubset, IncompatibleDimensionalityError},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+use crate::array::{
+    ArrayIndices, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkShape,
+    IncompatibleDimensionalityError,
 };
+use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use zarrs_metadata::Configuration;
+use zarrs_metadata::v3::MetadataV3;
+pub use zarrs_metadata_ext::chunk_grid::regular::RegularChunkGridConfiguration;
+use zarrs_plugin::PluginCreateError;
+
+zarrs_plugin::impl_extension_aliases!(RegularChunkGrid, v3: "regular");
 
 // Register the chunk grid.
 inventory::submit! {
-    ChunkGridPlugin::new(REGULAR, is_name_regular, create_chunk_grid_regular)
-}
-
-fn is_name_regular(name: &str) -> bool {
-    name.eq(REGULAR)
-}
-
-/// Create a `regular` chunk grid from metadata.
-///
-/// # Errors
-/// Returns a [`PluginCreateError`] if the metadata is invalid for a regular chunk grid.
-pub(crate) fn create_chunk_grid_regular(
-    metadata_and_array_shape: &(MetadataV3, ArrayShape),
-) -> Result<ChunkGrid, PluginCreateError> {
-    let (metadata, array_shape) = metadata_and_array_shape;
-    let configuration: RegularChunkGridConfiguration =
-        metadata.to_configuration().map_err(|_| {
-            PluginMetadataInvalidError::new(REGULAR, "chunk grid", metadata.to_string())
-        })?;
-    let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
-        .map_err(|_| {
-            PluginCreateError::from(
-                "regular chunk shape and array shape have inconsistent dimensionality",
-            )
-        })?;
-    Ok(ChunkGrid::new(chunk_grid))
+    ChunkGridPlugin::new::<RegularChunkGrid>()
 }
 
 /// A `regular` chunk grid.
@@ -185,18 +160,19 @@ impl RegularChunkGrid {
     /// Determinate version of [`ChunkGridTraits::chunks_in_array_subset`].
     pub(crate) fn chunks_in_array_subset(
         &self,
-        array_subset: &ArraySubset,
+        array_subset: &dyn ArraySubsetTraits,
     ) -> Result<ArraySubset, IncompatibleDimensionalityError> {
         match array_subset.end_inc() {
             Some(end) => {
-                let chunks_start = self.chunk_indices(array_subset.start())?;
+                let chunks_start = self.chunk_indices(&array_subset.start())?;
                 let chunks_end = self.chunk_indices(&end)?;
                 // .unwrap_or_else(|| self.grid_shape());
 
                 let shape = std::iter::zip(&chunks_start, chunks_end)
                     .map(|(&s, e)| e.saturating_sub(s) + 1)
                     .collect();
-                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)?)
+                Ok(ArraySubset::new_with_start_shape(chunks_start, shape)
+                    .expect("start and shape have same length"))
             }
             None => Ok(ArraySubset::new_empty(self.dimensionality())),
         }
@@ -204,23 +180,36 @@ impl RegularChunkGrid {
 }
 
 unsafe impl ChunkGridTraits for RegularChunkGrid {
-    fn create_metadata(&self) -> MetadataV3 {
-        let configuration = RegularChunkGridConfiguration {
+    fn create(
+        metadata: &MetadataV3,
+        array_shape: &ArrayShape,
+    ) -> Result<ChunkGrid, PluginCreateError> {
+        let configuration: RegularChunkGridConfiguration = metadata.to_typed_configuration()?;
+        let chunk_grid = RegularChunkGrid::new(array_shape.clone(), configuration.chunk_shape)
+            .map_err(|_| {
+                PluginCreateError::from(
+                    "regular chunk shape and array shape have inconsistent dimensionality",
+                )
+            })?;
+        Ok(ChunkGrid::new(chunk_grid))
+    }
+
+    fn configuration(&self) -> Configuration {
+        RegularChunkGridConfiguration {
             chunk_shape: self.chunk_shape.clone(),
-        };
-        MetadataV3::new_with_serializable_configuration(REGULAR.to_string(), &configuration)
-            .unwrap()
+        }
+        .into()
     }
 
     fn dimensionality(&self) -> usize {
         self.chunk_shape.len()
     }
 
-    fn array_shape(&self) -> &ArrayShape {
+    fn array_shape(&self) -> &[u64] {
         &self.array_shape
     }
 
-    fn grid_shape(&self) -> &ArrayShape {
+    fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
     }
 
@@ -290,33 +279,32 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
             ))
         }
     }
-
-    fn chunks_in_array_subset(
-        &self,
-        array_subset: &ArraySubset,
-    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError> {
-        self.chunks_in_array_subset(array_subset).map(Option::Some)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use rayon::iter::ParallelIterator;
 
-    use crate::array::chunk_grid::ChunkGridTraitsIterators;
-    use crate::array_subset::ArraySubset;
-
     use super::*;
+    use crate::array::{ArrayIndicesTinyVec, ArraySubset};
+    use zarrs_chunk_grid::ChunkGridTraitsIterators;
 
     #[test]
     fn chunk_grid_regular_configuration() {
         let configuration: RegularChunkGridConfiguration =
             serde_json::from_str(r#"{"chunk_shape":[1,2,3]}"#).unwrap();
-        assert_eq!(configuration.chunk_shape, vec![1, 2, 3].try_into().unwrap());
+        assert_eq!(
+            configuration.chunk_shape,
+            vec![
+                NonZeroU64::new(1).unwrap(),
+                NonZeroU64::new(2).unwrap(),
+                NonZeroU64::new(3).unwrap()
+            ]
+        );
         assert_eq!(
             configuration.to_string(),
             r#"regular chunk grid {"chunk_shape":[1,2,3]}"#
-        )
+        );
     }
 
     #[test]
@@ -324,7 +312,7 @@ mod tests {
         let metadata: MetadataV3 =
             serde_json::from_str(r#"{"name":"regular","configuration":{"chunk_shape":[1,2,3]}}"#)
                 .unwrap();
-        assert!(create_chunk_grid_regular(&(metadata, vec![3, 3, 3])).is_ok());
+        assert!(RegularChunkGrid::create(&metadata, &vec![3, 3, 3]).is_ok());
     }
 
     #[test]
@@ -332,19 +320,24 @@ mod tests {
         let metadata: MetadataV3 =
             serde_json::from_str(r#"{"name":"regular","configuration":{"invalid":[1,2,3]}}"#)
                 .unwrap();
-        assert!(create_chunk_grid_regular(&(metadata.clone(), vec![3, 3, 3])).is_err());
+        assert!(RegularChunkGrid::create(&metadata, &vec![3, 3, 3]).is_err());
         assert_eq!(
-            create_chunk_grid_regular(&(metadata, vec![3, 3, 3]))
+            RegularChunkGrid::create(&metadata, &vec![3, 3, 3])
                 .unwrap_err()
                 .to_string(),
-            r#"chunk grid regular is unsupported with metadata: regular {"invalid":[1,2,3]}"#
+            r"configuration is unsupported: unknown field `invalid`, expected `chunk_shape`"
         );
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn chunk_grid_regular() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
 
         {
             let chunk_grid =
@@ -365,21 +358,19 @@ mod tests {
             );
 
             assert_eq!(
-                chunk_grid
-                    .chunks_subset(&ArraySubset::new_with_ranges(&[1..3, 1..2, 5..8]),)
-                    .unwrap(),
+                chunk_grid.chunks_subset(&[1..3, 1..2, 5..8],).unwrap(),
                 Some(ArraySubset::new_with_ranges(&[1..3, 2..4, 15..24]))
             );
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[1..3]))
-                .is_err());
+            assert!(chunk_grid.chunks_subset(&[1..3]).is_err());
 
-            assert!(chunk_grid
-                .chunks_subset(&ArraySubset::new_with_ranges(&[0..0, 0..0, 0..0]),)
-                .unwrap()
-                .unwrap()
-                .is_empty());
+            assert!(
+                chunk_grid
+                    .chunks_subset(&[0..0, 0..0, 0..0],)
+                    .unwrap()
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         assert!(RegularChunkGrid::new(vec![0; 1], chunk_shape.clone()).is_err());
@@ -388,7 +379,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_out_of_bounds() {
         let array_shape: ArrayShape = vec![5, 7, 52];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 53];
@@ -408,7 +403,11 @@ mod tests {
     #[test]
     fn chunk_grid_regular_unlimited() {
         let array_shape: ArrayShape = vec![5, 7, 0];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let array_indices: ArrayIndices = vec![3, 5, 1000];
@@ -426,19 +425,33 @@ mod tests {
     #[test]
     fn chunk_grid_regular_iterators() {
         let array_shape: ArrayShape = vec![2, 2, 6];
-        let chunk_shape: ChunkShape = vec![1, 2, 3].try_into().unwrap();
+        let chunk_shape: ChunkShape = vec![
+            NonZeroU64::new(1).unwrap(),
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+        ];
         let chunk_grid = RegularChunkGrid::new(array_shape, chunk_shape).unwrap();
 
         let iter = chunk_grid.iter_chunk_indices();
         assert_eq!(
             iter.collect::<Vec<_>>(),
-            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+            vec![
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+            ]
         );
 
         let iter = chunk_grid.par_iter_chunk_indices();
         assert_eq!(
             iter.collect::<Vec<_>>(),
-            vec![vec![0, 0, 0], vec![0, 0, 1], vec![1, 0, 0], vec![1, 0, 1]]
+            vec![
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![0, 0, 1]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 0]),
+                ArrayIndicesTinyVec::Heap(vec![1, 0, 1]),
+            ]
         );
 
         let iter = chunk_grid.iter_chunk_subsets();
@@ -457,10 +470,10 @@ mod tests {
         assert_eq!(
             iter.collect::<Vec<_>>(),
             vec![
-                (vec![0, 0, 0], ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3])),
-                (vec![0, 0, 1], ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6])),
-                (vec![1, 0, 0], ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])),
-                (vec![1, 0, 1], ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6])),
+                (ArrayIndicesTinyVec::Heap(vec![0, 0, 0]), ArraySubset::new_with_ranges(&[0..1, 0..2, 0..3])),
+                (ArrayIndicesTinyVec::Heap(vec![0, 0, 1]), ArraySubset::new_with_ranges(&[0..1, 0..2, 3..6])),
+                (ArrayIndicesTinyVec::Heap(vec![1, 0, 0]), ArraySubset::new_with_ranges(&[1..2, 0..2, 0..3])),
+                (ArrayIndicesTinyVec::Heap(vec![1, 0, 1]), ArraySubset::new_with_ranges(&[1..2, 0..2, 3..6])),
             ]
         );
     }

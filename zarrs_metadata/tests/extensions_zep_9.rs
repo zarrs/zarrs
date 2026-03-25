@@ -51,6 +51,6 @@ fn array_extensions() {
     ]
 }"#;
 
-    let metadata: ArrayMetadataV3 = serde_json::from_str(&json).unwrap();
+    let metadata: ArrayMetadataV3 = serde_json::from_str(json).unwrap();
     assert_eq!(metadata.data_type.name(), "https://example.com/zarr/string");
 }

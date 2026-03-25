@@ -46,7 +46,6 @@
 //!   - Deprecated aliases will not be removed, but are not recommended for use in new arrays.
 //!   - Deprecated extensions may be removed in future releases.
 //!
-//! Extension names and aliases are configurable with [`Config::codec_aliases_v3_mut`](config::Config::codec_aliases_v3_mut) and similar methods for data types and Zarr V2.
 //! `zarrs` will persist extension names if opening an existing array of creating an array from metadata.
 //!
 //! #### Data Types
@@ -120,21 +119,15 @@
 //! let array = zarrs::array::ArrayBuilder::new(
 //!     vec![3, 4], // array shape
 //!     vec![2, 2], // regular chunk (shard) shape
-//!     zarrs::array::DataType::Float32,
+//!     zarrs::array::data_type::float32(),
 //!     0.0f32, // fill value
 //! )
-//! .array_to_bytes_codec(Arc::new(
-//!     // The sharding codec requires the sharding feature
-//!     zarrs::array::codec::ShardingCodecBuilder::new(
-//!         [2, 1].try_into()? // inner chunk shape
-//!     )
-//!     .bytes_to_bytes_codecs(vec![
-//!         // GzipCodec requires the gzip feature
-//! #       #[cfg(feature = "gzip")]
-//!         Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
-//!     ])
-//!     .build()
-//! ))
+//! .subchunk_shape(vec![2, 1]) // subchunk (inner chunk) shape
+//! .bytes_to_bytes_codecs(vec![
+//!     // GzipCodec requires the gzip feature
+//! #   #[cfg(feature = "gzip")]
+//!     Arc::new(zarrs::array::codec::GzipCodec::new(5)?),
+//! ])
 //! .dimension_names(["y", "x"].into())
 //! .attributes(serde_json::json!({"Zarr V3": "is great"}).as_object().unwrap().clone())
 //! .build(store.clone(), "/array")?; // /path/to/hierarchy.zarr/array
@@ -155,12 +148,12 @@
 //! )?;
 //! array.store_array_subset_ndarray::<f32, _>(
 //!     &[1, 1], // array index (start of subset)
-//!     ndarray::array![[-1.1, -1.2], [-2.1, -2.2]]
+//!     &ndarray::array![[-1.1, -1.2], [-2.1, -2.2]]
 //! )?;
 //! array.erase_chunk(&[1, 1])?;
 //!
 //! // Retrieve all array elements as an ndarray
-//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&array.subset_all())?;
+//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&[0..3, 0..4])?;
 //! println!("{array_all:4}");
 //! // [[ NaN,  NaN,  0.2,  0.3],
 //! //  [ NaN, -1.1, -1.2,  1.3],
@@ -174,15 +167,15 @@
 //! // [[  0.2,  0.3],
 //! //  [ -1.2,  1.3]]
 //!
-//! // Retrieve an inner chunk
+//! // Retrieve a subchunk
 //! use zarrs::array::ArrayShardedReadableExt;
 //! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
-//! let array_inner_chunk = array.retrieve_inner_chunk_ndarray_opt::<f32>(
+//! let array_subchunk = array.retrieve_subchunk_ndarray_opt::<f32>(
 //!     &shard_index_cache,
-//!     &[0, 3], // inner chunk index
-//!     &zarrs::array::codec::CodecOptions::default(),
+//!     &[0, 3], // subchunk index
+//!     &zarrs::array::CodecOptions::default(),
 //! )?;
-//! println!("{array_inner_chunk:4}");
+//! println!("{array_subchunk:4}");
 //! // [[ 0.3],
 //! //  [ 1.3]]
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -229,27 +222,28 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(html_logo_url = "https://zarrs.dev/zarrs-logo-400x400.png")]
 #![warn(clippy::wildcard_enum_match_arm)]
+#![deny(deprecated)]
 
 pub mod array;
-pub mod array_subset;
 pub mod config;
+pub mod convert;
 pub mod group;
 pub mod hierarchy;
-pub mod indexer;
 pub mod node;
 pub mod version;
 
+#[cfg(feature = "filesystem")]
+pub use zarrs_filesystem as filesystem;
 pub use zarrs_metadata as metadata;
 pub use zarrs_metadata_ext as metadata_ext;
 pub use zarrs_plugin as plugin;
-pub use zarrs_registry as registry;
 pub use zarrs_storage as storage;
 
-#[cfg(feature = "filesystem")]
-pub use zarrs_filesystem as filesystem;
-
 /// Get a mutable slice of the spare capacity in a vector.
-fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
+///
+/// # Safety
+/// The caller must not read from the returned slice before it has been initialised.
+unsafe fn vec_spare_capacity_to_mut_slice<T>(vec: &mut Vec<T>) -> &mut [T] {
     let spare_capacity = vec.spare_capacity_mut();
     // SAFETY: `spare_capacity` is valid for both reads and writes for len * size_of::<T>() many bytes, and it is properly aligned
     unsafe {
@@ -287,7 +281,7 @@ pub(crate) fn warn_deprecated_extension(
             "The `{deprecated_name}` {extension_type} alias is deprecated, use `{current_name}` instead.",
         );
     } else {
-        log::warn!("The `{deprecated_name}` {extension_type} is deprecated.",);
+        log::warn!("The `{deprecated_name}` {extension_type} is deprecated.");
     }
 }
 

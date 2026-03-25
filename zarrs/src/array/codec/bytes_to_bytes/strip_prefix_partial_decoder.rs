@@ -1,17 +1,11 @@
 use std::sync::Arc;
 
-use zarrs_storage::StorageError;
-
-use crate::{
-    array::{
-        codec::{BytesPartialDecoderTraits, CodecError, CodecOptions},
-        RawBytes,
-    },
-    storage::byte_range::{ByteRange, ByteRangeIterator},
-};
-
+use crate::array::ArrayBytesRaw;
 #[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{BytesPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_storage::StorageError;
+use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
 
 /// Partial decoder for stripping a prefix (e.g. checksum).
 pub(crate) struct StripPrefixPartialDecoder {
@@ -45,7 +39,7 @@ impl BytesPartialDecoderTraits for StripPrefixPartialDecoder {
         &self,
         decoded_regions: ByteRangeIterator,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'_>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'_>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)
@@ -99,7 +93,7 @@ impl AsyncBytesPartialDecoderTraits for AsyncStripPrefixPartialDecoder {
         &'a self,
         decoded_regions: ByteRangeIterator<'a>,
         options: &CodecOptions,
-    ) -> Result<Option<Vec<RawBytes<'a>>>, CodecError> {
+    ) -> Result<Option<Vec<ArrayBytesRaw<'a>>>, CodecError> {
         let decoded_regions = decoded_regions.map(|range| match range {
             ByteRange::FromStart(offset, length) => {
                 ByteRange::FromStart(offset.checked_add(self.prefix_size as u64).unwrap(), length)

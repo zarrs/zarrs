@@ -1,26 +1,22 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::Arc;
 
 use num::Integer;
-use zarrs_metadata::Configuration;
-use zarrs_registry::codec::FLETCHER32;
+use zarrs_plugin::ZarrVersion;
 
-use crate::array::{
-    codec::{
-        bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder,
-        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
-        CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-        RecommendedConcurrency,
-    },
-    BytesRepresentation, RawBytes,
-};
-
-#[cfg(feature = "async")]
-use crate::array::codec::AsyncBytesPartialDecoderTraits;
-
+use super::{CHECKSUM_SIZE, Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1};
 #[cfg(feature = "async")]
 use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::AsyncStripSuffixPartialDecoder;
-
-use super::{Fletcher32CodecConfiguration, Fletcher32CodecConfigurationV1, CHECKSUM_SIZE};
+use crate::array::codec::bytes_to_bytes::strip_suffix_partial_decoder::StripSuffixPartialDecoder;
+use crate::array::{ArrayBytesRaw, BytesRepresentation};
+#[cfg(feature = "async")]
+use zarrs_codec::AsyncBytesPartialDecoderTraits;
+use zarrs_codec::{
+    BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency,
+};
+use zarrs_metadata::Configuration;
 
 /// A `fletcher32` codec implementation.
 #[derive(Clone, Debug, Default)]
@@ -41,13 +37,13 @@ impl Fletcher32Codec {
 }
 
 impl CodecTraits for Fletcher32Codec {
-    fn identifier(&self) -> &str {
-        FLETCHER32
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         let configuration = Fletcher32CodecConfiguration::V1(Fletcher32CodecConfigurationV1 {});
@@ -124,9 +120,9 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
 
     fn encode<'a>(
         &self,
-        decoded_value: RawBytes<'a>,
+        decoded_value: ArrayBytesRaw<'a>,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let checksum = h5_checksum_fletcher32(&decoded_value).to_le_bytes();
         let mut encoded_value: Vec<u8> = Vec::with_capacity(decoded_value.len() + checksum.len());
         encoded_value.extend_from_slice(&decoded_value);
@@ -136,19 +132,25 @@ impl BytesToBytesCodecTraits for Fletcher32Codec {
 
     fn decode<'a>(
         &self,
-        encoded_value: RawBytes<'a>,
+        encoded_value: ArrayBytesRaw<'a>,
         _decoded_representation: &BytesRepresentation,
         options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         if encoded_value.len() >= CHECKSUM_SIZE {
             if options.validate_checksums() {
                 let decoded_value = &encoded_value[..encoded_value.len() - CHECKSUM_SIZE];
                 let checksum = h5_checksum_fletcher32(decoded_value).to_le_bytes();
-                if checksum != encoded_value[encoded_value.len() - CHECKSUM_SIZE..] {
+                let checksum_stored: [u8; CHECKSUM_SIZE] = encoded_value
+                    [encoded_value.len() - CHECKSUM_SIZE..]
+                    .try_into()
+                    .unwrap();
+                if checksum != checksum_stored {
                     return Err(CodecError::InvalidChecksum);
                 }
             }
-            let decoded_value = encoded_value[..encoded_value.len() - CHECKSUM_SIZE].to_vec();
+
+            let mut decoded_value = encoded_value.into_owned();
+            decoded_value.truncate(decoded_value.len() - CHECKSUM_SIZE);
             Ok(Cow::Owned(decoded_value))
         } else {
             Err(CodecError::Other(

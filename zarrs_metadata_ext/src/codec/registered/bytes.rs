@@ -1,6 +1,5 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-
 use zarrs_metadata::{ConfigurationSerialize, Endianness};
 
 /// A wrapper to handle various versions of `bytes` codec configuration parameters.
@@ -49,7 +48,7 @@ mod tests {
 
     #[test]
     fn codec_bytes_empty() {
-        serde_json::from_str::<BytesCodecConfiguration>(r#"{}"#).unwrap();
+        serde_json::from_str::<BytesCodecConfiguration>(r"{}").unwrap();
     }
 
     #[test]

@@ -1,15 +1,13 @@
 #![allow(missing_docs)]
-#![cfg(all(feature = "async"))]
+#![cfg(feature = "async")]
+
+use std::sync::Arc;
 
 use serde_json::json;
-use std::sync::Arc;
-use zarrs::storage::{
-    storage_adapter::async_to_sync::{AsyncToSyncBlockOn, AsyncToSyncStorageAdapter},
-    ReadableWritableStorage,
-};
-use zarrs::{
-    array::{DataType, ZARR_NAN_F32},
-    array_subset::ArraySubset,
+use zarrs::array::{ArraySubset, ZARR_NAN_F32, data_type};
+use zarrs::storage::ReadableWritableStorage;
+use zarrs::storage::storage_adapter::async_to_sync::{
+    AsyncToSyncBlockOn, AsyncToSyncStorageAdapter,
 };
 
 pub struct TokioBlockOn(pub tokio::runtime::Runtime);
@@ -48,7 +46,7 @@ fn array_read_and_write_async_storage_adapter() {
 
     // Create an array
     let array =
-        zarrs::array::ArrayBuilder::new(vec![8, 8], vec![4, 4], DataType::Float32, ZARR_NAN_F32)
+        zarrs::array::ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::float32(), ZARR_NAN_F32)
             .dimension_names(["y", "x"].into())
             .build(store.clone(), ARRAY_PATH)
             .unwrap();
@@ -56,15 +54,17 @@ fn array_read_and_write_async_storage_adapter() {
     assert_eq!(array.shape(), &[8, 8]);
 
     array
-        .store_chunk_elements::<f32>(
+        .store_chunk(
             &[0, 0],
             &[
-                0.0, 0.1, 0.2, 0.3, 1.0, 1.1, 1.2, 1.3, 2.0, 2.1, 2.2, 2.3, 3.0, 3.1, 3.2, 3.3,
+                0.0f32, 0.1, 0.2, 0.3, 1.0, 1.1, 1.2, 1.3, 2.0, 2.1, 2.2, 2.3, 3.0, 3.1, 3.2, 3.3,
             ],
         )
         .unwrap();
 
     let subset = ArraySubset::new_with_ranges(&[2..4, 2..4]);
-    let data = array.retrieve_array_subset_ndarray::<f32>(&subset).unwrap();
+    let data = array
+        .retrieve_array_subset::<ndarray::ArrayD<f32>>(&subset)
+        .unwrap();
     assert_eq!(data, ndarray::array![[2.2, 2.3], [3.2, 3.3]].into_dyn());
 }

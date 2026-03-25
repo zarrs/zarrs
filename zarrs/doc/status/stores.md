@@ -10,7 +10,7 @@
 | [SyncToAsyncStorageAdapter]        |        | &check;  | &check;  | &check;  |         | &check; | [zarrs_storage]<sup>†</sup>    |
 | [UsageLogStorageAdapter]           |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
 | [PerformanceMetricsStorageAdapter] |        | &check;  | &check;  | &check;  | &check; | &check; | [zarrs_storage]<sup>†</sup>    |
-| [ZipStorageAdapter]                |        | &check;  |          | &check;  | &check; |         | [zarrs_zip]                    |
+| [ZipStorageAdapter]                |        | &check;  |          | &check;  | &check; | &check; | [zarrs_zip]                    |
 
 <sup>† Re-exported in the `zarrs::storage` module.</sup>
 <br>

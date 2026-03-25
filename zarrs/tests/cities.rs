@@ -1,25 +1,18 @@
 #![allow(missing_docs)]
 #![cfg(all(feature = "sharding", feature = "zstd"))]
 
-use std::{
-    error::Error,
-    fs::File,
-    io::{BufRead, BufReader},
-    sync::Arc,
-};
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 
-use zarrs::{
-    array::{
-        codec::{
-            array_to_bytes::{
-                sharding::ShardingCodecBuilder, vlen::VlenCodec, vlen_utf8::VlenUtf8Codec,
-            },
-            ArrayToBytesCodecTraits, VlenCodecConfiguration, ZstdCodec,
-        },
-        ArrayBuilder, ArrayMetadataOptions, DataType,
-    },
-    storage::{store::MemoryStore, ReadableWritableListableStorage},
-};
+use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
+use zarrs::array::codec::array_to_bytes::vlen_utf8::VlenUtf8Codec;
+use zarrs::array::codec::{VlenCodecConfiguration, ZstdCodec};
+use zarrs::array::{ArrayBuilder, ArrayBytes, ArrayMetadataOptions, data_type};
+use zarrs::storage::ReadableWritableListableStorage;
+use zarrs::storage::store::MemoryStore;
+use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_filesystem::FilesystemStore;
 
 fn read_cities() -> std::io::Result<Vec<String>> {
@@ -49,19 +42,12 @@ fn cities_impl(
     let mut builder = ArrayBuilder::new(
         vec![cities.len() as u64], // array shape
         vec![chunk_size],          // regular chunk shape
-        DataType::String,
+        data_type::string(),
         "",
     );
+    builder.array_to_bytes_codec(vlen_codec);
     if let Some(shard_size) = shard_size {
-        builder.array_to_bytes_codec(Arc::new(
-            ShardingCodecBuilder::new(
-                vec![shard_size].try_into()?, // inner chunk chape
-            )
-            .array_to_bytes_codec(vlen_codec)
-            .build(),
-        ));
-    } else {
-        builder.array_to_bytes_codec(vlen_codec);
+        builder.subchunk_shape(vec![shard_size]);
     }
     if let Some(compression_level) = compression_level {
         builder.bytes_to_bytes_codecs(vec![
@@ -75,13 +61,14 @@ fn cities_impl(
         .store_metadata_opt(&ArrayMetadataOptions::default().with_include_zarrs_metadata(false))?;
 
     let subset_all = array.subset_all();
-    array.store_array_subset_elements(&subset_all, &cities)?;
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    array.store_array_subset(&subset_all, cities)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
     assert_eq!(cities, cities_out);
 
-    let last_block = array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
-    let (_bytes, offsets) = last_block.into_variable()?;
-    assert_eq!(offsets.len() as u64, chunk_size + 1);
+    let last_block: ArrayBytes =
+        array.retrieve_chunk(&[(cities.len() as u64).div_ceil(chunk_size)])?;
+    let variable_length_bytes = last_block.into_variable()?;
+    assert_eq!(variable_length_bytes.offsets().len() as u64, chunk_size + 1);
 
     Ok(store.size_prefix(&"c/".try_into().unwrap())?) // only chunks
 }
@@ -115,12 +102,12 @@ fn cities() -> Result<(), Box<dyn Error>> {
     }"#)?;
     let vlen_compressed = Arc::new(VlenCodec::new_with_configuration(&vlen_compressed_configuration)?);
 
-    print!("| encoding         | compression | size   |\n");
-    print!("| ---------------- | ----------- | ------ |\n");
-    print!("| vlen_utf8 |             | {} |\n", cities_impl(&cities, None, 1000, None, vlen_utf8.clone(), true)?);
-    print!("| vlen_utf8 | zstd 5      | {} |\n", cities_impl(&cities, Some(5), 1000, None, vlen_utf8.clone(), false)?);
-    print!("| vlen             |             | {} |\n", cities_impl(&cities, None, 1000, None, vlen.clone(), false)?);
-    print!("| vlen             | zstd 5      | {} |\n", cities_impl(&cities, None, 1000, None, vlen_compressed.clone(), false)?);
+    println!("| encoding         | compression | size   |");
+    println!("| ---------------- | ----------- | ------ |");
+    println!("| vlen_utf8 |             | {} |", cities_impl(&cities, None, 1000, None, vlen_utf8.clone(), true)?);
+    println!("| vlen_utf8 | zstd 5      | {} |", cities_impl(&cities, Some(5), 1000, None, vlen_utf8.clone(), false)?);
+    println!("| vlen             |             | {} |", cities_impl(&cities, None, 1000, None, vlen.clone(), false)?);
+    println!("| vlen             | zstd 5      | {} |", cities_impl(&cities, None, 1000, None, vlen_compressed.clone(), false)?);
     println!();
     // panic!();
 
@@ -141,7 +128,7 @@ fn cities_zarr_python_v2_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);
@@ -156,7 +143,7 @@ fn cities_zarr_python_v3_compat() -> Result<(), Box<dyn Error>> {
     )?);
     let array = zarrs::array::Array::open(store.clone(), "/")?;
     let subset_all = array.subset_all();
-    let cities_out = array.retrieve_array_subset_elements::<String>(&subset_all)?;
+    let cities_out = array.retrieve_array_subset::<Vec<String>>(&subset_all)?;
 
     let cities = read_cities()?;
     assert_eq!(cities, cities_out);

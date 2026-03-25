@@ -3,9 +3,10 @@
 
 use std::sync::Arc;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use zarrs::array::ArrayBytes;
 use zarrs::array::codec::BloscCodec;
-use zarrs_metadata_ext::codec::blosc::{BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
+use zarrs::metadata_ext::codec::blosc::{BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
 
 fn array_blosc_write_all(c: &mut Criterion) {
     let mut group = c.benchmark_group("array_blosc_write_all");
@@ -18,7 +19,7 @@ fn array_blosc_write_all(c: &mut Criterion) {
                 let array = zarrs::array::ArrayBuilder::new(
                     vec![size; 3],
                     vec![32; 3],
-                    zarrs::array::DataType::UInt8,
+                    zarrs::array::data_type::uint8(),
                     0u8,
                 )
                 .bytes_to_bytes_codecs(vec![Arc::new(
@@ -34,8 +35,8 @@ fn array_blosc_write_all(c: &mut Criterion) {
                 .build(store.into(), "/")
                 .unwrap();
                 let data = vec![1u8; num_elements.try_into().unwrap()];
-                let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-                array.store_array_subset_elements(&subset, &data).unwrap();
+                let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+                array.store_array_subset(&subset, &data).unwrap();
             });
         });
     }
@@ -53,7 +54,7 @@ fn array_blosc_read_all(c: &mut Criterion) {
             let array = zarrs::array::ArrayBuilder::new(
                 vec![size; 3],
                 vec![32; 3],
-                zarrs::array::DataType::UInt8,
+                zarrs::array::data_type::uint8(),
                 0u8,
             )
             .bytes_to_bytes_codecs(vec![Arc::new(
@@ -69,12 +70,12 @@ fn array_blosc_read_all(c: &mut Criterion) {
             .build(store.into(), "/")
             .unwrap();
             let data = vec![1u8; num_elements.try_into().unwrap()];
-            let subset = zarrs::array_subset::ArraySubset::new_with_shape(vec![size; 3]);
-            array.store_array_subset_elements(&subset, &data).unwrap();
+            let subset = zarrs::array::ArraySubset::new_with_shape(vec![size; 3]);
+            array.store_array_subset(&subset, &data).unwrap();
 
             // Benchmark reading the data
             b.iter(|| {
-                let _bytes = array.retrieve_array_subset(&subset).unwrap();
+                let _bytes: ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
             });
         });
     }

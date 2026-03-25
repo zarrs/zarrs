@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 use zarrs_metadata::NodeMetadata;
 
 /// Consolidated metadata of a Zarr hierarchy.
@@ -47,7 +46,8 @@ pub enum ConsolidatedMetadataKind {
 
 #[cfg(test)]
 mod tests {
-    use zarrs_metadata::{v3::GroupMetadataV3, NodeMetadata};
+    use zarrs_metadata::v3::GroupMetadataV3;
+    use zarrs_metadata::NodeMetadata;
 
     use super::*;
 

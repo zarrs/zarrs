@@ -27,7 +27,7 @@
 //!     "level": 9
 //! }
 //! # "#;
-//! # use zarrs_metadata_ext::codec::bz2::Bz2CodecConfiguration;
+//! # use zarrs::metadata_ext::codec::bz2::Bz2CodecConfiguration;
 //! # serde_json::from_str::<Bz2CodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -35,53 +35,57 @@ mod bz2_codec;
 
 use std::sync::Arc;
 
-use zarrs_registry::codec::BZ2;
+pub use self::bz2_codec::Bz2Codec;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
-
+use zarrs_codec::{Codec, CodecPluginV2, CodecPluginV3, CodecTraitsV2, CodecTraitsV3};
 pub use zarrs_metadata_ext::codec::bz2::{
     Bz2CodecConfiguration, Bz2CodecConfigurationV1, Bz2CompressionLevel,
 };
+use zarrs_plugin::PluginCreateError;
 
-pub use self::bz2_codec::Bz2Codec;
+zarrs_plugin::impl_extension_aliases!(Bz2Codec,
+    v3: "numcodecs.bz2", [],
+    v2: "bz2", []
+);
 
-// Register the codec.
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(BZ2, is_identifier_bz2, create_codec_bz2)
+    CodecPluginV3::new::<Bz2Codec>()
 }
 
-fn is_identifier_bz2(identifier: &str) -> bool {
-    identifier == BZ2
+// Register the V2 codec.
+inventory::submit! {
+    CodecPluginV2::new::<Bz2Codec>()
 }
 
-pub(crate) fn create_codec_bz2(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration: Bz2CodecConfiguration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(BZ2, "codec", metadata.to_string()))?;
-    let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
-    Ok(Codec::BytesToBytes(codec))
+impl CodecTraitsV3 for Bz2Codec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration: Bz2CodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
+}
+
+impl CodecTraitsV2 for Bz2Codec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration: Bz2CodecConfiguration = metadata.to_typed_configuration()?;
+        let codec = Arc::new(Bz2Codec::new_with_configuration(&configuration)?);
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use zarrs_storage::byte_range::ByteRange;
-
-    use crate::{
-        array::{
-            codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions},
-            ArrayRepresentation, BytesRepresentation, DataType,
-        },
-        array_subset::ArraySubset,
-        indexer::Indexer,
-    };
+    use std::borrow::Cow;
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::{ArraySubset, BytesRepresentation, ChunkShapeTraits, Indexer, data_type};
+    use zarrs_codec::{BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions};
+    use zarrs_storage::byte_range::ByteRange;
 
     const JSON_VALID1: &str = r#"
 {
@@ -110,13 +114,13 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn codec_bz2_partial_decode() {
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = data_type::uint16();
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: Bz2CodecConfiguration = serde_json::from_str(JSON_VALID1).unwrap();
@@ -126,7 +130,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
@@ -145,9 +149,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];
@@ -158,15 +164,15 @@ mod tests {
     #[tokio::test]
     #[cfg_attr(miri, ignore)]
     async fn codec_bz2_async_partial_decode() {
-        use crate::indexer::Indexer;
+        use crate::array::Indexer;
 
-        let array_representation =
-            ArrayRepresentation::new(vec![2, 2, 2], DataType::UInt16, 0u16).unwrap();
-        let data_type_size = array_representation.data_type().fixed_size().unwrap();
-        let array_size = array_representation.num_elements_usize() * data_type_size;
+        let shape = vec![NonZeroU64::new(2).unwrap(); 3];
+        let data_type = data_type::uint16();
+        let data_type_size = data_type.fixed_size().unwrap();
+        let array_size = shape.num_elements_usize() * data_type_size;
         let bytes_representation = BytesRepresentation::FixedSize(array_size as u64);
 
-        let elements: Vec<u16> = (0..array_representation.num_elements() as u16).collect();
+        let elements: Vec<u16> = (0..shape.num_elements_usize() as u16).collect();
         let bytes = crate::array::transmute_to_bytes_vec(elements);
 
         let codec_configuration: Bz2CodecConfiguration = serde_json::from_str(JSON_VALID1).unwrap();
@@ -176,7 +182,7 @@ mod tests {
             .encode(Cow::Owned(bytes), &CodecOptions::default())
             .unwrap();
         let decoded_regions = ArraySubset::new_with_ranges(&[0..2, 1..2, 0..1])
-            .iter_contiguous_byte_ranges(array_representation.shape(), data_type_size)
+            .iter_contiguous_byte_ranges(bytemuck::must_cast_slice(&shape), data_type_size)
             .unwrap()
             .map(ByteRange::new);
         let input_handle = Arc::new(encoded);
@@ -196,9 +202,11 @@ mod tests {
             .concat();
 
         let decoded: Vec<u16> = decoded
-            .to_vec()
-            .chunks_exact(size_of::<u16>())
-            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .clone()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| u16::from_ne_bytes(*b))
             .collect();
 
         let answer: Vec<u16> = vec![2, 6];

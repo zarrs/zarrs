@@ -1,6 +1,5 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// Helper function to determine if `padding_encoding` should be skipped during serialization.
@@ -73,10 +72,10 @@ mod tests {
     #[test]
     fn packbits_default() {
         let configuration = serde_json::from_str::<PackBitsCodecConfigurationV1>(
-            r#"
+            r"
         {
         }
-        "#,
+        ",
         )
         .unwrap();
         assert_eq!(configuration.padding_encoding, None);

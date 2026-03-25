@@ -12,13 +12,18 @@
 //!
 //! Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-use derive_more::{
-    derive::{Display, From},
-    Deref, Into,
-};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use derive_more::derive::{Display, From};
+use derive_more::{Deref, Into};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 mod array;
+
+/// An array shape. Dimensions may be zero.
+pub type ArrayShape = Vec<u64>;
+
+/// A chunk shape. Dimensions must be non-zero.
+pub type ChunkShape = Vec<std::num::NonZeroU64>;
 
 /// Zarr V3 metadata.
 pub mod v3;
@@ -26,9 +31,10 @@ pub mod v3;
 /// Zarr V2 metadata.
 pub mod v2;
 
-pub use array::{
-    ArrayShape, ChunkKeySeparator, ChunkShape, DimensionName, Endianness, IntoDimensionName,
-};
+/// Zarr V3 or V2 fill value metadata.
+pub use v3::FillValueMetadataV3 as FillValueMetadata;
+
+pub use array::{ChunkKeySeparator, DimensionName, Endianness, IntoDimensionName};
 use thiserror::Error;
 
 /// Zarr array metadata (V2 or V3).
@@ -120,6 +126,26 @@ pub enum DataTypeSize {
 #[derive(Default, Serialize, Deserialize, Debug, Clone, Deref, From, Into, Eq, PartialEq)]
 pub struct Configuration(serde_json::Map<String, serde_json::Value>);
 
+/// An empty configuration that does not allow any fields.
+///
+/// For use in validating that a configuration is empty with [`Configuration::to_typed`] etc.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EmptyConfiguration {}
+
+impl Configuration {
+    /// Try and convert [`Configuration`] to a specific serializable configuration.
+    ///
+    /// # Errors
+    /// Returns a [`serde_json`] error if the metadata cannot be converted.
+    pub fn to_typed<TConfiguration: DeserializeOwned>(
+        &self,
+    ) -> Result<TConfiguration, std::sync::Arc<serde_json::Error>> {
+        serde_json::from_value(serde_json::Value::Object(self.0.clone()))
+            .map_err(std::sync::Arc::new)
+    }
+}
+
 impl<T: ConfigurationSerialize> From<T> for Configuration {
     fn from(value: T) -> Self {
         match serde_json::to_value(value) {
@@ -177,14 +203,15 @@ impl ConfigurationError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use v3::{AdditionalFieldV3, AdditionalFieldsV3, MetadataV3};
+
+    use super::*;
 
     #[test]
     fn metadata() {
         let metadata = MetadataV3::try_from(r#""bytes""#);
         assert!(metadata.is_ok());
-        assert_eq!(metadata.unwrap().to_string(), r#"bytes"#);
+        assert_eq!(metadata.unwrap().to_string(), r"bytes");
         assert!(MetadataV3::try_from(r#"{ "name": "bytes" }"#).is_ok());
         let metadata =
             MetadataV3::try_from(r#"{ "name": "bytes", "configuration": { "endian": "little" } }"#);

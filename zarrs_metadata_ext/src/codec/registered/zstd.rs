@@ -1,7 +1,6 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `zstd` codec configuration parameters.

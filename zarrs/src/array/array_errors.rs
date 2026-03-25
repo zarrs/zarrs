@@ -1,18 +1,14 @@
 use serde_json::Value;
 use thiserror::Error;
+use zarrs_codec::CodecError;
+use zarrs_data_type::FillValue;
+use zarrs_metadata::FillValueMetadata;
 
-use crate::{
-    array::data_type::{DataTypeFillValueError, DataTypeFillValueMetadataError},
-    array_subset::{
-        ArraySubset, IncompatibleDimensionalityError, IncompatibleOffsetError,
-        IncompatibleStartEndIndicesError,
-    },
-    node::NodePathError,
-    plugin::PluginCreateError,
-    storage::StorageError,
-};
-
-use super::{codec::CodecError, ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
+use super::{ArrayBytesFixedDisjointViewCreateError, ArrayIndices, ArrayShape};
+use crate::array::{ArraySubset, ArraySubsetError, IncompatibleDimensionalityError};
+use crate::node::NodePathError;
+use zarrs_plugin::PluginCreateError;
+use zarrs_storage::StorageError;
 
 /// An array creation error.
 #[derive(Clone, Debug, Error)]
@@ -27,8 +23,13 @@ pub enum ArrayCreateError {
     #[error(transparent)]
     DataTypeCreateError(PluginCreateError),
     /// Invalid fill value.
-    #[error(transparent)]
-    InvalidFillValue(#[from] DataTypeFillValueError),
+    #[error("invalid fill value for data type `{data_type_name}`: {fill_value}")]
+    InvalidFillValue {
+        /// The data type name.
+        data_type_name: String,
+        /// The fill value.
+        fill_value: FillValue,
+    },
     // /// Unparseable metadata.
     // #[error("unparseable metadata: {_0:?}")]
     // UnparseableMetadata(String),
@@ -39,8 +40,13 @@ pub enum ArrayCreateError {
     // #[error("unsupported chunk grid metadata: {_0:?}")]
     // UnsupportedChunkGridMetadata(MetadataV3),
     /// Invalid fill value metadata.
-    #[error(transparent)]
-    InvalidFillValueMetadata(#[from] DataTypeFillValueMetadataError),
+    #[error("invalid fill value metadata for data type `{data_type_name}`: {fill_value_metadata}")]
+    InvalidFillValueMetadata {
+        /// The data type name.
+        data_type_name: String,
+        /// The fill value metadata.
+        fill_value_metadata: FillValueMetadata,
+    },
     /// Error creating codecs.
     #[error(transparent)]
     CodecsCreateError(PluginCreateError),
@@ -59,6 +65,9 @@ pub enum ArrayCreateError {
     /// The number of dimension names does not match the array dimensionality.
     #[error("the number of dimension names {0} does not match array dimensionality {1}")]
     InvalidDimensionNames(usize, usize),
+    /// Invalid subchunk shape (contains zero).
+    #[error("invalid subchunk shape {0:?}: all elements must be non-zero")]
+    InvalidSubchunkShape(super::ArrayShape),
     /// Storage error.
     #[error(transparent)]
     StorageError(#[from] StorageError),
@@ -92,12 +101,9 @@ pub enum ArrayError {
     /// Incompatible dimensionality.
     #[error(transparent)]
     IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),
-    /// Incompatible start and end indices.
+    /// An [`ArraySubsetError`].
     #[error(transparent)]
-    IncompatibleStartEndIndicesError(#[from] IncompatibleStartEndIndicesError),
-    /// An incompatible offset.
-    #[error(transparent)]
-    IncompatibleOffset(#[from] IncompatibleOffsetError),
+    ArraySubsetError(#[from] ArraySubsetError),
     /// Incompatible array subset.
     #[error("array subset {_0} is not compatible with array shape {_1:?}")]
     InvalidArraySubset(ArraySubset, ArrayShape),
@@ -113,29 +119,40 @@ pub enum ArrayError {
     /// An unexpected chunk decoded shape.
     #[error("got chunk decoded shape {_0:?}, expected {_1:?}")]
     UnexpectedChunkDecodedShape(ArrayShape, ArrayShape),
-    /// Incompatible element size.
-    #[error("the element types does not match the data type")]
-    IncompatibleElementType,
+    /// An element error.
+    #[error(transparent)]
+    ElementError(#[from] super::ElementError),
     /// Invalid data shape.
     #[error("data has shape {_0:?}, expected {_1:?}")]
     InvalidDataShape(Vec<usize>, Vec<usize>),
-    /// Invalid element value.
-    ///
-    /// For example
-    ///  - a bool array with a value not equal to 0 (false) or 1 (true).
-    ///  - a string with invalid utf-8 encoding.
-    #[error("Invalid element value")]
-    InvalidElementValue, // TODO: Add reason
     /// Unsupported method.
     #[error("unsupported array method: {_0}")]
     UnsupportedMethod(String),
     #[cfg(feature = "dlpack")]
-    /// A `DLPack` error
+    /// A [`TensorError`](super::TensorError).
     #[error(transparent)]
-    DlPackError(#[from] super::array_dlpack_ext::ArrayDlPackExtError),
+    TensorError(#[from] super::TensorError),
     /// Any other error.
     #[error("{_0}")]
     Other(String),
+}
+
+impl From<zarrs_codec::ExpectedFixedLengthBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedFixedLengthBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
+}
+
+impl From<zarrs_codec::ExpectedVariableLengthBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedVariableLengthBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
+}
+
+impl From<zarrs_codec::ExpectedOptionalBytesError> for ArrayError {
+    fn from(err: zarrs_codec::ExpectedOptionalBytesError) -> Self {
+        Self::CodecError(err.into())
+    }
 }
 
 /// An unsupported additional field error.

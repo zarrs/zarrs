@@ -7,7 +7,6 @@ mod platform {
     /// A marker trait that enforces `Send` only on native platforms.
     ///
     pub use core::marker::Send as MaybeSend;
-
     /// A marker trait that enforces `Sync` only on native platforms.
     ///
     pub use core::marker::Sync as MaybeSync;

@@ -20,7 +20,7 @@
 //! # let JSON = r#"
 //! {}
 //! # "#;
-//! # use zarrs_metadata_ext::codec::crc32c::Crc32cCodecConfiguration;
+//! # use zarrs::metadata_ext::codec::crc32c::Crc32cCodecConfiguration;
 //! # serde_json::from_str::<Crc32cCodecConfiguration>(JSON).unwrap();
 //! ```
 
@@ -29,58 +29,73 @@ mod crc32c_codec;
 use std::sync::Arc;
 
 pub use crc32c_codec::Crc32cCodec;
-pub use zarrs_metadata_ext::codec::crc32c::{Crc32cCodecConfiguration, Crc32cCodecConfigurationV1};
-use zarrs_registry::codec::CRC32C;
+use zarrs_metadata::v2::MetadataV2;
+use zarrs_metadata::v3::MetadataV3;
 
-use crate::{
-    array::codec::{Codec, CodecPlugin},
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
+use zarrs_codec::Codec;
+pub use zarrs_metadata_ext::codec::crc32c::{
+    Crc32cCodecConfiguration, Crc32cCodecConfigurationNumcodecs, Crc32cCodecConfigurationV1,
 };
+use zarrs_plugin::PluginCreateError;
 
-// Register the codec.
+zarrs_plugin::impl_extension_aliases!(Crc32cCodec, v3: "crc32c", v2: "crc32c");
+
+// Register the V3 codec.
 inventory::submit! {
-    CodecPlugin::new(CRC32C, is_identifier_crc32c, create_codec_crc32c)
+    zarrs_codec::CodecPluginV3::new::<Crc32cCodec>()
 }
 
-fn is_identifier_crc32c(identifier: &str) -> bool {
-    identifier == CRC32C
+impl zarrs_codec::CodecTraitsV3 for Crc32cCodec {
+    fn create(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
+        let configuration = if metadata.name() == "numcodecs.crc32c" {
+            Crc32cCodecConfiguration::Numcodecs(
+                metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
+            )
+        } else {
+            Crc32cCodecConfiguration::V1(
+                metadata.to_typed_configuration::<Crc32cCodecConfigurationV1>()?,
+            )
+        };
+        let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
-pub(crate) fn create_codec_crc32c(metadata: &MetadataV3) -> Result<Codec, PluginCreateError> {
-    let configuration = metadata
-        .to_configuration()
-        .map_err(|_| PluginMetadataInvalidError::new(CRC32C, "codec", metadata.to_string()))?;
-    let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
-    Ok(Codec::BytesToBytes(codec))
+impl zarrs_codec::CodecTraitsV2 for Crc32cCodec {
+    fn create(metadata: &MetadataV2) -> Result<Codec, PluginCreateError> {
+        let configuration = Crc32cCodecConfiguration::Numcodecs(
+            metadata.to_typed_configuration::<Crc32cCodecConfigurationNumcodecs>()?,
+        );
+        let codec = Arc::new(Crc32cCodec::new_with_configuration(&configuration));
+        Ok(Codec::BytesToBytes(codec))
+    }
 }
 
 const CHECKSUM_SIZE: usize = size_of::<u32>();
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, sync::Arc};
-
-    use crate::{
-        array::{
-            codec::{
-                BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecOptions, CodecTraits,
-            },
-            BytesRepresentation,
-        },
-        storage::byte_range::ByteRange,
-    };
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::array::BytesRepresentation;
+    use zarrs_codec::{
+        BytesPartialDecoderTraits, BytesToBytesCodecTraits, CodecMetadataOptions, CodecOptions,
+        CodecTraits,
+    };
+    use zarrs_storage::byte_range::ByteRange;
 
-    const JSON1: &str = r#"{}"#;
+    const JSON1: &str = r"{}";
 
     #[test]
     fn codec_crc32c_configuration_none() {
-        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r#"{}"#).unwrap();
+        let codec_configuration: Crc32cCodecConfiguration = serde_json::from_str(r"{}").unwrap();
         let codec = Crc32cCodec::new_with_configuration(&codec_configuration);
-        let metadata = codec.configuration("crc32c").unwrap();
-        assert_eq!(serde_json::to_string(&metadata).unwrap(), r#"{}"#);
+        let metadata = codec
+            .configuration_v3(&CodecMetadataOptions::default())
+            .unwrap();
+        assert_eq!(serde_json::to_string(&metadata).unwrap(), r"{}");
     }
 
     #[test]

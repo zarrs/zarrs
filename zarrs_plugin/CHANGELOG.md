@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-02
+
+### Added
+- Implement `From<Arc<serde_json::Error>>` for `PluginCreateError`
+- Change to Rust 2024 edition
+
+## [0.4.0] - 2026-01-13
+
+### Added
+- Add `ExtensionName` and `ExtensionNameStatic` traits
+- Add `ExtensionAliases{V2,V3}` traits with blanket implementations
+- Add `PluginConfigurationInvalidError` replacing `PluginMetadataInvalidError`
+
+### Changed
+- **Breaking**: Rename `ZarrVersion` to `ZarrVersionTraits`
+- **Breaking**: Rename `ZarrVersions` to `ZarrVersion`
+- **Breaking**: Remove simple form  `impl_extension_aliases!`, explicitly use `v3:` and `v2:` prefixes
+- **Breaking** Revise `PluginCreateError::NameInvalid` enum
+  - Add `NameInvalid` variant
+  - Replace `MetadataInvalid` with `ConfigurationInvalid`
+
+### Removed
+- **Breaking**: Remove `PluginMetadataInvalidError`
+- **Breaking**: Remove `ExtensionIdentifier`
+- **Breaking**: Remove `ExtensionAliases::{default_name,set_default_name}()`
+- **Breaking**: Remove `[Runtime]Plugin[2]::identifier()` method
+- **Breaking**: Remove `[Runtime]Plugin[2]::default_name()` method
+
+## [0.3.1] - 2026-01-09
+
+### Fixed
+- Use `paste` re-export in the `impl_extension_aliases` macro
+
+## [0.3.0] - 2025-12-31
+
+### Added
+- Add `Plugin::default_name()` method
+- Add `ExtensionAliasesConfig` struct for per-extension alias configuration
+- Add `ExtensionAliases<V>` trait for version-specific alias handling
+- Add `ExtensionIdentifier` trait for extensions with unique identifiers
+- Add `ZarrVersions` enum with `V2` and `V3` variants
+- Implement `From<ZarrVersion2>` and `From<ZarrVersion3>` for `ZarrVersions`
+- Add `ExtensionType*` and `ZarrVersion{2,3}` types (moved from `zarrs_registry`)
+- Add `RuntimePlugin[2]`, `RuntimeRegistry`, and `RegistrationHandle` for runtime plugin registration
+
+### Changed
+- **Breaking**: `Plugin[2]::new()` now takes a `default_name_fn` parameter
+- **Breaking**: `Plugin[2]::match_name()` now takes a `ZarrVersions` parameter
+- **Breaking**: Bump MSRV to 1.88
+
+## [0.2.3] - 2025-12-26
+
+### Added
+- Add `Plugin2` for plugins with two input parameters
+
+### Changed
+- Bump `zarrs_plugin` to 0.2.3
+
 ## [0.2.2] - 2025-09-18
 
 ### Added
@@ -45,9 +103,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  - Initial release
  - Split from the `plugin` module of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_plugin-v0.2.2...HEAD
-[0.2.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.2
-[0.2.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.1
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_plugin-v0.4.1...HEAD
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.4.0
+[0.3.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.3.1
+[0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.3.0
+[0.2.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.2.3
+[0.2.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.2.2
+[0.2.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_plugin-v0.2.1
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.2.0
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_plugin-v0.1.0
 

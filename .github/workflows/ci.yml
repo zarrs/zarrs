@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_and_test:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -31,13 +31,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo build ${{ matrix.features }}
-      - run: cargo test ${{ matrix.features }}
-      - run: cargo test ${{ matrix.features }} --examples
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
+      - run: cargo test --all-features --examples
   build_wasm:
     runs-on: ubuntu-latest
     steps:
@@ -53,10 +61,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
-      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
       - run: cargo test --all-features --examples
   test_macos:
     strategy:
@@ -66,10 +76,13 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
       - run: cargo test --all-features --examples
   test_s390x:
     runs-on: ubuntu-latest
@@ -86,16 +99,19 @@ jobs:
             lscpu | grep Endian 
             "
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "stable"
       - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
       - run: cargo test --all-features --examples
   fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - run: rustup component add rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
@@ -106,7 +122,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-features -- -D warnings
+      - run: cargo clippy --all-features --all-targets -- -D warnings -A clippy::pedantic
   doc:
     runs-on: ubuntu-latest
     steps:
@@ -129,7 +145,37 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --direct --all-features --workspace --exclude zarrs_object_store
+      - run: cargo minimal-versions check --all-features --workspace --exclude zarrs_object_store
+  msrv-1-91:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --all-features -p zarrs -p zarrs_chunk_key_encoding -p zarrs_codec -p zarrs_chunk_grid
+  msrv-1-88:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo minimal-versions check --all-features -p zarrs_plugin
+  # msrv-1-85:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: "1.85"
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo install cargo-hack cargo-minimal-versions --locked
+  #     - run: cargo minimal-versions check --all-features -p zarrs_object_store
   msrv-1-82:
     runs-on: ubuntu-latest
     steps:
@@ -139,21 +185,25 @@ jobs:
           toolchain: "1.82"
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --direct --all-features -p zarrs -p zarrs_storage -p zarrs_filesystem
-  msrv-1-77:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.77"
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-hack cargo-minimal-versions --locked
-      - run: cargo minimal-versions check --direct --all-features -p zarrs_data_type -p zarrs_metadata -p zarrs_metadata_ext -p zarrs_plugin -p zarrs_registry
+      - run: sed -i 's/edition = "2024"/edition = "2021"/' */Cargo.toml \
+      - run: cargo minimal-versions check --all-features -p zarrs_storage -p zarrs_filesystem
+  # msrv-1-77:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@master
+  #       with:
+  #         toolchain: "1.77"
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo install cargo-hack@0.6.39 cargo-minimal-versions@0.1.33 --locked
+  #     - run: sed -i 's/edition = "2024"/edition = "2021"/' zarrs/Cargo.toml
+  #     - run: cargo minimal-versions check --all-features -p zarrs_metadata -p zarrs_metadata_ext # Needs minimal-versions PR #1
   codecov:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly install cargo-llvm-cov --locked

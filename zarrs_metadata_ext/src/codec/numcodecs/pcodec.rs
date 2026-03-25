@@ -1,6 +1,5 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Deserializer, Serialize};
-
 use zarrs_metadata::ConfigurationSerialize;
 
 /// A wrapper to handle various versions of `pcodec` codec configuration parameters.
@@ -266,8 +265,8 @@ mod tests {
     #[test]
     fn codec_pcodec_valid_empty() {
         serde_json::from_str::<PcodecCodecConfiguration>(
-            r#"{
-        }"#,
+            r"{
+        }",
         )
         .unwrap();
     }

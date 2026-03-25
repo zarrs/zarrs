@@ -1,20 +1,18 @@
 //! A storage transformer which records performance metrics.
 
-use crate::{
-    byte_range::ByteRangeIterator, Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator,
-    OffsetBytesIterator, ReadableStorageTraits, StorageError, StoreKey, StoreKeys,
-    StoreKeysPrefixes, StorePrefix, WritableStorageTraits,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
+use crate::byte_range::ByteRangeIterator;
 #[cfg(feature = "async")]
 use crate::{
     AsyncListableStorageTraits, AsyncMaybeBytesIterator, AsyncReadableStorageTraits,
     AsyncWritableStorageTraits,
 };
-
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use crate::{
+    Bytes, ListableStorageTraits, MaybeBytes, MaybeBytesIterator, OffsetBytesIterator,
+    ReadableStorageTraits, StorageError, StoreKey, StoreKeys, StoreKeysPrefixes, StorePrefix,
+    WritableStorageTraits,
 };
 
 /// The performance metrics storage transformer. Accumulates metrics, such as bytes read and written.
@@ -340,11 +338,11 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits> AsyncWritableStorageTraits
 
 #[cfg(test)]
 mod tests {
-    use crate::store::MemoryStore;
-    use crate::store_test;
     use std::sync::Arc;
 
     use super::*;
+    use crate::store::MemoryStore;
+    use crate::store_test;
 
     #[test]
     fn performance_metrics() {
@@ -353,6 +351,7 @@ mod tests {
         store_test::store_write(&store).unwrap();
         store_test::store_read(&store).unwrap();
         store_test::store_list(&store).unwrap();
+        store_test::store_list_size(&store).unwrap();
         assert!(store.bytes_read() >= 12);
         assert!(store.bytes_written() >= 10);
         assert!(store.reads() >= 8);

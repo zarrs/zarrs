@@ -1,19 +1,21 @@
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use zarrs_metadata::Configuration;
 
 use crate::array::{
-    codec::{
-        ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
-        BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-        PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    },
-    ArrayBytes, BytesRepresentation, ChunkRepresentation, DataTypeSize, RawBytes, RawBytesOffsets,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType, DataTypeSize,
+    FillValue,
 };
-
+use zarrs_codec::{
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+};
 #[cfg(feature = "async")]
-use crate::array::codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
+use zarrs_metadata::Configuration;
+use zarrs_plugin::{ExtensionAliasesV3, ZarrVersion};
 
 /// The `vlen_v2` codec implementation.
 #[derive(Debug, Clone, Default)]
@@ -28,13 +30,13 @@ impl VlenV2Codec {
 }
 
 impl CodecTraits for VlenV2Codec {
-    fn identifier(&self) -> &str {
-        zarrs_registry::codec::VLEN_V2
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    fn configuration_opt(
+    fn configuration(
         &self,
-        _name: &str,
+        _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
         Some(Configuration::default())
@@ -57,7 +59,8 @@ impl CodecTraits for VlenV2Codec {
 impl ArrayCodecTraits for VlenV2Codec {
     fn recommended_concurrency(
         &self,
-        _decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         Ok(RecommendedConcurrency::new_maximum(1))
     }
@@ -76,16 +79,15 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
-    ) -> Result<RawBytes<'a>, CodecError> {
-        bytes.validate(
-            decoded_representation.num_elements(),
-            decoded_representation.data_type().size(),
-        )?;
-        let (bytes, offsets) = bytes.into_variable()?;
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        bytes.validate(num_elements, data_type)?;
+        let (bytes, offsets) = bytes.into_variable()?.into_parts();
 
-        let num_elements = decoded_representation.num_elements();
         debug_assert_eq!(1 + num_elements, offsets.len() as u64);
 
         let mut data: Vec<u8> = Vec::with_capacity(offsets.len() * size_of::<u32>() + bytes.len());
@@ -107,13 +109,17 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
 
     fn decode<'a>(
         &self,
-        bytes: RawBytes<'a>,
-        decoded_representation: &ChunkRepresentation,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let num_elements = decoded_representation.num_elements_usize();
-        let (bytes, offsets) = super::get_interleaved_bytes_and_offsets(num_elements, &bytes)?;
-        let offsets = RawBytesOffsets::new(offsets)?;
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        let num_elements_usize = usize::try_from(num_elements).unwrap();
+        let (bytes, offsets) =
+            super::get_interleaved_bytes_and_offsets(num_elements_usize, &bytes)?;
+        let offsets = ArrayBytesOffsets::new(offsets)?;
         let array_bytes = ArrayBytes::new_vlen(bytes, offsets)?;
         Ok(array_bytes)
     }
@@ -121,13 +127,17 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::vlen_v2_partial_decoder::VlenV2PartialDecoder::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape.to_vec(),
+                data_type.clone(),
+                fill_value.clone(),
             ),
         ))
     }
@@ -136,26 +146,39 @@ impl ArrayToBytesCodecTraits for VlenV2Codec {
     async fn async_partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        decoded_representation: &ChunkRepresentation,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(
             super::vlen_v2_partial_decoder::AsyncVlenV2PartialDecoder::new(
                 input_handle,
-                decoded_representation.clone(),
+                shape.to_vec(),
+                data_type.clone(),
+                fill_value.clone(),
             ),
         ))
     }
 
     fn encoded_representation(
         &self,
-        decoded_representation: &ChunkRepresentation,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        match decoded_representation.data_type().size() {
+        if data_type.is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
+            ));
+        }
+
+        match data_type.size() {
             DataTypeSize::Variable => Ok(BytesRepresentation::UnboundedSize),
             DataTypeSize::Fixed(_) => Err(CodecError::UnsupportedDataType(
-                decoded_representation.data_type().clone(),
-                zarrs_registry::codec::VLEN_V2.to_string(),
+                data_type.clone(),
+                Self::aliases_v3().default_name.to_string(),
             )),
         }
     }

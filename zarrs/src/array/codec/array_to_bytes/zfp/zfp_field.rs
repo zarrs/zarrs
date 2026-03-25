@@ -1,8 +1,11 @@
-use super::ZfpArray;
-use std::{marker::PhantomData, ptr::NonNull};
+use std::marker::PhantomData;
+use std::ptr::NonNull;
+
 use zfp_sys::{
     zfp_field, zfp_field_1d, zfp_field_2d, zfp_field_3d, zfp_field_4d, zfp_field_free, zfp_type,
 };
+
+use super::ZfpArray;
 
 /// A `zfp` field.
 #[derive(Debug)]

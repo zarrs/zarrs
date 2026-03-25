@@ -7,6 +7,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-02-02
+
+### Added
+- Add `DataTypeTraits::compatible_element_types()` method for declaring compatible Rust element types
+- Add `DataTypeTraitsV2` and `DataTypeTraitsV3` traits
+- Add `DataTypeCodecError` for codec support methods
+- Add `codec_traits` module with data type traits/plugins/macros for codec support
+  - These were moved from `zarrs` with various revisions (e.g. `zfp` enums simplified, rename impl macros, more useful `bytes` impl macro)
+- Add `impl_bitround_codec` macro and bitround helper functions (`round_bytes_*`) to `codec_traits::bitround`
+- Add `Display` impl for `DataType`
+
+### Changed
+- Add `paste` dependency
+- **Breaking**: Remove `create_fn` parameter from `DataTypePluginV2::create()` and add `T: DataTypeTraitsV2` bound
+- **Breaking**: Remove `create_fn` parameter from `DataTypePluginV3::create()` and add `T: DataTypeTraitsV3` bound
+- **Breaking**: Bump the MSRV to 1.91 and Rust 2024 edition
+
+## [0.8.1] - 2026-01-14
+
+### Added
+- Add `OptionalDataType`
+- Add `DataType::{is,downcast_ref,fixed_size,is_fixed,is_variable,is_optional,as_optional,optional_inner,to_optional}()`
+
+## [0.8.0] - 2026-01-13
+
+### Added
+- Add `DataType::fill_value_{v2,v3}()`
+- Add `DataType::configuration_{v2,v3}()`
+
+### Changed
+- **Breaking**: Change `DataType::from_metadata` parameter to `&DataTypeMetadata` instead of `&MetadataV3`
+- **Breaking**: Add `ZarrVersion` parameter to `DataTypeTraits::configuration()`
+- **Breaking**: Change `DataTypeTraits::fill_value` parameter to `&FillValueMetadata` instead of `&FillValueMetadataV3`
+- **Breaking**: Remove `DataTypeTraits::identifier()` method
+- **Breaking**: Add `DataTypeTraits` supertrait: `ExtensionName`
+- **Breaking**: Remove `DataTypeTraits::default_name()` method
+- **Breaking**: Change `DataType[Runtime]Plugin` to the new `Plugin` system from `zarrs_plugin`
+
+## [0.7.0] - 2025-12-31
+
+### Changed
+- **Breaking**: Change `DataType` from an alias of `Arc<dyn DataTypeTraits>` to a newtype
+- **Breaking**: Rename `DataTypeExtension` to `DataTypeTraits`
+
+### Removed
+- **Breaking**: Remove `DataTypeExtensionError` type
+
+## [0.6.0] - 2025-12-31
+
+### Added
+- Add `DataType` type alias (`Arc<dyn DataTypeExtension>`)
+- Add `DataTypeExtension::default_name()` method
+- Add `DataTypeExtension::eq()` method with default implementation
+- **Breaking**: Add `DataTypeExtension::as_any()` method
+- Add runtime data type registration: `[un]register_data_type` and `DataTypeRuntime{Plugin,RegistryHandle}`
+
+### Changed
+- **Breaking**: `DataTypePlugin::new()` now takes a `default_name_fn` parameter
+- **Breaking**: `DataTypePlugin::match_name()` now takes a `ZarrVersions` parameter
+- Bump the MSRV to 1.88
+
+### Removed
+- **Breaking**: Remove `DataTypeExtensionBytesCodec` trait and `DataTypeExtensionBytesCodecError` enum
+- **Breaking**: Remove `DataTypeExtensionPackBitsCodec` trait
+- **Breaking**: Remove `DataTypeExtension::codec_bytes()` method
+- **Breaking**: Remove `DataTypeExtension::codec_packbits()` method
+- **Breaking**: Remove `DataTypeExtensionError::BytesCodec` variant
+
+## [0.5.0] - 2025-12-26
+
+### Added
+- Add `FillValue::into_optional()`
+- Implement `From<Option<T>>` for `FillValue` where `FillValue: From<T>`
+
+### Changed
+- **Breaking**: Rename `FillValue::new_null()` to `new_optional_null()`
+- **Breaking**: bump `zarrs_metadata` to 0.7.0
+- Bump `zarrs_plugin` to 0.2.3
+
+### Removed
+- **Breaking**: Remove `FillValue::is_null()`
+
 ## [0.4.2] - 2025-10-31
 
 ## Fixed
@@ -23,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement `Clone` for `Error` structs
 
 ### Changed
-- **Breaking**: bump `zarrs_metadata` to 0.4.0
+- **Breaking**: bump `zarrs_metadata` to 0.6.0
 
 ## [0.3.3] - 2025-09-18
 
@@ -72,13 +154,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Split from the `zarrs::array::{data_type,fill_value}` modules of `zarrs` 0.20.0-dev
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.4.2...HEAD
-[0.4.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.2
-[0.4.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.1
-[0.4.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.4.0
-[0.3.3]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.3
-[0.3.2]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.2
-[0.3.1]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.1
-[0.3.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.3.0
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_data_type-v0.9.0...HEAD
+[0.9.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.9.0
+[0.8.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.1
+[0.8.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.8.0
+[0.7.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.7.0
+[0.6.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.6.0
+[0.5.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.5.0
+[0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.2
+[0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.1
+[0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.4.0
+[0.3.3]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.3
+[0.3.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.2
+[0.3.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.1
+[0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_data_type-v0.3.0
 [0.2.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.2.0
 [0.1.0]: https://github.com/LDeakin/zarrs/releases/tag/zarrs_data_type-v0.1.0

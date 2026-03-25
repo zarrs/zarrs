@@ -1,15 +1,14 @@
 #![allow(missing_docs)]
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use zarrs::array::ArrayMetadataOptions;
 use zarrs::config::MetadataConvertVersion;
 use zarrs::group::{Group, GroupMetadataOptions};
-use zarrs_metadata::v2::{
-    ArrayMetadataV2, ArrayMetadataV2Order, FillValueMetadataV2, GroupMetadataV2,
-};
-use zarrs_metadata::{ChunkKeySeparator, GroupMetadata};
-use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
+use zarrs::metadata::v2::{ArrayMetadataV2, ArrayMetadataV2Order, GroupMetadataV2};
+use zarrs::metadata::{ChunkKeySeparator, FillValueMetadata, GroupMetadata};
+use zarrs::storage::{ListableStorageTraits, ReadableStorageTraits, StoreKey};
 
 fn key_to_str<T: ReadableStorageTraits>(
     store: &Arc<T>,
@@ -61,9 +60,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a Zarr V2 array
     let array_metadata = ArrayMetadataV2::new(
         vec![10, 10],
-        vec![5, 5].try_into()?,
+        vec![NonZeroU64::new(5).unwrap(); 2],
         ">f4".into(), // big endian float32
-        FillValueMetadataV2::NaN,
+        FillValueMetadata::from(f32::NAN),
         None,
         None,
     )
@@ -98,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     array.metadata_opt(&convert_array_metadata_to_v3).to_string_pretty()
     // );
 
-    array.store_chunk_elements::<f32>(&[0, 1], &[0.0; 5 * 5])?;
+    array.store_chunk(&[0, 1], &[0.0f32; 5 * 5])?;
 
     // Print the keys in the store
     println!("The store contains keys:");
