@@ -2,9 +2,7 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-use zarrs::array::chunk_grid::{
-    ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement,
-};
+use zarrs::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGridConfiguration};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
 use zarrs_metadata::v3::MetadataV3;
@@ -59,18 +57,10 @@ fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
             "rectilinear",
             RectilinearChunkGridConfiguration::Inline {
                 chunk_shapes: vec![
-                    ChunkEdgeLengths::Varying(vec![
-                        RunLengthElement::Repeated([
-                            NonZeroU64::new(1).unwrap(),
-                            NonZeroU64::new(3).unwrap(),
-                        ]),
-                        RunLengthElement::Single(NonZeroU64::new(3).unwrap()),
-                        RunLengthElement::Single(NonZeroU64::new(2).unwrap()),
-                    ]),
-                    ChunkEdgeLengths::Varying(vec![
-                        RunLengthElement::Single(NonZeroU64::new(4).unwrap()),
-                        RunLengthElement::Single(NonZeroU64::new(4).unwrap()),
-                    ]),
+                    // Varying: chunk sizes [1, 1, 1, 3, 2] (run-length encoded as [[1,3], 3, 2])
+                    ChunkEdgeLengths::Varying(serde_json::from_str("[[1,3], 3, 2]").unwrap()),
+                    // Scalar: regular 4-element chunks
+                    ChunkEdgeLengths::Scalar(NonZeroU64::new(4).unwrap()),
                 ],
             },
         ),

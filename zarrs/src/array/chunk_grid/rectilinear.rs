@@ -474,10 +474,7 @@ mod tests {
         assert_eq!(chunk_grid.grid_shape(), &[3, 3]);
 
         // In-bounds array index resolves to a chunk
-        assert_eq!(
-            chunk_grid.chunk_indices(&[5, 5]).unwrap(),
-            Some(vec![1, 1])
-        );
+        assert_eq!(chunk_grid.chunk_indices(&[5, 5]).unwrap(), Some(vec![1, 1]));
 
         // array_indices_inbounds respects array shape, not chunk extent
         assert!(chunk_grid.array_indices_inbounds(&[5, 5]));
