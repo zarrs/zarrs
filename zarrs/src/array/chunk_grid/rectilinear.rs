@@ -75,15 +75,11 @@ pub use zarrs_metadata_ext::chunk_grid::rectilinear::{
 };
 use zarrs_registry::chunk_grid::RECTILINEAR;
 
-use crate::{
-    array::{
-        chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits},
-        ArrayIndices, ArrayShape, ChunkShape,
-    },
-    array_subset::IncompatibleDimensionalityError,
-    metadata::v3::MetadataV3,
-    plugin::{PluginCreateError, PluginMetadataInvalidError},
-};
+use crate::array::chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
+use crate::array::{ArrayIndices, ArrayShape, ChunkShape};
+use crate::array_subset::IncompatibleDimensionalityError;
+use crate::metadata::v3::MetadataV3;
+use crate::plugin::{PluginCreateError, PluginMetadataInvalidError};
 
 // Register the chunk grid.
 inventory::submit! {
