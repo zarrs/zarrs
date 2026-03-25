@@ -42,10 +42,10 @@ pub enum RunLengthElement {
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug, derive_more::From)]
 #[serde(untagged)]
 pub enum ChunkEdgeLengths {
-    /// An array of chunk edge lengths (potentially run-length encoded).
-    Varying(Vec<RunLengthElement>),
     /// A scalar value representing a regular grid with fixed-size chunks.
     Scalar(NonZeroU64),
+    /// An array of chunk edge lengths (potentially run-length encoded).
+    Varying(Vec<RunLengthElement>),
 }
 
 #[cfg(test)]
