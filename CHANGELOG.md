@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `zstd` and `blosc` codecs on WASM ([#369](https://github.com/zarrs/zarrs/pull/369) by [@keller-mark])
+  - On WASM, the `blosc` codec uses `blusc` (a pure Rust reimplementation of `c-blosc2`) rather than `c-blosc`
+
 ## [0.23.8] - 2026-03-26
 
 ### Added
