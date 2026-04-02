@@ -55,7 +55,7 @@ jobs:
           toolchain: "stable"
           targets: "wasm32-unknown-unknown"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async"
+      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async zstd blosc"
         working-directory: ./zarrs
   test_windows:
     runs-on: windows-latest
