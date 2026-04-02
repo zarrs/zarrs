@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-21
+
 ### Added
 - Add `CodecSpecificOptions` for codec-specific runtime configuration
 - Add `with_codec_specific_options` default method to `ArrayToArrayCodecTraits`, `ArrayToBytesCodecTraits`, and `BytesToBytesCodecTraits`
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Split from the `zarrs::array::codec` module of `zarrs` 0.23.0-beta.5
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_codec-v0.2.0...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_codec-v0.2.1...HEAD
+[0.2.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.2.1
 [0.2.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.2.0
 [0.1.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_codec-v0.1.0

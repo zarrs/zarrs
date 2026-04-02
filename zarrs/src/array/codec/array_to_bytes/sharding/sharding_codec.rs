@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::num::NonZeroU64;
+use std::ops::IndexMut;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
@@ -12,8 +13,8 @@ use super::sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use super::sharding_partial_decoder_sync::ShardingPartialDecoder;
 use super::{
     CodecChain, ShardingCodecConfiguration, ShardingCodecConfigurationV1, ShardingCodecOptions,
-    ShardingIndexLocation, calculate_chunks_per_shard, compute_index_encoded_size,
-    decode_shard_index, sharding_index_shape, sharding_partial_encoder,
+    ShardingIndexLocation, SubchunkWriteOrder, calculate_chunks_per_shard,
+    compute_index_encoded_size, decode_shard_index, sharding_index_shape, sharding_partial_encoder,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
@@ -702,6 +703,51 @@ impl ShardingCodec {
         num_chunks * chunk_encoded_size + index_encoded_size
     }
 
+    /// Encode an inner chunk from the `decoded_value` or return None.
+    #[expect(clippy::too_many_arguments)]
+    fn encode_inner_by_chunk_index(
+        &self,
+        chunk_index: usize,
+        decoded_value: &ArrayBytes,
+        shard_shape: &[NonZeroU64],
+        chunks_per_shard: &[NonZeroU64],
+        fill_value: &FillValue,
+        data_type: &DataType,
+        subchunk_shape: &[NonZeroU64],
+        options_inner: &CodecOptions,
+    ) -> Option<Result<(usize, Vec<u8>), CodecError>> {
+        let chunk_subset = self
+            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
+            .expect("inbounds chunk");
+
+        let bytes = decoded_value.extract_array_subset(
+            &chunk_subset,
+            bytemuck::must_cast_slice(shard_shape),
+            data_type,
+        );
+        let bytes = match bytes {
+            Ok(bytes) => bytes,
+            Err(err) => return Some(Err(err)),
+        };
+
+        let is_fill_value = bytes.is_fill_value(fill_value);
+        if is_fill_value {
+            None
+        } else {
+            let encoded_chunk = self.inner_codecs.encode(
+                bytes,
+                subchunk_shape,
+                data_type,
+                fill_value,
+                options_inner,
+            );
+            match encoded_chunk {
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
+                Err(err) => Some(Err(err)),
+            }
+        }
+    }
+
     /// Preallocate shard, encode and write chunks (in parallel), then truncate shard
     #[allow(clippy::too_many_lines)]
     #[expect(clippy::too_many_arguments)]
@@ -736,9 +782,9 @@ impl ShardingCodec {
 
         // Allocate the decoded shard index
         let mut shard_index = vec![u64::MAX; index_shape.num_elements_usize()];
-        let encoded_shard_offset: AtomicUsize = match self.index_location {
-            ShardingIndexLocation::Start => index_encoded_size.into(),
-            ShardingIndexLocation::End => 0.into(),
+        let encoded_shard_offset: usize = match self.index_location {
+            ShardingIndexLocation::Start => index_encoded_size,
+            ShardingIndexLocation::End => 0,
         };
 
         // Calc self/internal concurrent limits
@@ -751,64 +797,121 @@ impl ShardingCodec {
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
+        let n_chunks = chunks_per_shard
+            .as_slice()
+            .iter()
+            .map(|i| usize::try_from(i.get()).unwrap())
+            .product::<usize>();
+        let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
         // Encode the shards and update the shard index
-        {
-            let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
-            let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
-            let n_chunks = chunks_per_shard
-                .as_slice()
-                .iter()
-                .map(|i| usize::try_from(i.get()).unwrap())
-                .product::<usize>();
-            crate::iter_concurrent_limit!(
-                shard_concurrent_limit,
-                (0..n_chunks),
-                try_for_each,
-                |chunk_index: usize| {
-                    let chunk_subset = self
-                        .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                        .expect("inbounds chunk");
-                    let bytes = decoded_value.extract_array_subset(
-                        &chunk_subset,
-                        bytemuck::must_cast_slice(shard_shape),
-                        data_type,
-                    )?;
-                    if !bytes.is_fill_value(fill_value) {
-                        let chunk_encoded = self.inner_codecs.encode(
-                            bytes,
-                            subchunk_shape,
-                            data_type,
+        let encoded_shard_offset = match self.options.subchunk_write_order() {
+            SubchunkWriteOrder::Random => {
+                let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
+                let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
+                crate::iter_concurrent_limit!(
+                    shard_concurrent_limit,
+                    (0..n_chunks),
+                    try_for_each,
+                    |chunk_index: usize| {
+                        let maybe_chunk_encoded_with_id = self.encode_inner_by_chunk_index(
+                            chunk_index,
+                            decoded_value,
+                            shard_shape,
+                            chunks_per_shard.as_slice(),
                             fill_value,
+                            data_type,
+                            subchunk_shape,
                             &options,
-                        )?;
+                        );
+                        if let Some(chunk_encoded_with_id) = maybe_chunk_encoded_with_id {
+                            // We don't need to worry about the id because the order here is random.
+                            let chunk_encoded = chunk_encoded_with_id?.1;
+                            let chunk_offset = encoded_shard_offset_atomic.fetch_add(
+                                chunk_encoded.len(),
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
+                            if chunk_offset + chunk_encoded.len() > shard_size_bounded {
+                                // This is a dev error, indicates the codec bounded size is not correct
+                                return Err(CodecError::from(
+                                    "Sharding did not allocate a large enough buffer",
+                                ));
+                            }
 
-                        let chunk_offset = encoded_shard_offset
-                            .fetch_add(chunk_encoded.len(), std::sync::atomic::Ordering::Relaxed);
-                        if chunk_offset + chunk_encoded.len() > shard_size_bounded {
-                            // This is a dev error, indicates the codec bounded size is not correct
-                            return Err(CodecError::from(
-                                "Sharding did not allocate a large enough buffer",
-                            ));
+                            unsafe {
+                                let shard_index_unsafe = shard_index_slice
+                                    .index_mut(chunk_index * 2..chunk_index * 2 + 2);
+                                shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
+                                shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
+
+                                shard_slice
+                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
+                                    .copy_from_slice(&chunk_encoded);
+                            }
                         }
-
+                        Ok(())
+                    }
+                )?;
+                Ok::<_, CodecError>(
+                    encoded_shard_offset_atomic.load(std::sync::atomic::Ordering::Relaxed),
+                )
+            }
+            SubchunkWriteOrder::C => {
+                // TODO: Replace this chunk order with the desired order i.e., a `Vec` of the ids i.e., for morton order.
+                let chunk_order = 0..n_chunks;
+                let encoded_chunk_ids_and_chunks: Vec<(usize, Vec<u8>)> =
+                    crate::iter_concurrent_limit!(
+                        shard_concurrent_limit,
+                        chunk_order,
+                        filter_map,
+                        |chunk_index: usize| {
+                            self.encode_inner_by_chunk_index(
+                                chunk_index,
+                                decoded_value,
+                                shard_shape,
+                                chunks_per_shard.as_slice(),
+                                fill_value,
+                                data_type,
+                                subchunk_shape,
+                                &options,
+                            )
+                        }
+                    )
+                    .collect::<Result<Vec<_>, _>>()?;
+                let total_offset = encoded_chunk_ids_and_chunks.iter().fold(
+                    encoded_shard_offset,
+                    |acc: usize, (i, chunk)| {
+                        let chunk_len_usize = chunk.len();
+                        let chunk_length = u64::try_from(chunk_len_usize).unwrap();
+                        let chunk_offset = u64::try_from(acc).unwrap();
+                        let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
+                        shard_index_unsafe[0] = chunk_offset;
+                        shard_index_unsafe[1] = chunk_length;
+                        acc + chunk_len_usize
+                    },
+                );
+                crate::iter_concurrent_limit!(
+                    shard_concurrent_limit,
+                    encoded_chunk_ids_and_chunks,
+                    for_each,
+                    |(chunk_index, chunk): (usize, Vec<u8>)| {
                         unsafe {
-                            let shard_index_unsafe =
-                                shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2);
-                            shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
-                            shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
+                            let shard_index_loc =
+                                &shard_index[chunk_index * 2..chunk_index * 2 + 2];
+                            let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
+                            let chunk_encoded_len = usize::try_from(shard_index_loc[1]).unwrap();
 
                             shard_slice
-                                .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
-                                .copy_from_slice(&chunk_encoded);
+                                .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
+                                .copy_from_slice(&chunk);
                         }
                     }
-                    Ok(())
-                }
-            )?;
-        }
+                );
+                Ok(total_offset)
+            }
+        }?;
 
         // Truncate shard
-        let shard_length = encoded_shard_offset.load(std::sync::atomic::Ordering::Relaxed)
+        let shard_length = encoded_shard_offset
             + match self.index_location {
                 ShardingIndexLocation::Start => 0,
                 ShardingIndexLocation::End => index_encoded_size,
@@ -879,49 +982,29 @@ impl ShardingCodec {
         );
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
-        let encode_chunk = |chunk_index| {
-            let chunk_subset = self
-                .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                .expect("inbounds chunk");
-
-            let bytes = decoded_value.extract_array_subset(
-                &chunk_subset,
-                bytemuck::must_cast_slice(shard_shape),
-                data_type,
-            );
-            let bytes = match bytes {
-                Ok(bytes) => bytes,
-                Err(err) => return Some(Err(err)),
-            };
-
-            let is_fill_value = bytes.is_fill_value(fill_value);
-            if is_fill_value {
-                None
-            } else {
-                let encoded_chunk = self.inner_codecs.encode(
-                    bytes,
-                    subchunk_shape,
-                    data_type,
-                    fill_value,
-                    &options_inner,
-                );
-                match encoded_chunk {
-                    Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
-                    Err(err) => Some(Err(err)),
-                }
-            }
-        };
-
         #[cfg(not(target_arch = "wasm32"))]
-        let iterator = (0..n_chunks).into_par_iter();
+        let iterator = match self.options.subchunk_write_order() {
+            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
+        };
         #[cfg(target_arch = "wasm32")]
-        let iterator = 0..n_chunks;
+        let iterator = match self.options.subchunk_write_order() {
+            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
+        };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
             shard_concurrent_limit,
             iterator,
             filter_map,
-            encode_chunk
+            |chunk_index| self.encode_inner_by_chunk_index(
+                chunk_index,
+                decoded_value,
+                shard_shape,
+                chunks_per_shard.as_slice(),
+                fill_value,
+                data_type,
+                subchunk_shape,
+                &options_inner
+            )
         )
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -935,34 +1018,71 @@ impl ShardingCodec {
 
         // Allocate the decoded shard index
         let mut shard_index = vec![u64::MAX; index_shape.num_elements_usize()];
-        let encoded_shard_offset: AtomicUsize = match self.index_location {
-            ShardingIndexLocation::Start => index_encoded_size.into(),
-            ShardingIndexLocation::End => 0.into(),
+        let encoded_shard_offset = match self.index_location {
+            ShardingIndexLocation::Start => index_encoded_size,
+            ShardingIndexLocation::End => 0,
         };
+        let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
 
         // Write shard and update shard index
         if !encoded_chunks.is_empty() {
-            let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
-            let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
-            crate::iter_concurrent_limit!(
-                options.concurrent_target(),
-                encoded_chunks,
-                for_each,
-                |(chunk_index, chunk_encoded): (usize, Vec<u8>)| {
-                    let chunk_offset = encoded_shard_offset
-                        .fetch_add(chunk_encoded.len(), std::sync::atomic::Ordering::Relaxed);
-                    unsafe {
-                        let shard_index_unsafe =
-                            shard_index_slice.index_mut(chunk_index * 2..chunk_index * 2 + 2);
-                        shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
-                        shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
+            match self.options.subchunk_write_order() {
+                SubchunkWriteOrder::Random => {
+                    let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
+                    let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
+                    crate::iter_concurrent_limit!(
+                        options.concurrent_target(),
+                        encoded_chunks,
+                        for_each,
+                        |(chunk_index, chunk_encoded): (usize, Vec<u8>)| {
+                            let chunk_offset = encoded_shard_offset_atomic.fetch_add(
+                                chunk_encoded.len(),
+                                std::sync::atomic::Ordering::Relaxed,
+                            );
+                            unsafe {
+                                let shard_index_unsafe = shard_index_slice
+                                    .index_mut(chunk_index * 2..chunk_index * 2 + 2);
+                                shard_index_unsafe[0] = u64::try_from(chunk_offset).unwrap();
+                                shard_index_unsafe[1] = u64::try_from(chunk_encoded.len()).unwrap();
 
-                        shard_slice
-                            .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
-                            .copy_from_slice(&chunk_encoded);
-                    }
+                                shard_slice
+                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded.len())
+                                    .copy_from_slice(&chunk_encoded);
+                            }
+                        }
+                    );
                 }
-            );
+                SubchunkWriteOrder::C => {
+                    let mut offset = encoded_shard_offset;
+                    for (i, chunk) in &encoded_chunks {
+                        let chunk_len_usize = chunk.len();
+                        let chunk_length = u64::try_from(chunk_len_usize).unwrap();
+                        let chunk_offset = u64::try_from(offset).unwrap();
+                        let shard_index_unsafe = shard_index.index_mut(i * 2..i * 2 + 2);
+                        shard_index_unsafe[0] = chunk_offset;
+                        shard_index_unsafe[1] = chunk_length;
+                        offset += chunk_len_usize;
+                    }
+                    crate::iter_concurrent_limit!(
+                        options.concurrent_target(),
+                        encoded_chunks,
+                        for_each,
+                        |(chunk_index, chunk): (usize, Vec<u8>)| {
+                            unsafe {
+                                let shard_index_loc =
+                                    &shard_index[chunk_index * 2..chunk_index * 2 + 2];
+                                let chunk_offset = usize::try_from(shard_index_loc[0]).unwrap();
+                                let chunk_encoded_len =
+                                    usize::try_from(shard_index_loc[1]).unwrap();
+
+                                shard_slice
+                                    .index_mut(chunk_offset..chunk_offset + chunk_encoded_len)
+                                    .copy_from_slice(&chunk);
+                            }
+                        }
+                    );
+                }
+            }
         }
 
         // Write shard index
@@ -991,7 +1111,14 @@ impl ShardingCodec {
         Ok(shard)
     }
 
-    fn decode_index(
+    /// Decode the shard index inside the given encoded shard.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if the decoded shard index is not valid.
+    ///
+    /// # Panics
+    /// Panics if the encoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
+    pub fn decode_index(
         &self,
         encoded_shard: &[u8],
         chunks_per_shard: &[NonZeroU64],

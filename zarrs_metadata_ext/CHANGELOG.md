@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-03-26
+
+### Added
+- Add `rectilinear` chunk grid submodule
+
 ## [0.4.1] - 2026-02-02
 
 - Add `Crc32cCodecConfiguration::Numcodecs`, `Crc32cCodecConfigurationNumcodecs`, `Crc32cCodecConfigurationLocation`
@@ -78,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - rename `InvalidPermutationError` to `TransposeOrderError`
 - change the suffix of experimental codec configurations from V1 to V0 (`gdeflate`, `squeeze`, `vlen`, `vlen_v2`)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.1...HEAD
+[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.2...HEAD
+[0.4.2]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.1...zarrs_metadata_ext-v0.4.2
 [0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.1
 [0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.0
 [0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.3.0

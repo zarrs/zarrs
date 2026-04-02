@@ -2,15 +2,12 @@
 
 use std::num::NonZeroU64;
 use std::sync::Arc;
-
-use ndarray::ArrayD;
-
-use zarrs::array::chunk_grid::RectangularChunkGridConfiguration;
-use zarrs::metadata::v3::MetadataV3;
+use zarrs::array::chunk_grid::{ChunkEdgeLengths, RectilinearChunkGridConfiguration};
 use zarrs::storage::ReadableWritableListableStorage;
 use zarrs::storage::storage_adapter::usage_log::UsageLogStorageAdapter;
+use zarrs_metadata::v3::MetadataV3;
 
-fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
+fn rectilinear_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     use rayon::prelude::{IntoParallelIterator, ParallelIterator};
     use zarrs::array::{ArraySubset, ZARR_NAN_F32, codec, data_type};
     use zarrs::node::Node;
@@ -57,18 +54,14 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     let array = zarrs::array::ArrayBuilder::new(
         vec![8, 8], // array shape
         MetadataV3::new_with_configuration(
-            "rectangular",
-            RectangularChunkGridConfiguration {
-                chunk_shape: vec![
-                    vec![
-                        NonZeroU64::new(1).unwrap(),
-                        NonZeroU64::new(2).unwrap(),
-                        NonZeroU64::new(3).unwrap(),
-                        NonZeroU64::new(2).unwrap(),
-                    ]
-                    .into(),
-                    NonZeroU64::new(4).unwrap().into(),
-                ], // chunk sizes
+            "rectilinear",
+            RectilinearChunkGridConfiguration::Inline {
+                chunk_shapes: vec![
+                    // Varying: chunk sizes [1, 1, 1, 3, 2] (run-length encoded as [[1,3], 3, 2])
+                    ChunkEdgeLengths::Varying(serde_json::from_str("[[1,3], 3, 2]").unwrap()),
+                    // Scalar: regular 4-element chunks
+                    ChunkEdgeLengths::Scalar(NonZeroU64::new(4).unwrap()),
+                ],
             },
         ),
         data_type::float32(),
@@ -132,17 +125,17 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Read the whole array
-    let data_all: ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
+    let data_all: ndarray::ArrayD<f32> = array.retrieve_array_subset(&array.subset_all())?;
     println!("The whole array is:\n{data_all}\n");
 
     // Read a chunk back from the store
     let chunk_indices = vec![1, 0];
-    let data_chunk: ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
+    let data_chunk: ndarray::ArrayD<f32> = array.retrieve_chunk(&chunk_indices)?;
     println!("Chunk [1,0] is:\n{data_chunk}\n");
 
     // Read the central 4x2 subset of the array
     let subset_4x2 = ArraySubset::new_with_ranges(&[2..6, 3..5]); // the center 4x2 region
-    let data_4x2: ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
+    let data_4x2: ndarray::ArrayD<f32> = array.retrieve_array_subset(&subset_4x2)?;
     println!("The middle 4x2 subset is:\n{data_4x2}\n");
 
     // Show the hierarchy
@@ -154,7 +147,7 @@ fn rectangular_array_write_read() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    if let Err(err) = rectangular_array_write_read() {
+    if let Err(err) = rectilinear_array_write_read() {
         println!("{:?}", err);
     }
 }

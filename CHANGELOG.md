@@ -5,11 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
+
+## [0.23.9](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.9) - 2026-04-02
+
+### Fixed
+- Fix `zstd` and `blosc` codecs on WASM ([#369](https://github.com/zarrs/zarrs/pull/369) by [@keller-mark])
+  - On WASM, the `blosc` codec uses `blusc` (a pure Rust reimplementation of `c-blosc2`) rather than `c-blosc`
+
+## [0.23.8] - 2026-03-26
 
 ### Added
-- Add `Array::with_codec_specific_options` and `Array::set_codec_specific_options` to reconfigure codec chains with `CodecSpecificOptions`
+- Add `rectilinear` chunk grid
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.2
+- Replace `rectangular_array_write_read` example with `rectilinear_chunk_grid`
+
+## [0.23.7] - 2026-03-21
+
+### Added
 - Add `ShardingCodecOptions` for runtime configuration of the sharding codec
+  - Subchunks can now be written in C-major order via `ShardingCodecOptions.{set_,with_,}subchunk_write_order` (by [@ilan-gold])
+- Add `Array::with_codec_specific_options` and `Array::set_codec_specific_options` to reconfigure codec chains with `CodecSpecificOptions`
 - Add `CodecChain::with_codec_specific_options`
 
 ### Changed
@@ -2073,7 +2091,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs-v0.23.6...HEAD
+[0.23.8]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.8
+[0.23.7]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.7
 [0.23.6]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.6
 [0.23.5]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.5
 [0.23.4]: https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.4

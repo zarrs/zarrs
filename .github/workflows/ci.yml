@@ -55,7 +55,7 @@ jobs:
           toolchain: "stable"
           targets: "wasm32-unknown-unknown"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async"
+      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async zstd blosc"
         working-directory: ./zarrs
   test_windows:
     runs-on: windows-latest
@@ -122,8 +122,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-features -- -D warnings
-      - run: cargo clippy --all-features --all-targets -- -A clippy::pedantic
+      - run: cargo clippy --all-features --all-targets -- -D warnings -A clippy::pedantic
   doc:
     runs-on: ubuntu-latest
     steps:

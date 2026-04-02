@@ -8,10 +8,12 @@
 #![doc = include_str!("../../doc/status/chunk_grids.md")]
 
 pub mod rectangular;
+pub mod rectilinear;
 pub mod regular;
 pub mod regular_bounded;
 
 pub use rectangular::*;
+pub use rectilinear::*;
 pub use regular::*;
 pub use regular_bounded::*;
 
