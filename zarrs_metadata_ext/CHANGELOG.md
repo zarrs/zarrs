@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `DeltaCodecConfiguration`, `DeltaCodecConfigurationV1` (`zarrs.delta`)
+- Add `DeltaCodecConfigurationNumcodecs` (`numcodecs.delta` / V2 `delta`)
+
 ## [0.4.2] - 2026-03-26
 
 ### Added

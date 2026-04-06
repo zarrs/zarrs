@@ -2,6 +2,7 @@
 
 #[cfg(feature = "bitround")]
 pub mod bitround;
+pub mod delta;
 pub mod fixedscaleoffset;
 pub mod reshape;
 pub mod squeeze;

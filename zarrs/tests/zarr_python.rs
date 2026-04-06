@@ -136,3 +136,81 @@ fn zarr_python_v3_consolidated_metadata_null() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[test]
+fn zarr_python_compat_delta_v2() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_i2.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<i16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<i16> = (0..100 * 100_i32).map(|i| i as i16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}
+
+#[test]
+fn zarr_python_compat_delta_v2_astype() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_i2_astype_i4.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<i16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<i16> = (0..100 * 100_i32).map(|i| i as i16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}
+
+#[test]
+fn zarr_python_compat_delta_v2_unsigned_astype() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_u2_astype_u4.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<u16> = (0..100 * 100_u32).map(|i| i as u16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}
+
+#[test]
+fn zarr_python_compat_delta_v3() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_v3_i2.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<i16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<i16> = (0..100 * 100_i32).map(|i| i as i16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}
+
+#[test]
+fn zarr_python_compat_delta_v3_astype() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_v3_i2_astype_i4.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<i16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<i16> = (0..100 * 100_i32).map(|i| i as i16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}
+
+#[test]
+fn zarr_python_compat_delta_v3_unsigned_astype() -> Result<(), Box<dyn Error>> {
+    let path = PathBuf::from("tests/data/zarr_python_compat/delta_v3_u2_astype_u4.zarr");
+    let store = Arc::new(FilesystemStore::new(&path)?);
+    let array = Array::open(store, "/")?;
+    assert_eq!(array.shape(), vec![100, 100]);
+    let elements = array
+        .retrieve_array_subset::<Vec<u16>>(&ArraySubset::new_with_shape(array.shape().to_vec()))?;
+    let expected: Vec<u16> = (0..100 * 100_u32).map(|i| i as u16).collect();
+    assert_eq!(elements, expected);
+    Ok(())
+}

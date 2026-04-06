@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
 
+### Added
+- Add `delta` array-to-array codec (`zarrs.delta` and `numcodecs.delta`/V2 `delta`)
+
 ## [0.23.9](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.9) - 2026-04-02
 
 ### Fixed

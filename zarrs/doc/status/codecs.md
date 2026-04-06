@@ -2,6 +2,8 @@
 | -------------- | ---------------------------------- | ----------------------------------- | ------------- |
 | Array to Array | [`transpose`]                      | (implicit with `"order": "F"`)      | **transpose** |
 |                | 🚧[`reshape`]                      | -                                   |               |
+|                | 🚧[`numcodecs.delta`]              | `delta`                             |               |
+|                | 🚧[`zarrs.delta`]                  | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | [`bitround`]                       | `bitround`                          | bitround      |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
@@ -45,6 +47,8 @@
 
 [`transpose`]: crate::array::codec::array_to_array::transpose
 [`reshape`]: crate::array::codec::array_to_array::reshape
+[`numcodecs.delta`]: crate::array::codec::array_to_array::delta
+[`zarrs.delta`]: crate::array::codec::array_to_array::delta
 [`bitround`]: crate::array::codec::array_to_array::bitround
 [`numcodecs.fixedscaleoffset`]: crate::array::codec::array_to_array::fixedscaleoffset
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze

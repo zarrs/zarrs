@@ -21,6 +21,7 @@ use std::sync::Arc;
 // Array to array
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
+pub use array_to_array::delta::*;
 pub use array_to_array::fixedscaleoffset::*;
 pub use array_to_array::reshape::*;
 pub use array_to_array::squeeze::*;

@@ -38,6 +38,8 @@ pub use registered::*;
 
 /// `zarrs` codec metadata.
 mod zarrs {
+    /// `delta` codec metadata (`zarrs` experimental).
+    pub(super) mod delta;
     /// `gdeflate` codec metadata (`zarrs` experimental).
     pub mod gdeflate;
     /// `squeeze` codec metadata (`zarrs` experimental).
@@ -47,7 +49,13 @@ mod zarrs {
     /// `vlen_v2` codec metadata (`zarrs` experimental).
     pub mod vlen_v2;
 }
-pub use zarrs::*;
+pub use zarrs::{gdeflate, squeeze, vlen, vlen_v2};
+
+/// `delta` codec metadata (both `zarrs` and `numcodecs` variants).
+pub mod delta {
+    pub use super::numcodecs::delta::*;
+    pub use super::zarrs::delta::*;
+}
 
 /// `numcodecs` codec metadata.
 mod numcodecs {
@@ -57,6 +65,8 @@ mod numcodecs {
     pub mod bitround;
     /// `bz2` codec metadata (`numcodecs`).
     pub mod bz2;
+    /// `delta` codec metadata (`numcodecs`).
+    pub(super) mod delta;
     /// `fixedscaleoffset` codec metadata (`numcodecs`).
     pub mod fixedscaleoffset;
     /// `fletcher32` codec metadata (`numcodecs`).
@@ -72,4 +82,6 @@ mod numcodecs {
     /// `zlib` codec metadata (`numcodecs`).
     pub mod zlib;
 }
-pub use numcodecs::*;
+pub use numcodecs::{
+    adler32, bitround, bz2, fixedscaleoffset, fletcher32, pcodec, shuffle, vlen_array, zfpy, zlib,
+};

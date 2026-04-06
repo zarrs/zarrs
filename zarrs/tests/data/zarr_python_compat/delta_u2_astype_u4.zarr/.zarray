@@ -1,0 +1,23 @@
+{
+  "shape": [
+    100,
+    100
+  ],
+  "chunks": [
+    50,
+    50
+  ],
+  "dtype": "<u2",
+  "fill_value": 0,
+  "order": "C",
+  "filters": [
+    {
+      "id": "delta",
+      "dtype": "<u2",
+      "astype": "<u4"
+    }
+  ],
+  "dimension_separator": ".",
+  "compressor": null,
+  "zarr_format": 2
+}

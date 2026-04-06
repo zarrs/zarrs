@@ -1413,6 +1413,55 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
+        name: DeltaCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: None,
+        factory: |_dt| CodecInstance::ArrayToArray(Arc::new(DeltaCodec::new())),
+        lossy: false,
+        non_deterministic: false,
+        skip: Some(is_vlen_or_optional),
+    });
+
+    {
+        use zarrs::array::codec::DeltaCodecConfigurationNumcodecs;
+        use zarrs_metadata::v2::DataTypeMetadataV2;
+        codecs.push(CodecDef {
+            name: NumcodecsDeltaCodec::aliases_v3().default_name.clone(),
+            category: CodecCategory::ArrayToArray,
+            name_suffix: None,
+            factory: |dt| {
+                // numcodecs.delta requires a dtype in the configuration
+                let dtype_str = match data_type_id(dt) {
+                    "int8" => "|i1",
+                    "int16" => "<i2",
+                    "int32" => "<i4",
+                    "int64" => "<i8",
+                    "uint8" => "|u1",
+                    "uint16" => "<u2",
+                    "uint32" => "<u4",
+                    "uint64" => "<u8",
+                    "float32" => "<f4",
+                    "float64" => "<f8",
+                    // Unsupported types — codec will fail at runtime and be marked unsupported
+                    _ => "<f8",
+                };
+                CodecInstance::ArrayToArray(Arc::new(
+                    NumcodecsDeltaCodec::new_with_configuration(
+                        &DeltaCodecConfigurationNumcodecs {
+                            dtype: DataTypeMetadataV2::Simple(dtype_str.to_string()),
+                            astype: None,
+                        },
+                    )
+                    .unwrap(),
+                ))
+            },
+            lossy: false,
+            non_deterministic: false,
+            skip: Some(is_vlen_or_optional),
+        });
+    }
+
+    codecs.push(CodecDef {
         name: FixedScaleOffsetCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: None,
@@ -1777,6 +1826,13 @@ mod compatibility_matrix {
     fn registered_codecs() -> Vec<(Cow<'static, str>, &'static str)> {
         vec![
             // Array-to-Array
+            (codec::DeltaCodec::aliases_v3().default_name.clone(), "a2a"),
+            (
+                codec::NumcodecsDeltaCodec::aliases_v3()
+                    .default_name
+                    .clone(),
+                "a2a",
+            ),
             (
                 codec::BitroundCodec::aliases_v3().default_name.clone(),
                 "a2a",
