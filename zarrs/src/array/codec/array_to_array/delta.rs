@@ -117,8 +117,12 @@ mod tests {
     fn codec_delta_zarrs_configuration_valid() {
         let json = r#"{}"#;
         assert!(serde_json::from_str::<DeltaCodecConfigurationV1>(json).is_ok());
+    }
+
+    #[test]
+    fn codec_delta_zarrs_configuration_invalid_unknown_field() {
         let json = r#"{"astype": "<i2"}"#;
-        assert!(serde_json::from_str::<DeltaCodecConfigurationV1>(json).is_ok());
+        assert!(serde_json::from_str::<DeltaCodecConfigurationV1>(json).is_err());
     }
 
     #[test]

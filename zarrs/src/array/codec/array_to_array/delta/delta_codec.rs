@@ -11,7 +11,6 @@ use zarrs_data_type::codec_traits::fixedscaleoffset::{
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v2::DataTypeMetadataV2;
-use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use crate::array::{DataType, FillValue};
@@ -28,11 +27,6 @@ fn v2_dtype_to_data_type(dtype: &DataTypeMetadataV2) -> Result<DataType, PluginC
     };
     DataType::from_metadata(&data_type_metadata_v2_to_v3(dtype).map_err(err)?)
         .map_err(|e| PluginCreateError::Other(e.to_string()))
-}
-
-/// Convert a `MetadataV3` to a `DataType`.
-fn v3_dtype_to_data_type(dtype: &MetadataV3) -> Result<DataType, PluginCreateError> {
-    DataType::from_metadata(dtype).map_err(|e| PluginCreateError::Other(e.to_string()))
 }
 
 /// Get the `FixedScaleOffsetElementType` for a data type, or return a codec error.
@@ -154,7 +148,10 @@ fn delta_decode_bytes(bytes: &[u8], element_type: FixedScaleOffsetElementType) -
     }
 }
 
-/// Cast bytes from one numeric element type to another via `f64` intermediate.
+/// Cast bytes from one numeric element type to another.
+///
+/// Integer-to-integer and integer-to-float casts are performed directly (C-style truncation),
+/// matching numpy's `astype` behaviour. Float-to-integer casts use the float value directly.
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -166,49 +163,70 @@ fn cast_bytes(
     from: FixedScaleOffsetElementType,
     to: FixedScaleOffsetElementType,
 ) -> Vec<u8> {
-    macro_rules! read_f64 {
-        ($bytes:expr, $ty:ty, $size:expr) => {
-            $bytes
-                .as_chunks::<$size>()
-                .0
-                .iter()
-                .map(|c| <$ty>::from_ne_bytes(*c) as f64)
-                .collect::<Vec<f64>>()
-        };
+    use FixedScaleOffsetElementType as ET;
+
+    if from == to {
+        return bytes.to_vec();
     }
-    macro_rules! write_from_f64 {
-        ($elems:expr, $ty:ty) => {
-            $elems
-                .into_iter()
-                .flat_map(|e| (e as $ty).to_ne_bytes())
-                .collect::<Vec<u8>>()
+
+    macro_rules! cast_to {
+        ($chunks:expr, $from_ty:ty, $to:expr) => {
+            match $to {
+                ET::I8 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as i8).to_ne_bytes())
+                    .collect(),
+                ET::I16 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as i16).to_ne_bytes())
+                    .collect(),
+                ET::I32 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as i32).to_ne_bytes())
+                    .collect(),
+                ET::I64 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as i64).to_ne_bytes())
+                    .collect(),
+                ET::U8 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as u8).to_ne_bytes())
+                    .collect(),
+                ET::U16 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as u16).to_ne_bytes())
+                    .collect(),
+                ET::U32 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as u32).to_ne_bytes())
+                    .collect(),
+                ET::U64 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as u64).to_ne_bytes())
+                    .collect(),
+                ET::F32 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as f32).to_ne_bytes())
+                    .collect(),
+                ET::F64 => $chunks
+                    .iter()
+                    .flat_map(|c| (<$from_ty>::from_ne_bytes(*c) as f64).to_ne_bytes())
+                    .collect(),
+            }
         };
     }
 
-    let as_f64: Vec<f64> = match from {
-        FixedScaleOffsetElementType::I8 => read_f64!(bytes, i8, 1),
-        FixedScaleOffsetElementType::I16 => read_f64!(bytes, i16, 2),
-        FixedScaleOffsetElementType::I32 => read_f64!(bytes, i32, 4),
-        FixedScaleOffsetElementType::I64 => read_f64!(bytes, i64, 8),
-        FixedScaleOffsetElementType::U8 => read_f64!(bytes, u8, 1),
-        FixedScaleOffsetElementType::U16 => read_f64!(bytes, u16, 2),
-        FixedScaleOffsetElementType::U32 => read_f64!(bytes, u32, 4),
-        FixedScaleOffsetElementType::U64 => read_f64!(bytes, u64, 8),
-        FixedScaleOffsetElementType::F32 => read_f64!(bytes, f32, 4),
-        FixedScaleOffsetElementType::F64 => read_f64!(bytes, f64, 8),
-    };
-
-    match to {
-        FixedScaleOffsetElementType::I8 => write_from_f64!(as_f64, i8),
-        FixedScaleOffsetElementType::I16 => write_from_f64!(as_f64, i16),
-        FixedScaleOffsetElementType::I32 => write_from_f64!(as_f64, i32),
-        FixedScaleOffsetElementType::I64 => write_from_f64!(as_f64, i64),
-        FixedScaleOffsetElementType::U8 => write_from_f64!(as_f64, u8),
-        FixedScaleOffsetElementType::U16 => write_from_f64!(as_f64, u16),
-        FixedScaleOffsetElementType::U32 => write_from_f64!(as_f64, u32),
-        FixedScaleOffsetElementType::U64 => write_from_f64!(as_f64, u64),
-        FixedScaleOffsetElementType::F32 => write_from_f64!(as_f64, f32),
-        FixedScaleOffsetElementType::F64 => as_f64.into_iter().flat_map(f64::to_ne_bytes).collect(),
+    match from {
+        ET::I8 => cast_to!(bytes.as_chunks::<1>().0, i8, to),
+        ET::I16 => cast_to!(bytes.as_chunks::<2>().0, i16, to),
+        ET::I32 => cast_to!(bytes.as_chunks::<4>().0, i32, to),
+        ET::I64 => cast_to!(bytes.as_chunks::<8>().0, i64, to),
+        ET::U8 => cast_to!(bytes.as_chunks::<1>().0, u8, to),
+        ET::U16 => cast_to!(bytes.as_chunks::<2>().0, u16, to),
+        ET::U32 => cast_to!(bytes.as_chunks::<4>().0, u32, to),
+        ET::U64 => cast_to!(bytes.as_chunks::<8>().0, u64, to),
+        ET::F32 => cast_to!(bytes.as_chunks::<4>().0, f32, to),
+        ET::F64 => cast_to!(bytes.as_chunks::<8>().0, f64, to),
     }
 }
 
@@ -298,35 +316,21 @@ impl DeltaCodecImpl {
 #[derive(Clone, Debug)]
 pub struct DeltaCodec {
     inner: DeltaCodecImpl,
-    /// Original `astype` metadata for configuration round-trip.
-    astype_metadata: Option<MetadataV3>,
 }
 
 impl DeltaCodec {
-    /// Create a new `zarrs.delta` codec with no `astype` conversion.
+    /// Create a new `zarrs.delta` codec.
     pub fn new() -> Self {
         Self {
             inner: DeltaCodecImpl::new(None, None),
-            astype_metadata: None,
         }
     }
 
     /// Create a new `zarrs.delta` codec from configuration.
-    ///
-    /// # Errors
-    /// Returns an error if the `astype` metadata cannot be converted to a data type.
     pub fn new_with_configuration(
-        configuration: &DeltaCodecConfigurationV1,
+        _configuration: &DeltaCodecConfigurationV1,
     ) -> Result<Self, PluginCreateError> {
-        let astype = configuration
-            .astype
-            .as_ref()
-            .map(v3_dtype_to_data_type)
-            .transpose()?;
-        Ok(Self {
-            inner: DeltaCodecImpl::new(None, astype),
-            astype_metadata: configuration.astype.clone(),
-        })
+        Ok(Self::new())
     }
 }
 
@@ -346,9 +350,7 @@ impl CodecTraits for DeltaCodec {
         _version: ZarrVersion,
         _options: &CodecMetadataOptions,
     ) -> Option<Configuration> {
-        let configuration = DeltaCodecConfiguration::V1(DeltaCodecConfigurationV1 {
-            astype: self.astype_metadata.clone(),
-        });
+        let configuration = DeltaCodecConfiguration::V1(DeltaCodecConfigurationV1 {});
         Some(configuration.into())
     }
 
