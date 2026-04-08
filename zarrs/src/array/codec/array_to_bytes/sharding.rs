@@ -447,7 +447,7 @@ mod tests {
             .unwrap();
         match fill_value_amount {
             FillValueAmount::None => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Unordered => (),
+                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => (),
                 SubchunkWriteOrder::C => {
                     let mut offset_with_len = index.chunks(2).collect::<Vec<&[u64]>>();
                     offset_with_len.sort_by_key(|x| x[0]);
@@ -462,7 +462,7 @@ mod tests {
                 }
             },
             FillValueAmount::Partial => match codec.options.subchunk_write_order() {
-                SubchunkWriteOrder::Unordered => (),
+                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => (),
                 SubchunkWriteOrder::C => {
                     // The sorted index with unwritten elements filtered matches that of the real index
                     let filtered_index = index
