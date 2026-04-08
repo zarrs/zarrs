@@ -461,6 +461,23 @@ impl<TStorage: ?Sized> Array<TStorage> {
         path: NodePath,
         v3: ArrayMetadataV3,
     ) -> Result<Self, ArrayCreateError> {
+        // Create codec chain from V3 metadata
+        let codecs = Arc::new(
+            CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
+        );
+        Self::new_from_builder(storage, path, v3, codecs)
+    }
+
+    /// Create an array from V3 metadata and a pre-built codec chain.
+    ///
+    /// Used by [`ArrayBuilder`](crate::array::ArrayBuilder) to preserve the original codec objects
+    /// with their runtime options without round-tripping through metadata deserialisation.
+    pub(crate) fn new_from_builder(
+        storage: Arc<TStorage>,
+        path: NodePath,
+        v3: ArrayMetadataV3,
+        codecs: Arc<CodecChain>,
+    ) -> Result<Self, ArrayCreateError> {
         // Create data type from V3 metadata
         let data_type = DataType::from_metadata(&v3.data_type)
             .map_err(ArrayCreateError::DataTypeCreateError)?;
@@ -482,11 +499,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 fill_value_metadata: v3.fill_value.clone(),
             }
         })?;
-
-        // Create codec chain from V3 metadata
-        let codecs = Arc::new(
-            CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
-        );
 
         // Create storage transformers
         let storage_transformers =
