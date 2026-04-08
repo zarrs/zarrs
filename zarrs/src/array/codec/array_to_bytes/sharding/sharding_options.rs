@@ -4,11 +4,6 @@
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum SubchunkWriteOrder {
-    /// No order guarantee.
-    ///
-    /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
-    /// For example in the degenerate case of one thread, you may observe (mostly) ordered chunks.
-    Unordered,
     /// An alias for `Unordered`. Soft deprecated.
     ///
     /// `Random` is a misnomer and this variant will be removed in a future release.
@@ -16,6 +11,11 @@ pub enum SubchunkWriteOrder {
     Random,
     /// C order i.e., row-major
     C,
+    /// No order guarantee.
+    ///
+    /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
+    /// For example in the degenerate case of one thread, you may observe (mostly) ordered chunks.
+    Unordered,
     // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
 }
 
