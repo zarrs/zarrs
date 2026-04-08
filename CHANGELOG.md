@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
 
+### Added
+- Add `SubchunkWriteOrder::Unordered` with the same behaviour as `SubchunkWriteOrder::Random`
+  - The `Random` variant is a misnomer and it will be removed in a future release
+
 ## [0.23.9](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.9) - 2026-04-02
 
 ### Fixed
