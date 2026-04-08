@@ -922,33 +922,48 @@ mod tests {
         );
     }
 
-    #[test]
     #[cfg(feature = "sharding")]
-    fn array_builder_codec_specific_options() {
-        use crate::array::codec::array_to_bytes::sharding::{
-            ShardingCodec, ShardingCodecOptions, SubchunkWriteOrder,
-        };
+    fn array_builder_codec_specific_options_impl(
+        write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
+    ) {
+        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecOptions};
         use zarrs_codec::CodecSpecificOptions;
 
         let storage = Arc::new(MemoryStore::new());
         let mut builder = ArrayBuilder::new(vec![8, 8], [2, 2], data_type::int8(), 0i8);
         builder.subchunk_shape(Some(vec![1, 1]));
-        let opts = CodecSpecificOptions::default().with_option(
-            ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+        builder.codec_specific_options(
+            CodecSpecificOptions::default().with_option(
+                ShardingCodecOptions::default().with_subchunk_write_order(write_order),
+            ),
         );
-        builder.codec_specific_options(opts);
         let array = builder.build(storage, "/").unwrap();
 
         let codecs = array.codecs();
-        let codec = codecs.array_to_bytes_codec();
-        let sharding = codec
+        let sharding = codecs
+            .array_to_bytes_codec()
             .as_any()
             .downcast_ref::<ShardingCodec>()
             .expect("expected ShardingCodec");
-        assert!(matches!(
-            sharding.options.subchunk_write_order(),
-            SubchunkWriteOrder::C
-        ));
+        assert!(
+            matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
+            "expected {write_order:?}, got {:?}",
+            sharding.options.subchunk_write_order()
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "sharding")]
+    fn array_builder_codec_specific_options_random() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Random);
+    }
+
+    #[test]
+    #[cfg(feature = "sharding")]
+    fn array_builder_codec_specific_options_c() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
     }
 
     #[cfg(all(feature = "sharding", feature = "zstd"))]
