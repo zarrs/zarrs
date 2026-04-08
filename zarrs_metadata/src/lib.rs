@@ -3,7 +3,7 @@
 //! This crate supports serialisation and deserialisation of Zarr V2 and V3 core metadata.
 //!
 //! [`ArrayMetadata`] and [`GroupMetadata`] can represent any conformant Zarr array/group metadata.
-//! The [`zarrs_metadata_ext`](https://docs.rs/zarrs/latest/zarrs_metadata_ext/) crate supports the serialisation and deserialisation of known Zarr extension point metadata into concrete structures.
+//! The [`zarrs_metadata_ext`](https://docs.rs/zarrs_metadata_ext/latest/zarrs_metadata_ext/) crate supports the serialisation and deserialisation of known Zarr extension point metadata into concrete structures.
 //!
 //! ## Licence
 //! `zarrs_metadata` is licensed under either of
