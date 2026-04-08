@@ -1022,10 +1022,7 @@ mod tests {
     ) {
         use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
-        use crate::array::codec::array_to_bytes::sharding::{
-            ShardingCodec, ShardingCodecBuilder, ShardingCodecOptions,
-        };
-        use zarrs_codec::CodecSpecificOptions;
+        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecBuilder};
 
         const SHAPE: [u64; 2] = [4, 4];
         const SHARD_SHAPE: [u64; 2] = [2, 2];
@@ -1037,11 +1034,7 @@ mod tests {
             .collect();
         let mut codec_builder = ShardingCodecBuilder::new(chunk_shape, &data_type::float64());
         codec_builder.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(5, false))]);
-        let codec = Arc::new(codec_builder.build()).with_codec_specific_options(
-            &CodecSpecificOptions::default().with_option(
-                ShardingCodecOptions::default().with_subchunk_write_order(write_order),
-            ),
-        );
+        let codec = Arc::new(codec_builder.build().with_subchunk_write_order(write_order));
 
         let storage = Arc::new(MemoryStore::new());
         // Intentionally do NOT call builder.codec_specific_options()
