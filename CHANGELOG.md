@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
 
+### Added
+- Add `ArrayBuilder::codec_specific_options`
+- Add `ShardingCodec::with_options` and `ShardingCodec::with_subchunk_write_order` for directly configuring a `ShardingCodec` before passing it to `ArrayBuilder`
+
+### Fixed
+- `ArrayBuilder::build` now preserves codec objects (and their embedded `CodecSpecificOptions`) passed directly via `array_to_bytes_codec` etc., rather than losing them through a metadata serialisation/deserialisation round-trip
+
 ## [0.23.9](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.9) - 2026-04-02
 
 ### Fixed
