@@ -7,7 +7,7 @@ pub enum SubchunkWriteOrder {
     /// An alias for `Unordered`. Soft deprecated.
     ///
     /// `Random` is a misnomer and this variant will be removed in a future release.
-    // TODO: Remove
+    // TODO: Remove in 0.24
     Random,
     /// C order i.e., row-major
     C,
