@@ -4,12 +4,18 @@
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum SubchunkWriteOrder {
-    /// Random order.
-    /// This setting means that there is no order guarantee, and not that the order will be guranteed to be random.
-    /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
+    /// An alias for `Unordered`. Soft deprecated.
+    ///
+    /// `Random` is a misnomer and this variant will be removed in a future release.
+    // TODO: Remove in 0.24
     Random,
     /// C order i.e., row-major
     C,
+    /// No order guarantee.
+    ///
+    /// Because subchunk writing is parallelized, it will often appear that subchunks are written at random with this setting although this is dependent on the parallelizable workload.
+    /// For example in the degenerate case of one thread, you may observe (mostly) ordered chunks.
+    Unordered,
     // TODO: Morton order - depend on https://docs.rs/morton-encoding/latest/morton_encoding/?
 }
 
@@ -23,7 +29,7 @@ pub struct ShardingCodecOptions {
 impl Default for ShardingCodecOptions {
     fn default() -> Self {
         Self {
-            subchunk_write_order: SubchunkWriteOrder::Random,
+            subchunk_write_order: SubchunkWriteOrder::Unordered,
         }
     }
 }

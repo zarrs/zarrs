@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
 
 ### Added
+- Add `SubchunkWriteOrder::Unordered` with the same behaviour as `SubchunkWriteOrder::Random`
+  - The `Random` variant is a misnomer and it will be removed in a future release
 - Add `ArrayBuilder::codec_specific_options`
 - Add `ShardingCodec::with_options` and `ShardingCodec::with_subchunk_write_order` for directly configuring a `ShardingCodec` before passing it to `ArrayBuilder`
 
