@@ -93,6 +93,20 @@ impl ShardingCodec {
             )),
         }
     }
+
+    /// Return a version of this codec with the provided [`ShardingCodecOptions`].
+    #[must_use]
+    pub fn with_options(mut self, options: ShardingCodecOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Return a version of this codec with the provided [`SubchunkWriteOrder`].
+    #[must_use]
+    pub fn with_subchunk_write_order(mut self, order: SubchunkWriteOrder) -> Self {
+        self.options = self.options.with_subchunk_write_order(order);
+        self
+    }
 }
 
 impl CodecTraits for ShardingCodec {
