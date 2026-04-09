@@ -465,14 +465,14 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs = Arc::new(
             CodecChain::from_metadata(&v3.codecs).map_err(ArrayCreateError::CodecsCreateError)?,
         );
-        Self::new_from_builder(storage, path, v3, codecs)
+        Self::new_with_codec_chain(storage, path, v3, codecs)
     }
 
     /// Create an array from V3 metadata and a pre-built codec chain.
     ///
     /// Used by [`ArrayBuilder`](crate::array::ArrayBuilder) to preserve the original codec objects
     /// with their runtime options without round-tripping through metadata deserialisation.
-    pub(crate) fn new_from_builder(
+    pub(crate) fn new_with_codec_chain(
         storage: Arc<TStorage>,
         path: NodePath,
         v3: ArrayMetadataV3,

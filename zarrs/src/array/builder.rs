@@ -598,7 +598,7 @@ impl ArrayBuilder {
         let codec_chain = Arc::new(self.build_codec_chain()?);
         let array_metadata_v3 = self.build_metadata_with_codec_chain(&codec_chain)?;
         Ok(
-            Array::new_from_builder(storage, path, array_metadata_v3, codec_chain)?
+            Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?
                 .with_metadata_options(self.metadata_options)
                 .with_codec_options(self.codec_options)
                 .with_codec_specific_options(&self.codec_specific_options),
