@@ -11,7 +11,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use rayon_iter_concurrent_limit::iter_concurrent_limit;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use zarrs::array::ArraySubset;
+use zarrs::array::codec::{ShardingCodecOptions, SubchunkWriteOrder, ZstdCodec};
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::store::MemoryStore;
 use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
@@ -20,8 +23,8 @@ use zarrs::storage::{ReadableStorage, ReadableWritableListableStorage};
 const USE_MEMORY_STORE: bool = false;
 
 // Array dimensions matching the Python snippet
-const SHAPE: [u64; 4] = [8192, 4, 128, 128];
-const SHARD_SHAPE: [u64; 4] = [4096, 4, 128, 128];
+const SHAPE: [u64; 4] = [8192 * 4, 4, 128, 128];
+const SHARD_SHAPE: [u64; 4] = [8192 * 4, 4, 128, 128];
 const CHUNK_SHAPE: [u64; 4] = [1, 1, 128, 128];
 
 /// Elements per shard (f64 = 8 bytes each)
@@ -35,18 +38,6 @@ fn data_path() -> PathBuf {
         .join("sharded_partial_read")
 }
 
-/// Generate pseudo-random f64 values via a simple LCG (no external crate needed).
-fn random_data(n: usize) -> Vec<f64> {
-    let mut state: u64 = 0x123456789abcdef0;
-    (0..n)
-        .map(|_| {
-            state = state
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (state >> 11) as f64 * (1.0 / (1u64 << 53) as f64) * 2.0 - 1.0
-        })
-        .collect()
-}
 
 fn make_store() -> ReadableWritableListableStorage {
     if USE_MEMORY_STORE {
@@ -65,13 +56,19 @@ fn populate_array(store: ReadableWritableListableStorage) {
         zarrs::array::data_type::float64(),
         0.0f64,
     )
+    .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(5, false))])
     .subchunk_shape(CHUNK_SHAPE.to_vec())
+    .codec_specific_options(
+        zarrs_codec::CodecSpecificOptions::default().with_option(
+            ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+        ),
+    )
     .build(store, "/")
     .unwrap();
     array.store_metadata().unwrap();
 
     let total_elements = SHAPE.iter().product::<u64>() as usize;
-    let data = random_data(total_elements);
+    let data = (0..total_elements).map(|e| e as f64).collect::<Vec<_>>();
     array
         .store_array_subset(
             &ArraySubset::new_with_shape(SHAPE.to_vec()),
@@ -157,10 +154,51 @@ fn bench_read_partial_unaligned(c: &mut Criterion) {
     group.finish();
 }
 
+/// 64 disparate chunk reads of size 128 in dim 0, fetched in parallel.
+///
+/// Subsets are at dim-0 positions 0, 512, 1024, … (stride 512, width 128), covering
+/// the full extents of dims 1–3.  Each subset spans `[128, 4, 128, 128]` elements.
+fn bench_read_disparate_parallel(c: &mut Criterion) {
+    const N_CHUNKS: u64 = 64;
+    const CHUNK_SIZE: u64 = 128;
+    const STRIDE: u64 = 512;
+
+    let store = open_store();
+    let array = zarrs::array::Array::open(store, "/").unwrap();
+    let mut group = c.benchmark_group("sharded_partial_read");
+
+    let chunk_bytes = CHUNK_SIZE * SHAPE[1] * SHAPE[2] * SHAPE[3] * 8;
+    group.throughput(Throughput::Bytes(chunk_bytes * N_CHUNKS));
+
+    let subsets: Vec<ArraySubset> = (0..N_CHUNKS)
+        .map(|k| {
+            let start = k * STRIDE;
+            ArraySubset::new_with_ranges(&[
+                start..start + CHUNK_SIZE,
+                0..SHAPE[1],
+                0..SHAPE[2],
+                0..SHAPE[3],
+            ])
+        })
+        .collect();
+
+    let concurrency = std::thread::available_parallelism().map_or(4, |n| n.get());
+
+    group.bench_function("disparate_parallel", |b| {
+        b.iter(|| {
+                iter_concurrent_limit!(concurrency, subsets.clone(), for_each, |subset: ArraySubset| {
+                    let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
+                });
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
-    bench_read_full,
-    bench_read_partial_aligned,
-    bench_read_partial_unaligned,
+    // bench_read_partial_aligned,
+    // bench_read_partial_unaligned,
+    bench_read_disparate_parallel,
 );
 criterion_main!(benches);
