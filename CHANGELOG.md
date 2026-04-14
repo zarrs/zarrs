@@ -5,7 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.9...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.10...HEAD)
+
+## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
+
+### Added
+- Add `SubchunkWriteOrder::Unordered` with the same behaviour as `SubchunkWriteOrder::Random`
+  - The `Random` variant is a misnomer and it will be removed in a future release
+- Add `ArrayBuilder::codec_specific_options`
+- Add `ShardingCodec::with_options` and `ShardingCodec::with_subchunk_write_order` for directly configuring a `ShardingCodec` before passing it to `ArrayBuilder`
+
+### Fixed
+- `ArrayBuilder::build` now preserves codec objects (and their embedded `CodecSpecificOptions`) passed directly via `array_to_bytes_codec` etc., rather than losing them through a metadata serialisation/deserialisation round-trip
 
 ## [0.23.9](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.9) - 2026-04-02
 

@@ -18,6 +18,7 @@ use crate::node::NodePath;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
     ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
+    CodecSpecificOptions,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -124,6 +125,8 @@ pub struct ArrayBuilder {
     subchunk_shape: Option<ArrayShape>,
     /// Codec options.
     codec_options: CodecOptions,
+    /// Codec-specific options.
+    codec_specific_options: CodecSpecificOptions,
     /// Metadata options.
     metadata_options: ArrayMetadataOptions,
 }
@@ -172,6 +175,7 @@ impl ArrayBuilder {
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
             codec_options,
+            codec_specific_options: CodecSpecificOptions::default(),
             metadata_options,
         }
     }
@@ -206,6 +210,7 @@ impl ArrayBuilder {
             #[cfg(feature = "sharding")]
             subchunk_shape: None,
             codec_options,
+            codec_specific_options: CodecSpecificOptions::default(),
             metadata_options,
         }
     }
@@ -444,11 +449,33 @@ impl ArrayBuilder {
         self
     }
 
+    /// Set codec-specific options.
+    ///
+    /// These are applied to the codec chain when building the array.
+    /// Can be used to configure runtime codec behaviour that is not part of the codec metadata,
+    /// such as [`ShardingCodecOptions`](crate::array::codec::ShardingCodecOptions).
+    pub fn codec_specific_options(
+        &mut self,
+        codec_specific_options: CodecSpecificOptions,
+    ) -> &mut Self {
+        self.codec_specific_options = codec_specific_options;
+        self
+    }
+
     /// Get the metadata of an array that would be created with the current builder state.
     ///
     /// # Errors
     /// Returns an [`ArrayCreateError`] if this metadata is invalid/unsupported by `zarrs`.
     pub fn build_metadata(&self) -> Result<ArrayMetadataV3, ArrayCreateError> {
+        let codec_chain = self.build_codec_chain()?;
+        self.build_metadata_with_codec_chain(&codec_chain)
+    }
+
+    /// Build [`ArrayMetadataV3`] from the builder state using a pre-built codec chain.
+    fn build_metadata_with_codec_chain(
+        &self,
+        codec_chain: &CodecChain,
+    ) -> Result<ArrayMetadataV3, ArrayCreateError> {
         let chunk_grid = match &self.chunk_grid {
             ArrayBuilderChunkGridMaybe::ChunkGrid(chunk_grid) => chunk_grid.clone(),
             ArrayBuilderChunkGridMaybe::Metadata(array_shape, metadata) => {
@@ -480,6 +507,39 @@ impl ArrayBuilder {
             ));
         }
 
+        // Create data type metadata
+        let data_type_name = data_type
+            .name_v3()
+            .map_or_else(String::new, Cow::into_owned);
+        let data_type_configuration = data_type.configuration_v3();
+        let data_type_metadata = if data_type_configuration.is_empty() {
+            MetadataV3::new(data_type_name.clone())
+        } else {
+            MetadataV3::new_with_configuration(data_type_name.clone(), data_type_configuration)
+        };
+
+        Ok(ArrayMetadataV3::new(
+            chunk_grid.array_shape().to_vec(),
+            chunk_grid.metadata(),
+            data_type_metadata,
+            data_type.metadata_fill_value(&fill_value).map_err(|_| {
+                ArrayCreateError::InvalidFillValue {
+                    data_type_name,
+                    fill_value,
+                }
+            })?,
+            codec_chain.create_metadatas(self.metadata_options.codec_metadata_options()),
+        )
+        .with_attributes(self.attributes.clone())
+        .with_additional_fields(self.additional_fields.clone())
+        .with_chunk_key_encoding(self.chunk_key_encoding.metadata())
+        .with_dimension_names(self.dimension_names.clone())
+        .with_storage_transformers(self.storage_transformers.create_metadatas()))
+    }
+
+    /// Build the codec chain from the builder's codec objects.
+    fn build_codec_chain(&self) -> Result<CodecChain, ArrayCreateError> {
+        let data_type = self.data_type.to_data_type()?;
         let array_to_bytes_codec = self
             .array_to_bytes_codec
             .clone()
@@ -520,34 +580,7 @@ impl ArrayBuilder {
             self.bytes_to_bytes_codecs.clone(),
         );
 
-        // Create data type metadata
-        let data_type_name = data_type
-            .name_v3()
-            .map_or_else(String::new, Cow::into_owned);
-        let data_type_configuration = data_type.configuration_v3();
-        let data_type_metadata = if data_type_configuration.is_empty() {
-            MetadataV3::new(data_type_name.clone())
-        } else {
-            MetadataV3::new_with_configuration(data_type_name.clone(), data_type_configuration)
-        };
-
-        Ok(ArrayMetadataV3::new(
-            chunk_grid.array_shape().to_vec(),
-            chunk_grid.metadata(),
-            data_type_metadata,
-            data_type.metadata_fill_value(&fill_value).map_err(|_| {
-                ArrayCreateError::InvalidFillValue {
-                    data_type_name,
-                    fill_value,
-                }
-            })?,
-            codec_chain.create_metadatas(self.metadata_options.codec_metadata_options()),
-        )
-        .with_attributes(self.attributes.clone())
-        .with_additional_fields(self.additional_fields.clone())
-        .with_chunk_key_encoding(self.chunk_key_encoding.metadata())
-        .with_dimension_names(self.dimension_names.clone())
-        .with_storage_transformers(self.storage_transformers.create_metadatas()))
+        Ok(codec_chain)
     }
 
     /// Build into an [`Array`].
@@ -562,11 +595,13 @@ impl ArrayBuilder {
         path: &str,
     ) -> Result<Array<TStorage>, ArrayCreateError> {
         let path: NodePath = path.try_into()?;
-        let array_metadata = ArrayMetadata::V3(self.build_metadata()?);
+        let codec_chain = Arc::new(self.build_codec_chain()?);
+        let array_metadata_v3 = self.build_metadata_with_codec_chain(&codec_chain)?;
         Ok(
-            Array::new_with_metadata(storage, path.as_str(), array_metadata)?
+            Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?
                 .with_metadata_options(self.metadata_options)
-                .with_codec_options(self.codec_options),
+                .with_codec_options(self.codec_options)
+                .with_codec_specific_options(&self.codec_specific_options),
         )
     }
 
@@ -885,5 +920,125 @@ mod tests {
             ab.build_metadata().unwrap().fill_value,
             FillValueMetadata::from("0x7fc00001")
         );
+    }
+
+    #[cfg(feature = "sharding")]
+    fn array_builder_codec_specific_options_impl(
+        write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
+    ) {
+        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecOptions};
+        use zarrs_codec::CodecSpecificOptions;
+
+        let storage = Arc::new(MemoryStore::new());
+        let mut builder = ArrayBuilder::new(vec![8, 8], [2, 2], data_type::int8(), 0i8);
+        builder.subchunk_shape(Some(vec![1, 1]));
+        builder.codec_specific_options(
+            CodecSpecificOptions::default().with_option(
+                ShardingCodecOptions::default().with_subchunk_write_order(write_order),
+            ),
+        );
+        let array = builder.build(storage, "/").unwrap();
+
+        let codecs = array.codecs();
+        let sharding = codecs
+            .array_to_bytes_codec()
+            .as_any()
+            .downcast_ref::<ShardingCodec>()
+            .expect("expected ShardingCodec");
+        assert!(
+            matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
+            "expected {write_order:?}, got {:?}",
+            sharding.options.subchunk_write_order()
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "sharding")]
+    fn array_builder_codec_specific_options_random() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::Random);
+    }
+
+    #[test]
+    #[cfg(feature = "sharding")]
+    fn array_builder_codec_specific_options_c() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
+    }
+
+    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    fn array_builder_codec_options_preserved_from_codec_object_impl(
+        write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
+    ) {
+        use crate::array::ArraySubset;
+        use crate::array::codec::ZstdCodec;
+        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecBuilder};
+
+        const SHAPE: [u64; 2] = [4, 4];
+        const SHARD_SHAPE: [u64; 2] = [2, 2];
+        const CHUNK_SHAPE: [u64; 2] = [1, 1];
+
+        let chunk_shape: ChunkShape = CHUNK_SHAPE
+            .iter()
+            .map(|&x| NonZeroU64::new(x).unwrap())
+            .collect();
+        let mut codec_builder = ShardingCodecBuilder::new(chunk_shape, &data_type::float64());
+        codec_builder.bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(5, false))]);
+        let codec = Arc::new(codec_builder.build().with_subchunk_write_order(write_order));
+
+        let storage = Arc::new(MemoryStore::new());
+        // Intentionally do NOT call builder.codec_specific_options()
+        let array = ArrayBuilder::new(
+            SHAPE.to_vec(),
+            SHARD_SHAPE.to_vec(),
+            data_type::float64(),
+            0.0f64,
+        )
+        .array_to_bytes_codec(codec)
+        .build(storage, "/")
+        .unwrap();
+
+        // Verify the option was preserved through build()
+        let codecs = array.codecs();
+        let sharding = codecs
+            .array_to_bytes_codec()
+            .as_any()
+            .downcast_ref::<ShardingCodec>()
+            .expect("expected ShardingCodec");
+        assert!(
+            matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
+            "expected {write_order:?}, got {:?}",
+            sharding.options.subchunk_write_order()
+        );
+
+        array.store_metadata().unwrap();
+
+        let total_elements = SHAPE.iter().product::<u64>() as usize;
+        let data: Vec<f64> = (0..total_elements).map(|x| x as f64).collect();
+        array
+            .store_array_subset(
+                &ArraySubset::new_with_shape(SHAPE.to_vec()),
+                data.as_slice(),
+            )
+            .unwrap();
+
+        let read_data = array
+            .retrieve_array_subset::<Vec<f64>>(&ArraySubset::new_with_shape(SHAPE.to_vec()))
+            .unwrap();
+        assert_eq!(data, read_data);
+    }
+
+    #[test]
+    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    fn array_builder_codec_options_preserved_from_codec_object_random() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::Random);
+    }
+
+    #[test]
+    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    fn array_builder_codec_options_preserved_from_codec_object_c() {
+        use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
+        array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::C);
     }
 }

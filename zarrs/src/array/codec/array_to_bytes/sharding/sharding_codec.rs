@@ -93,6 +93,20 @@ impl ShardingCodec {
             )),
         }
     }
+
+    /// Return a version of this codec with the provided [`ShardingCodecOptions`].
+    #[must_use]
+    pub fn with_options(mut self, options: ShardingCodecOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    /// Return a version of this codec with the provided [`SubchunkWriteOrder`].
+    #[must_use]
+    pub fn with_subchunk_write_order(mut self, order: SubchunkWriteOrder) -> Self {
+        self.options = self.options.with_subchunk_write_order(order);
+        self
+    }
 }
 
 impl CodecTraits for ShardingCodec {
@@ -805,7 +819,7 @@ impl ShardingCodec {
         let shard_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut shard);
         // Encode the shards and update the shard index
         let encoded_shard_offset = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Random => {
+            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
                 let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                 let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                 crate::iter_concurrent_limit!(
@@ -984,11 +998,15 @@ impl ShardingCodec {
 
         #[cfg(not(target_arch = "wasm32"))]
         let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => (0..n_chunks).into_par_iter(),
+            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {
+                (0..n_chunks).into_par_iter()
+            }
         };
         #[cfg(target_arch = "wasm32")]
         let iterator = match self.options.subchunk_write_order() {
-            SubchunkWriteOrder::Random | SubchunkWriteOrder::C => 0..n_chunks,
+            SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random | SubchunkWriteOrder::C => {
+                0..n_chunks
+            }
         };
 
         let encoded_chunks: Vec<(usize, Vec<u8>)> = crate::iter_concurrent_limit!(
@@ -1027,7 +1045,7 @@ impl ShardingCodec {
         // Write shard and update shard index
         if !encoded_chunks.is_empty() {
             match self.options.subchunk_write_order() {
-                SubchunkWriteOrder::Random => {
+                SubchunkWriteOrder::Unordered | SubchunkWriteOrder::Random => {
                     let encoded_shard_offset_atomic: AtomicUsize = encoded_shard_offset.into();
                     let shard_index_slice = UnsafeCellSlice::new(&mut shard_index);
                     crate::iter_concurrent_limit!(

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix a broken doc link to `zarrs_metadata_ext`
+
 ## [0.7.4] - 2026-02-25
 
 ### Added
