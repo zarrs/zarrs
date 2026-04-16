@@ -19,6 +19,7 @@ use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::PluginCreateError;
+type ScalarMapData = Vec<(Vec<u8>, Vec<u8>)>;
 
 /// Registered `cast_value` array-to-array codec.
 #[derive(Clone, Debug)]
@@ -97,11 +98,10 @@ impl CastValueCodec {
                     }
                     _ => {}
                 }
-                if matches!(configuration.out_of_range, Some(CastValueOutOfRangeMode::Wrap))
-                    && !matches!(
-                        data_kind(&target_data_type),
-                        Some(DataKind::Int { .. })
-                    )
+                if matches!(
+                    configuration.out_of_range,
+                    Some(CastValueOutOfRangeMode::Wrap)
+                ) && !matches!(data_kind(&target_data_type), Some(DataKind::Int { .. }))
                 {
                     return Err(PluginCreateError::Other(
                         "cast_value out_of_range=\"wrap\" requires an integral target data_type"
@@ -123,9 +123,9 @@ impl CastValueCodec {
     }
 
     fn element_size(data_type: &DataType) -> Result<usize, CodecError> {
-        data_type
-            .fixed_size()
-            .ok_or_else(|| CodecError::UnsupportedDataType(data_type.clone(), "cast_value".to_string()))
+        data_type.fixed_size().ok_or_else(|| {
+            CodecError::UnsupportedDataType(data_type.clone(), "cast_value".to_string())
+        })
     }
 
     fn parsed_scalar_map(
@@ -133,7 +133,7 @@ impl CastValueCodec {
         scalar_map: &[[zarrs_metadata::FillValueMetadata; 2]],
         source_data_type: &DataType,
         target_data_type: &DataType,
-    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, CodecError> {
+    ) -> Result<ScalarMapData, CodecError> {
         scalar_map
             .iter()
             .map(|entry| {
@@ -148,22 +148,24 @@ impl CastValueCodec {
             .collect()
     }
 
-    fn scalar_map_encode(
-        &self,
-        source_data_type: &DataType,
-    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, CodecError> {
-        self.scalar_map.as_ref().map_or(Ok(Vec::new()), |scalar_map| {
-            self.parsed_scalar_map(&scalar_map.encode, source_data_type, &self.target_data_type)
-        })
+    fn scalar_map_encode(&self, source_data_type: &DataType) -> Result<ScalarMapData, CodecError> {
+        self.scalar_map
+            .as_ref()
+            .map_or(Ok(Vec::new()), |scalar_map| {
+                self.parsed_scalar_map(&scalar_map.encode, source_data_type, &self.target_data_type)
+            })
     }
 
-    fn scalar_map_decode(
-        &self,
-        decoded_data_type: &DataType,
-    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, CodecError> {
-        self.scalar_map.as_ref().map_or(Ok(Vec::new()), |scalar_map| {
-            self.parsed_scalar_map(&scalar_map.decode, &self.target_data_type, decoded_data_type)
-        })
+    fn scalar_map_decode(&self, decoded_data_type: &DataType) -> Result<ScalarMapData, CodecError> {
+        self.scalar_map
+            .as_ref()
+            .map_or(Ok(Vec::new()), |scalar_map| {
+                self.parsed_scalar_map(
+                    &scalar_map.decode,
+                    &self.target_data_type,
+                    decoded_data_type,
+                )
+            })
     }
 }
 
@@ -261,7 +263,11 @@ impl ArrayToArrayCodecTraits for CastValueCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(CastValueCodecPartial::new(
-            input_handle, shape, data_type, fill_value, self,
+            input_handle,
+            shape,
+            data_type,
+            fill_value,
+            self,
         )))
     }
 
@@ -292,7 +298,11 @@ impl ArrayToArrayCodecTraits for CastValueCodec {
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         Ok(Arc::new(CastValueCodecPartial::new(
-            input_handle, shape, data_type, fill_value, self,
+            input_handle,
+            shape,
+            data_type,
+            fill_value,
+            self,
         )))
     }
 
@@ -413,9 +423,8 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let all = crate::array::ArraySubset::new_with_shape(
-            self.shape.iter().map(|d| d.get()).collect(),
-        );
+        let all =
+            crate::array::ArraySubset::new_with_shape(self.shape.iter().map(|d| d.get()).collect());
         let encoded_value = self.input_output_handle.partial_decode(&all, options)?;
         let mut decoded_value = self.codec.decode(
             encoded_value,
@@ -439,7 +448,8 @@ where
             &self.fill_value,
             options,
         )?;
-        self.input_output_handle.partial_encode(&all, &encoded_value, options)
+        self.input_output_handle
+            .partial_encode(&all, &encoded_value, options)
     }
 
     fn supports_partial_encode(&self) -> bool {
@@ -471,7 +481,10 @@ where
         indexer: &dyn crate::array::Indexer,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let encoded = self.input_output_handle.partial_decode(indexer, options).await?;
+        let encoded = self
+            .input_output_handle
+            .partial_decode(indexer, options)
+            .await?;
         self.codec.decode(
             encoded,
             &self.shape,
@@ -507,10 +520,12 @@ where
         bytes: &ArrayBytes<'_>,
         options: &CodecOptions,
     ) -> Result<(), CodecError> {
-        let all = crate::array::ArraySubset::new_with_shape(
-            self.shape.iter().map(|d| d.get()).collect(),
-        );
-        let encoded_value = self.input_output_handle.partial_decode(&all, options).await?;
+        let all =
+            crate::array::ArraySubset::new_with_shape(self.shape.iter().map(|d| d.get()).collect());
+        let encoded_value = self
+            .input_output_handle
+            .partial_decode(&all, options)
+            .await?;
         let mut decoded_value = self.codec.decode(
             encoded_value,
             &self.shape,
@@ -546,56 +561,94 @@ where
 fn data_kind(data_type: &DataType) -> Option<DataKind> {
     use crate::array::data_type;
     let type_id = data_type.as_any().type_id();
-    Some(if type_id == std::any::TypeId::of::<data_type::Int2DataType>() {
-        DataKind::Int { bits: 2, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::Int4DataType>() {
-        DataKind::Int { bits: 4, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::Int8DataType>() {
-        DataKind::Int { bits: 8, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::Int16DataType>() {
-        DataKind::Int { bits: 16, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::Int32DataType>() {
-        DataKind::Int { bits: 32, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::Int64DataType>() {
-        DataKind::Int { bits: 64, signed: true }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt2DataType>() {
-        DataKind::Int { bits: 2, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt4DataType>() {
-        DataKind::Int { bits: 4, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt8DataType>() {
-        DataKind::Int { bits: 8, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt16DataType>() {
-        DataKind::Int { bits: 16, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt32DataType>() {
-        DataKind::Int { bits: 32, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::UInt64DataType>() {
-        DataKind::Int { bits: 64, signed: false }
-    } else if type_id == std::any::TypeId::of::<data_type::Float16DataType>() {
-        DataKind::Float16
-    } else if type_id == std::any::TypeId::of::<data_type::BFloat16DataType>() {
-        DataKind::BFloat16
-    } else if type_id == std::any::TypeId::of::<data_type::Float32DataType>() {
-        DataKind::Float32
-    } else if type_id == std::any::TypeId::of::<data_type::Float64DataType>() {
-        DataKind::Float64
-    } else if type_id == std::any::TypeId::of::<data_type::Float8E3M4DataType>() {
-        DataKind::Float8E3M4
-    } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3DataType>() {
-        DataKind::Float8E4M3
-    } else if type_id == std::any::TypeId::of::<data_type::Float8E5M2DataType>() {
-        DataKind::Float8E5M2
-    } else if type_id == std::any::TypeId::of::<data_type::Float4E2M1FNDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float6E2M3FNDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float6E3M2FNDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float8E4M3B11FNUZDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float8E4M3FNUZDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float8E5M2FNUZDataType>()
-        || type_id == std::any::TypeId::of::<data_type::Float8E8M0FNUDataType>()
-    {
-        DataKind::UnsupportedReal
-    } else {
-        return None;
-    })
+    Some(
+        if type_id == std::any::TypeId::of::<data_type::Int2DataType>() {
+            DataKind::Int {
+                bits: 2,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Int4DataType>() {
+            DataKind::Int {
+                bits: 4,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Int8DataType>() {
+            DataKind::Int {
+                bits: 8,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Int16DataType>() {
+            DataKind::Int {
+                bits: 16,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Int32DataType>() {
+            DataKind::Int {
+                bits: 32,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Int64DataType>() {
+            DataKind::Int {
+                bits: 64,
+                signed: true,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt2DataType>() {
+            DataKind::Int {
+                bits: 2,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt4DataType>() {
+            DataKind::Int {
+                bits: 4,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt8DataType>() {
+            DataKind::Int {
+                bits: 8,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt16DataType>() {
+            DataKind::Int {
+                bits: 16,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt32DataType>() {
+            DataKind::Int {
+                bits: 32,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::UInt64DataType>() {
+            DataKind::Int {
+                bits: 64,
+                signed: false,
+            }
+        } else if type_id == std::any::TypeId::of::<data_type::Float16DataType>() {
+            DataKind::Float16
+        } else if type_id == std::any::TypeId::of::<data_type::BFloat16DataType>() {
+            DataKind::BFloat16
+        } else if type_id == std::any::TypeId::of::<data_type::Float32DataType>() {
+            DataKind::Float32
+        } else if type_id == std::any::TypeId::of::<data_type::Float64DataType>() {
+            DataKind::Float64
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E3M4DataType>() {
+            DataKind::Float8E3M4
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3DataType>() {
+            DataKind::Float8E4M3
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E5M2DataType>() {
+            DataKind::Float8E5M2
+        } else if type_id == std::any::TypeId::of::<data_type::Float4E2M1FNDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float6E2M3FNDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float6E3M2FNDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float8E4M3B11FNUZDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float8E4M3FNUZDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float8E5M2FNUZDataType>()
+            || type_id == std::any::TypeId::of::<data_type::Float8E8M0FNUDataType>()
+        {
+            DataKind::UnsupportedReal
+        } else {
+            return None;
+        },
+    )
 }
 
 fn convert_array<'a>(
@@ -606,16 +659,21 @@ fn convert_array<'a>(
     out_of_range: Option<CastValueOutOfRangeMode>,
     scalar_map: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<ArrayBytes<'a>, CodecError> {
-    let source_kind = data_kind(source_data_type)
-        .ok_or_else(|| CodecError::UnsupportedDataType(source_data_type.clone(), "cast_value".to_string()))?;
-    let target_kind = data_kind(target_data_type)
-        .ok_or_else(|| CodecError::UnsupportedDataType(target_data_type.clone(), "cast_value".to_string()))?;
-    if matches!(source_kind, DataKind::UnsupportedReal) || matches!(target_kind, DataKind::UnsupportedReal) {
+    let source_kind = data_kind(source_data_type).ok_or_else(|| {
+        CodecError::UnsupportedDataType(source_data_type.clone(), "cast_value".to_string())
+    })?;
+    let target_kind = data_kind(target_data_type).ok_or_else(|| {
+        CodecError::UnsupportedDataType(target_data_type.clone(), "cast_value".to_string())
+    })?;
+    if matches!(source_kind, DataKind::UnsupportedReal)
+        || matches!(target_kind, DataKind::UnsupportedReal)
+    {
         if source_kind == target_kind {
             return Ok(bytes);
         }
         return Err(CodecError::Other(
-            "cast_value currently only supports cross-type casting for standard numeric formats".to_string(),
+            "cast_value currently only supports cross-type casting for standard numeric formats"
+                .to_string(),
         ));
     }
 
@@ -624,7 +682,10 @@ fn convert_array<'a>(
     let bytes = bytes.into_fixed()?;
     let mut out = Vec::with_capacity(bytes.len() / source_size * target_size);
     for element in bytes.chunks_exact(source_size) {
-        if let Some((_, mapped)) = scalar_map.iter().find(|(input, _)| input.as_slice() == element) {
+        if let Some((_, mapped)) = scalar_map
+            .iter()
+            .find(|(input, _)| input.as_slice() == element)
+        {
             out.extend_from_slice(mapped);
             continue;
         }
@@ -641,22 +702,60 @@ fn convert_array<'a>(
 
 fn bytes_to_scalar(bytes: &[u8], kind: DataKind) -> Result<Scalar, CodecError> {
     Ok(match kind {
-        DataKind::Int { bits: 2, signed: true } | DataKind::Int { bits: 4, signed: true } => {
-            Scalar::Signed(i8::from_ne_bytes([bytes[0]]) as i64)
+        DataKind::Int {
+            bits: 2,
+            signed: true,
         }
-        DataKind::Int { signed: true, bits: 8 } => Scalar::Signed(i8::from_ne_bytes([bytes[0]]) as i64),
-        DataKind::Int { signed: true, bits: 16 } => Scalar::Signed(i16::from_ne_bytes(bytes.try_into().unwrap()) as i64),
-        DataKind::Int { signed: true, bits: 32 } => Scalar::Signed(i32::from_ne_bytes(bytes.try_into().unwrap()) as i64),
-        DataKind::Int { signed: true, bits: 64 } => Scalar::Signed(i64::from_ne_bytes(bytes.try_into().unwrap())),
-        DataKind::Int { signed: false, bits: 2 } | DataKind::Int { signed: false, bits: 4 } => {
-            Scalar::Unsigned(u8::from_ne_bytes([bytes[0]]) as u64)
+        | DataKind::Int {
+            bits: 4,
+            signed: true,
+        } => Scalar::Signed(i8::from_ne_bytes([bytes[0]]) as i64),
+        DataKind::Int {
+            signed: true,
+            bits: 8,
+        } => Scalar::Signed(i8::from_ne_bytes([bytes[0]]) as i64),
+        DataKind::Int {
+            signed: true,
+            bits: 16,
+        } => Scalar::Signed(i16::from_ne_bytes(bytes.try_into().unwrap()) as i64),
+        DataKind::Int {
+            signed: true,
+            bits: 32,
+        } => Scalar::Signed(i32::from_ne_bytes(bytes.try_into().unwrap()) as i64),
+        DataKind::Int {
+            signed: true,
+            bits: 64,
+        } => Scalar::Signed(i64::from_ne_bytes(bytes.try_into().unwrap())),
+        DataKind::Int {
+            signed: false,
+            bits: 2,
         }
-        DataKind::Int { signed: false, bits: 8 } => Scalar::Unsigned(u8::from_ne_bytes([bytes[0]]) as u64),
-        DataKind::Int { signed: false, bits: 16 } => Scalar::Unsigned(u16::from_ne_bytes(bytes.try_into().unwrap()) as u64),
-        DataKind::Int { signed: false, bits: 32 } => Scalar::Unsigned(u32::from_ne_bytes(bytes.try_into().unwrap()) as u64),
-        DataKind::Int { signed: false, bits: 64 } => Scalar::Unsigned(u64::from_ne_bytes(bytes.try_into().unwrap())),
-        DataKind::Float16 => scalar_from_f64(half::f16::from_ne_bytes(bytes.try_into().unwrap()).to_f64()),
-        DataKind::BFloat16 => scalar_from_f64(half::bf16::from_ne_bytes(bytes.try_into().unwrap()).to_f64()),
+        | DataKind::Int {
+            signed: false,
+            bits: 4,
+        } => Scalar::Unsigned(u8::from_ne_bytes([bytes[0]]) as u64),
+        DataKind::Int {
+            signed: false,
+            bits: 8,
+        } => Scalar::Unsigned(u8::from_ne_bytes([bytes[0]]) as u64),
+        DataKind::Int {
+            signed: false,
+            bits: 16,
+        } => Scalar::Unsigned(u16::from_ne_bytes(bytes.try_into().unwrap()) as u64),
+        DataKind::Int {
+            signed: false,
+            bits: 32,
+        } => Scalar::Unsigned(u32::from_ne_bytes(bytes.try_into().unwrap()) as u64),
+        DataKind::Int {
+            signed: false,
+            bits: 64,
+        } => Scalar::Unsigned(u64::from_ne_bytes(bytes.try_into().unwrap())),
+        DataKind::Float16 => {
+            scalar_from_f64(half::f16::from_ne_bytes(bytes.try_into().unwrap()).to_f64())
+        }
+        DataKind::BFloat16 => {
+            scalar_from_f64(half::bf16::from_ne_bytes(bytes.try_into().unwrap()).to_f64())
+        }
         DataKind::Float32 => {
             let value = f32::from_ne_bytes(bytes.try_into().unwrap());
             Scalar::Finite {
@@ -712,15 +811,42 @@ fn scalar_to_bytes(
                 _ => unreachable!(),
             })
         }
-        DataKind::Float16 => Ok(encode_small_float(scalar, rounding, out_of_range, encode_f16_candidates)?.to_vec()),
-        DataKind::BFloat16 => Ok(encode_small_float(scalar, rounding, out_of_range, encode_bf16_candidates)?.to_vec()),
-        DataKind::Float32 => Ok(encode_f32(scalar, rounding, out_of_range)?.to_ne_bytes().to_vec()),
-        DataKind::Float64 => Ok(encode_f64(scalar, rounding, out_of_range)?.to_ne_bytes().to_vec()),
-        DataKind::Float8E3M4 => Ok(encode_small_float(scalar, rounding, out_of_range, encode_f8e3m4_candidates)?.to_vec()),
-        DataKind::Float8E4M3 => Ok(encode_small_float(scalar, rounding, out_of_range, encode_f8e4m3_candidates)?.to_vec()),
-        DataKind::Float8E5M2 => Ok(encode_small_float(scalar, rounding, out_of_range, encode_f8e5m2_candidates)?.to_vec()),
+        DataKind::Float16 => {
+            Ok(encode_small_float(scalar, rounding, out_of_range, encode_f16_candidates)?.to_vec())
+        }
+        DataKind::BFloat16 => {
+            Ok(
+                encode_small_float(scalar, rounding, out_of_range, encode_bf16_candidates)?
+                    .to_vec(),
+            )
+        }
+        DataKind::Float32 => Ok(encode_f32(scalar, rounding, out_of_range)?
+            .to_ne_bytes()
+            .to_vec()),
+        DataKind::Float64 => Ok(encode_f64(scalar, rounding, out_of_range)?
+            .to_ne_bytes()
+            .to_vec()),
+        DataKind::Float8E3M4 => {
+            Ok(
+                encode_small_float(scalar, rounding, out_of_range, encode_f8e3m4_candidates)?
+                    .to_vec(),
+            )
+        }
+        DataKind::Float8E4M3 => {
+            Ok(
+                encode_small_float(scalar, rounding, out_of_range, encode_f8e4m3_candidates)?
+                    .to_vec(),
+            )
+        }
+        DataKind::Float8E5M2 => {
+            Ok(
+                encode_small_float(scalar, rounding, out_of_range, encode_f8e5m2_candidates)?
+                    .to_vec(),
+            )
+        }
         DataKind::UnsupportedReal => Err(CodecError::Other(
-            "cast_value currently only supports identity casts for some custom float formats".to_string(),
+            "cast_value currently only supports identity casts for some custom float formats"
+                .to_string(),
         )),
     }
 }
@@ -734,14 +860,19 @@ fn scalar_to_int(
 ) -> Result<i64, CodecError> {
     let (min, max) = int_bounds(bits, signed);
     match scalar {
-        Scalar::Signed(value) => clamp_or_wrap_int(value as i128, min, max, bits, signed, out_of_range),
-        Scalar::Unsigned(value) => clamp_or_wrap_int(value as i128, min, max, bits, signed, out_of_range),
+        Scalar::Signed(value) => {
+            clamp_or_wrap_int(value as i128, min, max, bits, signed, out_of_range)
+        }
+        Scalar::Unsigned(value) => {
+            clamp_or_wrap_int(value as i128, min, max, bits, signed, out_of_range)
+        }
         Scalar::Finite { value, .. } => {
             let rounded = round_float_to_int(value, rounding)?;
             clamp_or_wrap_int(rounded, min, max, bits, signed, out_of_range)
         }
         Scalar::NaN | Scalar::PosInf | Scalar::NegInf => Err(CodecError::Other(
-            "cast_value cannot cast NaN or infinite values to an integral type without scalar_map".to_string(),
+            "cast_value cannot cast NaN or infinite values to an integral type without scalar_map"
+                .to_string(),
         )),
     }
 }
@@ -830,7 +961,16 @@ fn encode_f64(
     Ok(match scalar {
         Scalar::Signed(v) => v as f64,
         Scalar::Unsigned(v) => v as f64,
-        Scalar::Finite { value, negative_zero } => if negative_zero { -0.0 } else { value },
+        Scalar::Finite {
+            value,
+            negative_zero,
+        } => {
+            if negative_zero {
+                -0.0
+            } else {
+                value
+            }
+        }
         Scalar::PosInf => f64::INFINITY,
         Scalar::NegInf => f64::NEG_INFINITY,
         Scalar::NaN => f64::NAN,
@@ -846,7 +986,10 @@ fn encode_f32(
         Scalar::NaN => Ok(f32::NAN),
         Scalar::PosInf => Ok(f32::INFINITY),
         Scalar::NegInf => Ok(f32::NEG_INFINITY),
-        Scalar::Finite { value, negative_zero } => {
+        Scalar::Finite {
+            value,
+            negative_zero,
+        } => {
             if negative_zero {
                 return Ok(-0.0);
             }
@@ -867,13 +1010,21 @@ fn encode_f32_from_f64(
     }
     let rounded_val = if value > f32::MAX as f64 {
         match rounding {
-            CastValueRoundingMode::TowardsNegative | CastValueRoundingMode::TowardsZero => f32::MAX as f64,
-            _ => f64::INFINITY,
+            CastValueRoundingMode::TowardsNegative | CastValueRoundingMode::TowardsZero => {
+                f32::MAX as f64
+            }
+            CastValueRoundingMode::NearestEven
+            | CastValueRoundingMode::TowardsPositive
+            | CastValueRoundingMode::NearestAway => f64::INFINITY,
         }
     } else if value < -(f32::MAX as f64) {
         match rounding {
-            CastValueRoundingMode::TowardsPositive | CastValueRoundingMode::TowardsZero => -(f32::MAX as f64),
-            _ => f64::NEG_INFINITY,
+            CastValueRoundingMode::TowardsPositive | CastValueRoundingMode::TowardsZero => {
+                -(f32::MAX as f64)
+            }
+            CastValueRoundingMode::NearestEven
+            | CastValueRoundingMode::TowardsNegative
+            | CastValueRoundingMode::NearestAway => f64::NEG_INFINITY,
         }
     } else {
         let nearest = value as f32;
@@ -894,7 +1045,11 @@ fn encode_f32_from_f64(
         (match rounding {
             CastValueRoundingMode::NearestEven => nearest,
             CastValueRoundingMode::TowardsZero => {
-                if value.is_sign_negative() { up } else { down }
+                if value.is_sign_negative() {
+                    up
+                } else {
+                    down
+                }
             }
             CastValueRoundingMode::TowardsPositive => up,
             CastValueRoundingMode::TowardsNegative => down,
@@ -905,7 +1060,11 @@ fn encode_f32_from_f64(
                     Ordering::Less => down,
                     Ordering::Greater => up,
                     Ordering::Equal => {
-                        if value.is_sign_negative() { down } else { up }
+                        if value.is_sign_negative() {
+                            down
+                        } else {
+                            up
+                        }
                     }
                 }
             }
@@ -916,9 +1075,15 @@ fn encode_f32_from_f64(
     } else {
         match out_of_range {
             Some(CastValueOutOfRangeMode::Clamp) => {
-                if rounded_val.is_sign_positive() { Ok(f32::INFINITY) } else { Ok(f32::NEG_INFINITY) }
+                if rounded_val.is_sign_positive() {
+                    Ok(f32::INFINITY)
+                } else {
+                    Ok(f32::NEG_INFINITY)
+                }
             }
-            _ => Err(CodecError::Other("cast_value float cast overflow".to_string())),
+            _ => Err(CodecError::Other(
+                "cast_value float cast overflow".to_string(),
+            )),
         }
     }
 }
@@ -956,41 +1121,56 @@ fn encode_small_float<const N: usize>(
     let candidates = candidates_fn();
     match scalar {
         Scalar::NaN => {
-            if let Some((bits, _)) = candidates.iter().find(|(_, scalar)| matches!(scalar, Scalar::NaN)) {
+            if let Some((bits, _)) = candidates
+                .iter()
+                .find(|(_, scalar)| matches!(scalar, Scalar::NaN))
+            {
                 return Ok(*bits);
             }
-            return Err(CodecError::Other(
+            Err(CodecError::Other(
                 "cast_value target format does not support NaN".to_string(),
-            ));
+            ))
         }
         Scalar::PosInf => {
-            if let Some((bits, _)) = candidates.iter().find(|(_, scalar)| matches!(scalar, Scalar::PosInf)) {
+            if let Some((bits, _)) = candidates
+                .iter()
+                .find(|(_, scalar)| matches!(scalar, Scalar::PosInf))
+            {
                 return Ok(*bits);
             }
-            return Err(CodecError::Other(
+            Err(CodecError::Other(
                 "cast_value target format does not support infinity".to_string(),
-            ));
+            ))
         }
         Scalar::NegInf => {
-            if let Some((bits, _)) = candidates.iter().find(|(_, scalar)| matches!(scalar, Scalar::NegInf)) {
+            if let Some((bits, _)) = candidates
+                .iter()
+                .find(|(_, scalar)| matches!(scalar, Scalar::NegInf))
+            {
                 return Ok(*bits);
             }
-            return Err(CodecError::Other(
+            Err(CodecError::Other(
                 "cast_value target format does not support infinity".to_string(),
-            ));
+            ))
         }
-        Scalar::Finite { value, negative_zero } => {
-            if negative_zero {
-                if let Some((bits, _)) = candidates.iter().find(|(_, scalar)| {
+        Scalar::Finite {
+            value,
+            negative_zero,
+        } => {
+            if negative_zero
+                && let Some((bits, _)) = candidates.iter().find(|(_, scalar)| {
                     matches!(scalar, Scalar::Finite { value, negative_zero: true } if *value == 0.0)
                 }) {
                     return Ok(*bits);
                 }
-            }
             choose_small_float_candidate(value, rounding, out_of_range, &candidates)
         }
-        Scalar::Signed(v) => choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates),
-        Scalar::Unsigned(v) => choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates),
+        Scalar::Signed(v) => {
+            choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates)
+        }
+        Scalar::Unsigned(v) => {
+            choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates)
+        }
     }
 }
 
@@ -1025,12 +1205,16 @@ fn choose_small_float_candidate<const N: usize>(
         let rounded_val = if value > max {
             match rounding {
                 CastValueRoundingMode::TowardsNegative | CastValueRoundingMode::TowardsZero => max,
-                _ => f64::INFINITY,
+                CastValueRoundingMode::NearestEven
+                | CastValueRoundingMode::TowardsPositive
+                | CastValueRoundingMode::NearestAway => f64::INFINITY,
             }
         } else if value < min {
             match rounding {
                 CastValueRoundingMode::TowardsPositive | CastValueRoundingMode::TowardsZero => min,
-                _ => f64::NEG_INFINITY,
+                CastValueRoundingMode::NearestEven
+                | CastValueRoundingMode::TowardsNegative
+                | CastValueRoundingMode::NearestAway => f64::NEG_INFINITY,
             }
         } else {
             unreachable!();
@@ -1042,7 +1226,11 @@ fn choose_small_float_candidate<const N: usize>(
                 .map(|(bits, _)| *bits)
                 .unwrap());
         } else if matches!(out_of_range, Some(CastValueOutOfRangeMode::Clamp)) {
-            let target = if rounded_val.is_sign_positive() { max } else { min };
+            let target = if rounded_val.is_sign_positive() {
+                max
+            } else {
+                min
+            };
             return Ok(finite_candidates
                 .iter()
                 .find(|(_, v)| *v == target)
@@ -1076,19 +1264,30 @@ fn choose_small_float_candidate<const N: usize>(
     }
     Ok(match rounding {
         CastValueRoundingMode::TowardsZero => {
-            if value.is_sign_negative() { upper.0 } else { lower.0 }
+            if value.is_sign_negative() {
+                upper.0
+            } else {
+                lower.0
+            }
         }
         CastValueRoundingMode::TowardsPositive => upper.0,
         CastValueRoundingMode::TowardsNegative => lower.0,
         CastValueRoundingMode::NearestEven | CastValueRoundingMode::NearestAway => {
             let lower_dist = (value - lower.1).abs();
             let upper_dist = (upper.1 - value).abs();
-            match lower_dist.partial_cmp(&upper_dist).unwrap_or(Ordering::Equal) {
+            match lower_dist
+                .partial_cmp(&upper_dist)
+                .unwrap_or(Ordering::Equal)
+            {
                 Ordering::Less => lower.0,
                 Ordering::Greater => upper.0,
                 Ordering::Equal => {
                     if matches!(rounding, CastValueRoundingMode::NearestAway) {
-                        if value.is_sign_negative() { lower.0 } else { upper.0 }
+                        if value.is_sign_negative() {
+                            lower.0
+                        } else {
+                            upper.0
+                        }
                     } else if (lower.0[N - 1] & 1) == 0 {
                         lower.0
                     } else {
@@ -1150,7 +1349,11 @@ fn float8_e3m4_to_f64(val: u8) -> f64 {
     }
     if exponent == 7 {
         return if mantissa == 0 {
-            if sign != 0 { f64::NEG_INFINITY } else { f64::INFINITY }
+            if sign != 0 {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            }
         } else {
             f64::NAN
         };
@@ -1175,7 +1378,11 @@ fn decode_ieee_like_8bit(bits: u8, exponent_bits: u8, mantissa_bits: u8, bias: i
     }
     if exponent == max_exponent as i16 {
         return if mantissa == 0 {
-            if sign { f64::NEG_INFINITY } else { f64::INFINITY }
+            if sign {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            }
         } else {
             f64::NAN
         };

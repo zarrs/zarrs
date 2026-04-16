@@ -1,8 +1,7 @@
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
-use zarrs_metadata::ConfigurationSerialize;
-use zarrs_metadata::FillValueMetadata;
 use zarrs_metadata::v3::MetadataV3;
+use zarrs_metadata::{ConfigurationSerialize, FillValueMetadata};
 
 /// A wrapper to handle various versions of `cast_value` codec configuration parameters.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Display, From)]

@@ -72,10 +72,12 @@ mod tests {
 
     #[test]
     fn codec_cast_value_configuration_invalid_unknown_field() {
-        assert!(serde_json::from_str::<CastValueCodecConfiguration>(
-            r#"{ "data_type": "uint8", "unknown": true }"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<CastValueCodecConfiguration>(
+                r#"{ "data_type": "uint8", "unknown": true }"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -86,7 +88,8 @@ mod tests {
         let elements = vec![0.0f32, 1.25, -3.5, 8.0];
         let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(elements.clone()));
 
-        let configuration: CastValueCodecConfiguration = serde_json::from_str(JSON_IDENTITY).unwrap();
+        let configuration: CastValueCodecConfiguration =
+            serde_json::from_str(JSON_IDENTITY).unwrap();
         let codec = CastValueCodec::new_with_configuration(&configuration).unwrap();
 
         let encoded = codec
