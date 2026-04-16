@@ -7,6 +7,8 @@
 /// Registered codec metadata.
 /// See <https://github.com/zarr-developers/zarr-extensions>.
 mod registered {
+    /// `cast_value` codec metadata (registered).
+    pub mod cast_value;
     /// `blosc` codec metadata (registered, core).
     pub mod blosc;
     /// `bytes` codec metadata (registered, core).

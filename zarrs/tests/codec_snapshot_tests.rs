@@ -42,6 +42,7 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
     data_type,
 };
+use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use zarrs_filesystem::FilesystemStore;
@@ -1245,6 +1246,9 @@ pub struct CodecDef {
 /// Build the codec registry with all available codecs
 fn codec_registry() -> Vec<CodecDef> {
     use zarrs::array::codec::*;
+    use zarrs::metadata_ext::codec::cast_value::{
+        CastValueCodecConfiguration, CastValueCodecConfigurationV1,
+    };
     use zarrs::metadata_ext::codec::fixedscaleoffset::{
         FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
     };
@@ -1415,6 +1419,42 @@ fn codec_registry() -> Vec<CodecDef> {
         dt.fixed_size().is_none() || dt.as_optional().is_some()
     }
 
+    fn is_not_supported_cast_value_data_type(dt: &DataType) -> bool {
+        !matches!(
+            data_type_id(dt),
+            "int2"
+                | "int4"
+                | "int8"
+                | "int16"
+                | "int32"
+                | "int64"
+                | "uint2"
+                | "uint4"
+                | "uint8"
+                | "uint16"
+                | "uint32"
+                | "uint64"
+                | "bfloat16"
+                | "float16"
+                | "float8_e4m3"
+                | "float8_e5m2"
+                | "float32"
+                | "float64"
+        )
+    }
+
+    fn data_type_metadata(data_type: &DataType) -> MetadataV3 {
+        let name = data_type
+            .name_v3()
+            .map_or_else(String::new, Cow::into_owned);
+        let configuration = data_type.configuration_v3();
+        if configuration.is_empty() {
+            MetadataV3::new(name)
+        } else {
+            MetadataV3::new_with_configuration(name, configuration)
+        }
+    }
+
     #[cfg(feature = "bitround")]
     codecs.push(CodecDef {
         name: BitroundCodec::aliases_v3().default_name.clone(),
@@ -1424,6 +1464,28 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: true,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+    });
+
+    codecs.push(CodecDef {
+        name: CastValueCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: None,
+        factory: |dt| {
+            CodecInstance::ArrayToArray(Arc::new(
+                CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+                    CastValueCodecConfigurationV1 {
+                        data_type: data_type_metadata(dt),
+                        rounding: Default::default(),
+                        out_of_range: None,
+                        scalar_map: None,
+                    },
+                ))
+                .unwrap(),
+            ))
+        },
+        lossy: false,
+        non_deterministic: false,
+        skip: Some(is_not_supported_cast_value_data_type),
     });
 
     codecs.push(CodecDef {
@@ -1818,6 +1880,10 @@ mod compatibility_matrix {
             // Array-to-Array
             (
                 codec::BitroundCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            (
+                codec::CastValueCodec::aliases_v3().default_name.clone(),
                 "a2a",
             ),
             (
