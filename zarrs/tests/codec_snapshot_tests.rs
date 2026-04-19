@@ -26,6 +26,7 @@
     feature = "float8",
 ))]
 
+#[path = "common/semantic_comparison.rs"]
 mod semantic_comparison;
 
 use half::{bf16, f16};

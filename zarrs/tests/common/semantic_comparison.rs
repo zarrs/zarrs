@@ -36,15 +36,15 @@ pub(crate) fn arrays_equal(a: &ArrayBytes, b: &ArrayBytes, data_type: &DataType)
 
     // For variable-length types, also check offsets match
     match (a, b) {
-        (ArrayBytes::Variable(a_var), ArrayBytes::Variable(b_var)) => {
-            if a_var.offsets() != b_var.offsets() {
-                return false;
-            }
+        (ArrayBytes::Variable(a_var), ArrayBytes::Variable(b_var))
+            if a_var.offsets() != b_var.offsets() =>
+        {
+            return false;
         }
-        (ArrayBytes::Optional(a_opt), ArrayBytes::Optional(b_opt)) => {
-            if a_opt.mask() != b_opt.mask() {
-                return false;
-            }
+        (ArrayBytes::Optional(a_opt), ArrayBytes::Optional(b_opt))
+            if a_opt.mask() != b_opt.mask() =>
+        {
+            return false;
         }
         _ => {}
     }
