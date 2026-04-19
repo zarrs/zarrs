@@ -26,6 +26,8 @@
     feature = "float8",
 ))]
 
+mod semantic_comparison;
+
 use half::{bf16, f16};
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
@@ -44,6 +46,15 @@ use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
+
+/// Comparison mode for round-trip verification
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComparisonMode {
+    /// Byte-for-byte equality (default for most codecs)
+    ByteLevel,
+    /// Semantic float equality: NaN == NaN, but preserves sign of zero
+    SemanticFloat,
+}
 
 /// Get a string identifier for a data type (for test matching purposes)
 fn data_type_id(data_type: &DataType) -> &'static str {
@@ -86,6 +97,22 @@ fn data_type_id(data_type: &DataType) -> &'static str {
         "float8_e4m3"
     } else if type_id == TypeId::of::<data_type::Float8E5M2DataType>() {
         "float8_e5m2"
+    } else if type_id == TypeId::of::<data_type::Float8E5M2FNUZDataType>() {
+        "float8_e5m2fnuz"
+    } else if type_id == TypeId::of::<data_type::Float8E8M0FNUDataType>() {
+        "float8_e8m0fnu"
+    } else if type_id == TypeId::of::<data_type::Float8E4M3B11FNUZDataType>() {
+        "float8_e4m3b11fnuz"
+    } else if type_id == TypeId::of::<data_type::Float8E4M3FNUZDataType>() {
+        "float8_e4m3fnuz"
+    } else if type_id == TypeId::of::<data_type::Float8E3M4DataType>() {
+        "float8_e3m4"
+    } else if type_id == TypeId::of::<data_type::Float6E3M2FNDataType>() {
+        "float6_e3m2fn"
+    } else if type_id == TypeId::of::<data_type::Float6E2M3FNDataType>() {
+        "float6_e2m3fn"
+    } else if type_id == TypeId::of::<data_type::Float4E2M1FNDataType>() {
+        "float4_e2m1fn"
     } else if type_id == TypeId::of::<data_type::StringDataType>() {
         "string"
     } else if type_id == TypeId::of::<data_type::BytesDataType>() {
@@ -161,6 +188,8 @@ pub struct TestConfig {
     pub non_deterministic: bool,
     /// If true, the codec is lossy and round-trip data won't match exactly
     pub lossy: bool,
+    /// Comparison mode for round-trip verification
+    pub comparison_mode: ComparisonMode,
 }
 
 impl Default for TestConfig {
@@ -176,6 +205,7 @@ impl Default for TestConfig {
             chunk_grid_name: "regular".to_string(),
             non_deterministic: false,
             lossy: false,
+            comparison_mode: ComparisonMode::ByteLevel,
         }
     }
 }
@@ -804,13 +834,22 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
 
     // For lossless codecs, verify the data matches
     // If data doesn't match, this indicates a codec bug or incompatible data type
-    if !config.lossy && read_data != test_data {
-        return CodecTestResult::Failure {
-            reason: format!(
-                "Round-trip verification failed: read data does not match written data for {:?}",
-                config.data_type
-            ),
+    if !config.lossy {
+        let data_matches = match config.comparison_mode {
+            ComparisonMode::ByteLevel => read_data == test_data,
+            ComparisonMode::SemanticFloat => {
+                semantic_comparison::arrays_equal(&read_data, &test_data, &config.data_type)
+            }
         };
+
+        if !data_matches {
+            return CodecTestResult::Failure {
+                reason: format!(
+                    "Round-trip verification failed: read data does not match written data for {:?}",
+                    config.data_type
+                ),
+            };
+        }
     }
 
     CodecTestResult::Success
