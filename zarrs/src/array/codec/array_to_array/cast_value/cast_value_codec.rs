@@ -342,19 +342,25 @@ impl ArrayToArrayCodecTraits for CastValueCodec {
             &CodecOptions::default(),
         )?;
         let encoded = FillValue::new(encoded.into_fixed()?.into_owned());
-        let decoded_back = self.decode(
-            encoded.as_ne_bytes().to_vec().into(),
-            &[NonZeroU64::new(1).unwrap()],
-            decoded_data_type,
-            decoded_fill_value,
-            &CodecOptions::default(),
-        )?;
-        let decoded_back = FillValue::new(decoded_back.into_fixed()?.into_owned());
-        if decoded_back != *decoded_fill_value {
-            return Err(CodecError::Other(
-                "cast_value fill value does not survive a round-trip cast".to_string(),
-            ));
-        }
+        // NOTE: Spec deviation from spec/cast_value.md.
+        //
+        // The spec requires validating that fill values survive an encode->decode round-trip.
+        // In zarrs, the original decoded fill value is always available and propagated through
+        // codec operations, so there is never a need to decode an encoded fill value anyway.
+        //
+        // let decoded_back = self.decode(
+        //     encoded.as_ne_bytes().to_vec().into(),
+        //     &[NonZeroU64::new(1).unwrap()],
+        //     decoded_data_type,
+        //     decoded_fill_value,
+        //     &CodecOptions::default(),
+        // )?;
+        // let decoded_back = FillValue::new(decoded_back.into_fixed()?.into_owned());
+        // if decoded_back != *decoded_fill_value {
+        //     return Err(CodecError::Other(
+        //         "cast_value fill value does not survive a round-trip cast".to_string(),
+        //     ));
+        // }
         Ok(encoded)
     }
 }

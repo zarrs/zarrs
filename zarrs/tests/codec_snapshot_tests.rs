@@ -1241,6 +1241,8 @@ pub struct CodecDef {
     pub non_deterministic: bool,
     /// Optional predicate to skip certain data types (returns true to skip)
     pub skip: Option<fn(&DataType) -> bool>,
+    /// Optional function to determine comparison mode per data type (None = ByteLevel)
+    pub comparison_mode_fn: Option<fn(&DataType) -> ComparisonMode>,
 }
 
 /// Build the codec registry with all available codecs
@@ -1269,6 +1271,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zstd")]
@@ -1280,6 +1283,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "blosc")]
@@ -1302,6 +1306,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "crc32c")]
@@ -1313,6 +1318,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zlib")]
@@ -1329,6 +1335,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "bz2")]
@@ -1345,6 +1352,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "adler32")]
@@ -1356,6 +1364,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "fletcher32")]
@@ -1367,6 +1376,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "gdeflate")]
@@ -1378,6 +1388,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1393,6 +1404,7 @@ fn codec_registry() -> Vec<CodecDef> {
         non_deterministic: false,
         // Skip variable-length / optional data types (shuffle requires fixed element size)
         skip: Some(|dt| dt.is_variable() || dt.is_optional()),
+        comparison_mode_fn: None,
     });
 
     // =========================================================================
@@ -1412,6 +1424,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     // Helper: skip for variable-length and optional data types
@@ -1455,6 +1468,61 @@ fn codec_registry() -> Vec<CodecDef> {
         }
     }
 
+    /// Maps a data type to a wider (lossless) target for cast_value upcast testing.
+    /// The test data values for each type are small enough to be exactly representable
+    /// in the wider type, so round-trip verification remains valid.
+    fn cast_upcast_target(dt: &DataType) -> Option<DataType> {
+        match data_type_id(dt) {
+            "int2" | "int4" => Some(data_type::int8()),
+            "int8" => Some(data_type::int16()),
+            "int16" => Some(data_type::int32()),
+            "int32" => Some(data_type::int64()),
+            // uint8 fits exactly in float32 (integers 0-255 are all representable)
+            "uint8" => Some(data_type::float32()),
+            "uint2" | "uint4" => Some(data_type::uint8()),
+            "uint16" => Some(data_type::uint32()),
+            "uint32" => Some(data_type::uint64()),
+            "float8_e4m3" | "float8_e5m2" => Some(data_type::float16()),
+            "bfloat16" | "float16" => Some(data_type::float32()),
+            "float32" => Some(data_type::float64()),
+            // int64, uint64, float64 have no standard wider type
+            _ => None,
+        }
+    }
+
+    /// Maps a data type to a narrower (lossy) target for cast_value downcast testing.
+    fn cast_downcast_target(dt: &DataType) -> Option<DataType> {
+        match data_type_id(dt) {
+            "int16" => Some(data_type::int8()),
+            "int32" => Some(data_type::int16()),
+            "int64" => Some(data_type::int32()),
+            "uint16" => Some(data_type::uint8()),
+            "uint32" => Some(data_type::uint16()),
+            "uint64" => Some(data_type::uint32()),
+            "bfloat16" => Some(data_type::float8_e4m3()),
+            "float16" => Some(data_type::float8_e5m2()),
+            "float32" => Some(data_type::float16()),
+            "float64" => Some(data_type::float32()),
+            // int2/int4/int8, uint2/uint4/uint8, float8_* are already at the narrow end
+            _ => None,
+        }
+    }
+
+    fn skip_cast_upcast(dt: &DataType) -> bool {
+        is_not_supported_cast_value_data_type(dt) || cast_upcast_target(dt).is_none()
+    }
+
+    fn skip_cast_downcast(dt: &DataType) -> bool {
+        is_not_supported_cast_value_data_type(dt) || cast_downcast_target(dt).is_none()
+    }
+
+    fn cast_value_comparison_mode(dt: &DataType) -> ComparisonMode {
+        match data_type_id(dt) {
+            "float8_e4m3" | "float8_e5m2" => ComparisonMode::SemanticFloat,
+            _ => ComparisonMode::ByteLevel,
+        }
+    }
+
     #[cfg(feature = "bitround")]
     codecs.push(CodecDef {
         name: BitroundCodec::aliases_v3().default_name.clone(),
@@ -1464,17 +1532,20 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: true,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
+    // cast_value upcast: each type cast to a wider type (lossless for our test data)
     codecs.push(CodecDef {
         name: CastValueCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
-        name_suffix: None,
+        name_suffix: Some("upcast"),
         factory: |dt| {
+            let target = cast_upcast_target(dt).expect("skip_cast_upcast should prevent None");
             CodecInstance::ArrayToArray(Arc::new(
                 CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
                     CastValueCodecConfigurationV1 {
-                        data_type: data_type_metadata(dt),
+                        data_type: data_type_metadata(&target),
                         rounding: Default::default(),
                         out_of_range: None,
                         scalar_map: None,
@@ -1485,7 +1556,33 @@ fn codec_registry() -> Vec<CodecDef> {
         },
         lossy: false,
         non_deterministic: false,
-        skip: Some(is_not_supported_cast_value_data_type),
+        skip: Some(skip_cast_upcast),
+        comparison_mode_fn: Some(cast_value_comparison_mode),
+    });
+
+    // cast_value downcast: each type cast to a narrower type (lossy)
+    codecs.push(CodecDef {
+        name: CastValueCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: Some("downcast"),
+        factory: |dt| {
+            let target = cast_downcast_target(dt).expect("skip_cast_downcast should prevent None");
+            CodecInstance::ArrayToArray(Arc::new(
+                CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+                    CastValueCodecConfigurationV1 {
+                        data_type: data_type_metadata(&target),
+                        rounding: Default::default(),
+                        out_of_range: Some(CastValueOutOfRangeMode::Clamp),
+                        scalar_map: None,
+                    },
+                ))
+                .unwrap(),
+            ))
+        },
+        lossy: true,
+        non_deterministic: false,
+        skip: Some(skip_cast_downcast),
+        comparison_mode_fn: Some(cast_value_comparison_mode),
     });
 
     codecs.push(CodecDef {
@@ -1496,6 +1593,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1511,6 +1609,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1550,6 +1649,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: true,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // =========================================================================
@@ -1564,6 +1664,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip for optional data types
@@ -1584,6 +1685,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false, // Using single-threaded pool makes it deterministic
         skip: Some(is_optional),
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "pcodec")]
@@ -1600,6 +1702,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zfp")]
@@ -1611,6 +1714,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip vlen codecs for fixed-length or optional data types
@@ -1626,6 +1730,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1636,6 +1741,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1646,6 +1752,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1656,6 +1763,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1666,6 +1774,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1676,6 +1785,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip optional codec for non-optional data types
@@ -1694,6 +1804,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_not_optional),
+        comparison_mode_fn: None,
     });
 
     codecs
@@ -1711,6 +1822,9 @@ fn build_test_config(
         fill_value: fill_value.clone(),
         lossy: codec.lossy,
         non_deterministic: codec.non_deterministic,
+        comparison_mode: codec
+            .comparison_mode_fn
+            .map_or(ComparisonMode::ByteLevel, |f| f(data_type)),
         ..Default::default()
     };
 
