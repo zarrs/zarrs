@@ -4,7 +4,7 @@ use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeTraits` for complex subfloat types (two subfloats packed together).
 macro_rules! impl_complex_subfloat_data_type {
-    ($marker:ty) => {
+    ($marker:ty, $microfloat:ty) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(
                 &self,
@@ -25,6 +25,22 @@ macro_rules! impl_complex_subfloat_data_type {
             {
                 // Complex subfloats use array of two hex strings like ["0x00", "0x00"]
                 if let Some([re, im]) = fill_value_metadata.as_array() {
+                    #[cfg(feature = "microfloat")]
+                    let parse_component = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
+                        if let Some(s) = v.as_str() {
+                            if let Some(hex) = s.strip_prefix("0x") {
+                                return u8::from_str_radix(hex, 16).ok();
+                            }
+                            return match s {
+                                "NaN" => Some(<$microfloat>::NAN.to_bits()),
+                                "Infinity" => Some(<$microfloat>::INFINITY.to_bits()),
+                                "-Infinity" => Some(<$microfloat>::NEG_INFINITY.to_bits()),
+                                _ => None,
+                            };
+                        }
+                        v.as_f64().map(|f| <$microfloat>::from_f64(f).to_bits())
+                    };
+                    #[cfg(not(feature = "microfloat"))]
                     let parse_hex = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
                         if let Some(s) = v.as_str() {
                             if let Some(hex) = s.strip_prefix("0x") {
@@ -36,7 +52,11 @@ macro_rules! impl_complex_subfloat_data_type {
                         }
                         None
                     };
-                    if let (Some(re_byte), Some(im_byte)) = (parse_hex(re), parse_hex(im)) {
+                    #[cfg(not(feature = "microfloat"))]
+                    let parsed = (parse_hex(re), parse_hex(im));
+                    #[cfg(feature = "microfloat")]
+                    let parsed = (parse_component(re), parse_component(im));
+                    if let (Some(re_byte), Some(im_byte)) = parsed {
                         return Ok(zarrs_data_type::FillValue::from([re_byte, im_byte]));
                     }
                 }
@@ -52,15 +72,53 @@ macro_rules! impl_complex_subfloat_data_type {
                     .as_ne_bytes()
                     .try_into()
                     .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
-                // Return as array of hex strings
-                Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                    zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[0])),
-                    zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[1])),
-                ]))
+                #[cfg(feature = "microfloat")]
+                {
+                    let component_to_metadata = |byte: u8| {
+                        let value = <$microfloat>::from_bits(byte);
+                        if value.is_nan() {
+                            zarrs_metadata::FillValueMetadata::from("NaN".to_string())
+                        } else if value.is_infinite() {
+                            if value.is_sign_negative() {
+                                zarrs_metadata::FillValueMetadata::from("-Infinity".to_string())
+                            } else {
+                                zarrs_metadata::FillValueMetadata::from("Infinity".to_string())
+                            }
+                        } else {
+                            zarrs_metadata::FillValueMetadata::from(value.to_f64())
+                        }
+                    };
+
+                    Ok(zarrs_metadata::FillValueMetadata::from(vec![
+                        component_to_metadata(bytes[0]),
+                        component_to_metadata(bytes[1]),
+                    ]))
+                }
+                #[cfg(not(feature = "microfloat"))]
+                {
+                    // Return as array of hex strings
+                    Ok(zarrs_metadata::FillValueMetadata::from(vec![
+                        zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[0])),
+                        zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[1])),
+                    ]))
+                }
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
                 self
+            }
+
+            fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+                #[cfg(feature = "microfloat")]
+                {
+                    const TYPES: [std::any::TypeId; 1] =
+                        [std::any::TypeId::of::<num::Complex<$microfloat>>()];
+                    &TYPES
+                }
+                #[cfg(not(feature = "microfloat"))]
+                {
+                    &[]
+                }
             }
         }
     };
@@ -115,14 +173,14 @@ register_data_type_plugin!(ComplexFloat8E8M0FNUDataType);
 zarrs_plugin::impl_extension_aliases!(ComplexFloat8E8M0FNUDataType, v3: "complex_float8_e8m0fnu");
 
 // DataTypeTraits implementations for complex subfloats
-impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E3M4DataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E4M3B11FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E4M3FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType);
-impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType);
+impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType, microfloat::f4e2m1fn);
+impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType, microfloat::f6e2m3fn);
+impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType, microfloat::f6e3m2fn);
+impl_complex_subfloat_data_type!(ComplexFloat8E3M4DataType, microfloat::f8e3m4);
+impl_complex_subfloat_data_type!(ComplexFloat8E4M3B11FNUZDataType, microfloat::f8e4m3b11fnuz);
+impl_complex_subfloat_data_type!(ComplexFloat8E4M3FNUZDataType, microfloat::f8e4m3fnuz);
+impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType, microfloat::f8e5m2fnuz);
+impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType, microfloat::f8e8m0fnu);
 
 // PackBits codec implementations for complex subfloats
 use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;

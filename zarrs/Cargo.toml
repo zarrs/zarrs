@@ -36,6 +36,7 @@ async = ["dep:async-generic", "dep:async-trait", "dep:futures", "moka/future", "
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
 float8 = ["dep:float8"] # Adds support for float8 array elements
+microfloat = ["dep:microfloat"] # Adds support for microfloat array elements
 
 [lints]
 workspace = true
@@ -87,6 +88,7 @@ zarrs_metadata_ext.workspace = true
 jiff = { version = "0.2.15", optional = true }
 chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.5.0", optional = true, features = ["bytemuck"] }
+microfloat = { version = "0.1.0", path = "../../microfloat", optional = true, features = ["bytemuck"] }
 simd-adler32 = { version = "0.3.7", optional = true }
 itoa = "1.0.15"
 log = "0.4.28"

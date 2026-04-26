@@ -4,7 +4,7 @@ use super::macros::register_data_type_plugin;
 
 /// Macro to implement `DataTypeTraits` for subfloat types (single-byte floating point formats).
 macro_rules! impl_subfloat_data_type {
-    ($marker:ty) => {
+    ($marker:ty, $microfloat:ty) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(
                 &self,
@@ -23,7 +23,42 @@ macro_rules! impl_subfloat_data_type {
                 _version: zarrs_plugin::ZarrVersion,
             ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError>
             {
-                // Subfloats use hex string representation like "0x00"
+                #[cfg(feature = "microfloat")]
+                {
+                    if let Some(s) = fill_value_metadata.as_str() {
+                        if let Some(hex) = s.strip_prefix("0x")
+                            && let Ok(byte) = u8::from_str_radix(hex, 16)
+                        {
+                            return Ok(zarrs_data_type::FillValue::from(byte));
+                        }
+                        match s {
+                            "NaN" => {
+                                return Ok(zarrs_data_type::FillValue::from(
+                                    <$microfloat>::NAN.to_bits(),
+                                ));
+                            }
+                            "Infinity" => {
+                                return Ok(zarrs_data_type::FillValue::from(
+                                    <$microfloat>::INFINITY.to_bits(),
+                                ));
+                            }
+                            "-Infinity" => {
+                                return Ok(zarrs_data_type::FillValue::from(
+                                    <$microfloat>::NEG_INFINITY.to_bits(),
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    if let Some(f) = fill_value_metadata.as_f64() {
+                        return Ok(zarrs_data_type::FillValue::from(
+                            <$microfloat>::from_f64(f).to_bits(),
+                        ));
+                    }
+                }
+
+                #[cfg(not(feature = "microfloat"))]
                 if let Some(s) = fill_value_metadata.as_str() {
                     if let Some(hex) = s.strip_prefix("0x") {
                         if let Ok(byte) = u8::from_str_radix(hex, 16) {
@@ -49,15 +84,49 @@ macro_rules! impl_subfloat_data_type {
                     .as_ne_bytes()
                     .try_into()
                     .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
-                // Return as hex string
-                Ok(zarrs_metadata::FillValueMetadata::from(format!(
-                    "0x{:02x}",
-                    bytes[0]
-                )))
+                #[cfg(feature = "microfloat")]
+                {
+                    let value = <$microfloat>::from_bits(bytes[0]);
+                    if value.is_nan() {
+                        Ok(zarrs_metadata::FillValueMetadata::from("NaN".to_string()))
+                    } else if value.is_infinite() {
+                        if value.is_sign_negative() {
+                            Ok(zarrs_metadata::FillValueMetadata::from(
+                                "-Infinity".to_string(),
+                            ))
+                        } else {
+                            Ok(zarrs_metadata::FillValueMetadata::from(
+                                "Infinity".to_string(),
+                            ))
+                        }
+                    } else {
+                        Ok(zarrs_metadata::FillValueMetadata::from(value.to_f64()))
+                    }
+                }
+                #[cfg(not(feature = "microfloat"))]
+                {
+                    // Return as hex string
+                    Ok(zarrs_metadata::FillValueMetadata::from(format!(
+                        "0x{:02x}",
+                        bytes[0]
+                    )))
+                }
             }
 
             fn as_any(&self) -> &dyn std::any::Any {
                 self
+            }
+
+            fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
+                #[cfg(feature = "microfloat")]
+                {
+                    const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<$microfloat>()];
+                    &TYPES
+                }
+                #[cfg(not(feature = "microfloat"))]
+                {
+                    &[]
+                }
             }
         }
     };
@@ -112,14 +181,14 @@ register_data_type_plugin!(Float8E8M0FNUDataType);
 zarrs_plugin::impl_extension_aliases!(Float8E8M0FNUDataType, v3: "float8_e8m0fnu");
 
 // DataTypeTraits implementations for subfloats
-impl_subfloat_data_type!(Float4E2M1FNDataType);
-impl_subfloat_data_type!(Float6E2M3FNDataType);
-impl_subfloat_data_type!(Float6E3M2FNDataType);
-impl_subfloat_data_type!(Float8E3M4DataType);
-impl_subfloat_data_type!(Float8E4M3B11FNUZDataType);
-impl_subfloat_data_type!(Float8E4M3FNUZDataType);
-impl_subfloat_data_type!(Float8E5M2FNUZDataType);
-impl_subfloat_data_type!(Float8E8M0FNUDataType);
+impl_subfloat_data_type!(Float4E2M1FNDataType, microfloat::f4e2m1fn);
+impl_subfloat_data_type!(Float6E2M3FNDataType, microfloat::f6e2m3fn);
+impl_subfloat_data_type!(Float6E3M2FNDataType, microfloat::f6e3m2fn);
+impl_subfloat_data_type!(Float8E3M4DataType, microfloat::f8e3m4);
+impl_subfloat_data_type!(Float8E4M3B11FNUZDataType, microfloat::f8e4m3b11fnuz);
+impl_subfloat_data_type!(Float8E4M3FNUZDataType, microfloat::f8e4m3fnuz);
+impl_subfloat_data_type!(Float8E5M2FNUZDataType, microfloat::f8e5m2fnuz);
+impl_subfloat_data_type!(Float8E8M0FNUDataType, microfloat::f8e8m0fnu);
 
 // PackBits codec implementations for subfloats
 use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;

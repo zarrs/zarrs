@@ -13,16 +13,16 @@
 | [`UInt16`]                    | `uint16`                     | `>u2` `<u2`   | [`u16`]                                          |
 | [`UInt32`]                    | `uint32`                     | `>u4` `<u4`   | [`u32`]                                          |
 | [`UInt64`]                    | `uint64`                     | `>u8` `<u8`   | [`u64`]                                          |
-| [`Float4E2M1FN`]†             | `float4_e2m1fn`              |               |                                                  |
-| [`Float6E2M3FN`]†             | `float6_e2m3fn`              |               |                                                  |
-| [`Float6E3M2FN`]†             | `float6_e3m2fn`              |               |                                                  |
-| [`Float8E3M4`]†               | `float8_e3m4`                |               |                                                  |
-| [`Float8E4M3`]†               | `float8_e4m3`                |               |  [`float8::F8E4M3`] (`float8`)                   |
-| [`Float8E4M3B11FNUZ`]†        | `float8_e4m3b11fnuz`         |               |                                                  |
-| [`Float8E4M3FNUZ`]†           | `float8_e4m3fnuz`            |               |                                                  |
-| [`Float8E5M2`]†               | `float8_e5m2`                |               | [`float8::F8E5M2`] (`float8`)                    |
-| [`Float8E5M2FNUZ`]†           | `float8_e5m2fnuz`            |               |                                                  |
-| [`Float8E8M0FNU`]†            | `float8_e8m0fnu`             |               |                                                  |
+| [`Float4E2M1FN`]†             | `float4_e2m1fn`              |               | [`microfloat::f4e2m1fn`] (`microfloat`)          |
+| [`Float6E2M3FN`]†             | `float6_e2m3fn`              |               | [`microfloat::f6e2m3fn`] (`microfloat`)          |
+| [`Float6E3M2FN`]†             | `float6_e3m2fn`              |               | [`microfloat::f6e3m2fn`] (`microfloat`)          |
+| [`Float8E3M4`]†               | `float8_e3m4`                |               | [`microfloat::f8e3m4`] (`microfloat`)            |
+| [`Float8E4M3`]†               | `float8_e4m3`                |               |  [`float8::F8E4M3`] (`float8`)<br>[`microfloat::f8e4m3`] (`microfloat`) |
+| [`Float8E4M3B11FNUZ`]†        | `float8_e4m3b11fnuz`         |               | [`microfloat::f8e4m3b11fnuz`] (`microfloat`)     |
+| [`Float8E4M3FNUZ`]†           | `float8_e4m3fnuz`            |               | [`microfloat::f8e4m3fnuz`] (`microfloat`)        |
+| [`Float8E5M2`]†               | `float8_e5m2`                |               | [`float8::F8E5M2`] (`float8`)<br>[`microfloat::f8e5m2`] (`microfloat`) |
+| [`Float8E5M2FNUZ`]†           | `float8_e5m2fnuz`            |               | [`microfloat::f8e5m2fnuz`] (`microfloat`)        |
+| [`Float8E8M0FNU`]†            | `float8_e8m0fnu`             |               | [`microfloat::f8e8m0fnu`] (`microfloat`)         |
 | [`BFloat16`]                  | `bfloat16`                   |               | [`half::bf16`]                                   |
 | [`Float16`]                   | `float16`                    | `>f2` `<f2`   | [`half::f16`]                                    |
 | [`Float32`]                   | `float32`                    | `>f4` `<f4`   | [`f32`]                                          |
@@ -33,16 +33,16 @@
 | [`ComplexFloat16`]            | `complex_float16`            |               | [`Complex<half::f16>`]                           |
 | [`ComplexFloat32`]            | `complex_float32`            |               | [`Complex<f32>`]                                 |
 | [`ComplexFloat64`]            | `complex_float64`            |               | [`Complex<f64>`]                                 |
-| [`ComplexFloat4E2M1FN`]†      | `complex_float4_e2m1fn`      |               |                                                  |
-| [`ComplexFloat6E2M3FN`]†      | `complex_float6_e2m3fn`      |               |                                                  |
-| [`ComplexFloat6E3M2FN`]†      | `complex_float6_e3m2fn`      |               |                                                  |
-| [`ComplexFloat8E3M4`]†        | `complex_float8_e3m4`        |               |                                                  |
-| [`ComplexFloat8E4M3`]†        | `complex_float8_e4m3`        |               | [`Complex<float8::F8E4M3>`] (`float8`)           |
-| [`ComplexFloat8E4M3B11FNUZ`]† | `complex_float8_e4m3b11fnuz` |               |                                                  |
-| [`ComplexFloat8E4M3FNUZ`]†    | `complex_float8_e4m3fnuz`    |               |                                                  |
-| [`ComplexFloat8E5M2`]†        | `complex_float8_e5m2`        |               | [`Complex<float8::F8E5M2>`] (`float8`)           |
-| [`ComplexFloat8E5M2FNUZ`]†    | `complex_float8_e5m2fnuz`    |               |                                                  |
-| [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               |                                                  |
+| [`ComplexFloat4E2M1FN`]†      | `complex_float4_e2m1fn`      |               | [`Complex<microfloat::f4e2m1fn>`] (`microfloat`) |
+| [`ComplexFloat6E2M3FN`]†      | `complex_float6_e2m3fn`      |               | [`Complex<microfloat::f6e2m3fn>`] (`microfloat`) |
+| [`ComplexFloat6E3M2FN`]†      | `complex_float6_e3m2fn`      |               | [`Complex<microfloat::f6e3m2fn>`] (`microfloat`) |
+| [`ComplexFloat8E3M4`]†        | `complex_float8_e3m4`        |               | [`Complex<microfloat::f8e3m4>`] (`microfloat`)   |
+| [`ComplexFloat8E4M3`]†        | `complex_float8_e4m3`        |               | [`Complex<float8::F8E4M3>`] (`float8`)<br>[`Complex<microfloat::f8e4m3>`] (`microfloat`) |
+| [`ComplexFloat8E4M3B11FNUZ`]† | `complex_float8_e4m3b11fnuz` |               | [`Complex<microfloat::f8e4m3b11fnuz>`] (`microfloat`) |
+| [`ComplexFloat8E4M3FNUZ`]†    | `complex_float8_e4m3fnuz`    |               | [`Complex<microfloat::f8e4m3fnuz>`] (`microfloat`) |
+| [`ComplexFloat8E5M2`]†        | `complex_float8_e5m2`        |               | [`Complex<float8::F8E5M2>`] (`float8`)<br>[`Complex<microfloat::f8e5m2>`] (`microfloat`) |
+| [`ComplexFloat8E5M2FNUZ`]†    | `complex_float8_e5m2fnuz`    |               | [`Complex<microfloat::f8e5m2fnuz>`] (`microfloat`) |
+| [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               | [`Complex<microfloat::f8e8m0fnu>`] (`microfloat`) |
 | [`Optional`]                  | 🚧`zarrs.optional`           |               | [`Option`]                                       |
 | [`RawBits`]                   | `r*`                         | `\|V*`        | `[u8; N]` / `&[u8; N]`                           |
 | [`String`]                    | `string`                     | `\|O`         | [`String`] / [`&str`]                            |
@@ -115,6 +115,26 @@
 [`Complex<f64>`]: num::complex::Complex<f64>
 [`Complex<float8::F8E4M3>`]: num::complex::Complex<float8::F8E4M3>
 [`Complex<float8::F8E5M2>`]: num::complex::Complex<float8::F8E5M2>
+[`Complex<microfloat::f4e2m1fn>`]: num::complex::Complex<microfloat::f4e2m1fn>
+[`Complex<microfloat::f6e2m3fn>`]: num::complex::Complex<microfloat::f6e2m3fn>
+[`Complex<microfloat::f6e3m2fn>`]: num::complex::Complex<microfloat::f6e3m2fn>
+[`Complex<microfloat::f8e3m4>`]: num::complex::Complex<microfloat::f8e3m4>
+[`Complex<microfloat::f8e4m3>`]: num::complex::Complex<microfloat::f8e4m3>
+[`Complex<microfloat::f8e4m3b11fnuz>`]: num::complex::Complex<microfloat::f8e4m3b11fnuz>
+[`Complex<microfloat::f8e4m3fnuz>`]: num::complex::Complex<microfloat::f8e4m3fnuz>
+[`Complex<microfloat::f8e5m2>`]: num::complex::Complex<microfloat::f8e5m2>
+[`Complex<microfloat::f8e5m2fnuz>`]: num::complex::Complex<microfloat::f8e5m2fnuz>
+[`Complex<microfloat::f8e8m0fnu>`]: num::complex::Complex<microfloat::f8e8m0fnu>
+[`microfloat::f4e2m1fn`]: microfloat::f4e2m1fn
+[`microfloat::f6e2m3fn`]: microfloat::f6e2m3fn
+[`microfloat::f6e3m2fn`]: microfloat::f6e3m2fn
+[`microfloat::f8e3m4`]: microfloat::f8e3m4
+[`microfloat::f8e4m3`]: microfloat::f8e4m3
+[`microfloat::f8e4m3b11fnuz`]: microfloat::f8e4m3b11fnuz
+[`microfloat::f8e4m3fnuz`]: microfloat::f8e4m3fnuz
+[`microfloat::f8e5m2`]: microfloat::f8e5m2
+[`microfloat::f8e5m2fnuz`]: microfloat::f8e5m2fnuz
+[`microfloat::f8e8m0fnu`]: microfloat::f8e8m0fnu
 
 [ZEP0001]: https://zarr.dev/zeps/accepted/ZEP0001.html
 [zarr-specs #130]: https://github.com/zarr-developers/zarr-specs/issues/130
