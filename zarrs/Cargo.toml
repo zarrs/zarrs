@@ -35,7 +35,7 @@ dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
 async = ["dep:async-generic", "dep:async-trait", "dep:futures", "moka/future", "zarrs_storage/async", "zarrs_codec/async"] # Enable experimental async API
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
-float8 = ["dep:float8"] # Adds support for float8 array elements
+float8 = ["dep:float8", "microfloat"] # Adds support for float8 array elements
 microfloat = ["dep:microfloat"] # Adds support for microfloat array elements
 
 [lints]

@@ -1259,6 +1259,62 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "microfloat")]
+    #[test]
+    fn data_type_complex_float8_e4m3_fill_value() {
+        let data_type = complex_float8_e4m3();
+
+        let metadata = serde_json::from_str::<FillValueMetadata>(r"[1.0, -1.0]").unwrap();
+        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        assert_eq!(
+            fill_value.as_ne_bytes(),
+            [
+                microfloat::f8e4m3::from_f64(1.0).to_bits(),
+                microfloat::f8e4m3::from_f64(-1.0).to_bits()
+            ]
+        );
+        assert_eq!(
+            metadata,
+            data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadata>(r#"["Infinity", "NaN"]"#).unwrap();
+        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        assert_eq!(
+            microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[0]),
+            microfloat::f8e4m3::INFINITY
+        );
+        assert!(microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[1]).is_nan());
+    }
+
+    #[cfg(feature = "microfloat")]
+    #[test]
+    fn data_type_complex_float8_e5m2_fill_value() {
+        let data_type = complex_float8_e5m2();
+
+        let metadata = serde_json::from_str::<FillValueMetadata>(r"[1.0, -1.0]").unwrap();
+        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        assert_eq!(
+            fill_value.as_ne_bytes(),
+            [
+                microfloat::f8e5m2::from_f64(1.0).to_bits(),
+                microfloat::f8e5m2::from_f64(-1.0).to_bits()
+            ]
+        );
+        assert_eq!(
+            metadata,
+            data_type.metadata_fill_value(&fill_value).unwrap()
+        );
+
+        let metadata = serde_json::from_str::<FillValueMetadata>(r#"["Infinity", "NaN"]"#).unwrap();
+        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        assert_eq!(
+            microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[0]),
+            microfloat::f8e5m2::INFINITY
+        );
+        assert!(microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[1]).is_nan());
+    }
+
     #[test]
     fn data_type_float8_e5m2fnuz() {
         let json = r#""float8_e5m2fnuz""#;

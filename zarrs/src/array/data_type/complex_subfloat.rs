@@ -2,20 +2,9 @@
 
 use super::macros::register_data_type_plugin;
 
-// Prefer microfloat, fall back to float8 for types available in both crates
-#[cfg(feature = "microfloat")]
-type SelectedFloat8E4M3 = microfloat::f8e4m3;
-#[cfg(all(not(feature = "microfloat"), feature = "float8"))]
-type SelectedFloat8E4M3 = float8::F8E4M3;
-
-#[cfg(feature = "microfloat")]
-type SelectedFloat8E5M2 = microfloat::f8e5m2;
-#[cfg(all(not(feature = "microfloat"), feature = "float8"))]
-type SelectedFloat8E5M2 = float8::F8E5M2;
-
 /// Macro to implement `DataTypeTraits` for complex subfloat types (microfloat only).
 macro_rules! impl_complex_subfloat_data_type {
-    ($marker:ty, $float_type:ty) => {
+    ($marker:ty, $float_type:ty $(, $float8_type:ty)?) => {
         impl zarrs_data_type::DataTypeTraits for $marker {
             fn configuration(
                 &self,
@@ -118,10 +107,19 @@ macro_rules! impl_complex_subfloat_data_type {
             }
 
             fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
-                #[cfg(feature = "microfloat")]
+                #[cfg(all(feature = "float8", feature = "microfloat"))]
                 {
-                    const TYPES: [std::any::TypeId; 1] =
-                        [std::any::TypeId::of::<num::Complex<$float_type>>()];
+                    const TYPES: [std::any::TypeId; impl_complex_subfloat_data_type!(@num_types $($float8_type)?)] = [
+                        std::any::TypeId::of::<num::Complex<$float_type>>(),
+                        $(std::any::TypeId::of::<num::Complex<$float8_type>>(),)?
+                    ];
+                    &TYPES
+                }
+                #[cfg(all(not(feature = "float8"), feature = "microfloat"))]
+                {
+                    const TYPES: [std::any::TypeId; 1] = [std::any::TypeId::of::<
+                        num::Complex<$float_type>,
+                    >()];
                     &TYPES
                 }
                 #[cfg(not(feature = "microfloat"))]
@@ -130,6 +128,12 @@ macro_rules! impl_complex_subfloat_data_type {
                 }
             }
         }
+    };
+    (@num_types) => {
+        1
+    };
+    (@num_types $float8_type:ty) => {
+        2
     };
 }
 
@@ -198,255 +202,20 @@ impl_complex_subfloat_data_type!(ComplexFloat4E2M1FNDataType, microfloat::f4e2m1
 impl_complex_subfloat_data_type!(ComplexFloat6E2M3FNDataType, microfloat::f6e2m3fn);
 impl_complex_subfloat_data_type!(ComplexFloat6E3M2FNDataType, microfloat::f6e3m2fn);
 impl_complex_subfloat_data_type!(ComplexFloat8E3M4DataType, microfloat::f8e3m4);
+impl_complex_subfloat_data_type!(
+    ComplexFloat8E4M3DataType,
+    microfloat::f8e4m3,
+    float8::F8E4M3
+);
 impl_complex_subfloat_data_type!(ComplexFloat8E4M3B11FNUZDataType, microfloat::f8e4m3b11fnuz);
 impl_complex_subfloat_data_type!(ComplexFloat8E4M3FNUZDataType, microfloat::f8e4m3fnuz);
+impl_complex_subfloat_data_type!(
+    ComplexFloat8E5M2DataType,
+    microfloat::f8e5m2,
+    float8::F8E5M2
+);
 impl_complex_subfloat_data_type!(ComplexFloat8E5M2FNUZDataType, microfloat::f8e5m2fnuz);
 impl_complex_subfloat_data_type!(ComplexFloat8E8M0FNUDataType, microfloat::f8e8m0fnu);
-
-// DataTypeTraits implementations for complex float8 types (microfloat or float8 crate)
-impl zarrs_data_type::DataTypeTraits for ComplexFloat8E4M3DataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
-        zarrs_metadata::Configuration::default()
-    }
-
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(2)
-    }
-
-    fn fill_value(
-        &self,
-        fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersion,
-    ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        if let Some([re, im]) = fill_value_metadata.as_array() {
-            #[cfg(feature = "microfloat")]
-            let parse_component = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
-                if let Some(s) = v.as_str() {
-                    if let Some(hex) = s.strip_prefix("0x") {
-                        return u8::from_str_radix(hex, 16).ok();
-                    }
-                    return match s {
-                        "NaN" => Some(SelectedFloat8E4M3::NAN.to_bits()),
-                        "Infinity" => Some(SelectedFloat8E4M3::INFINITY.to_bits()),
-                        "-Infinity" => Some(SelectedFloat8E4M3::NEG_INFINITY.to_bits()),
-                        _ => None,
-                    };
-                }
-                v.as_f64()
-                    .map(|f| SelectedFloat8E4M3::from_f64(f).to_bits())
-            };
-            #[cfg(not(feature = "microfloat"))]
-            let parse_hex = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
-                if let Some(s) = v.as_str() {
-                    if let Some(hex) = s.strip_prefix("0x") {
-                        return u8::from_str_radix(hex, 16).ok();
-                    }
-                }
-                if let Some(int) = v.as_u64() {
-                    return u8::try_from(int).ok();
-                }
-                None
-            };
-            #[cfg(not(feature = "microfloat"))]
-            let parsed = (parse_hex(re), parse_hex(im));
-            #[cfg(feature = "microfloat")]
-            let parsed = (parse_component(re), parse_component(im));
-            if let (Some(re_byte), Some(im_byte)) = parsed {
-                return Ok(zarrs_data_type::FillValue::from([re_byte, im_byte]));
-            }
-        }
-        Err(zarrs_data_type::DataTypeFillValueMetadataError)
-    }
-
-    fn metadata_fill_value(
-        &self,
-        fill_value: &zarrs_data_type::FillValue,
-    ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
-        let bytes: [u8; 2] = fill_value
-            .as_ne_bytes()
-            .try_into()
-            .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
-        #[cfg(any(feature = "float8", feature = "microfloat"))]
-        {
-            let component_to_metadata = |byte: u8| -> zarrs_metadata::FillValueMetadata {
-                let f8 = SelectedFloat8E4M3::from_bits(byte);
-                if f8.is_nan() {
-                    zarrs_metadata::FillValueMetadata::from("NaN".to_string())
-                } else if f8 == SelectedFloat8E4M3::INFINITY {
-                    zarrs_metadata::FillValueMetadata::from("Infinity".to_string())
-                } else if f8 == SelectedFloat8E4M3::NEG_INFINITY {
-                    zarrs_metadata::FillValueMetadata::from("-Infinity".to_string())
-                } else {
-                    zarrs_metadata::FillValueMetadata::from(f8.to_f64())
-                }
-            };
-            Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                component_to_metadata(bytes[0]),
-                component_to_metadata(bytes[1]),
-            ]))
-        }
-        #[cfg(not(any(feature = "float8", feature = "microfloat")))]
-        {
-            Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[0])),
-                zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[1])),
-            ]))
-        }
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
-        #[cfg(all(feature = "float8", feature = "microfloat"))]
-        {
-            const TYPES: [std::any::TypeId; 2] = [
-                std::any::TypeId::of::<num::Complex<float8::F8E4M3>>(),
-                std::any::TypeId::of::<num::Complex<microfloat::f8e4m3>>(),
-            ];
-            &TYPES
-        }
-        #[cfg(all(feature = "float8", not(feature = "microfloat")))]
-        {
-            const TYPES: [std::any::TypeId; 1] =
-                [std::any::TypeId::of::<num::Complex<float8::F8E4M3>>()];
-            &TYPES
-        }
-        #[cfg(all(not(feature = "float8"), feature = "microfloat"))]
-        {
-            const TYPES: [std::any::TypeId; 1] =
-                [std::any::TypeId::of::<num::Complex<microfloat::f8e4m3>>()];
-            &TYPES
-        }
-        #[cfg(not(any(feature = "float8", feature = "microfloat")))]
-        {
-            &[]
-        }
-    }
-}
-
-impl zarrs_data_type::DataTypeTraits for ComplexFloat8E5M2DataType {
-    fn configuration(&self, _version: zarrs_plugin::ZarrVersion) -> zarrs_metadata::Configuration {
-        zarrs_metadata::Configuration::default()
-    }
-
-    fn size(&self) -> zarrs_metadata::DataTypeSize {
-        zarrs_metadata::DataTypeSize::Fixed(2)
-    }
-
-    fn fill_value(
-        &self,
-        fill_value_metadata: &zarrs_metadata::FillValueMetadata,
-        _version: zarrs_plugin::ZarrVersion,
-    ) -> Result<zarrs_data_type::FillValue, zarrs_data_type::DataTypeFillValueMetadataError> {
-        if let Some([re, im]) = fill_value_metadata.as_array() {
-            #[cfg(feature = "microfloat")]
-            let parse_component = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
-                if let Some(s) = v.as_str() {
-                    if let Some(hex) = s.strip_prefix("0x") {
-                        return u8::from_str_radix(hex, 16).ok();
-                    }
-                    return match s {
-                        "NaN" => Some(SelectedFloat8E5M2::NAN.to_bits()),
-                        "Infinity" => Some(SelectedFloat8E5M2::INFINITY.to_bits()),
-                        "-Infinity" => Some(SelectedFloat8E5M2::NEG_INFINITY.to_bits()),
-                        _ => None,
-                    };
-                }
-                v.as_f64()
-                    .map(|f| SelectedFloat8E5M2::from_f64(f).to_bits())
-            };
-            #[cfg(not(feature = "microfloat"))]
-            let parse_hex = |v: &zarrs_metadata::FillValueMetadata| -> Option<u8> {
-                if let Some(s) = v.as_str() {
-                    if let Some(hex) = s.strip_prefix("0x") {
-                        return u8::from_str_radix(hex, 16).ok();
-                    }
-                }
-                if let Some(int) = v.as_u64() {
-                    return u8::try_from(int).ok();
-                }
-                None
-            };
-            #[cfg(not(feature = "microfloat"))]
-            let parsed = (parse_hex(re), parse_hex(im));
-            #[cfg(feature = "microfloat")]
-            let parsed = (parse_component(re), parse_component(im));
-            if let (Some(re_byte), Some(im_byte)) = parsed {
-                return Ok(zarrs_data_type::FillValue::from([re_byte, im_byte]));
-            }
-        }
-        Err(zarrs_data_type::DataTypeFillValueMetadataError)
-    }
-
-    fn metadata_fill_value(
-        &self,
-        fill_value: &zarrs_data_type::FillValue,
-    ) -> Result<zarrs_metadata::FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
-        let bytes: [u8; 2] = fill_value
-            .as_ne_bytes()
-            .try_into()
-            .map_err(|_| zarrs_data_type::DataTypeFillValueError)?;
-        #[cfg(any(feature = "float8", feature = "microfloat"))]
-        {
-            let component_to_metadata = |byte: u8| -> zarrs_metadata::FillValueMetadata {
-                let f8 = SelectedFloat8E5M2::from_bits(byte);
-                if f8.is_nan() {
-                    zarrs_metadata::FillValueMetadata::from("NaN".to_string())
-                } else if f8 == SelectedFloat8E5M2::INFINITY {
-                    zarrs_metadata::FillValueMetadata::from("Infinity".to_string())
-                } else if f8 == SelectedFloat8E5M2::NEG_INFINITY {
-                    zarrs_metadata::FillValueMetadata::from("-Infinity".to_string())
-                } else {
-                    zarrs_metadata::FillValueMetadata::from(f8.to_f64())
-                }
-            };
-            Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                component_to_metadata(bytes[0]),
-                component_to_metadata(bytes[1]),
-            ]))
-        }
-        #[cfg(not(any(feature = "float8", feature = "microfloat")))]
-        {
-            Ok(zarrs_metadata::FillValueMetadata::from(vec![
-                zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[0])),
-                zarrs_metadata::FillValueMetadata::from(format!("0x{:02x}", bytes[1])),
-            ]))
-        }
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn compatible_element_types(&self) -> &'static [std::any::TypeId] {
-        #[cfg(all(feature = "float8", feature = "microfloat"))]
-        {
-            const TYPES: [std::any::TypeId; 2] = [
-                std::any::TypeId::of::<num::Complex<float8::F8E5M2>>(),
-                std::any::TypeId::of::<num::Complex<microfloat::f8e5m2>>(),
-            ];
-            &TYPES
-        }
-        #[cfg(all(feature = "float8", not(feature = "microfloat")))]
-        {
-            const TYPES: [std::any::TypeId; 1] =
-                [std::any::TypeId::of::<num::Complex<float8::F8E5M2>>()];
-            &TYPES
-        }
-        #[cfg(all(not(feature = "float8"), feature = "microfloat"))]
-        {
-            const TYPES: [std::any::TypeId; 1] =
-                [std::any::TypeId::of::<num::Complex<microfloat::f8e5m2>>()];
-            &TYPES
-        }
-        #[cfg(not(any(feature = "float8", feature = "microfloat")))]
-        {
-            &[]
-        }
-    }
-}
 
 // PackBits codec implementations for complex subfloats
 use zarrs_data_type::codec_traits::impl_pack_bits_data_type_traits;
