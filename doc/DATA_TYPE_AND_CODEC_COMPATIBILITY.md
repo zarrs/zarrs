@@ -34,30 +34,30 @@ Results:
 | complex_bfloat16 | ✓ | - | ✗ | ✓ | ✓ | ✓ |
 | complex_float16 | ✓ | - | ✗ | ✓ | ✓ | ✓ |
 | complex_float32 | ✓ | - | ✗ | ✓ | ✓ | ✓ |
-| complex_float4_e2m1fn | - | - | - | - | - | - |
+| complex_float4_e2m1fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | complex_float64 | ✓ | - | ✗ | ✓ | ✓ | ✓ |
-| complex_float6_e2m3fn | - | - | - | - | - | - |
-| complex_float6_e3m2fn | - | - | - | - | - | - |
-| complex_float8_e3m4 | - | - | - | - | - | - |
+| complex_float6_e2m3fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| complex_float6_e3m2fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| complex_float8_e3m4 | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | complex_float8_e4m3 | ✗ | - | ✗ | ✓ | ✓ | ✓ |
-| complex_float8_e4m3b11fnuz | - | - | - | - | - | - |
-| complex_float8_e4m3fnuz | - | - | - | - | - | - |
+| complex_float8_e4m3b11fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| complex_float8_e4m3fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | complex_float8_e5m2 | ✗ | - | ✗ | ✓ | ✓ | ✓ |
-| complex_float8_e5m2fnuz | - | - | - | - | - | - |
-| complex_float8_e8m0fnu | - | - | - | - | - | - |
+| complex_float8_e5m2fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| complex_float8_e8m0fnu | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | float16 | ✓ | ✓ | ✗ | ✓ | ✓ | ✓ |
 | float32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float4_e2m1fn | - | - | - | - | - | - |
+| float4_e2m1fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | float64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float6_e2m3fn | - | - | - | - | - | - |
-| float6_e3m2fn | - | - | - | - | - | - |
-| float8_e3m4 | - | - | - | - | - | - |
-| float8_e4m3 | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| float8_e4m3b11fnuz | - | - | - | - | - | - |
-| float8_e4m3fnuz | - | - | - | - | - | - |
-| float8_e5m2 | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ |
-| float8_e5m2fnuz | - | - | - | - | - | - |
-| float8_e8m0fnu | - | - | - | - | - | - |
+| float6_e2m3fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float6_e3m2fn | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float8_e3m4 | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float8_e4m3 | ✗ | 💥 | ✗ | ✓ | ✓ | ✓ |
+| float8_e4m3b11fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float8_e4m3fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float8_e5m2 | ✗ | 💥 | ✗ | ✓ | ✓ | ✓ |
+| float8_e5m2fnuz | ✗ | - | ✗ | ✓ | ✓ | ✓ |
+| float8_e8m0fnu | ✗ | - | ✗ | ✓ | ✓ | ✓ |
 | int16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int2 | ✗ | ✓ | ✗ | ✓ | ✓ | ✓ |
 | int32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -91,30 +91,30 @@ Results:
 | complex_bfloat16 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | complex_float16 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✗ |
 | complex_float32 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✗ |
-| complex_float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float4_e2m1fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | complex_float64 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✗ |
-| complex_float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float6_e2m3fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| complex_float6_e3m2fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| complex_float8_e3m4 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | complex_float8_e4m3 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
-| complex_float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e4m3b11fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| complex_float8_e4m3fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | complex_float8_e5m2 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
-| complex_float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e5m2fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| complex_float8_e8m0fnu | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | float16 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✗ |
 | float32 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✓ |
-| float4_e2m1fn | - | - | - | - | - | - | - | - | - | - | - |
+| float4_e2m1fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | float64 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✓ |
-| float6_e2m3fn | - | - | - | - | - | - | - | - | - | - | - |
-| float6_e3m2fn | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e3m4 | - | - | - | - | - | - | - | - | - | - | - |
+| float6_e2m3fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| float6_e3m2fn | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| float8_e3m4 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | float8_e4m3 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
-| float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e4m3b11fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| float8_e4m3fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | float8_e5m2 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
-| float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - | - |
-| float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - | - |
+| float8_e5m2fnuz | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
+| float8_e8m0fnu | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | int16 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✓ |
 | int2 | ✓ | - | ✓ | ✗ | ✓ | - | - | - | - | - | ✗ |
 | int32 | ✓ | - | ✓ | ✓ | ✓ | - | - | - | - | - | ✓ |
@@ -148,30 +148,30 @@ Results:
 | complex_bfloat16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | complex_float16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | complex_float32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| complex_float4_e2m1fn | - | - | - | - | - | - | - | - | - | - |
+| complex_float4_e2m1fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | complex_float64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| complex_float6_e2m3fn | - | - | - | - | - | - | - | - | - | - |
-| complex_float6_e3m2fn | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e3m4 | - | - | - | - | - | - | - | - | - | - |
+| complex_float6_e2m3fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| complex_float6_e3m2fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| complex_float8_e3m4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | complex_float8_e4m3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| complex_float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e4m3b11fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| complex_float8_e4m3fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | complex_float8_e5m2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| complex_float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - |
-| complex_float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - |
+| complex_float8_e5m2fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| complex_float8_e8m0fnu | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | float16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | float32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float4_e2m1fn | - | - | - | - | - | - | - | - | - | - |
+| float4_e2m1fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | float64 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float6_e2m3fn | - | - | - | - | - | - | - | - | - | - |
-| float6_e3m2fn | - | - | - | - | - | - | - | - | - | - |
-| float8_e3m4 | - | - | - | - | - | - | - | - | - | - |
+| float6_e2m3fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| float6_e3m2fn | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| float8_e3m4 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | float8_e4m3 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float8_e4m3b11fnuz | - | - | - | - | - | - | - | - | - | - |
-| float8_e4m3fnuz | - | - | - | - | - | - | - | - | - | - |
+| float8_e4m3b11fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| float8_e4m3fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | float8_e5m2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| float8_e5m2fnuz | - | - | - | - | - | - | - | - | - | - |
-| float8_e8m0fnu | - | - | - | - | - | - | - | - | - | - |
+| float8_e5m2fnuz | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| float8_e8m0fnu | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int16 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int2 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | int32 | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |

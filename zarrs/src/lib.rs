@@ -205,6 +205,7 @@
 //!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array).
 //!  - Additional [`Element`](crate::array::Element)/[`ElementOwned`](crate::array::ElementOwned) implementations:
 //!    - `float8`: add support for [`float8`] subfloat data types.
+//!    - `microfloat`: add support for [`microfloat`] subfloat data types.
 //!    - `jiff`: add support for [`jiff`] time data types.
 //!    - `chrono`: add support for [`chrono`] time data types.
 //!

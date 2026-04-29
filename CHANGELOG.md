@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.10...HEAD)
 
 ### Added
+- Add a `microfloat` feature for expanded subfloat and complex subfloat data type / element support
 - Add `cast_value` codec
 
 ## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
