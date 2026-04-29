@@ -82,10 +82,20 @@ fn data_type_id(data_type: &DataType) -> &'static str {
         "float64"
     } else if type_id == TypeId::of::<data_type::BFloat16DataType>() {
         "bfloat16"
+    } else if type_id == TypeId::of::<data_type::Float8E3M4DataType>() {
+        "float8_e3m4"
     } else if type_id == TypeId::of::<data_type::Float8E4M3DataType>() {
         "float8_e4m3"
+    } else if type_id == TypeId::of::<data_type::Float8E4M3B11FNUZDataType>() {
+        "float8_e4m3b11fnuz"
+    } else if type_id == TypeId::of::<data_type::Float8E4M3FNUZDataType>() {
+        "float8_e4m3fnuz"
     } else if type_id == TypeId::of::<data_type::Float8E5M2DataType>() {
         "float8_e5m2"
+    } else if type_id == TypeId::of::<data_type::Float8E5M2FNUZDataType>() {
+        "float8_e5m2fnuz"
+    } else if type_id == TypeId::of::<data_type::Float8E8M0FNUDataType>() {
+        "float8_e8m0fnu"
     } else if type_id == TypeId::of::<data_type::StringDataType>() {
         "string"
     } else if type_id == TypeId::of::<data_type::BytesDataType>() {
@@ -102,10 +112,20 @@ fn data_type_id(data_type: &DataType) -> &'static str {
         "complex_float64"
     } else if type_id == TypeId::of::<data_type::ComplexBFloat16DataType>() {
         "complex_bfloat16"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E3M4DataType>() {
+        "complex_float8_e3m4"
     } else if type_id == TypeId::of::<data_type::ComplexFloat8E4M3DataType>() {
         "complex_float8_e4m3"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E4M3B11FNUZDataType>() {
+        "complex_float8_e4m3b11fnuz"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E4M3FNUZDataType>() {
+        "complex_float8_e4m3fnuz"
     } else if type_id == TypeId::of::<data_type::ComplexFloat8E5M2DataType>() {
         "complex_float8_e5m2"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E5M2FNUZDataType>() {
+        "complex_float8_e5m2fnuz"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat8E8M0FNUDataType>() {
+        "complex_float8_e8m0fnu"
     } else if type_id == TypeId::of::<data_type::NumpyDateTime64DataType>() {
         "numpy.datetime64"
     } else if type_id == TypeId::of::<data_type::NumpyTimeDelta64DataType>() {
@@ -485,9 +505,6 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
         "float4_e2m1fn" => (0..num_elements).map(|i| (i % 16) as u8).collect(),
         // Float6 (6-bit values stored in 1 byte, values 0-63 fit in 6 bits)
         "float6_e2m3fn" | "float6_e3m2fn" => (0..num_elements).map(|i| (i % 64) as u8).collect(),
-
-        // Float8 variants (1 byte each)
-        "float8_e4m3" | "float8_e5m2" => (0..num_elements).map(|i| (i % 128) as u8).collect(),
 
         "float32" => (0..num_elements)
             .flat_map(|i| ((i as f32) * 0.5).to_ne_bytes())
