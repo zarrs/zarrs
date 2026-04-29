@@ -23,7 +23,7 @@
     feature = "zlib",
     // Element types
     feature = "chrono",
-    feature = "float8",
+    feature = "microfloat",
 ))]
 
 use half::{bf16, f16};
