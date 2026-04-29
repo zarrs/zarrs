@@ -23,7 +23,7 @@
     feature = "zlib",
     // Element types
     feature = "chrono",
-    feature = "float8",
+    feature = "microfloat",
 ))]
 
 #[path = "common/semantic_comparison.rs"]
