@@ -17,12 +17,8 @@ mod macros;
 mod bool;
 mod bytes;
 mod complex_float;
-mod complex_float8_e4m3;
-mod complex_float8_e5m2;
 mod complex_subfloat;
 mod float;
-mod float8_e4m3;
-mod float8_e5m2;
 mod int;
 mod int2;
 mod int4;
@@ -58,16 +54,13 @@ pub use complex_float::{
     Complex64DataType, Complex128DataType, ComplexBFloat16DataType, ComplexFloat16DataType,
     ComplexFloat32DataType, ComplexFloat64DataType,
 };
-pub use complex_float8_e4m3::ComplexFloat8E4M3DataType;
-pub use complex_float8_e5m2::ComplexFloat8E5M2DataType;
 pub use complex_subfloat::{
     ComplexFloat4E2M1FNDataType, ComplexFloat6E2M3FNDataType, ComplexFloat6E3M2FNDataType,
-    ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3FNUZDataType,
-    ComplexFloat8E5M2FNUZDataType, ComplexFloat8E8M0FNUDataType,
+    ComplexFloat8E3M4DataType, ComplexFloat8E4M3B11FNUZDataType, ComplexFloat8E4M3DataType,
+    ComplexFloat8E4M3FNUZDataType, ComplexFloat8E5M2DataType, ComplexFloat8E5M2FNUZDataType,
+    ComplexFloat8E8M0FNUDataType,
 };
 pub use float::{BFloat16DataType, Float16DataType, Float32DataType, Float64DataType};
-pub use float8_e4m3::Float8E4M3DataType;
-pub use float8_e5m2::Float8E5M2DataType;
 pub use int::{Int8DataType, Int16DataType, Int32DataType, Int64DataType};
 pub use int2::Int2DataType;
 pub use int4::Int4DataType;
@@ -76,8 +69,8 @@ pub use numpy_timedelta64::NumpyTimeDelta64DataType;
 pub use raw_bits::RawBitsDataType;
 pub use subfloat::{
     Float4E2M1FNDataType, Float6E2M3FNDataType, Float6E3M2FNDataType, Float8E3M4DataType,
-    Float8E4M3B11FNUZDataType, Float8E4M3FNUZDataType, Float8E5M2FNUZDataType,
-    Float8E8M0FNUDataType,
+    Float8E4M3B11FNUZDataType, Float8E4M3DataType, Float8E4M3FNUZDataType, Float8E5M2DataType,
+    Float8E5M2FNUZDataType, Float8E8M0FNUDataType,
 };
 pub use uint::{UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType};
 pub use uint2::UInt2DataType;
@@ -1001,7 +994,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(not(feature = "float8"), feature = "microfloat"))]
+    #[cfg(any(feature = "float8", feature = "microfloat"))]
     #[test]
     fn data_type_float8_e4m3() {
         let json = r#""float8_e4m3""#;
@@ -1016,7 +1009,13 @@ mod tests {
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
         assert_eq!(fill_value.as_ne_bytes(), [170]);
+        #[cfg(not(feature = "microfloat"))]
+        assert_eq!(float8::F8E4M3::from_bits(170).to_f32(), -0.3125);
+        #[cfg(feature = "microfloat")]
         assert_eq!(microfloat::f8e4m3::from_bits(170).to_f32(), -0.3125);
+        #[cfg(not(feature = "microfloat"))]
+        let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
+        #[cfg(feature = "microfloat")]
         let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             serde_json::from_str::<FillValueMetadata>(r"-0.3125").unwrap(),
@@ -1025,10 +1024,19 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""NaN""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
+        assert!(float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
+        #[cfg(feature = "microfloat")]
         assert!(microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""Infinity""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
+        assert_eq!(
+            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E4M3::INFINITY
+        );
+        #[cfg(feature = "microfloat")]
         assert_eq!(
             microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[0]),
             microfloat::f8e4m3::INFINITY
@@ -1036,81 +1044,47 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""-Infinity""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[0]),
-            microfloat::f8e4m3::NEG_INFINITY
-        );
-    }
-
-    #[cfg(feature = "float8")]
-    #[test]
-    fn data_type_float8_e4m3() {
-        let json = r#""float8_e4m3""#;
-        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let data_type = DataType::from_metadata(&metadata).unwrap();
-        assert_eq!(
-            json,
-            serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
-        );
-        assert_eq!(data_type.name_v3().unwrap().as_ref(), "float8_e4m3");
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(fill_value.as_ne_bytes(), [170]);
-        // Verify that the fill value represents -0.3125 in float8_e4m3 format
-        assert_eq!(float8::F8E4M3::from_bits(170).to_f32(), -0.3125);
-        // metadata_fill_value returns numeric value (with float8 feature enabled)
-        let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
-        assert_eq!(
-            serde_json::from_str::<FillValueMetadata>(r"-0.3125").unwrap(),
-            metadata_out
-        );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""NaN""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert!(float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""Infinity""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E4M3::INFINITY
-        );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""-Infinity""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
         assert_eq!(
             float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E4M3::NEG_INFINITY
         );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"0").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(feature = "microfloat")]
         assert_eq!(
-            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E4M3::ZERO
+            microfloat::f8e4m3::from_bits(fill_value.as_ne_bytes()[0]),
+            microfloat::f8e4m3::NEG_INFINITY
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"-0").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E4M3::NEG_ZERO
-        );
+        #[cfg(not(feature = "microfloat"))]
+        {
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"0").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E4M3::ZERO
+            );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"-1").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E4M3::NEG_ONE
-        );
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"-0").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E4M3::NEG_ZERO
+            );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"1").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E4M3::ONE
-        );
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"-1").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E4M3::NEG_ONE
+            );
+
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"1").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E4M3::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E4M3::ONE
+            );
+        }
     }
 
     #[test]
@@ -1192,7 +1166,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(not(feature = "float8"), feature = "microfloat"))]
+    #[cfg(any(feature = "float8", feature = "microfloat"))]
     #[test]
     fn data_type_float8_e5m2() {
         let json = r#""float8_e5m2""#;
@@ -1207,7 +1181,13 @@ mod tests {
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
         assert_eq!(fill_value.as_ne_bytes(), [170]);
+        #[cfg(not(feature = "microfloat"))]
+        assert_eq!(float8::F8E5M2::from_bits(170).to_f32(), -0.046875);
+        #[cfg(feature = "microfloat")]
         assert_eq!(microfloat::f8e5m2::from_bits(170).to_f32(), -0.046875);
+        #[cfg(not(feature = "microfloat"))]
+        let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
+        #[cfg(feature = "microfloat")]
         let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
         assert_eq!(
             serde_json::from_str::<FillValueMetadata>(r"-0.046875").unwrap(),
@@ -1216,10 +1196,19 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""NaN""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
+        assert!(float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
+        #[cfg(feature = "microfloat")]
         assert!(microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""Infinity""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
+        assert_eq!(
+            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+            float8::F8E5M2::INFINITY
+        );
+        #[cfg(feature = "microfloat")]
         assert_eq!(
             microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[0]),
             microfloat::f8e5m2::INFINITY
@@ -1227,81 +1216,47 @@ mod tests {
 
         let metadata = serde_json::from_str::<FillValueMetadata>(r#""-Infinity""#).unwrap();
         let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[0]),
-            microfloat::f8e5m2::NEG_INFINITY
-        );
-    }
-
-    #[cfg(feature = "float8")]
-    #[test]
-    fn data_type_float8_e5m2() {
-        let json = r#""float8_e5m2""#;
-        let metadata: MetadataV3 = serde_json::from_str(json).unwrap();
-        let data_type = DataType::from_metadata(&metadata).unwrap();
-        assert_eq!(
-            json,
-            serde_json::to_string(&data_type_metadata(&data_type)).unwrap()
-        );
-        assert_eq!(data_type.name_v3().unwrap().as_ref(), "float8_e5m2");
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""0xaa""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(fill_value.as_ne_bytes(), [170]);
-        // Verify that the fill value represents -0.046875 in float8_e5m2 format
-        assert_eq!(float8::F8E5M2::from_bits(170).to_f32(), -0.046875);
-        // metadata_fill_value returns numeric value (with float8 feature enabled)
-        let metadata_out = data_type.metadata_fill_value(&fill_value).unwrap();
-        assert_eq!(
-            serde_json::from_str::<FillValueMetadata>(r"-0.046875").unwrap(),
-            metadata_out
-        );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""NaN""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert!(float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]).is_nan());
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""Infinity""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E5M2::INFINITY
-        );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r#""-Infinity""#).unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(not(feature = "microfloat"))]
         assert_eq!(
             float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
             float8::F8E5M2::NEG_INFINITY
         );
-
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"0").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+        #[cfg(feature = "microfloat")]
         assert_eq!(
-            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E5M2::ZERO
+            microfloat::f8e5m2::from_bits(fill_value.as_ne_bytes()[0]),
+            microfloat::f8e5m2::NEG_INFINITY
         );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"-0").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E5M2::NEG_ZERO
-        );
+        #[cfg(not(feature = "microfloat"))]
+        {
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"0").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E5M2::ZERO
+            );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"-1").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E5M2::NEG_ONE
-        );
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"-0").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E5M2::NEG_ZERO
+            );
 
-        let metadata = serde_json::from_str::<FillValueMetadata>(r"1").unwrap();
-        let fill_value = data_type.fill_value_v3(&metadata).unwrap();
-        assert_eq!(
-            float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
-            float8::F8E5M2::ONE
-        );
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"-1").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E5M2::NEG_ONE
+            );
+
+            let metadata = serde_json::from_str::<FillValueMetadata>(r"1").unwrap();
+            let fill_value = data_type.fill_value_v3(&metadata).unwrap();
+            assert_eq!(
+                float8::F8E5M2::from_bits(fill_value.as_ne_bytes()[0]),
+                float8::F8E5M2::ONE
+            );
+        }
     }
 
     #[test]

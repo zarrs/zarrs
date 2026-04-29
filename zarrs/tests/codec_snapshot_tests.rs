@@ -114,6 +114,18 @@ fn data_type_id(data_type: &DataType) -> &'static str {
         "raw_bits"
     } else if type_id == TypeId::of::<data_type::OptionalDataType>() {
         "optional"
+    } else if type_id == TypeId::of::<data_type::Float4E2M1FNDataType>() {
+        "float4_e2m1fn"
+    } else if type_id == TypeId::of::<data_type::Float6E2M3FNDataType>() {
+        "float6_e2m3fn"
+    } else if type_id == TypeId::of::<data_type::Float6E3M2FNDataType>() {
+        "float6_e3m2fn"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat4E2M1FNDataType>() {
+        "complex_float4_e2m1fn"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat6E2M3FNDataType>() {
+        "complex_float6_e2m3fn"
+    } else if type_id == TypeId::of::<data_type::ComplexFloat6E3M2FNDataType>() {
+        "complex_float6_e3m2fn"
     } else {
         "unknown"
     }
@@ -210,14 +222,54 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             "fill_0",
         ),
         (data_type::float16(), FillValue::new(vec![0u8; 2]), "fill_0"),
-        // Float8 variants (1 byte each)
+        // Sub-byte floats (microfloat crate)
+        (
+            data_type::float4_e2m1fn(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float6_e2m3fn(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float6_e3m2fn(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float8_e3m4(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
         (
             data_type::float8_e4m3(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
         (
+            data_type::float8_e4m3b11fnuz(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float8_e4m3fnuz(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
             data_type::float8_e5m2(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float8_e5m2fnuz(),
+            FillValue::new(vec![0u8]),
+            "fill_0",
+        ),
+        (
+            data_type::float8_e8m0fnu(),
             FillValue::new(vec![0u8]),
             "fill_0",
         ),
@@ -237,14 +289,54 @@ pub fn all_data_types() -> Vec<(DataType, FillValue, &'static str)> {
             FillValue::new(vec![0u8; 4]),
             "fill_0",
         ),
-        // Complex float8 (1 byte each = 2 bytes total)
+        // Complex sub-byte floats (2 bytes total)
+        (
+            data_type::complex_float4_e2m1fn(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float6_e2m3fn(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float6_e3m2fn(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float8_e3m4(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
         (
             data_type::complex_float8_e4m3(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
         (
+            data_type::complex_float8_e4m3b11fnuz(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float8_e4m3fnuz(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
             data_type::complex_float8_e5m2(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float8_e5m2fnuz(),
+            FillValue::new(vec![0u8; 2]),
+            "fill_0",
+        ),
+        (
+            data_type::complex_float8_e8m0fnu(),
             FillValue::new(vec![0u8; 2]),
             "fill_0",
         ),
@@ -389,6 +481,11 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
             .flat_map(|i| f16::from_f32((i as f32) * 0.5).to_ne_bytes())
             .collect(),
 
+        // Float4 (4-bit values stored in 1 byte, values 0-15 fit in 4 bits)
+        "float4_e2m1fn" => (0..num_elements).map(|i| (i % 16) as u8).collect(),
+        // Float6 (6-bit values stored in 1 byte, values 0-63 fit in 6 bits)
+        "float6_e2m3fn" | "float6_e3m2fn" => (0..num_elements).map(|i| (i % 64) as u8).collect(),
+
         // Float8 variants (1 byte each)
         "float8_e4m3" | "float8_e5m2" => (0..num_elements).map(|i| (i % 128) as u8).collect(),
 
@@ -419,6 +516,15 @@ fn generate_fixed_bytes(data_type: &DataType, num_elements: usize) -> Vec<u8> {
                 bytes.extend(imag.to_ne_bytes());
                 bytes
             })
+            .collect(),
+
+        // Complex float4 (2 x 4-bit components, values 0-15 fit in 4 bits each, 1 byte per element)
+        "complex_float4_e2m1fn" => (0..num_elements)
+            .flat_map(|i| vec![(i % 16) as u8, ((i + 1) % 16) as u8])
+            .collect(),
+        // Complex float6 (2 x 6-bit components, values 0-63 fit in 6 bits each, 2 bytes per element)
+        "complex_float6_e2m3fn" | "complex_float6_e3m2fn" => (0..num_elements)
+            .flat_map(|i| vec![(i % 64) as u8, ((i + 1) % 64) as u8])
             .collect(),
 
         // Complex float8 (2 bytes total)
