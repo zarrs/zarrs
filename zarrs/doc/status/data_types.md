@@ -50,7 +50,7 @@
 | [`NumpyDateTime64`]           | `numpy.datetime64`           |               | [`i64`]<br>[`chrono::DateTime<Utc>`] (`chrono`)<br>[`jiff::Timestamp`] (`jiff`)  |
 | [`NumpyTimeDelta64`]          | `numpy.timedelta64`          |               | [`i64`]<br>[`chrono::TimeDelta`] (`chrono`)<br>[`jiff::SignedDuration`] (`jiff`) |
 
-<sup>† Additional features (e.g. `float8`) may be required to parse floating point fill values. All subfloat types support hex string fill values.</sup>
+<sup>† Additional features (e.g. `microfloat` / `float8`) may be required to parse floating point fill values. All subfloat types support hex string fill values.</sup>
 
 [`DataType`]: crate::array::data_type
 
