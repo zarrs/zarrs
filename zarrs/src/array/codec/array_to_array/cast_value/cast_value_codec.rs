@@ -33,15 +33,34 @@ pub struct CastValueCodec {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DataKind {
-    Int { bits: u8, signed: bool },
+    Int {
+        bits: u8,
+        signed: bool,
+    },
     Float16,
     BFloat16,
     Float32,
     Float64,
+    #[cfg(feature = "microfloat")]
+    Float4E2M1FN,
+    #[cfg(feature = "microfloat")]
+    Float6E2M3FN,
+    #[cfg(feature = "microfloat")]
+    Float6E3M2FN,
+    #[cfg(feature = "microfloat")]
     Float8E3M4,
+    #[cfg(feature = "microfloat")]
     Float8E4M3,
+    #[cfg(feature = "microfloat")]
+    Float8E4M3B11FNUZ,
+    #[cfg(feature = "microfloat")]
+    Float8E4M3FNUZ,
+    #[cfg(feature = "microfloat")]
     Float8E5M2,
-    UnsupportedReal,
+    #[cfg(feature = "microfloat")]
+    Float8E5M2FNUZ,
+    #[cfg(feature = "microfloat")]
+    Float8E8M0FNU,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -90,7 +109,7 @@ impl CastValueCodec {
             CastValueCodecConfiguration::V1(configuration) => {
                 let target_data_type = DataType::from_metadata(&configuration.data_type)?;
                 match data_kind(&target_data_type) {
-                    Some(DataKind::UnsupportedReal) | None => {
+                    None => {
                         return Err(PluginCreateError::Other(
                             "cast_value target data_type is not a supported real-number type"
                                 .to_string(),
@@ -636,25 +655,48 @@ fn data_kind(data_type: &DataType) -> Option<DataKind> {
             DataKind::Float32
         } else if type_id == std::any::TypeId::of::<data_type::Float64DataType>() {
             DataKind::Float64
-        } else if type_id == std::any::TypeId::of::<data_type::Float8E3M4DataType>() {
-            DataKind::Float8E3M4
-        } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3DataType>() {
-            DataKind::Float8E4M3
-        } else if type_id == std::any::TypeId::of::<data_type::Float8E5M2DataType>() {
-            DataKind::Float8E5M2
-        } else if type_id == std::any::TypeId::of::<data_type::Float4E2M1FNDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float6E2M3FNDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float6E3M2FNDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float8E4M3B11FNUZDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float8E4M3FNUZDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float8E5M2FNUZDataType>()
-            || type_id == std::any::TypeId::of::<data_type::Float8E8M0FNUDataType>()
-        {
-            DataKind::UnsupportedReal
+        } else if let Some(kind) = subfloat_data_kind(data_type) {
+            kind
         } else {
             return None;
         },
     )
+}
+
+#[cfg(feature = "microfloat")]
+fn subfloat_data_kind(data_type: &DataType) -> Option<DataKind> {
+    use crate::array::data_type;
+    let type_id = data_type.as_any().type_id();
+    Some(
+        if type_id == std::any::TypeId::of::<data_type::Float4E2M1FNDataType>() {
+            DataKind::Float4E2M1FN
+        } else if type_id == std::any::TypeId::of::<data_type::Float6E2M3FNDataType>() {
+            DataKind::Float6E2M3FN
+        } else if type_id == std::any::TypeId::of::<data_type::Float6E3M2FNDataType>() {
+            DataKind::Float6E3M2FN
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E3M4DataType>() {
+            DataKind::Float8E3M4
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3DataType>() {
+            DataKind::Float8E4M3
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3B11FNUZDataType>() {
+            DataKind::Float8E4M3B11FNUZ
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E4M3FNUZDataType>() {
+            DataKind::Float8E4M3FNUZ
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E5M2DataType>() {
+            DataKind::Float8E5M2
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E5M2FNUZDataType>() {
+            DataKind::Float8E5M2FNUZ
+        } else if type_id == std::any::TypeId::of::<data_type::Float8E8M0FNUDataType>() {
+            DataKind::Float8E8M0FNU
+        } else {
+            return None;
+        },
+    )
+}
+
+#[cfg(not(feature = "microfloat"))]
+fn subfloat_data_kind(_data_type: &DataType) -> Option<DataKind> {
+    None
 }
 
 fn convert_array<'a>(
@@ -671,18 +713,6 @@ fn convert_array<'a>(
     let target_kind = data_kind(target_data_type).ok_or_else(|| {
         CodecError::UnsupportedDataType(target_data_type.clone(), "cast_value".to_string())
     })?;
-    if matches!(source_kind, DataKind::UnsupportedReal)
-        || matches!(target_kind, DataKind::UnsupportedReal)
-    {
-        if source_kind == target_kind {
-            return Ok(bytes);
-        }
-        return Err(CodecError::Other(
-            "cast_value currently only supports cross-type casting for standard numeric formats"
-                .to_string(),
-        ));
-    }
-
     let source_size = CastValueCodec::element_size(source_data_type)?;
     let target_size = CastValueCodec::element_size(target_data_type)?;
     let bytes = bytes.into_fixed()?;
@@ -773,10 +803,40 @@ fn bytes_to_scalar(bytes: &[u8], kind: DataKind) -> Result<Scalar, CodecError> {
             let value = f64::from_ne_bytes(bytes.try_into().unwrap());
             scalar_from_f64(value)
         }
-        DataKind::Float8E3M4 => scalar_from_f64(float8_e3m4_to_f64(bytes[0])),
-        DataKind::Float8E4M3 => scalar_from_f64(float8_e4m3_to_f64(bytes[0])),
-        DataKind::Float8E5M2 => scalar_from_f64(float8_e5m2_to_f64(bytes[0])),
-        DataKind::UnsupportedReal => unreachable!(),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float4E2M1FN => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f4e2m1fn>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float6E2M3FN => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f6e2m3fn>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float6E3M2FN => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f6e3m2fn>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E3M4 => scalar_from_f64(microfloat_to_f64::<microfloat::f8e3m4>(bytes[0])),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E4M3 => scalar_from_f64(microfloat_to_f64::<microfloat::f8e4m3>(bytes[0])),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E4M3B11FNUZ => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f8e4m3b11fnuz>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E4M3FNUZ => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f8e4m3fnuz>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E5M2 => scalar_from_f64(microfloat_to_f64::<microfloat::f8e5m2>(bytes[0])),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E5M2FNUZ => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f8e5m2fnuz>(bytes[0]))
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E8M0FNU => {
+            scalar_from_f64(microfloat_to_f64::<microfloat::f8e8m0fnu>(bytes[0]))
+        }
         DataKind::Int { .. } => unreachable!(),
     })
 }
@@ -832,28 +892,58 @@ fn scalar_to_bytes(
         DataKind::Float64 => Ok(encode_f64(scalar, rounding, out_of_range)?
             .to_ne_bytes()
             .to_vec()),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float4E2M1FN => {
+            Ok(encode_microfloat::<microfloat::f4e2m1fn>(scalar, rounding, out_of_range)?.to_vec())
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float6E2M3FN => {
+            Ok(encode_microfloat::<microfloat::f6e2m3fn>(scalar, rounding, out_of_range)?.to_vec())
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float6E3M2FN => {
+            Ok(encode_microfloat::<microfloat::f6e3m2fn>(scalar, rounding, out_of_range)?.to_vec())
+        }
+        #[cfg(feature = "microfloat")]
         DataKind::Float8E3M4 => {
-            Ok(
-                encode_small_float(scalar, rounding, out_of_range, encode_f8e3m4_candidates)?
-                    .to_vec(),
-            )
+            Ok(encode_microfloat::<microfloat::f8e3m4>(scalar, rounding, out_of_range)?.to_vec())
         }
+        #[cfg(feature = "microfloat")]
         DataKind::Float8E4M3 => {
+            Ok(encode_microfloat::<microfloat::f8e4m3>(scalar, rounding, out_of_range)?.to_vec())
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E4M3B11FNUZ => {
             Ok(
-                encode_small_float(scalar, rounding, out_of_range, encode_f8e4m3_candidates)?
+                encode_microfloat::<microfloat::f8e4m3b11fnuz>(scalar, rounding, out_of_range)?
                     .to_vec(),
             )
         }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E4M3FNUZ => {
+            Ok(
+                encode_microfloat::<microfloat::f8e4m3fnuz>(scalar, rounding, out_of_range)?
+                    .to_vec(),
+            )
+        }
+        #[cfg(feature = "microfloat")]
         DataKind::Float8E5M2 => {
+            Ok(encode_microfloat::<microfloat::f8e5m2>(scalar, rounding, out_of_range)?.to_vec())
+        }
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E5M2FNUZ => {
             Ok(
-                encode_small_float(scalar, rounding, out_of_range, encode_f8e5m2_candidates)?
+                encode_microfloat::<microfloat::f8e5m2fnuz>(scalar, rounding, out_of_range)?
                     .to_vec(),
             )
         }
-        DataKind::UnsupportedReal => Err(CodecError::Other(
-            "cast_value currently only supports identity casts for some custom float formats"
-                .to_string(),
-        )),
+        #[cfg(feature = "microfloat")]
+        DataKind::Float8E8M0FNU => {
+            Ok(
+                encode_microfloat::<microfloat::f8e8m0fnu>(scalar, rounding, out_of_range)?
+                    .to_vec(),
+            )
+        }
     }
 }
 
@@ -1169,12 +1259,30 @@ fn encode_small_float<const N: usize>(
                 }) {
                     return Ok(*bits);
                 }
+            if value == 0.0
+                && let Some((bits, _)) = candidates.iter().find(|(_, scalar)| {
+                    matches!(scalar, Scalar::Finite { value, negative_zero: false } if *value == 0.0)
+                }) {
+                    return Ok(*bits);
+                }
             choose_small_float_candidate(value, rounding, out_of_range, &candidates)
         }
         Scalar::Signed(v) => {
+            if v == 0
+                && let Some((bits, _)) = candidates.iter().find(|(_, scalar)| {
+                    matches!(scalar, Scalar::Finite { value, negative_zero: false } if *value == 0.0)
+                }) {
+                    return Ok(*bits);
+                }
             choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates)
         }
         Scalar::Unsigned(v) => {
+            if v == 0
+                && let Some((bits, _)) = candidates.iter().find(|(_, scalar)| {
+                    matches!(scalar, Scalar::Finite { value, negative_zero: false } if *value == 0.0)
+                }) {
+                    return Ok(*bits);
+                }
             choose_small_float_candidate(v as f64, rounding, out_of_range, &candidates)
         }
     }
@@ -1186,7 +1294,7 @@ fn choose_small_float_candidate<const N: usize>(
     out_of_range: Option<CastValueOutOfRangeMode>,
     candidates: &[([u8; N], Scalar)],
 ) -> Result<[u8; N], CodecError> {
-    let finite_candidates: Vec<_> = candidates
+    let mut finite_candidates: Vec<_> = candidates
         .iter()
         .filter_map(|(bits, scalar)| match scalar {
             Scalar::Finite { value, .. } => Some((*bits, *value)),
@@ -1195,6 +1303,7 @@ fn choose_small_float_candidate<const N: usize>(
             Scalar::NaN | Scalar::Signed(_) | Scalar::Unsigned(_) => None,
         })
         .collect();
+    finite_candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
     let min = finite_candidates
         .iter()
         .filter(|(_, v)| v.is_finite())
@@ -1323,85 +1432,299 @@ fn encode_bf16_candidates() -> Vec<([u8; 2], Scalar)> {
         .collect()
 }
 
-fn encode_f8e3m4_candidates() -> Vec<([u8; 1], Scalar)> {
-    (0u8..=u8::MAX)
-        .map(|bits| ([bits], scalar_from_f64(float8_e3m4_to_f64(bits))))
-        .collect()
+#[cfg(feature = "microfloat")]
+trait MicrofloatBits: Copy {
+    fn storage_bits() -> u32;
+    fn zero() -> Self;
+    fn neg_zero() -> Self;
+    fn min() -> Self;
+    fn max() -> Self;
+    fn from_bits(bits: u8) -> Self;
+    fn from_f64(value: f64) -> Self;
+    fn to_bits(self) -> u8;
+    fn to_f64(self) -> f64;
 }
 
-fn encode_f8e4m3_candidates() -> Vec<([u8; 1], Scalar)> {
-    (0u8..=u8::MAX)
-        .map(|bits| ([bits], scalar_from_f64(float8_e4m3_to_f64(bits))))
-        .collect()
+#[cfg(feature = "microfloat")]
+macro_rules! impl_microfloat_bits {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl MicrofloatBits for $ty {
+                fn storage_bits() -> u32 {
+                    <$ty>::STORAGE_BITS
+                }
+
+                fn zero() -> Self {
+                    <$ty>::ZERO
+                }
+
+                fn neg_zero() -> Self {
+                    <$ty>::NEG_ZERO
+                }
+
+                fn min() -> Self {
+                    <$ty>::MIN
+                }
+
+                fn max() -> Self {
+                    <$ty>::MAX
+                }
+
+                fn from_bits(bits: u8) -> Self {
+                    <$ty>::from_bits(bits)
+                }
+
+                fn from_f64(value: f64) -> Self {
+                    <$ty>::from_f64(value)
+                }
+
+                fn to_bits(self) -> u8 {
+                    <$ty>::to_bits(self)
+                }
+
+                fn to_f64(self) -> f64 {
+                    <$ty>::to_f64(self)
+                }
+            }
+        )*
+    };
 }
 
-fn encode_f8e5m2_candidates() -> Vec<([u8; 1], Scalar)> {
-    (0u8..=u8::MAX)
-        .map(|bits| ([bits], scalar_from_f64(float8_e5m2_to_f64(bits))))
-        .collect()
+#[cfg(feature = "microfloat")]
+impl_microfloat_bits!(
+    microfloat::f4e2m1fn,
+    microfloat::f6e2m3fn,
+    microfloat::f6e3m2fn,
+    microfloat::f8e3m4,
+    microfloat::f8e4m3,
+    microfloat::f8e4m3b11fnuz,
+    microfloat::f8e4m3fnuz,
+    microfloat::f8e5m2,
+    microfloat::f8e5m2fnuz,
+    microfloat::f8e8m0fnu,
+);
+
+#[cfg(feature = "microfloat")]
+fn microfloat_to_f64<T: MicrofloatBits>(bits: u8) -> f64 {
+    T::from_bits(bits).to_f64()
 }
 
-fn float8_e3m4_to_f64(val: u8) -> f64 {
-    let sign = (val & 0b1000_0000) as u32;
-    let exponent = ((val >> 4) & 0b111) as i16;
-    let mantissa = (val & 0b1111) as u32;
-    if exponent == 0 {
-        if mantissa == 0 {
-            return f32::from_bits(sign << 24) as f64;
-        }
-        let scale = 2f64.powi(-2);
-        let value = (mantissa as f64 / 16.0) * scale;
-        return if sign != 0 { -value } else { value };
-    }
-    if exponent == 7 {
-        return if mantissa == 0 {
-            if sign != 0 {
-                f64::NEG_INFINITY
+#[cfg(feature = "microfloat")]
+fn encode_microfloat<T: MicrofloatBits>(
+    scalar: Scalar,
+    rounding: CastValueRoundingMode,
+    out_of_range: Option<CastValueOutOfRangeMode>,
+) -> Result<[u8; 1], CodecError> {
+    match scalar {
+        Scalar::NaN => {
+            let value = T::from_f64(f64::NAN);
+            if value.to_f64().is_nan() {
+                Ok([value.to_bits()])
             } else {
-                f64::INFINITY
+                Err(CodecError::Other(
+                    "cast_value target format does not support NaN".to_string(),
+                ))
+            }
+        }
+        Scalar::PosInf => encode_microfloat_infinity::<T>(false),
+        Scalar::NegInf => encode_microfloat_infinity::<T>(true),
+        Scalar::Finite {
+            value,
+            negative_zero,
+        } => {
+            if value == 0.0 {
+                return Ok([microfloat_zero_bits::<T>(negative_zero)]);
+            }
+            choose_microfloat_candidate::<T>(value, rounding, out_of_range).map(|bits| [bits])
+        }
+        Scalar::Signed(value) => {
+            if value == 0 {
+                return Ok([microfloat_zero_bits::<T>(false)]);
+            }
+            choose_microfloat_candidate::<T>(value as f64, rounding, out_of_range)
+                .map(|bits| [bits])
+        }
+        Scalar::Unsigned(value) => {
+            if value == 0 {
+                return Ok([microfloat_zero_bits::<T>(false)]);
+            }
+            choose_microfloat_candidate::<T>(value as f64, rounding, out_of_range)
+                .map(|bits| [bits])
+        }
+    }
+}
+
+#[cfg(feature = "microfloat")]
+fn encode_microfloat_infinity<T: MicrofloatBits>(negative: bool) -> Result<[u8; 1], CodecError> {
+    let source = if negative {
+        f64::NEG_INFINITY
+    } else {
+        f64::INFINITY
+    };
+    let value = T::from_f64(source);
+    if value.to_f64() == source {
+        Ok([value.to_bits()])
+    } else {
+        Err(CodecError::Other(
+            "cast_value target format does not support infinity".to_string(),
+        ))
+    }
+}
+
+#[cfg(feature = "microfloat")]
+fn microfloat_zero_bits<T: MicrofloatBits>(negative: bool) -> u8 {
+    let zero = T::zero().to_bits();
+    let neg_zero = T::neg_zero().to_bits();
+    if negative && neg_zero != zero {
+        neg_zero
+    } else {
+        zero
+    }
+}
+
+#[cfg(feature = "microfloat")]
+fn choose_microfloat_candidate<T: MicrofloatBits>(
+    value: f64,
+    rounding: CastValueRoundingMode,
+    out_of_range: Option<CastValueOutOfRangeMode>,
+) -> Result<u8, CodecError> {
+    let min = (T::min().to_bits(), T::min().to_f64());
+    let max = (T::max().to_bits(), T::max().to_f64());
+
+    if value < min.1 || value > max.1 {
+        let rounded = if value > max.1 {
+            match rounding {
+                CastValueRoundingMode::TowardsNegative | CastValueRoundingMode::TowardsZero => max,
+                CastValueRoundingMode::NearestEven
+                | CastValueRoundingMode::TowardsPositive
+                | CastValueRoundingMode::NearestAway => (0, f64::INFINITY),
             }
         } else {
-            f64::NAN
-        };
-    }
-    let unbiased = exponent - 3;
-    let value = (1.0 + mantissa as f64 / 16.0) * 2f64.powi(unbiased.into());
-    if sign != 0 { -value } else { value }
-}
-
-fn decode_ieee_like_8bit(bits: u8, exponent_bits: u8, mantissa_bits: u8, bias: i16) -> f64 {
-    let sign = (bits & 0x80) != 0;
-    let exponent = ((bits >> mantissa_bits) & ((1 << exponent_bits) - 1)) as i16;
-    let mantissa = (bits & ((1 << mantissa_bits) - 1)) as u32;
-    let max_exponent = (1 << exponent_bits) - 1;
-    if exponent == 0 {
-        if mantissa == 0 {
-            return if sign { -0.0 } else { 0.0 };
-        }
-        let value =
-            (mantissa as f64 / f64::from(1u32 << mantissa_bits)) * 2f64.powi(1 - bias as i32);
-        return if sign { -value } else { value };
-    }
-    if exponent == max_exponent as i16 {
-        return if mantissa == 0 {
-            if sign {
-                f64::NEG_INFINITY
-            } else {
-                f64::INFINITY
+            match rounding {
+                CastValueRoundingMode::TowardsPositive | CastValueRoundingMode::TowardsZero => min,
+                CastValueRoundingMode::NearestEven
+                | CastValueRoundingMode::TowardsNegative
+                | CastValueRoundingMode::NearestAway => (0, f64::NEG_INFINITY),
             }
-        } else {
-            f64::NAN
         };
+        if rounded.1.is_finite() {
+            return Ok(rounded.0);
+        } else if matches!(out_of_range, Some(CastValueOutOfRangeMode::Clamp)) {
+            return Ok(if rounded.1.is_sign_positive() {
+                max.0
+            } else {
+                min.0
+            });
+        } else {
+            return Err(CodecError::Other(
+                "cast_value float cast overflow".to_string(),
+            ));
+        }
     }
-    let value = (1.0 + mantissa as f64 / f64::from(1u32 << mantissa_bits))
-        * 2f64.powi((exponent - bias) as i32);
-    if sign { -value } else { value }
+
+    let nearest = T::from_f64(value);
+    let nearest = (nearest.to_bits(), nearest.to_f64());
+    if nearest.1 == value {
+        return Ok(nearest.0);
+    }
+    let (lower, upper) = if nearest.1 < value {
+        (
+            nearest,
+            next_up_microfloat::<T>(nearest.0)
+                .map(|bits| (bits, T::from_bits(bits).to_f64()))
+                .unwrap_or(max),
+        )
+    } else {
+        (
+            next_down_microfloat::<T>(nearest.0)
+                .map(|bits| (bits, T::from_bits(bits).to_f64()))
+                .unwrap_or(min),
+            nearest,
+        )
+    };
+
+    Ok(match rounding {
+        CastValueRoundingMode::TowardsZero => {
+            if value.is_sign_negative() {
+                upper.0
+            } else {
+                lower.0
+            }
+        }
+        CastValueRoundingMode::TowardsPositive => upper.0,
+        CastValueRoundingMode::TowardsNegative => lower.0,
+        CastValueRoundingMode::NearestEven | CastValueRoundingMode::NearestAway => {
+            let lower_dist = (value - lower.1).abs();
+            let upper_dist = (upper.1 - value).abs();
+            match lower_dist
+                .partial_cmp(&upper_dist)
+                .unwrap_or(Ordering::Equal)
+            {
+                Ordering::Less => lower.0,
+                Ordering::Greater => upper.0,
+                Ordering::Equal => {
+                    if matches!(rounding, CastValueRoundingMode::NearestAway) {
+                        if value.is_sign_negative() {
+                            lower.0
+                        } else {
+                            upper.0
+                        }
+                    } else if (lower.0 & 1) == 0 {
+                        lower.0
+                    } else {
+                        upper.0
+                    }
+                }
+            }
+        }
+    })
 }
 
-fn float8_e4m3_to_f64(bits: u8) -> f64 {
-    decode_ieee_like_8bit(bits, 4, 3, 7)
+#[cfg(feature = "microfloat")]
+fn next_up_microfloat<T: MicrofloatBits>(bits: u8) -> Option<u8> {
+    if !microfloat_is_signed::<T>() {
+        return (bits < T::max().to_bits()).then_some(bits + 1);
+    }
+
+    let sign_bit = microfloat_sign_bit::<T>();
+    if bits & sign_bit != 0 {
+        let negative_min_magnitude = sign_bit | 1;
+        if bits == negative_min_magnitude {
+            Some(T::zero().to_bits())
+        } else if bits > negative_min_magnitude {
+            Some(bits - 1)
+        } else {
+            Some(1)
+        }
+    } else if bits < T::max().to_bits() {
+        Some(bits + 1)
+    } else {
+        None
+    }
 }
 
-fn float8_e5m2_to_f64(bits: u8) -> f64 {
-    decode_ieee_like_8bit(bits, 5, 2, 15)
+#[cfg(feature = "microfloat")]
+fn next_down_microfloat<T: MicrofloatBits>(bits: u8) -> Option<u8> {
+    if !microfloat_is_signed::<T>() {
+        return (bits > T::min().to_bits()).then_some(bits - 1);
+    }
+
+    let sign_bit = microfloat_sign_bit::<T>();
+    if bits & sign_bit != 0 {
+        (bits < T::min().to_bits()).then_some(bits + 1)
+    } else if bits == T::zero().to_bits() {
+        Some(sign_bit | 1)
+    } else {
+        Some(bits - 1)
+    }
+}
+
+#[cfg(feature = "microfloat")]
+fn microfloat_is_signed<T: MicrofloatBits>() -> bool {
+    T::from_f64(-1.0).to_f64().is_sign_negative()
+}
+
+#[cfg(feature = "microfloat")]
+fn microfloat_sign_bit<T: MicrofloatBits>() -> u8 {
+    1 << (T::storage_bits() - 1)
 }

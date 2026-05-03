@@ -166,6 +166,80 @@ mod tests {
         assert_eq!(encoded[0], 0);
     }
 
+    #[cfg(feature = "microfloat")]
+    #[test]
+    fn codec_cast_value_float32_to_all_subfloats() {
+        let shape = vec![NonZeroU64::new(1).unwrap()];
+        let source_data_type = data_type::float32();
+        let fill_value = FillValue::from(0.0f32);
+        let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![1.0f32]));
+        let targets = [
+            ("float4_e2m1fn", 0x02),
+            ("float6_e2m3fn", 0x08),
+            ("float6_e3m2fn", 0x0c),
+            ("float8_e3m4", 0x30),
+            ("float8_e4m3", 0x38),
+            ("float8_e4m3b11fnuz", 0x58),
+            ("float8_e4m3fnuz", 0x40),
+            ("float8_e5m2", 0x3c),
+            ("float8_e5m2fnuz", 0x40),
+            ("float8_e8m0fnu", 0x7f),
+        ];
+
+        for (target_name, expected) in targets {
+            let codec = CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+                CastValueCodecConfigurationV1 {
+                    data_type: MetadataV3::new(target_name.to_string()),
+                    rounding: Default::default(),
+                    out_of_range: None,
+                    scalar_map: None,
+                },
+            ))
+            .unwrap();
+            let encoded = codec
+                .encode(
+                    bytes.clone(),
+                    &shape,
+                    &source_data_type,
+                    &fill_value,
+                    &CodecOptions::default(),
+                )
+                .unwrap();
+            assert_eq!(encoded.into_fixed().unwrap().as_ref(), &[expected]);
+        }
+    }
+
+    #[cfg(feature = "microfloat")]
+    #[test]
+    fn codec_cast_value_subfloat_negative_rounding() {
+        let shape = vec![NonZeroU64::new(3).unwrap()];
+        let source_data_type = data_type::float32();
+        let fill_value = FillValue::from(0.0f32);
+        let bytes = ArrayBytes::from(crate::array::transmute_to_bytes_vec(vec![
+            0.0f32, -0.0, -1.0,
+        ]));
+        let codec = CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+            CastValueCodecConfigurationV1 {
+                data_type: MetadataV3::new("float4_e2m1fn".to_string()),
+                rounding: Default::default(),
+                out_of_range: None,
+                scalar_map: None,
+            },
+        ))
+        .unwrap();
+
+        let encoded = codec
+            .encode(
+                bytes,
+                &shape,
+                &source_data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(encoded.into_fixed().unwrap().as_ref(), &[0x00, 0x08, 0x0a]);
+    }
+
     #[allow(clippy::single_range_in_vec_init)]
     #[test]
     fn codec_cast_value_partial_decode() {

@@ -1557,8 +1557,16 @@ fn codec_registry() -> Vec<CodecDef> {
                 | "uint64"
                 | "bfloat16"
                 | "float16"
+                | "float4_e2m1fn"
+                | "float6_e2m3fn"
+                | "float6_e3m2fn"
+                | "float8_e3m4"
                 | "float8_e4m3"
+                | "float8_e4m3b11fnuz"
+                | "float8_e4m3fnuz"
                 | "float8_e5m2"
+                | "float8_e5m2fnuz"
+                | "float8_e8m0fnu"
                 | "float32"
                 | "float64"
         )
@@ -1590,7 +1598,11 @@ fn codec_registry() -> Vec<CodecDef> {
             "uint2" | "uint4" => Some(data_type::uint8()),
             "uint16" => Some(data_type::uint32()),
             "uint32" => Some(data_type::uint64()),
-            "float8_e4m3" | "float8_e5m2" => Some(data_type::float16()),
+            "float4_e2m1fn" | "float6_e2m3fn" | "float6_e3m2fn" | "float8_e3m4" | "float8_e4m3"
+            | "float8_e4m3b11fnuz" | "float8_e4m3fnuz" | "float8_e5m2" | "float8_e5m2fnuz" => {
+                Some(data_type::float16())
+            }
+            "float8_e8m0fnu" => Some(data_type::float32()),
             "bfloat16" | "float16" => Some(data_type::float32()),
             "float32" => Some(data_type::float64()),
             // int64, uint64, float64 have no standard wider type
@@ -1626,7 +1638,7 @@ fn codec_registry() -> Vec<CodecDef> {
 
     fn cast_value_comparison_mode(dt: &DataType) -> ComparisonMode {
         match data_type_id(dt) {
-            "float8_e4m3" | "float8_e5m2" => ComparisonMode::SemanticFloat,
+            "float8_e3m4" | "float8_e4m3" | "float8_e5m2" => ComparisonMode::SemanticFloat,
             _ => ComparisonMode::ByteLevel,
         }
     }
