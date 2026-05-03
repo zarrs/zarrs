@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add metadata types for the `cast_value` codec
+
 ## [0.4.2] - 2026-03-26
 
 ### Added
