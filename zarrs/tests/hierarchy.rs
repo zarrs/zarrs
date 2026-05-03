@@ -319,9 +319,10 @@ mod consolidated_open {
         .unwrap();
 
         let mut consolidated = ConsolidatedMetadata::default();
-        consolidated
-            .metadata
-            .insert("real".to_string(), NodeMetadata::Array(real_child.metadata().clone()));
+        consolidated.metadata.insert(
+            "real".to_string(),
+            NodeMetadata::Array(real_child.metadata().clone()),
+        );
         consolidated
             .metadata
             .insert("phantom".to_string(), phantom_metadata);
@@ -352,11 +353,18 @@ mod consolidated_open {
         // Default policy is Auto: phantom child is reported via consolidated metadata.
         let h = Hierarchy::open(&store, "/").unwrap();
         let tree = h.tree();
-        assert!(tree.contains("phantom"), "tree should include phantom: {tree}");
+        assert!(
+            tree.contains("phantom"),
+            "tree should include phantom: {tree}"
+        );
         assert!(tree.contains("real"), "tree should include real: {tree}");
 
         let node = Node::open(&store, "/").unwrap();
-        let names: Vec<_> = node.children().iter().map(|c| c.name().to_string()).collect();
+        let names: Vec<_> = node
+            .children()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
         assert!(names.contains(&"phantom".to_string()), "names: {names:?}");
         assert!(names.contains(&"real".to_string()), "names: {names:?}");
 
@@ -373,11 +381,18 @@ mod consolidated_open {
         // With Never, only the actually-stored child is discovered.
         let h = Hierarchy::open(&store, "/").unwrap();
         let tree = h.tree();
-        assert!(!tree.contains("phantom"), "tree should not include phantom: {tree}");
+        assert!(
+            !tree.contains("phantom"),
+            "tree should not include phantom: {tree}"
+        );
         assert!(tree.contains("real"), "tree should include real: {tree}");
 
         let node = Node::open(&store, "/").unwrap();
-        let names: Vec<_> = node.children().iter().map(|c| c.name().to_string()).collect();
+        let names: Vec<_> = node
+            .children()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
         assert!(!names.contains(&"phantom".to_string()), "names: {names:?}");
         assert!(names.contains(&"real".to_string()), "names: {names:?}");
 
@@ -400,13 +415,15 @@ mod consolidated_open {
 
         let err = Hierarchy::open(&store, "/").expect_err("should fail under Must");
         assert!(
-            err.to_string().contains("Consolidated metadata required but missing"),
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
             "unexpected error: {err}"
         );
 
         let err = Node::open(&store, "/").expect_err("should fail under Must");
         assert!(
-            err.to_string().contains("Consolidated metadata required but missing"),
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
             "unexpected error: {err}"
         );
 
@@ -452,10 +469,8 @@ mod consolidated_open {
             .build(store.clone(), "/")
             .unwrap();
 
-        let sub_group_md: NodeMetadata = serde_json::from_str(
-            r#"{"zarr_format": 3, "node_type": "group"}"#,
-        )
-        .unwrap();
+        let sub_group_md: NodeMetadata =
+            serde_json::from_str(r#"{"zarr_format": 3, "node_type": "group"}"#).unwrap();
         let leaf_array_md: NodeMetadata = serde_json::from_str(
             r#"{
                 "zarr_format": 3,
@@ -471,7 +486,9 @@ mod consolidated_open {
         .unwrap();
 
         let mut consolidated = ConsolidatedMetadata::default();
-        consolidated.metadata.insert("sub".to_string(), sub_group_md);
+        consolidated
+            .metadata
+            .insert("sub".to_string(), sub_group_md);
         consolidated
             .metadata
             .insert("sub/leaf".to_string(), leaf_array_md);
@@ -552,7 +569,11 @@ mod consolidated_open {
         assert!(h.tree().contains("phantom"));
 
         let node = Node::async_open(store.clone(), "/").await.unwrap();
-        let names: Vec<_> = node.children().iter().map(|c| c.name().to_string()).collect();
+        let names: Vec<_> = node
+            .children()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
         assert!(names.contains(&"phantom".to_string()), "names: {names:?}");
 
         reset_config();
@@ -649,7 +670,9 @@ mod consolidated_open {
         .unwrap();
 
         let mut consolidated = ConsolidatedMetadata::default();
-        consolidated.metadata.insert("sub".to_string(), sub_group_md);
+        consolidated
+            .metadata
+            .insert("sub".to_string(), sub_group_md);
         consolidated
             .metadata
             .insert("sub/leaf".to_string(), leaf_array_md);
@@ -667,7 +690,10 @@ mod consolidated_open {
         let direct = group.children(false).unwrap();
         assert_eq!(direct.len(), 1);
         assert_eq!(direct[0].path().as_str(), "/sub");
-        assert!(direct[0].children().is_empty(), "non-recursive should not populate descendants");
+        assert!(
+            direct[0].children().is_empty(),
+            "non-recursive should not populate descendants"
+        );
 
         // recursive=true: tree rooted at /sub with leaf as a child.
         let tree = group.children(true).unwrap();

@@ -224,9 +224,9 @@ pub(crate) fn resolve_consolidated_policy(
     }
     match (consolidated, policy) {
         (Some(c), _) => Ok(Some(c)),
-        (None, UseConsolidatedMetadata::Must) => {
-            Err(NodeCreateError::MissingConsolidatedMetadata(path.to_string()))
-        }
+        (None, UseConsolidatedMetadata::Must) => Err(NodeCreateError::MissingConsolidatedMetadata(
+            path.to_string(),
+        )),
         (None, _) => Ok(None),
     }
 }
@@ -242,7 +242,9 @@ pub(crate) fn consolidated_metadata_for_open(
         NodeMetadata::Group(GroupMetadata::V3(group_metadata)) => group_metadata
             .additional_fields
             .get("consolidated_metadata")
-            .and_then(|f| serde_json::from_value::<ConsolidatedMetadata>(f.as_value().clone()).ok()),
+            .and_then(|f| {
+                serde_json::from_value::<ConsolidatedMetadata>(f.as_value().clone()).ok()
+            }),
         NodeMetadata::Group(GroupMetadata::V2(_)) | NodeMetadata::Array(_) => None,
     };
     resolve_consolidated_policy(path, consolidated, policy)
@@ -577,7 +579,7 @@ impl Node {
 
     /// Consolidate metadata. Returns [`None`] for an array.
     ///
-    /// [`ConsolidatedMetadataMetadata`] can be converted into [`ConsolidatedMetadata`](zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadata) in [`GroupMetadataV3`](crate::metadata::v3::GroupMetadataV3).
+    /// [`ConsolidatedMetadataMetadata`] can be converted into [`ConsolidatedMetadata`] in [`GroupMetadataV3`](crate::metadata::v3::GroupMetadataV3).
     #[must_use]
     #[allow(clippy::items_after_statements)]
     pub fn consolidate_metadata(&self) -> Option<ConsolidatedMetadataMetadata> {
