@@ -773,4 +773,192 @@ mod tests {
         );
         assert!(node.is_root());
     }
+
+    #[test]
+    fn parent_path_str_branches() {
+        // root has no parent
+        assert_eq!(super::parent_path_str("/"), "");
+        // direct child of root
+        assert_eq!(super::parent_path_str("/foo"), "/");
+        // nested
+        assert_eq!(super::parent_path_str("/foo/bar"), "/foo");
+        assert_eq!(super::parent_path_str("/foo/bar/baz"), "/foo/bar");
+        // pathological: no slash at all (should not happen for real NodePath, but fn must handle it)
+        assert_eq!(super::parent_path_str("foo"), "");
+    }
+
+    fn array_md(shape: u64) -> NodeMetadata {
+        NodeMetadata::Array(
+            serde_json::from_str::<zarrs_metadata::v3::ArrayMetadataV3>(&format!(
+                r#"{{
+                    "zarr_format": 3,
+                    "node_type": "array",
+                    "shape": [{shape}],
+                    "data_type": "float32",
+                    "chunk_grid": {{"name": "regular", "configuration": {{"chunk_shape": [{shape}]}}}},
+                    "chunk_key_encoding": {{"name": "default", "configuration": {{"separator": "/"}}}},
+                    "fill_value": 0,
+                    "codecs": [{{"name": "bytes", "configuration": {{"endian": "little"}}}}]
+                }}"#
+            ))
+            .unwrap()
+            .into(),
+        )
+    }
+
+    fn group_md() -> NodeMetadata {
+        NodeMetadata::Group(GroupMetadataV3::default().into())
+    }
+
+    #[test]
+    fn expand_consolidated_metadata_root_and_nested_bases() {
+        // Base is root: rel "foo" → "/foo"
+        let mut c = ConsolidatedMetadata::default();
+        c.metadata.insert("foo".to_string(), array_md(1));
+        c.metadata.insert("/bar".to_string(), array_md(2));
+        c.metadata.insert(String::new(), group_md()); // base group entry — must be skipped
+        c.metadata.insert("/".to_string(), group_md()); // also base entry after stripping leading slash
+        let out = super::expand_consolidated_metadata(&NodePath::root(), &c).unwrap();
+        let paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
+        assert!(paths.contains(&"/foo".to_string()));
+        assert!(paths.contains(&"/bar".to_string()));
+        assert!(!paths.iter().any(|p| p == "/"), "base group must be skipped");
+
+        // Base is non-root: rel "foo" → "/group/foo"
+        let base = NodePath::new("/group").unwrap();
+        let mut c = ConsolidatedMetadata::default();
+        c.metadata.insert("foo".to_string(), array_md(3));
+        c.metadata.insert("sub/leaf".to_string(), array_md(4));
+        let out = super::expand_consolidated_metadata(&base, &c).unwrap();
+        let mut paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
+        paths.sort();
+        assert_eq!(paths, vec!["/group/foo", "/group/sub/leaf"]);
+    }
+
+    #[test]
+    fn build_node_tree_and_direct_children() {
+        // Hierarchy: /a (group), /a/x (array), /a/y (group, no children)
+        let entries = vec![
+            (NodePath::new("/a").unwrap(), group_md()),
+            (NodePath::new("/a/x").unwrap(), array_md(1)),
+            (NodePath::new("/a/y").unwrap(), group_md()),
+        ];
+
+        // From root: only /a is direct.
+        let direct = super::direct_children_from_flat(&NodePath::root(), entries.clone());
+        let names: Vec<_> = direct.iter().map(|n| n.path().as_str().to_string()).collect();
+        assert_eq!(names, vec!["/a"]);
+        assert!(direct[0].children().is_empty(), "direct must not populate descendants");
+
+        // Tree from root.
+        let tree = super::build_node_tree(&NodePath::root(), entries.clone());
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].path().as_str(), "/a");
+        let mut child_names: Vec<_> = tree[0]
+            .children()
+            .iter()
+            .map(|n| n.path().as_str().to_string())
+            .collect();
+        child_names.sort();
+        assert_eq!(child_names, vec!["/a/x", "/a/y"]);
+        // /a/y is an empty group — collect_children_from_map's "no entries" branch.
+        let y = tree[0]
+            .children()
+            .iter()
+            .find(|n| n.path().as_str() == "/a/y")
+            .unwrap();
+        assert!(y.children().is_empty());
+    }
+
+    #[test]
+    fn consolidated_metadata_for_open_v2_and_array_return_none() {
+        use crate::config::UseConsolidatedMetadata;
+
+        // V2 group metadata → never has consolidated metadata.
+        let v2_group = NodeMetadata::Group(zarrs_metadata::v2::GroupMetadataV2::new().into());
+        let result = super::consolidated_metadata_for_open(
+            &NodePath::root(),
+            &v2_group,
+            UseConsolidatedMetadata::Auto,
+        )
+        .unwrap();
+        assert!(result.is_none());
+
+        // Array metadata → never has consolidated metadata.
+        let arr = array_md(1);
+        let result = super::consolidated_metadata_for_open(
+            &NodePath::root(),
+            &arr,
+            UseConsolidatedMetadata::Auto,
+        )
+        .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn resolve_consolidated_policy_branches() {
+        use crate::config::UseConsolidatedMetadata;
+        let path = NodePath::root();
+        let some_md = ConsolidatedMetadata::default();
+
+        // Never always returns None even when present.
+        assert!(super::resolve_consolidated_policy(
+            &path,
+            Some(some_md.clone()),
+            UseConsolidatedMetadata::Never,
+        )
+        .unwrap()
+        .is_none());
+
+        // Auto with present returns Some.
+        assert!(super::resolve_consolidated_policy(
+            &path,
+            Some(some_md.clone()),
+            UseConsolidatedMetadata::Auto,
+        )
+        .unwrap()
+        .is_some());
+
+        // Auto with absent returns None.
+        assert!(super::resolve_consolidated_policy(
+            &path,
+            None,
+            UseConsolidatedMetadata::Auto,
+        )
+        .unwrap()
+        .is_none());
+
+        // Must with absent errors.
+        let err = super::resolve_consolidated_policy(
+            &path,
+            None,
+            UseConsolidatedMetadata::Must,
+        )
+        .unwrap_err();
+        assert!(matches!(err, NodeCreateError::MissingConsolidatedMetadata(_)));
+    }
+
+    #[test]
+    fn missing_consolidated_metadata_error_conversions() {
+        // Cover the From<NodeCreateError> for ArrayCreateError / GroupCreateError arms.
+        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
+        let s = err.to_string();
+        assert!(s.contains("Consolidated metadata required but missing"));
+
+        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
+        let arr_err: ArrayCreateError = err.into();
+        assert!(
+            arr_err
+                .to_string()
+                .contains("Consolidated metadata required but missing")
+        );
+
+        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
+        let group_err: GroupCreateError = err.into();
+        assert!(
+            group_err
+                .to_string()
+                .contains("Consolidated metadata required but missing")
+        );
+    }
 }

@@ -809,4 +809,205 @@ mod consolidated_open {
 
         reset_config();
     }
+
+    #[test]
+    #[serial]
+    fn group_must_errors_when_absent() {
+        reset_config();
+
+        // V3 group with no consolidated_metadata.
+        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let root = zarrs::group::GroupBuilder::default()
+            .build(store.clone(), "/")
+            .unwrap();
+        root.store_metadata().unwrap();
+
+        global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
+
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let err = group
+            .children(false)
+            .expect_err("children should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+
+        let err = group
+            .traverse()
+            .expect_err("traverse should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+
+        // child_arrays propagates as ArrayCreateError — covers the
+        // From<NodeCreateError> for ArrayCreateError MissingConsolidatedMetadata arm.
+        let err = group
+            .child_arrays()
+            .expect_err("child_arrays should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+
+        // child_groups propagates as GroupCreateError — covers the
+        // From<NodeCreateError> for GroupCreateError MissingConsolidatedMetadata arm.
+        let err = group
+            .child_groups()
+            .expect_err("child_groups should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+
+        reset_config();
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    #[serial]
+    async fn async_group_consolidated_methods() {
+        use object_store::memory::InMemory;
+        use zarrs_object_store::AsyncObjectStore;
+        use zarrs_storage::AsyncWritableStorageTraits;
+
+        reset_config();
+
+        // Manually serialize a root v3 group with phantom + real children via consolidated metadata.
+        let phantom_md: NodeMetadata = serde_json::from_str(
+            r#"{
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [42],
+                "data_type": "float32",
+                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [42]}},
+                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+                "fill_value": 0,
+                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
+            }"#,
+        )
+        .unwrap();
+        let subgroup_md: NodeMetadata =
+            serde_json::from_str(r#"{"zarr_format": 3, "node_type": "group"}"#).unwrap();
+        let mut consolidated = ConsolidatedMetadata::default();
+        consolidated
+            .metadata
+            .insert("phantom".to_string(), phantom_md);
+        consolidated
+            .metadata
+            .insert("subgroup".to_string(), subgroup_md);
+
+        let mut consolidated_value = serde_json::to_value(&consolidated).unwrap();
+        // Mark the additional field as not must-understand so Group::async_open accepts it.
+        consolidated_value
+            .as_object_mut()
+            .unwrap()
+            .insert("must_understand".to_string(), serde_json::Value::Bool(false));
+        let root_md = serde_json::json!({
+            "zarr_format": 3,
+            "node_type": "group",
+            "consolidated_metadata": consolidated_value,
+        });
+
+        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        store
+            .set(
+                &StoreKey::new("zarr.json").unwrap(),
+                serde_json::to_vec(&root_md).unwrap().into(),
+            )
+            .await
+            .unwrap();
+
+        let group = zarrs::group::Group::async_open(store.clone(), "/")
+            .await
+            .unwrap();
+
+        // async_children(false) — direct children only, from inline map.
+        let direct = group.async_children(false).await.unwrap();
+        let mut names: Vec<_> = direct
+            .iter()
+            .map(|n| n.path().as_str().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["/phantom".to_string(), "/subgroup".to_string()]);
+
+        // async_children(true) — recursive (here equivalent since no nested children).
+        let tree = group.async_children(true).await.unwrap();
+        assert_eq!(tree.len(), 2);
+
+        // async_traverse — flat list.
+        let traversed = group.async_traverse().await.unwrap();
+        let mut tpaths: Vec<_> = traversed
+            .iter()
+            .map(|(p, _)| p.as_str().to_string())
+            .collect();
+        tpaths.sort();
+        assert_eq!(tpaths, vec!["/phantom".to_string(), "/subgroup".to_string()]);
+
+        // async_child_arrays — only the array.
+        let arrays = group.async_child_arrays().await.unwrap();
+        let array_paths: Vec<_> = arrays
+            .iter()
+            .map(|a| a.path().as_str().to_string())
+            .collect();
+        assert_eq!(array_paths, vec!["/phantom".to_string()]);
+
+        reset_config();
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    #[serial]
+    async fn async_group_must_errors_when_absent() {
+        use object_store::memory::InMemory;
+        use zarrs_object_store::AsyncObjectStore;
+        use zarrs_storage::AsyncWritableStorageTraits;
+
+        reset_config();
+
+        // V3 group with no consolidated_metadata.
+        let root_md = serde_json::json!({
+            "zarr_format": 3,
+            "node_type": "group",
+        });
+        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        store
+            .set(
+                &StoreKey::new("zarr.json").unwrap(),
+                serde_json::to_vec(&root_md).unwrap().into(),
+            )
+            .await
+            .unwrap();
+
+        global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Must);
+
+        let group = zarrs::group::Group::async_open(store.clone(), "/")
+            .await
+            .unwrap();
+        let err = group
+            .async_children(false)
+            .await
+            .expect_err("async_children should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+        let err = group
+            .async_traverse()
+            .await
+            .expect_err("async_traverse should fail under Must when consolidated absent");
+        assert!(
+            err.to_string()
+                .contains("Consolidated metadata required but missing"),
+            "unexpected error: {err}"
+        );
+
+        reset_config();
+    }
 }
