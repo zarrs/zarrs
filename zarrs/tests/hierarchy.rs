@@ -812,6 +812,196 @@ mod consolidated_open {
 
     #[test]
     #[serial]
+    fn node_open_falls_back_when_no_consolidated() {
+        reset_config();
+
+        // V3 group with one real child, no consolidated_metadata.
+        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let root = zarrs::group::GroupBuilder::default()
+            .build(store.clone(), "/")
+            .unwrap();
+        let arr = zarrs::array::ArrayBuilder::new(
+            vec![5],
+            vec![5],
+            zarrs::array::data_type::float32(),
+            0.0f32,
+        )
+        .build(store.clone(), "/only")
+        .unwrap();
+        root.store_metadata().unwrap();
+        arr.store_metadata().unwrap();
+
+        // Node::open must fall back to listing storage and find /only.
+        let node = Node::open(&store, "/").unwrap();
+        let names: Vec<_> = node
+            .children()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+        assert!(names.contains(&"only".to_string()), "names: {names:?}");
+
+        reset_config();
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    #[serial]
+    async fn async_node_open_falls_back_when_no_consolidated() {
+        use object_store::memory::InMemory;
+        use zarrs_object_store::AsyncObjectStore;
+        use zarrs_storage::AsyncWritableStorageTraits;
+
+        reset_config();
+
+        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        let root_md = serde_json::json!({"zarr_format": 3, "node_type": "group"});
+        store
+            .set(
+                &StoreKey::new("zarr.json").unwrap(),
+                serde_json::to_vec(&root_md).unwrap().into(),
+            )
+            .await
+            .unwrap();
+        let arr_md = serde_json::json!({
+            "zarr_format": 3,
+            "node_type": "array",
+            "shape": [5],
+            "data_type": "float32",
+            "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [5]}},
+            "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+            "fill_value": 0,
+            "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
+        });
+        store
+            .set(
+                &StoreKey::new("only/zarr.json").unwrap(),
+                serde_json::to_vec(&arr_md).unwrap().into(),
+            )
+            .await
+            .unwrap();
+
+        let node = Node::async_open(store.clone(), "/").await.unwrap();
+        let names: Vec<_> = node
+            .children()
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+        assert!(names.contains(&"only".to_string()), "names: {names:?}");
+
+        reset_config();
+    }
+
+    /// Trigger the malformed-key error path in `expand_consolidated_metadata`
+    /// through `Node::open` / `Group::children` / async variants. This covers
+    /// the `?` propagation arms.
+    #[test]
+    #[serial]
+    fn malformed_consolidated_key_propagates_error() {
+        reset_config();
+
+        // Build a root group with consolidated metadata containing an invalid
+        // relative path ("foo/", which yields "/foo/" — invalid NodePath).
+        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let root = zarrs::group::GroupBuilder::default()
+            .build(store.clone(), "/")
+            .unwrap();
+
+        let bad_array_md: NodeMetadata = serde_json::from_str(
+            r#"{
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [3],
+                "data_type": "float32",
+                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [3]}},
+                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+                "fill_value": 0,
+                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
+            }"#,
+        )
+        .unwrap();
+
+        let mut consolidated = ConsolidatedMetadata::default();
+        consolidated.metadata.insert("foo/".to_string(), bad_array_md);
+
+        let mut root = root;
+        root.set_consolidated_metadata(Some(consolidated));
+        let serialized = serde_json::to_vec(root.metadata()).unwrap();
+        store
+            .set(&StoreKey::new("zarr.json").unwrap(), serialized.into())
+            .unwrap();
+
+        // Hierarchy::open propagates the NodePath error (covers expand `?`).
+        assert!(Hierarchy::open(&store, "/").is_err());
+        // Node::open same.
+        assert!(Node::open(&store, "/").is_err());
+        // Group::children same (covers Group::children's `?`).
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        assert!(group.children(false).is_err());
+        assert!(group.traverse().is_err());
+
+        reset_config();
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    #[serial]
+    async fn async_malformed_consolidated_key_propagates_error() {
+        use object_store::memory::InMemory;
+        use zarrs_object_store::AsyncObjectStore;
+        use zarrs_storage::AsyncWritableStorageTraits;
+
+        reset_config();
+
+        let bad_array_md: NodeMetadata = serde_json::from_str(
+            r#"{
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [3],
+                "data_type": "float32",
+                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [3]}},
+                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+                "fill_value": 0,
+                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
+            }"#,
+        )
+        .unwrap();
+        let mut consolidated = ConsolidatedMetadata::default();
+        consolidated.metadata.insert("foo/".to_string(), bad_array_md);
+
+        let mut consolidated_value = serde_json::to_value(&consolidated).unwrap();
+        consolidated_value
+            .as_object_mut()
+            .unwrap()
+            .insert("must_understand".to_string(), serde_json::Value::Bool(false));
+        let root_md = serde_json::json!({
+            "zarr_format": 3,
+            "node_type": "group",
+            "consolidated_metadata": consolidated_value,
+        });
+
+        let store = Arc::new(AsyncObjectStore::new(InMemory::new()));
+        store
+            .set(
+                &StoreKey::new("zarr.json").unwrap(),
+                serde_json::to_vec(&root_md).unwrap().into(),
+            )
+            .await
+            .unwrap();
+
+        // Node::async_open propagates the error (covers expand `?` in async path).
+        assert!(Node::async_open(store.clone(), "/").await.is_err());
+        // Group::async_children same.
+        let group = zarrs::group::Group::async_open(store.clone(), "/")
+            .await
+            .unwrap();
+        assert!(group.async_children(false).await.is_err());
+        assert!(group.async_traverse().await.is_err());
+
+        reset_config();
+    }
+
+    #[test]
+    #[serial]
     fn group_must_errors_when_absent() {
         reset_config();
 
