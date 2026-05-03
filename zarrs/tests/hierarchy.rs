@@ -921,7 +921,9 @@ mod consolidated_open {
         .unwrap();
 
         let mut consolidated = ConsolidatedMetadata::default();
-        consolidated.metadata.insert("foo/".to_string(), bad_array_md);
+        consolidated
+            .metadata
+            .insert("foo/".to_string(), bad_array_md);
 
         let mut root = root;
         root.set_consolidated_metadata(Some(consolidated));
@@ -966,13 +968,15 @@ mod consolidated_open {
         )
         .unwrap();
         let mut consolidated = ConsolidatedMetadata::default();
-        consolidated.metadata.insert("foo/".to_string(), bad_array_md);
+        consolidated
+            .metadata
+            .insert("foo/".to_string(), bad_array_md);
 
         let mut consolidated_value = serde_json::to_value(&consolidated).unwrap();
-        consolidated_value
-            .as_object_mut()
-            .unwrap()
-            .insert("must_understand".to_string(), serde_json::Value::Bool(false));
+        consolidated_value.as_object_mut().unwrap().insert(
+            "must_understand".to_string(),
+            serde_json::Value::Bool(false),
+        );
         let root_md = serde_json::json!({
             "zarr_format": 3,
             "node_type": "group",
@@ -1094,10 +1098,10 @@ mod consolidated_open {
 
         let mut consolidated_value = serde_json::to_value(&consolidated).unwrap();
         // Mark the additional field as not must-understand so Group::async_open accepts it.
-        consolidated_value
-            .as_object_mut()
-            .unwrap()
-            .insert("must_understand".to_string(), serde_json::Value::Bool(false));
+        consolidated_value.as_object_mut().unwrap().insert(
+            "must_understand".to_string(),
+            serde_json::Value::Bool(false),
+        );
         let root_md = serde_json::json!({
             "zarr_format": 3,
             "node_type": "group",
@@ -1137,7 +1141,10 @@ mod consolidated_open {
             .map(|(p, _)| p.as_str().to_string())
             .collect();
         tpaths.sort();
-        assert_eq!(tpaths, vec!["/phantom".to_string(), "/subgroup".to_string()]);
+        assert_eq!(
+            tpaths,
+            vec!["/phantom".to_string(), "/subgroup".to_string()]
+        );
 
         // async_child_arrays — only the array.
         let arrays = group.async_child_arrays().await.unwrap();

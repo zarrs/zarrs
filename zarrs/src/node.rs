@@ -822,7 +822,10 @@ mod tests {
         let paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
         assert!(paths.contains(&"/foo".to_string()));
         assert!(paths.contains(&"/bar".to_string()));
-        assert!(!paths.iter().any(|p| p == "/"), "base group must be skipped");
+        assert!(
+            !paths.iter().any(|p| p == "/"),
+            "base group must be skipped"
+        );
 
         // Base is non-root: rel "foo" → "/group/foo"
         let base = NodePath::new("/group").unwrap();
@@ -846,9 +849,15 @@ mod tests {
 
         // From root: only /a is direct.
         let direct = super::direct_children_from_flat(&NodePath::root(), entries.clone());
-        let names: Vec<_> = direct.iter().map(|n| n.path().as_str().to_string()).collect();
+        let names: Vec<_> = direct
+            .iter()
+            .map(|n| n.path().as_str().to_string())
+            .collect();
         assert_eq!(names, vec!["/a"]);
-        assert!(direct[0].children().is_empty(), "direct must not populate descendants");
+        assert!(
+            direct[0].children().is_empty(),
+            "direct must not populate descendants"
+        );
 
         // Tree from root.
         let tree = super::build_node_tree(&NodePath::root(), entries.clone());
@@ -902,40 +911,41 @@ mod tests {
         let some_md = ConsolidatedMetadata::default();
 
         // Never always returns None even when present.
-        assert!(super::resolve_consolidated_policy(
-            &path,
-            Some(some_md.clone()),
-            UseConsolidatedMetadata::Never,
-        )
-        .unwrap()
-        .is_none());
+        assert!(
+            super::resolve_consolidated_policy(
+                &path,
+                Some(some_md.clone()),
+                UseConsolidatedMetadata::Never,
+            )
+            .unwrap()
+            .is_none()
+        );
 
         // Auto with present returns Some.
-        assert!(super::resolve_consolidated_policy(
-            &path,
-            Some(some_md.clone()),
-            UseConsolidatedMetadata::Auto,
-        )
-        .unwrap()
-        .is_some());
+        assert!(
+            super::resolve_consolidated_policy(
+                &path,
+                Some(some_md.clone()),
+                UseConsolidatedMetadata::Auto,
+            )
+            .unwrap()
+            .is_some()
+        );
 
         // Auto with absent returns None.
-        assert!(super::resolve_consolidated_policy(
-            &path,
-            None,
-            UseConsolidatedMetadata::Auto,
-        )
-        .unwrap()
-        .is_none());
+        assert!(
+            super::resolve_consolidated_policy(&path, None, UseConsolidatedMetadata::Auto,)
+                .unwrap()
+                .is_none()
+        );
 
         // Must with absent errors.
-        let err = super::resolve_consolidated_policy(
-            &path,
-            None,
-            UseConsolidatedMetadata::Must,
-        )
-        .unwrap_err();
-        assert!(matches!(err, NodeCreateError::MissingConsolidatedMetadata(_)));
+        let err = super::resolve_consolidated_policy(&path, None, UseConsolidatedMetadata::Must)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            NodeCreateError::MissingConsolidatedMetadata(_)
+        ));
     }
 
     #[test]
