@@ -313,6 +313,28 @@ async fn test_bytes_to_bytes_codec_async_partial_encoding<
 
 // Array-to-Array Codec Tests
 
+#[tokio::test]
+async fn test_cast_value_async_partial_encoding() {
+    use zarrs::array::codec::CastValueCodec;
+    use zarrs::metadata_ext::codec::cast_value::CastValueCodecConfiguration;
+
+    let config: CastValueCodecConfiguration = serde_json::from_str(
+        r#"{
+            "data_type": "float64",
+            "scalar_map": {
+                "encode": [[100.0, 101.0]],
+                "decode": [[101.0, 100.0]]
+            }
+        }"#,
+    )
+    .unwrap();
+    let codec = Arc::new(CastValueCodec::new_with_configuration(&config).unwrap());
+
+    test_array_to_array_codec_async_partial_encoding(codec, "cast_value", true)
+        .await
+        .unwrap();
+}
+
 #[cfg(feature = "bitround")]
 #[tokio::test]
 async fn test_bitround_async_partial_encoding() {

@@ -234,3 +234,47 @@ impl_bytes_data_type_traits!(Float8E4M3FNUZDataType, 1);
 impl_bytes_data_type_traits!(Float8E5M2DataType, 1);
 impl_bytes_data_type_traits!(Float8E5M2FNUZDataType, 1);
 impl_bytes_data_type_traits!(Float8E8M0FNUDataType, 1);
+
+// CastValue codec implementations for subfloats
+#[cfg(feature = "microfloat")]
+use zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_float;
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float4E2M1FNDataType, microfloat, microfloat::f4e2m1fn, 4);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float6E2M3FNDataType, microfloat, microfloat::f6e2m3fn, 6);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float6E3M2FNDataType, microfloat, microfloat::f6e3m2fn, 6);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float8E3M4DataType, microfloat, microfloat::f8e3m4, 8);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float8E4M3DataType, microfloat, microfloat::f8e4m3, 8);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(
+    Float8E4M3B11FNUZDataType,
+    microfloat,
+    microfloat::f8e4m3b11fnuz,
+    8
+);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(
+    Float8E4M3FNUZDataType,
+    microfloat,
+    microfloat::f8e4m3fnuz,
+    8
+);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(Float8E5M2DataType, microfloat, microfloat::f8e5m2, 8);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(
+    Float8E5M2FNUZDataType,
+    microfloat,
+    microfloat::f8e5m2fnuz,
+    8
+);
+#[cfg(feature = "microfloat")]
+impl_cast_value_data_type_traits_float!(
+    Float8E8M0FNUDataType,
+    microfloat,
+    microfloat::f8e8m0fnu,
+    8
+);
