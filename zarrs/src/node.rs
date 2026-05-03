@@ -939,6 +939,15 @@ mod tests {
     }
 
     #[test]
+    fn expand_consolidated_metadata_malformed_key_errors() {
+        // A key with a trailing slash produces an invalid NodePath ("/foo/").
+        let mut c = ConsolidatedMetadata::default();
+        c.metadata.insert("foo/".to_string(), array_md(1));
+        let err = super::expand_consolidated_metadata(&NodePath::root(), &c).unwrap_err();
+        assert!(matches!(err, NodeCreateError::NodePathError(_)));
+    }
+
+    #[test]
     fn missing_consolidated_metadata_error_conversions() {
         // Cover the From<NodeCreateError> for ArrayCreateError / GroupCreateError arms.
         let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
