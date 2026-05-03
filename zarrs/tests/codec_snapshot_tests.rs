@@ -26,6 +26,9 @@
     feature = "microfloat",
 ))]
 
+#[path = "common/semantic_comparison.rs"]
+mod semantic_comparison;
+
 use half::{bf16, f16};
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
@@ -40,10 +43,20 @@ use zarrs::array::{
     ArrayBuilder, ArrayBytes, ArrayBytesOffsets, ArrayMetadataOptions, DataType, FillValue,
     data_type,
 };
+use zarrs::metadata::v3::MetadataV3;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
+
+/// Comparison mode for round-trip verification
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComparisonMode {
+    /// Byte-for-byte equality (default for most codecs)
+    ByteLevel,
+    /// Semantic float equality: NaN == NaN, but preserves sign of zero
+    SemanticFloat,
+}
 
 /// Get a string identifier for a data type (for test matching purposes)
 fn data_type_id(data_type: &DataType) -> &'static str {
@@ -193,6 +206,8 @@ pub struct TestConfig {
     pub non_deterministic: bool,
     /// If true, the codec is lossy and round-trip data won't match exactly
     pub lossy: bool,
+    /// Comparison mode for round-trip verification
+    pub comparison_mode: ComparisonMode,
 }
 
 impl Default for TestConfig {
@@ -208,6 +223,7 @@ impl Default for TestConfig {
             chunk_grid_name: "regular".to_string(),
             non_deterministic: false,
             lossy: false,
+            comparison_mode: ComparisonMode::ByteLevel,
         }
     }
 }
@@ -927,13 +943,22 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
 
     // For lossless codecs, verify the data matches
     // If data doesn't match, this indicates a codec bug or incompatible data type
-    if !config.lossy && read_data != test_data {
-        return CodecTestResult::Failure {
-            reason: format!(
-                "Round-trip verification failed: read data does not match written data for {:?}",
-                config.data_type
-            ),
+    if !config.lossy {
+        let data_matches = match config.comparison_mode {
+            ComparisonMode::ByteLevel => read_data == test_data,
+            ComparisonMode::SemanticFloat => {
+                semantic_comparison::arrays_equal(&read_data, &test_data, &config.data_type)
+            }
         };
+
+        if !data_matches {
+            return CodecTestResult::Failure {
+                reason: format!(
+                    "Round-trip verification failed: read data does not match written data for {:?}",
+                    config.data_type
+                ),
+            };
+        }
     }
 
     CodecTestResult::Success
@@ -1324,11 +1349,16 @@ pub struct CodecDef {
     pub non_deterministic: bool,
     /// Optional predicate to skip certain data types (returns true to skip)
     pub skip: Option<fn(&DataType) -> bool>,
+    /// Optional function to determine comparison mode per data type (None = ByteLevel)
+    pub comparison_mode_fn: Option<fn(&DataType) -> ComparisonMode>,
 }
 
 /// Build the codec registry with all available codecs
 fn codec_registry() -> Vec<CodecDef> {
     use zarrs::array::codec::*;
+    use zarrs::metadata_ext::codec::cast_value::{
+        CastValueCodecConfiguration, CastValueCodecConfigurationV1,
+    };
     use zarrs::metadata_ext::codec::fixedscaleoffset::{
         FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecs,
     };
@@ -1349,6 +1379,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zstd")]
@@ -1360,6 +1391,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "blosc")]
@@ -1382,6 +1414,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "crc32c")]
@@ -1393,6 +1426,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zlib")]
@@ -1409,6 +1443,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "bz2")]
@@ -1425,6 +1460,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "adler32")]
@@ -1436,6 +1472,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "fletcher32")]
@@ -1447,6 +1484,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "gdeflate")]
@@ -1458,6 +1496,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1473,6 +1512,7 @@ fn codec_registry() -> Vec<CodecDef> {
         non_deterministic: false,
         // Skip variable-length / optional data types (shuffle requires fixed element size)
         skip: Some(|dt| dt.is_variable() || dt.is_optional()),
+        comparison_mode_fn: None,
     });
 
     // =========================================================================
@@ -1492,11 +1532,115 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     // Helper: skip for variable-length and optional data types
     fn is_vlen_or_optional(dt: &DataType) -> bool {
         dt.fixed_size().is_none() || dt.as_optional().is_some()
+    }
+
+    fn is_not_supported_cast_value_data_type(dt: &DataType) -> bool {
+        !matches!(
+            data_type_id(dt),
+            "int2"
+                | "int4"
+                | "int8"
+                | "int16"
+                | "int32"
+                | "int64"
+                | "uint2"
+                | "uint4"
+                | "uint8"
+                | "uint16"
+                | "uint32"
+                | "uint64"
+                | "bfloat16"
+                | "float16"
+                | "float4_e2m1fn"
+                | "float6_e2m3fn"
+                | "float6_e3m2fn"
+                | "float8_e3m4"
+                | "float8_e4m3"
+                | "float8_e4m3b11fnuz"
+                | "float8_e4m3fnuz"
+                | "float8_e5m2"
+                | "float8_e5m2fnuz"
+                | "float8_e8m0fnu"
+                | "float32"
+                | "float64"
+        )
+    }
+
+    fn data_type_metadata(data_type: &DataType) -> MetadataV3 {
+        let name = data_type
+            .name_v3()
+            .map_or_else(String::new, Cow::into_owned);
+        let configuration = data_type.configuration_v3();
+        if configuration.is_empty() {
+            MetadataV3::new(name)
+        } else {
+            MetadataV3::new_with_configuration(name, configuration)
+        }
+    }
+
+    /// Maps a data type to a wider (lossless) target for cast_value upcast testing.
+    /// The test data values for each type are small enough to be exactly representable
+    /// in the wider type, so round-trip verification remains valid.
+    fn cast_upcast_target(dt: &DataType) -> Option<DataType> {
+        match data_type_id(dt) {
+            "int2" | "int4" => Some(data_type::int8()),
+            "int8" => Some(data_type::int16()),
+            "int16" => Some(data_type::int32()),
+            "int32" => Some(data_type::int64()),
+            // uint8 fits exactly in float32 (integers 0-255 are all representable)
+            "uint8" => Some(data_type::float32()),
+            "uint2" | "uint4" => Some(data_type::uint8()),
+            "uint16" => Some(data_type::uint32()),
+            "uint32" => Some(data_type::uint64()),
+            "float4_e2m1fn" | "float6_e2m3fn" | "float6_e3m2fn" | "float8_e3m4" | "float8_e4m3"
+            | "float8_e4m3b11fnuz" | "float8_e4m3fnuz" | "float8_e5m2" | "float8_e5m2fnuz" => {
+                Some(data_type::float16())
+            }
+            "float8_e8m0fnu" => Some(data_type::float32()),
+            "bfloat16" | "float16" => Some(data_type::float32()),
+            "float32" => Some(data_type::float64()),
+            // int64, uint64, float64 have no standard wider type
+            _ => None,
+        }
+    }
+
+    /// Maps a data type to a narrower (lossy) target for cast_value downcast testing.
+    fn cast_downcast_target(dt: &DataType) -> Option<DataType> {
+        match data_type_id(dt) {
+            "int16" => Some(data_type::int8()),
+            "int32" => Some(data_type::int16()),
+            "int64" => Some(data_type::int32()),
+            "uint16" => Some(data_type::uint8()),
+            "uint32" => Some(data_type::uint16()),
+            "uint64" => Some(data_type::uint32()),
+            "bfloat16" => Some(data_type::float8_e4m3()),
+            "float16" => Some(data_type::float8_e5m2()),
+            "float32" => Some(data_type::float16()),
+            "float64" => Some(data_type::float32()),
+            // int2/int4/int8, uint2/uint4/uint8, float8_* are already at the narrow end
+            _ => None,
+        }
+    }
+
+    fn skip_cast_upcast(dt: &DataType) -> bool {
+        is_not_supported_cast_value_data_type(dt) || cast_upcast_target(dt).is_none()
+    }
+
+    fn skip_cast_downcast(dt: &DataType) -> bool {
+        is_not_supported_cast_value_data_type(dt) || cast_downcast_target(dt).is_none()
+    }
+
+    fn cast_value_comparison_mode(dt: &DataType) -> ComparisonMode {
+        match data_type_id(dt) {
+            "float8_e3m4" | "float8_e4m3" | "float8_e5m2" => ComparisonMode::SemanticFloat,
+            _ => ComparisonMode::ByteLevel,
+        }
     }
 
     #[cfg(feature = "bitround")]
@@ -1508,6 +1652,57 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: true,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
+    });
+
+    // cast_value upcast: each type cast to a wider type (lossless for our test data)
+    codecs.push(CodecDef {
+        name: CastValueCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: Some("upcast"),
+        factory: |dt| {
+            let target = cast_upcast_target(dt).expect("skip_cast_upcast should prevent None");
+            CodecInstance::ArrayToArray(Arc::new(
+                CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+                    CastValueCodecConfigurationV1 {
+                        data_type: data_type_metadata(&target),
+                        rounding: Default::default(),
+                        out_of_range: None,
+                        scalar_map: None,
+                    },
+                ))
+                .unwrap(),
+            ))
+        },
+        lossy: false,
+        non_deterministic: false,
+        skip: Some(skip_cast_upcast),
+        comparison_mode_fn: Some(cast_value_comparison_mode),
+    });
+
+    // cast_value downcast: each type cast to a narrower type (lossy)
+    codecs.push(CodecDef {
+        name: CastValueCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: Some("downcast"),
+        factory: |dt| {
+            let target = cast_downcast_target(dt).expect("skip_cast_downcast should prevent None");
+            CodecInstance::ArrayToArray(Arc::new(
+                CastValueCodec::new_with_configuration(&CastValueCodecConfiguration::V1(
+                    CastValueCodecConfigurationV1 {
+                        data_type: data_type_metadata(&target),
+                        rounding: Default::default(),
+                        out_of_range: Some(CastValueOutOfRangeMode::Clamp),
+                        scalar_map: None,
+                    },
+                ))
+                .unwrap(),
+            ))
+        },
+        lossy: true,
+        non_deterministic: false,
+        skip: Some(skip_cast_downcast),
+        comparison_mode_fn: Some(cast_value_comparison_mode),
     });
 
     codecs.push(CodecDef {
@@ -1518,6 +1713,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1533,6 +1729,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: None,
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1572,6 +1769,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: true,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // =========================================================================
@@ -1586,6 +1784,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip for optional data types
@@ -1606,6 +1805,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false, // Using single-threaded pool makes it deterministic
         skip: Some(is_optional),
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "pcodec")]
@@ -1622,6 +1822,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     #[cfg(feature = "zfp")]
@@ -1633,6 +1834,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip vlen codecs for fixed-length or optional data types
@@ -1648,6 +1850,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1658,6 +1861,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1668,6 +1872,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1678,6 +1883,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1688,6 +1894,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_fixed_length_or_optional),
+        comparison_mode_fn: None,
     });
 
     codecs.push(CodecDef {
@@ -1698,6 +1905,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_vlen_or_optional),
+        comparison_mode_fn: None,
     });
 
     // Helper: skip optional codec for non-optional data types
@@ -1716,6 +1924,7 @@ fn codec_registry() -> Vec<CodecDef> {
         lossy: false,
         non_deterministic: false,
         skip: Some(is_not_optional),
+        comparison_mode_fn: None,
     });
 
     codecs
@@ -1733,6 +1942,9 @@ fn build_test_config(
         fill_value: fill_value.clone(),
         lossy: codec.lossy,
         non_deterministic: codec.non_deterministic,
+        comparison_mode: codec
+            .comparison_mode_fn
+            .map_or(ComparisonMode::ByteLevel, |f| f(data_type)),
         ..Default::default()
     };
 
@@ -1902,6 +2114,10 @@ mod compatibility_matrix {
             // Array-to-Array
             (
                 codec::BitroundCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            (
+                codec::CastValueCodec::aliases_v3().default_name.clone(),
                 "a2a",
             ),
             (

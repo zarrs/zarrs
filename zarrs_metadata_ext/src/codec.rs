@@ -11,6 +11,8 @@ mod registered {
     pub mod blosc;
     /// `bytes` codec metadata (registered, core).
     pub mod bytes;
+    /// `cast_value` codec metadata (registered).
+    pub mod cast_value;
     /// `crc32c` codec metadata (registered, ZEP0002).
     pub mod crc32c;
     /// `gzip` codec metadata (registered, core).
