@@ -207,28 +207,21 @@ pub(crate) fn build_node_tree(
     collect_children_from_map(base_path.as_str(), &mut by_parent)
 }
 
-/// Read the v3 consolidated metadata from a group's metadata, honouring the
-/// configured [`UseConsolidatedMetadata`] policy.
+/// Apply the [`UseConsolidatedMetadata`] policy to an already-extracted optional
+/// [`ConsolidatedMetadata`].
 ///
 /// Returns `Ok(Some(...))` when consolidated metadata should be used, `Ok(None)`
 /// when it is absent and the policy permits falling back to listing, and
 /// [`NodeCreateError::MissingConsolidatedMetadata`] when the policy requires it
 /// but it is absent.
-pub(crate) fn consolidated_metadata_for_open(
+pub(crate) fn resolve_consolidated_policy(
     path: &NodePath,
-    metadata: &NodeMetadata,
+    consolidated: Option<ConsolidatedMetadata>,
     policy: UseConsolidatedMetadata,
 ) -> Result<Option<ConsolidatedMetadata>, NodeCreateError> {
     if policy == UseConsolidatedMetadata::Never {
         return Ok(None);
     }
-    let consolidated = match metadata {
-        NodeMetadata::Group(GroupMetadata::V3(group_metadata)) => group_metadata
-            .additional_fields
-            .get("consolidated_metadata")
-            .and_then(|f| serde_json::from_value::<ConsolidatedMetadata>(f.as_value().clone()).ok()),
-        NodeMetadata::Group(GroupMetadata::V2(_)) | NodeMetadata::Array(_) => None,
-    };
     match (consolidated, policy) {
         (Some(c), _) => Ok(Some(c)),
         (None, UseConsolidatedMetadata::Must) => {
@@ -236,6 +229,39 @@ pub(crate) fn consolidated_metadata_for_open(
         }
         (None, _) => Ok(None),
     }
+}
+
+/// Read the v3 consolidated metadata from a group's metadata, honouring the
+/// configured [`UseConsolidatedMetadata`] policy.
+pub(crate) fn consolidated_metadata_for_open(
+    path: &NodePath,
+    metadata: &NodeMetadata,
+    policy: UseConsolidatedMetadata,
+) -> Result<Option<ConsolidatedMetadata>, NodeCreateError> {
+    let consolidated = match metadata {
+        NodeMetadata::Group(GroupMetadata::V3(group_metadata)) => group_metadata
+            .additional_fields
+            .get("consolidated_metadata")
+            .and_then(|f| serde_json::from_value::<ConsolidatedMetadata>(f.as_value().clone()).ok()),
+        NodeMetadata::Group(GroupMetadata::V2(_)) | NodeMetadata::Array(_) => None,
+    };
+    resolve_consolidated_policy(path, consolidated, policy)
+}
+
+/// Build a `Vec<Node>` containing only the direct children of `base_path`
+/// from a flat `(NodePath, NodeMetadata)` list. Nested descendants are dropped.
+pub(crate) fn direct_children_from_flat(
+    base_path: &NodePath,
+    flat: Vec<(NodePath, NodeMetadata)>,
+) -> Vec<Node> {
+    let base = base_path.as_str();
+    let mut out: Vec<Node> = flat
+        .into_iter()
+        .filter(|(p, _)| parent_path_str(p.as_str()) == base)
+        .map(|(p, m)| Node::new_with_metadata(p, m, vec![]))
+        .collect();
+    out.sort_by(|a, b| a.path().as_str().cmp(b.path().as_str()));
+    out
 }
 
 impl Node {

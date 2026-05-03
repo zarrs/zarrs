@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `microfloat` feature for expanded subfloat and complex subfloat data type / element support
   - The `float8` feature is considered deprecated as the associated types are not IEEE 754-compliant
+- Use Zarr V3 consolidated metadata (when present on a root group) to populate child nodes — avoiding `list_dir` and per-array reads — for `Hierarchy::open`, `Node::open`, `Group::children`, `Group::traverse`, `Group::child_arrays`, `Group::child_groups`, `Group::child_paths`, `Group::child_array_paths`, `Group::child_group_paths`, and their async variants
+  - Add `UseConsolidatedMetadata` (`Auto` / `Must` / `Never`) and a new `Config::use_consolidated_metadata` global setting (default `Auto`)
+  - Add `NodeCreateError::MissingConsolidatedMetadata`, returned when `Must` is set but the field is absent
 
 ## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
 

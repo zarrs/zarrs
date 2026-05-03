@@ -557,4 +557,230 @@ mod consolidated_open {
 
         reset_config();
     }
+
+    #[test]
+    #[serial]
+    fn group_child_arrays_uses_consolidated() {
+        reset_config();
+        let store = build_store_with_phantom();
+
+        // Group::child_arrays must surface the phantom array purely from
+        // consolidated metadata — there is no /phantom/zarr.json in storage.
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let arrays = group.child_arrays().unwrap();
+        let names: Vec<_> = arrays
+            .iter()
+            .map(|a| a.path().as_str().to_string())
+            .collect();
+        assert!(names.contains(&"/phantom".to_string()), "names: {names:?}");
+        assert!(names.contains(&"/real".to_string()), "names: {names:?}");
+
+        // The phantom array carries the consolidated metadata's shape (42).
+        let phantom = arrays
+            .iter()
+            .find(|a| a.path().as_str() == "/phantom")
+            .unwrap();
+        assert_eq!(phantom.shape(), &[42]);
+
+        reset_config();
+    }
+
+    #[test]
+    #[serial]
+    fn group_child_arrays_never_skips_consolidated() {
+        reset_config();
+        let store = build_store_with_phantom();
+        global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::Never);
+
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let arrays = group.child_arrays().unwrap();
+        let names: Vec<_> = arrays
+            .iter()
+            .map(|a| a.path().as_str().to_string())
+            .collect();
+        assert!(!names.contains(&"/phantom".to_string()), "names: {names:?}");
+        assert!(names.contains(&"/real".to_string()), "names: {names:?}");
+
+        reset_config();
+    }
+
+    #[test]
+    #[serial]
+    fn group_traverse_uses_consolidated() {
+        reset_config();
+        let store = build_store_with_phantom();
+
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        let nodes = group.traverse().unwrap();
+        let paths: Vec<_> = nodes.iter().map(|(p, _)| p.as_str().to_string()).collect();
+        assert!(paths.contains(&"/phantom".to_string()), "paths: {paths:?}");
+        assert!(paths.contains(&"/real".to_string()), "paths: {paths:?}");
+
+        reset_config();
+    }
+
+    #[test]
+    #[serial]
+    fn group_children_recursive_uses_consolidated() {
+        reset_config();
+
+        // /
+        //   sub/        (group, only in consolidated_metadata)
+        //     leaf      (array, only in consolidated_metadata)
+        let store: Arc<MemoryStore> = Arc::new(MemoryStore::new());
+        let root = zarrs::group::GroupBuilder::default()
+            .build(store.clone(), "/")
+            .unwrap();
+
+        let sub_group_md: NodeMetadata =
+            serde_json::from_str(r#"{"zarr_format": 3, "node_type": "group"}"#).unwrap();
+        let leaf_array_md: NodeMetadata = serde_json::from_str(
+            r#"{
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [4],
+                "data_type": "int32",
+                "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [4]}},
+                "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
+                "fill_value": 0,
+                "codecs": [{"name": "bytes", "configuration": {"endian": "little"}}]
+            }"#,
+        )
+        .unwrap();
+
+        let mut consolidated = ConsolidatedMetadata::default();
+        consolidated.metadata.insert("sub".to_string(), sub_group_md);
+        consolidated
+            .metadata
+            .insert("sub/leaf".to_string(), leaf_array_md);
+
+        let mut root = root;
+        root.set_consolidated_metadata(Some(consolidated));
+        let serialized = serde_json::to_vec(root.metadata()).unwrap();
+        store
+            .set(&StoreKey::new("zarr.json").unwrap(), serialized.into())
+            .unwrap();
+
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+
+        // recursive=false: only direct children (/sub).
+        let direct = group.children(false).unwrap();
+        assert_eq!(direct.len(), 1);
+        assert_eq!(direct[0].path().as_str(), "/sub");
+        assert!(direct[0].children().is_empty(), "non-recursive should not populate descendants");
+
+        // recursive=true: tree rooted at /sub with leaf as a child.
+        let tree = group.children(true).unwrap();
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].path().as_str(), "/sub");
+        assert_eq!(tree[0].children().len(), 1);
+        assert_eq!(tree[0].children()[0].path().as_str(), "/sub/leaf");
+
+        reset_config();
+    }
+
+    /// Hard guarantee: opening a Group with consolidated metadata and then
+    /// calling `child_arrays()` performs **exactly one** `get` on the store
+    /// (the root `zarr.json`). No per-array fetches occur.
+    #[test]
+    #[serial]
+    fn group_child_arrays_no_per_array_reads() {
+        use std::sync::Mutex;
+
+        use zarrs_storage::byte_range::{ByteRange, ByteRangeIterator};
+        use zarrs_storage::{
+            ListableStorageTraits, MaybeBytes, MaybeBytesIterator, ReadableStorageTraits,
+            StorageError, StoreKeys, StoreKeysPrefixes, StorePrefix,
+        };
+
+        struct CountingStore {
+            inner: Arc<MemoryStore>,
+            gets: Mutex<Vec<String>>,
+            list_dirs: Mutex<usize>,
+        }
+
+        impl CountingStore {
+            fn new(inner: Arc<MemoryStore>) -> Self {
+                Self {
+                    inner,
+                    gets: Mutex::new(Vec::new()),
+                    list_dirs: Mutex::new(0),
+                }
+            }
+        }
+
+        impl ReadableStorageTraits for CountingStore {
+            fn get(&self, key: &StoreKey) -> Result<MaybeBytes, StorageError> {
+                self.gets.lock().unwrap().push(key.as_str().to_string());
+                self.inner.get(key)
+            }
+            fn get_partial_many<'a>(
+                &'a self,
+                key: &StoreKey,
+                byte_ranges: ByteRangeIterator<'a>,
+            ) -> Result<MaybeBytesIterator<'a>, StorageError> {
+                self.gets.lock().unwrap().push(key.as_str().to_string());
+                self.inner.get_partial_many(key, byte_ranges)
+            }
+            fn get_partial(
+                &self,
+                key: &StoreKey,
+                byte_range: ByteRange,
+            ) -> Result<MaybeBytes, StorageError> {
+                self.gets.lock().unwrap().push(key.as_str().to_string());
+                self.inner.get_partial(key, byte_range)
+            }
+            fn size_key(&self, key: &StoreKey) -> Result<Option<u64>, StorageError> {
+                self.inner.size_key(key)
+            }
+            fn supports_get_partial(&self) -> bool {
+                self.inner.supports_get_partial()
+            }
+        }
+
+        impl ListableStorageTraits for CountingStore {
+            fn list(&self) -> Result<StoreKeys, StorageError> {
+                self.inner.list()
+            }
+            fn list_prefix(&self, prefix: &StorePrefix) -> Result<StoreKeys, StorageError> {
+                self.inner.list_prefix(prefix)
+            }
+            fn list_dir(&self, prefix: &StorePrefix) -> Result<StoreKeysPrefixes, StorageError> {
+                *self.list_dirs.lock().unwrap() += 1;
+                self.inner.list_dir(prefix)
+            }
+            fn size_prefix(&self, prefix: &StorePrefix) -> Result<u64, StorageError> {
+                self.inner.size_prefix(prefix)
+            }
+        }
+
+        reset_config();
+
+        // Build the same phantom-store, then wrap it.
+        let inner = build_store_with_phantom();
+        let store = Arc::new(CountingStore::new(inner));
+
+        let group = zarrs::group::Group::open(store.clone(), "/").unwrap();
+        // Reset counters after the open.
+        store.gets.lock().unwrap().clear();
+        *store.list_dirs.lock().unwrap() = 0;
+
+        let arrays = group.child_arrays().unwrap();
+        assert_eq!(arrays.len(), 2, "should see real + phantom");
+
+        let gets = store.gets.lock().unwrap();
+        let list_dirs = *store.list_dirs.lock().unwrap();
+        assert_eq!(
+            gets.len(),
+            0,
+            "child_arrays should not perform any storage reads when consolidated metadata is present, got: {:?}",
+            *gets
+        );
+        assert_eq!(
+            list_dirs, 0,
+            "child_arrays should not perform any list_dir calls when consolidated metadata is present"
+        );
+
+        reset_config();
+    }
 }
