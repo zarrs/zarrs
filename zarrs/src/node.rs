@@ -35,12 +35,14 @@ pub use node_async::{
 use thiserror::Error;
 
 use crate::array::{ArrayCreateError, ArrayMetadata};
-use crate::config::MetadataRetrieveVersion;
+use crate::config::{MetadataRetrieveVersion, UseConsolidatedMetadata};
 use crate::group::GroupCreateError;
 use zarrs_metadata::GroupMetadata;
 pub use zarrs_metadata::NodeMetadata;
 use zarrs_metadata::v2::{ArrayMetadataV2, GroupMetadataV2};
-use zarrs_metadata_ext::group::consolidated_metadata::ConsolidatedMetadataMetadata;
+use zarrs_metadata_ext::group::consolidated_metadata::{
+    ConsolidatedMetadata, ConsolidatedMetadataMetadata,
+};
 #[cfg(feature = "async")]
 use zarrs_storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
 use zarrs_storage::{ListableStorageTraits, ReadableStorageTraits, StorageError, StorePrefixError};
@@ -90,6 +92,9 @@ pub enum NodeCreateError {
     /// Missing metadata.
     #[error("Metadata is missing for {0}")]
     MissingMetadata(String),
+    /// Consolidated metadata was required but not present on the root group.
+    #[error("Consolidated metadata required but missing on group {0}")]
+    MissingConsolidatedMetadata(String),
 }
 
 impl From<NodeCreateError> for ArrayCreateError {
@@ -103,6 +108,9 @@ impl From<NodeCreateError> for ArrayCreateError {
             }
             NodeCreateError::MissingMetadata(err) => {
                 StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
+            }
+            NodeCreateError::MissingConsolidatedMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingConsolidatedMetadata(err).to_string())
             }
         })
     }
@@ -120,7 +128,113 @@ impl From<NodeCreateError> for GroupCreateError {
             NodeCreateError::MissingMetadata(err) => {
                 StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
             }
+            NodeCreateError::MissingConsolidatedMetadata(err) => {
+                StorageError::Other(NodeCreateError::MissingConsolidatedMetadata(err).to_string())
+            }
         })
+    }
+}
+
+/// Expand the inline `metadata` map of a [`ConsolidatedMetadata`] into a flat
+/// list of `(NodePath, NodeMetadata)` rooted under `base_path`.
+///
+/// Keys in the consolidated map are relative paths to `base_path`. A leading
+/// `/` is tolerated for compatibility with implementations that include it.
+pub(crate) fn expand_consolidated_metadata(
+    base_path: &NodePath,
+    consolidated: &ConsolidatedMetadata,
+) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+    let base = base_path.as_str();
+    let base_no_trailing = if base == "/" { "" } else { base };
+    let mut out = Vec::with_capacity(consolidated.metadata.len());
+    for (rel, md) in &consolidated.metadata {
+        let rel = rel.strip_prefix('/').unwrap_or(rel);
+        if rel.is_empty() {
+            // The base group is conventionally not included in its own consolidated map; skip it if it is.
+            continue;
+        }
+        let full = format!("{base_no_trailing}/{rel}");
+        let path = NodePath::new(&full)?;
+        out.push((path, md.clone()));
+    }
+    Ok(out)
+}
+
+/// Return the parent of a node-path string, or the empty string if no parent exists.
+fn parent_path_str(p: &str) -> &str {
+    if p == "/" {
+        return "";
+    }
+    match p.rfind('/') {
+        Some(0) => "/",
+        Some(idx) => &p[..idx],
+        None => "",
+    }
+}
+
+/// Recursively collect the children of `parent` from the parent-keyed map.
+fn collect_children_from_map(
+    parent: &str,
+    by_parent: &mut HashMap<String, Vec<(NodePath, NodeMetadata)>>,
+) -> Vec<Node> {
+    let Some(mut entries) = by_parent.remove(parent) else {
+        return Vec::new();
+    };
+    entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+    entries
+        .into_iter()
+        .map(|(path, md)| {
+            let children = match &md {
+                NodeMetadata::Group(_) => collect_children_from_map(path.as_str(), by_parent),
+                NodeMetadata::Array(_) => Vec::new(),
+            };
+            Node::new_with_metadata(path, md, children)
+        })
+        .collect()
+}
+
+/// Build a tree of [`Node`]s from a flat list of `(NodePath, NodeMetadata)` entries
+/// and the `base_path` of the parent group whose direct children are returned.
+pub(crate) fn build_node_tree(
+    base_path: &NodePath,
+    flat: Vec<(NodePath, NodeMetadata)>,
+) -> Vec<Node> {
+    let mut by_parent: HashMap<String, Vec<(NodePath, NodeMetadata)>> = HashMap::new();
+    for (path, md) in flat {
+        let parent = parent_path_str(path.as_str()).to_string();
+        by_parent.entry(parent).or_default().push((path, md));
+    }
+    collect_children_from_map(base_path.as_str(), &mut by_parent)
+}
+
+/// Read the v3 consolidated metadata from a group's metadata, honouring the
+/// configured [`UseConsolidatedMetadata`] policy.
+///
+/// Returns `Ok(Some(...))` when consolidated metadata should be used, `Ok(None)`
+/// when it is absent and the policy permits falling back to listing, and
+/// [`NodeCreateError::MissingConsolidatedMetadata`] when the policy requires it
+/// but it is absent.
+pub(crate) fn consolidated_metadata_for_open(
+    path: &NodePath,
+    metadata: &NodeMetadata,
+    policy: UseConsolidatedMetadata,
+) -> Result<Option<ConsolidatedMetadata>, NodeCreateError> {
+    if policy == UseConsolidatedMetadata::Never {
+        return Ok(None);
+    }
+    let consolidated = match metadata {
+        NodeMetadata::Group(GroupMetadata::V3(group_metadata)) => group_metadata
+            .additional_fields
+            .get("consolidated_metadata")
+            .and_then(|f| serde_json::from_value::<ConsolidatedMetadata>(f.as_value().clone()).ok()),
+        NodeMetadata::Group(GroupMetadata::V2(_)) | NodeMetadata::Array(_) => None,
+    };
+    match (consolidated, policy) {
+        (Some(c), _) => Ok(Some(c)),
+        (None, UseConsolidatedMetadata::Must) => {
+            Err(NodeCreateError::MissingConsolidatedMetadata(path.to_string()))
+        }
+        (None, _) => Ok(None),
     }
 }
 
@@ -266,10 +380,18 @@ impl Node {
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
         let metadata = Self::get_metadata(storage, &path, version)?;
-        let children = match metadata {
+        let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => get_child_nodes_opt(storage, &path, true, version)?,
+            NodeMetadata::Group(_) => {
+                let policy = crate::config::global_config().use_consolidated_metadata();
+                match consolidated_metadata_for_open(&path, &metadata, policy)? {
+                    Some(consolidated) => {
+                        let flat = expand_consolidated_metadata(&path, &consolidated)?;
+                        build_node_tree(&path, flat)
+                    }
+                    None => get_child_nodes_opt(storage, &path, true, version)?,
+                }
+            }
         };
         let node = Self {
             path,
@@ -307,11 +429,17 @@ impl Node {
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
         let metadata = Self::async_get_metadata(&storage, &path, version).await?;
-        let children = match metadata {
+        let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
             NodeMetadata::Group(_) => {
-                async_get_child_nodes_opt(&storage, &path, true, version).await?
+                let policy = crate::config::global_config().use_consolidated_metadata();
+                match consolidated_metadata_for_open(&path, &metadata, policy)? {
+                    Some(consolidated) => {
+                        let flat = expand_consolidated_metadata(&path, &consolidated)?;
+                        build_node_tree(&path, flat)
+                    }
+                    None => async_get_child_nodes_opt(&storage, &path, true, version).await?,
+                }
             }
         };
         let node = Self {

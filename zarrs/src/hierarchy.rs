@@ -12,9 +12,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::array::{Array, ArrayMetadata};
-use crate::config::MetadataRetrieveVersion;
+use crate::config::{MetadataRetrieveVersion, global_config};
 use crate::group::Group;
-use crate::node::get_all_nodes_of;
+use crate::node::{consolidated_metadata_for_open, expand_consolidated_metadata, get_all_nodes_of};
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
 #[cfg(feature = "async")]
 use crate::{
@@ -67,10 +67,17 @@ impl Hierarchy {
         let node_metadata = Node::get_metadata(storage, &node_path, version)?;
         let mut hierarchy = Hierarchy::new();
 
-        let nodes = match node_metadata {
+        let nodes = match &node_metadata {
             NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => get_all_nodes_of(storage, &node_path, version)?,
+            NodeMetadata::Group(_) => {
+                let policy = global_config().use_consolidated_metadata();
+                match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
+                    Some(consolidated) => {
+                        expand_consolidated_metadata(&node_path, &consolidated)?
+                    }
+                    None => get_all_nodes_of(storage, &node_path, version)?,
+                }
+            }
         };
 
         hierarchy.0.insert(node_path, node_metadata);
@@ -109,10 +116,17 @@ impl Hierarchy {
         let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
         let mut hierarchy = Hierarchy::new();
 
-        let nodes = match node_metadata {
+        let nodes = match &node_metadata {
             NodeMetadata::Array(_) => Vec::default(),
-            // TODO: Add consolidated metadata support
-            NodeMetadata::Group(_) => async_get_all_nodes_of(storage, &node_path, version).await?,
+            NodeMetadata::Group(_) => {
+                let policy = global_config().use_consolidated_metadata();
+                match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
+                    Some(consolidated) => {
+                        expand_consolidated_metadata(&node_path, &consolidated)?
+                    }
+                    None => async_get_all_nodes_of(storage, &node_path, version).await?,
+                }
+            }
         };
 
         hierarchy.0.insert(node_path, node_metadata);
