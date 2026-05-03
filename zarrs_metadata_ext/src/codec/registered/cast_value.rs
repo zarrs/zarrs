@@ -134,7 +134,7 @@ mod tests {
         assert!(serialized.get("rounding").is_some());
         assert!(serialized.get("out_of_range").is_some());
         assert!(serialized.get("scalar_map").is_some());
-        assert!(!serialized.get("decode").is_some());
+        assert!(serialized.get("decode").is_none());
     }
 
     #[test]
@@ -153,9 +153,9 @@ mod tests {
 
         // Verify exact round-trip: absent optional fields stay absent
         let serialized = serde_json::to_value(&config).unwrap();
-        assert!(!serialized.get("rounding").is_some());
-        assert!(!serialized.get("out_of_range").is_some());
-        assert!(!serialized.get("scalar_map").is_some());
+        assert!(serialized.get("rounding").is_none());
+        assert!(serialized.get("out_of_range").is_none());
+        assert!(serialized.get("scalar_map").is_none());
 
         let reserialized = serde_json::to_string(&config).unwrap();
         assert!(!reserialized.contains("rounding"));
