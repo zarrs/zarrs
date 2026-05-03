@@ -102,6 +102,42 @@ mod tests {
     }
 
     #[test]
+    fn codec_cast_value_config_scalar_map() {
+        let config: CastValueCodecConfiguration = serde_json::from_str(
+            r#"{
+                "data_type": "uint8",
+                "rounding": "towards-zero",
+                "out_of_range": "wrap",
+                "scalar_map": {
+                    "encode": [
+                        ["NaN", 0],
+                        ["+Infinity", 0],
+                        ["-Infinity", 0]
+                    ]
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let CastValueCodecConfiguration::V1(config) = config;
+        assert_eq!(config.rounding, Some(CastValueRoundingMode::TowardsZero));
+        assert_eq!(config.out_of_range, Some(CastValueOutOfRangeMode::Wrap));
+        assert!(config.scalar_map.is_some());
+
+        let scalar_map = config.scalar_map.as_ref().unwrap();
+        assert!(scalar_map.encode.is_some());
+        assert!(scalar_map.decode.is_none());
+
+        // Verify exact round-trip: present fields stay present, absent fields stay absent
+        let serialized = serde_json::to_value(&config).unwrap();
+        assert!(serialized.get("data_type").is_some());
+        assert!(serialized.get("rounding").is_some());
+        assert!(serialized.get("out_of_range").is_some());
+        assert!(serialized.get("scalar_map").is_some());
+        assert!(!serialized.get("decode").is_some());
+    }
+
+    #[test]
     fn codec_cast_value_config_defaults() {
         let config: CastValueCodecConfiguration = serde_json::from_str(
             r#"{
