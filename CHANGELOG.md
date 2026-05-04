@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `UseConsolidatedMetadata` (`Auto` / `Must` / `Never`) and a new `Config::use_consolidated_metadata` global setting (default `Auto`)
   - Add `NodeCreateError::MissingConsolidatedMetadata`, returned when `Must` is set but the field is absent
 
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.3
+
 ## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
 
 ### Added
