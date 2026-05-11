@@ -92,9 +92,8 @@ pub enum NodeCreateError {
     /// Missing metadata.
     #[error("Metadata is missing for {0}")]
     MissingMetadata(String),
-    /// Consolidated metadata was required but not present on the root group.
-    #[error("Consolidated metadata required but missing on group {0}")]
-    MissingConsolidatedMetadata(String),
+    // TODO: In a future breaking release, consider adding a more specific
+    // `MissingConsolidatedMetadata` variant instead of using `MissingMetadata`.
 }
 
 impl From<NodeCreateError> for ArrayCreateError {
@@ -108,9 +107,6 @@ impl From<NodeCreateError> for ArrayCreateError {
             }
             NodeCreateError::MissingMetadata(err) => {
                 StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
-            }
-            NodeCreateError::MissingConsolidatedMetadata(err) => {
-                StorageError::Other(NodeCreateError::MissingConsolidatedMetadata(err).to_string())
             }
         })
     }
@@ -127,9 +123,6 @@ impl From<NodeCreateError> for GroupCreateError {
             }
             NodeCreateError::MissingMetadata(err) => {
                 StorageError::Other(NodeCreateError::MissingMetadata(err).to_string())
-            }
-            NodeCreateError::MissingConsolidatedMetadata(err) => {
-                StorageError::Other(NodeCreateError::MissingConsolidatedMetadata(err).to_string())
             }
         })
     }
@@ -212,8 +205,8 @@ pub(crate) fn build_node_tree(
 ///
 /// Returns `Ok(Some(...))` when consolidated metadata should be used, `Ok(None)`
 /// when it is absent and the policy permits falling back to listing, and
-/// [`NodeCreateError::MissingConsolidatedMetadata`] when the policy requires it
-/// but it is absent.
+/// [`NodeCreateError::MissingMetadata`] when the policy requires consolidated
+/// metadata but it is absent.
 pub(crate) fn resolve_consolidated_policy(
     path: &NodePath,
     consolidated: Option<ConsolidatedMetadata>,
@@ -224,9 +217,11 @@ pub(crate) fn resolve_consolidated_policy(
     }
     match (consolidated, policy) {
         (Some(c), _) => Ok(Some(c)),
-        (None, UseConsolidatedMetadata::Must) => Err(NodeCreateError::MissingConsolidatedMetadata(
-            path.to_string(),
-        )),
+        // TODO: In a future breaking release, consider using a more specific
+        // `MissingConsolidatedMetadata` error variant instead of `MissingMetadata`.
+        (None, UseConsolidatedMetadata::Must) => Err(NodeCreateError::MissingMetadata(format!(
+            "Consolidated metadata required but missing on group {path}"
+        ))),
         (None, _) => Ok(None),
     }
 }
@@ -942,10 +937,7 @@ mod tests {
         // Must with absent errors.
         let err = super::resolve_consolidated_policy(&path, None, UseConsolidatedMetadata::Must)
             .unwrap_err();
-        assert!(matches!(
-            err,
-            NodeCreateError::MissingConsolidatedMetadata(_)
-        ));
+        assert!(matches!(err, NodeCreateError::MissingMetadata(_)));
     }
 
     #[test]
@@ -958,21 +950,22 @@ mod tests {
     }
 
     #[test]
-    fn missing_consolidated_metadata_error_conversions() {
-        // Cover the From<NodeCreateError> for ArrayCreateError / GroupCreateError arms.
-        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
+    fn missing_consolidated_metadata_error_message() {
+        // Verify that missing consolidated metadata uses MissingMetadata with a descriptive message.
+        let path = NodePath::root();
+        let err = super::resolve_consolidated_policy(&path, None, UseConsolidatedMetadata::Must)
+            .unwrap_err();
         let s = err.to_string();
         assert!(s.contains("Consolidated metadata required but missing"));
 
-        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
-        let arr_err: ArrayCreateError = err.into();
+        // Verify the error converts correctly to ArrayCreateError and GroupCreateError.
+        let arr_err: ArrayCreateError = err.clone().into();
         assert!(
             arr_err
                 .to_string()
                 .contains("Consolidated metadata required but missing")
         );
 
-        let err = NodeCreateError::MissingConsolidatedMetadata("/x".to_string());
         let group_err: GroupCreateError = err.into();
         assert!(
             group_err

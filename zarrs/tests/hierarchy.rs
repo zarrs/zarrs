@@ -1038,7 +1038,7 @@ mod consolidated_open {
         );
 
         // child_arrays propagates as ArrayCreateError — covers the
-        // From<NodeCreateError> for ArrayCreateError MissingConsolidatedMetadata arm.
+        // From<NodeCreateError> for ArrayCreateError path for missing consolidated metadata.
         let err = group
             .child_arrays()
             .expect_err("child_arrays should fail under Must when consolidated absent");
@@ -1049,7 +1049,7 @@ mod consolidated_open {
         );
 
         // child_groups propagates as GroupCreateError — covers the
-        // From<NodeCreateError> for GroupCreateError MissingConsolidatedMetadata arm.
+        // From<NodeCreateError> for GroupCreateError path for missing consolidated metadata.
         let err = group
             .child_groups()
             .expect_err("child_groups should fail under Must when consolidated absent");
