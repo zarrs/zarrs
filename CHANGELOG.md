@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `microfloat` feature for expanded subfloat and complex subfloat data type / element support
   - The `float8` feature is considered deprecated as the associated types are not IEEE 754-compliant
+- Add `NodePath::is_root`, `NodePath::parent`, and `NodePath::join` for safer hierarchy path manipulation
 
 ### Changed
 - Bump `zarrs_metadata_ext` to 0.4.3
+
+### Fixed
+- `NodePath::validate` now rejects components starting with `__` (the reserved prefix) and components composed only of period characters (`.` / `..` / `...`), matching `NodeName` rules
 
 ## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
 
