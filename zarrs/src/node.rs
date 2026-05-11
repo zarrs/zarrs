@@ -486,7 +486,7 @@ impl Node {
     /// Indicates if a node is the root.
     #[must_use]
     pub fn is_root(&self) -> bool {
-        self.path.as_str().eq("/")
+        self.path.is_root()
     }
 
     /// Returns the name of the node.
