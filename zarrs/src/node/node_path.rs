@@ -85,15 +85,17 @@ impl NodePath {
     /// Returns the parent path of this node, or `None` if this is the root path.
     #[must_use]
     pub fn parent(&self) -> Option<Self> {
-        self.0.parent().and_then(|p| {
-            if p.as_os_str().is_empty() {
-                // `PathBuf::parent("/")` returns `Some("")` — root has no parent.
-                None
-            } else {
-                let s = p.to_string_lossy();
-                Self::new(&s).ok()
-            }
-        })
+        let s = self.as_str();
+        let (parent, child) = s.rsplit_once('/')?;
+        if child.is_empty() {
+            // Root path (`/`) splits into `("", "")` — no parent.
+            None
+        } else if parent.is_empty() {
+            // Direct child of root (`/foo`) — parent is root.
+            Some(Self::root())
+        } else {
+            Self::new(parent).ok()
+        }
     }
 
     /// Creates a new path by joining `relative` to this path.
@@ -109,14 +111,21 @@ impl NodePath {
             return Ok(self.clone());
         }
 
-        let mut path_buf = self.0.clone();
-        path_buf.push(relative);
-        let joined = path_buf.to_string_lossy().to_string();
-        if Self::validate(&joined) {
-            Ok(Self(path_buf))
-        } else {
-            Err(NodePathError(joined))
+        // Reject components that are empty (from `//` or trailing `/`), start with `__`, or are period-only (`.` / `..`).
+        for component in relative.split('/') {
+            if component.is_empty() || !NodeName::validate(component) {
+                return Err(NodePathError(format!(
+                    "invalid node name `{component}` in '{relative}'"
+                )));
+            }
         }
+
+        let joined = if self.is_root() {
+            format!("/{}", relative)
+        } else {
+            format!("{}/{}", self.as_str(), relative)
+        };
+        Self::new(&joined)
     }
 }
 
