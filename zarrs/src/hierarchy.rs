@@ -72,7 +72,7 @@ impl Hierarchy {
             NodeMetadata::Group(_) => {
                 let policy = global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
-                    Some(consolidated) => expand_consolidated_metadata(&node_path, &consolidated)?,
+                    Some(consolidated) => expand_consolidated_metadata(&node_path, consolidated)?,
                     None => get_all_nodes_of(storage, &node_path, version)?,
                 }
             }
@@ -119,7 +119,7 @@ impl Hierarchy {
             NodeMetadata::Group(_) => {
                 let policy = global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
-                    Some(consolidated) => expand_consolidated_metadata(&node_path, &consolidated)?,
+                    Some(consolidated) => expand_consolidated_metadata(&node_path, consolidated)?,
                     None => async_get_all_nodes_of(storage, &node_path, version).await?,
                 }
             }

@@ -23,7 +23,7 @@ pub use key::{
 
 #[cfg(feature = "async")]
 mod node_async;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
@@ -135,50 +135,33 @@ impl From<NodeCreateError> for GroupCreateError {
 /// `/` is tolerated for compatibility with implementations that include it.
 pub(crate) fn expand_consolidated_metadata(
     base_path: &NodePath,
-    consolidated: &ConsolidatedMetadata,
+    consolidated: ConsolidatedMetadata,
 ) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
-    let base = base_path.as_str();
-    let base_no_trailing = if base == "/" { "" } else { base };
     let mut out = Vec::with_capacity(consolidated.metadata.len());
-    for (rel, md) in &consolidated.metadata {
-        let rel = rel.strip_prefix('/').unwrap_or(rel);
-        if rel.is_empty() {
+    for (rel, md) in consolidated.metadata {
+        let path = base_path.join(&rel)?;
+        if path == *base_path {
             // The base group is conventionally not included in its own consolidated map; skip it if it is.
             continue;
         }
-        let full = format!("{base_no_trailing}/{rel}");
-        let path = NodePath::new(&full)?;
-        out.push((path, md.clone()));
+        out.push((path, md));
     }
     Ok(out)
 }
 
-/// Return the parent of a node-path string, or the empty string if no parent exists.
-fn parent_path_str(p: &str) -> &str {
-    if p == "/" {
-        return "";
-    }
-    match p.rfind('/') {
-        Some(0) => "/",
-        Some(idx) => &p[..idx],
-        None => "",
-    }
-}
-
 /// Recursively collect the children of `parent` from the parent-keyed map.
 fn collect_children_from_map(
-    parent: &str,
-    by_parent: &mut HashMap<String, Vec<(NodePath, NodeMetadata)>>,
+    parent: &NodePath,
+    by_parent: &mut BTreeMap<NodePath, BTreeMap<NodePath, NodeMetadata>>,
 ) -> Vec<Node> {
-    let Some(mut entries) = by_parent.remove(parent) else {
+    let Some(entries) = by_parent.remove(parent) else {
         return Vec::new();
     };
-    entries.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
     entries
         .into_iter()
         .map(|(path, md)| {
             let children = match &md {
-                NodeMetadata::Group(_) => collect_children_from_map(path.as_str(), by_parent),
+                NodeMetadata::Group(_) => collect_children_from_map(&path, by_parent),
                 NodeMetadata::Array(_) => Vec::new(),
             };
             Node::new_with_metadata(path, md, children)
@@ -192,12 +175,13 @@ pub(crate) fn build_node_tree(
     base_path: &NodePath,
     flat: Vec<(NodePath, NodeMetadata)>,
 ) -> Vec<Node> {
-    let mut by_parent: HashMap<String, Vec<(NodePath, NodeMetadata)>> = HashMap::new();
+    let mut by_parent: BTreeMap<NodePath, BTreeMap<NodePath, NodeMetadata>> = BTreeMap::new();
     for (path, md) in flat {
-        let parent = parent_path_str(path.as_str()).to_string();
-        by_parent.entry(parent).or_default().push((path, md));
+        if let Some(parent) = path.parent() {
+            by_parent.entry(parent).or_default().insert(path, md);
+        }
     }
-    collect_children_from_map(base_path.as_str(), &mut by_parent)
+    collect_children_from_map(base_path, &mut by_parent)
 }
 
 /// Apply the [`UseConsolidatedMetadata`] policy to an already-extracted optional
@@ -251,13 +235,12 @@ pub(crate) fn direct_children_from_flat(
     base_path: &NodePath,
     flat: Vec<(NodePath, NodeMetadata)>,
 ) -> Vec<Node> {
-    let base = base_path.as_str();
     let mut out: Vec<Node> = flat
         .into_iter()
-        .filter(|(p, _)| parent_path_str(p.as_str()) == base)
+        .filter(|(p, _)| p.parent().as_ref() == Some(base_path))
         .map(|(p, m)| Node::new_with_metadata(p, m, vec![]))
         .collect();
-    out.sort_by(|a, b| a.path().as_str().cmp(b.path().as_str()));
+    out.sort_by(|a, b| a.path().cmp(b.path()));
     out
 }
 
@@ -409,7 +392,7 @@ impl Node {
                 let policy = crate::config::global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&path, &metadata, policy)? {
                     Some(consolidated) => {
-                        let flat = expand_consolidated_metadata(&path, &consolidated)?;
+                        let flat = expand_consolidated_metadata(&path, consolidated)?;
                         build_node_tree(&path, flat)
                     }
                     None => get_child_nodes_opt(storage, &path, true, version)?,
@@ -458,7 +441,7 @@ impl Node {
                 let policy = crate::config::global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&path, &metadata, policy)? {
                     Some(consolidated) => {
-                        let flat = expand_consolidated_metadata(&path, &consolidated)?;
+                        let flat = expand_consolidated_metadata(&path, consolidated)?;
                         build_node_tree(&path, flat)
                     }
                     None => async_get_child_nodes_opt(&storage, &path, true, version).await?,
@@ -769,19 +752,6 @@ mod tests {
         assert!(node.is_root());
     }
 
-    #[test]
-    fn parent_path_str_branches() {
-        // root has no parent
-        assert_eq!(super::parent_path_str("/"), "");
-        // direct child of root
-        assert_eq!(super::parent_path_str("/foo"), "/");
-        // nested
-        assert_eq!(super::parent_path_str("/foo/bar"), "/foo");
-        assert_eq!(super::parent_path_str("/foo/bar/baz"), "/foo/bar");
-        // pathological: no slash at all (should not happen for real NodePath, but fn must handle it)
-        assert_eq!(super::parent_path_str("foo"), "");
-    }
-
     fn array_md(shape: u64) -> NodeMetadata {
         NodeMetadata::Array(
             serde_json::from_str::<zarrs_metadata::v3::ArrayMetadataV3>(&format!(
@@ -813,7 +783,7 @@ mod tests {
         c.metadata.insert("/bar".to_string(), array_md(2));
         c.metadata.insert(String::new(), group_md()); // base group entry — must be skipped
         c.metadata.insert("/".to_string(), group_md()); // also base entry after stripping leading slash
-        let out = super::expand_consolidated_metadata(&NodePath::root(), &c).unwrap();
+        let out = super::expand_consolidated_metadata(&NodePath::root(), c).unwrap();
         let paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
         assert!(paths.contains(&"/foo".to_string()));
         assert!(paths.contains(&"/bar".to_string()));
@@ -827,7 +797,7 @@ mod tests {
         let mut c = ConsolidatedMetadata::default();
         c.metadata.insert("foo".to_string(), array_md(3));
         c.metadata.insert("sub/leaf".to_string(), array_md(4));
-        let out = super::expand_consolidated_metadata(&base, &c).unwrap();
+        let out = super::expand_consolidated_metadata(&base, c).unwrap();
         let mut paths: Vec<_> = out.iter().map(|(p, _)| p.as_str().to_string()).collect();
         paths.sort();
         assert_eq!(paths, vec!["/group/foo", "/group/sub/leaf"]);
@@ -945,7 +915,7 @@ mod tests {
         // A key with a trailing slash produces an invalid NodePath ("/foo/").
         let mut c = ConsolidatedMetadata::default();
         c.metadata.insert("foo/".to_string(), array_md(1));
-        let err = super::expand_consolidated_metadata(&NodePath::root(), &c).unwrap_err();
+        let err = super::expand_consolidated_metadata(&NodePath::root(), c).unwrap_err();
         assert!(matches!(err, NodeCreateError::NodePathError(_)));
     }
 

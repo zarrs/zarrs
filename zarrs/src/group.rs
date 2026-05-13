@@ -345,7 +345,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
         if let Some(consolidated) =
             resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
         {
-            let flat = expand_consolidated_metadata(&self.path, &consolidated)?;
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
             return Ok(if recursive {
                 build_node_tree(&self.path, flat)
             } else {
@@ -369,7 +369,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
         if let Some(consolidated) =
             resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
         {
-            return expand_consolidated_metadata(&self.path, &consolidated);
+            return expand_consolidated_metadata(&self.path, consolidated);
         }
         get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
     }
@@ -538,7 +538,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
         if let Some(consolidated) =
             resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
         {
-            let flat = expand_consolidated_metadata(&self.path, &consolidated)?;
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
             return Ok(if recursive {
                 build_node_tree(&self.path, flat)
             } else {
@@ -562,7 +562,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
         if let Some(consolidated) =
             resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
         {
-            return expand_consolidated_metadata(&self.path, &consolidated);
+            return expand_consolidated_metadata(&self.path, consolidated);
         }
         async_get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default).await
     }
