@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.3...HEAD)
+
+## [0.4.3](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.3) - 2026-05-13
 
 ### Added
 - Add metadata types for the `cast_value` codec
@@ -86,8 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - rename `InvalidPermutationError` to `TransposeOrderError`
 - change the suffix of experimental codec configurations from V1 to V0 (`gdeflate`, `squeeze`, `vlen`, `vlen_v2`)
 
-[unreleased]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.2...HEAD
-[0.4.2]: https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.1...zarrs_metadata_ext-v0.4.2
+[0.4.2]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.2
 [0.4.1]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.1
 [0.4.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.0
 [0.3.0]: https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.3.0
