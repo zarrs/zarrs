@@ -39,8 +39,9 @@ use crate::config::{
 };
 use crate::convert::group_metadata_v2_to_v3;
 use crate::node::{
-    Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
-    meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
+    Node, NodeCreateError, NodePath, NodePathError, build_node_tree, direct_children_from_flat,
+    expand_consolidated_metadata, get_all_nodes_of, get_child_nodes, meta_key_v2_attributes,
+    meta_key_v2_group, meta_key_v3, resolve_consolidated_policy,
 };
 #[cfg(feature = "async")]
 use crate::{
@@ -332,17 +333,44 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     /// The `recursive` argument determines whether the returned `Node`s will have their
     /// children (and their children, etc.) populated.
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// policy permits, children are populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
+        let policy = global_config().use_consolidated_metadata();
+        if let Some(consolidated) =
+            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
+        {
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
+            return Ok(if recursive {
+                build_node_tree(&self.path, flat)
+            } else {
+                direct_children_from_flat(&self.path, flat)
+            });
+        }
         get_child_nodes(&self.storage, &self.path, recursive)
     }
 
     /// Return all the Nodes under the group, recursively
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// policy permits, the result is populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        let policy = global_config().use_consolidated_metadata();
+        if let Some(consolidated) =
+            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
+        {
+            return expand_consolidated_metadata(&self.path, consolidated);
+        }
         get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
     }
 
@@ -498,17 +526,44 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
     /// The `recursive` argument determines whether the returned `Node`s will have their
     /// children (and their children, etc.) populated.
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// policy permits, children are populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
+        let policy = global_config().use_consolidated_metadata();
+        if let Some(consolidated) =
+            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
+        {
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
+            return Ok(if recursive {
+                build_node_tree(&self.path, flat)
+            } else {
+                direct_children_from_flat(&self.path, flat)
+            });
+        }
         async_get_child_nodes(&self.storage, &self.path, recursive).await
     }
 
     /// Return all the Nodes under the group, recursively
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// policy permits, the result is populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        let policy = global_config().use_consolidated_metadata();
+        if let Some(consolidated) =
+            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
+        {
+            return expand_consolidated_metadata(&self.path, consolidated);
+        }
         async_get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default).await
     }
 

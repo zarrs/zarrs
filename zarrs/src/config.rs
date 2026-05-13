@@ -108,6 +108,16 @@ use zarrs_codec::{CodecMetadataOptions, CodecOptions};
 ///
 /// If true, then aliased extension names will be replaced by the standard name if metadata is resaved.
 /// This sets the default for the association option of [`crate::array::ArrayMetadataOptions`].
+///
+/// ### Use Consolidated Metadata
+/// > default: [`UseConsolidatedMetadata::Auto`]
+///
+/// Controls whether [`crate::node::Node::open`], [`crate::hierarchy::Hierarchy::open`], and their async/`_opt` variants
+/// use the `consolidated_metadata` field of a Zarr V3 root group instead of listing children from storage.
+/// See [`UseConsolidatedMetadata`] for the available modes.
+///
+/// Consolidated metadata is a snapshot. If the hierarchy has been modified after the snapshot was written,
+/// the consolidated copy may be out of date. Set this to [`UseConsolidatedMetadata::Never`] to force re-discovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Config {
@@ -121,6 +131,7 @@ pub struct Config {
     include_zarrs_metadata: bool,
     experimental_partial_encoding: bool,
     convert_aliased_extension_names: bool,
+    use_consolidated_metadata: UseConsolidatedMetadata,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -137,6 +148,7 @@ impl Default for Config {
             include_zarrs_metadata: true,
             experimental_partial_encoding: false,
             convert_aliased_extension_names: false,
+            use_consolidated_metadata: UseConsolidatedMetadata::default(),
         }
     }
 }
@@ -301,6 +313,21 @@ impl Config {
         self.convert_aliased_extension_names = convert_aliased_extension_names;
         self
     }
+
+    /// Get the [use consolidated metadata](#use-consolidated-metadata) configuration.
+    #[must_use]
+    pub fn use_consolidated_metadata(&self) -> UseConsolidatedMetadata {
+        self.use_consolidated_metadata
+    }
+
+    /// Set the [use consolidated metadata](#use-consolidated-metadata) configuration.
+    pub fn set_use_consolidated_metadata(
+        &mut self,
+        use_consolidated_metadata: UseConsolidatedMetadata,
+    ) -> &mut Self {
+        self.use_consolidated_metadata = use_consolidated_metadata;
+        self
+    }
 }
 
 static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| RwLock::new(Config::default()));
@@ -341,6 +368,23 @@ pub enum MetadataConvertVersion {
     Default,
     /// Write Zarr V3 metadata. Zarr V2 metadata will not be automatically removed if it exists.
     V3,
+}
+
+/// Controls whether `consolidated_metadata` (if present in a Zarr V3 root group) is used to populate
+/// child nodes when opening a [`Node`](crate::node::Node) or [`Hierarchy`](crate::hierarchy::Hierarchy).
+///
+/// Consolidated metadata is a snapshot of the hierarchy embedded in the root group. Using it
+/// avoids `list_dir` calls and per-node metadata reads, but it may be stale if the hierarchy was
+/// modified after the snapshot was written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum UseConsolidatedMetadata {
+    /// Use consolidated metadata if it is present on the root group; otherwise fall back to listing storage.
+    #[default]
+    Auto,
+    /// Require consolidated metadata to be present on the root group. If absent, opening fails.
+    Must,
+    /// Never use consolidated metadata, even if it is present. Always re-discover children from storage.
+    Never,
 }
 
 /// Version options for [`Array::erase_metadata`](crate::array::Array::erase_metadata) and [`Group::erase_metadata`](crate::group::Group::erase_metadata), and their async variants.
