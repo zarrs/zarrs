@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
-use super::{BytesCodec, Endianness, reverse_endianness};
+use super::{BytesCodec, BytesDataTypeExt, Endianness};
 use crate::array::{ArrayBytes, DataType, FillValue, IndexerError, update_array_bytes};
 use zarrs_codec::{
     ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialDecoderTraits,
@@ -42,6 +42,24 @@ impl<T: ?Sized> BytesCodecPartial<T> {
             fill_value: fill_value.clone(),
             endian,
         }
+    }
+
+    /// Decode bytes, applying endianness conversion if required.
+    fn decode_bytes(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CodecError> {
+        Ok(self
+            .data_type
+            .codec_bytes()?
+            .decode(Cow::Owned(bytes), self.endian)?
+            .into_owned())
+    }
+
+    /// Encode bytes, applying endianness conversion if required.
+    fn encode_bytes(&self, bytes: Cow<'_, [u8]>) -> Result<Vec<u8>, CodecError> {
+        Ok(self
+            .data_type
+            .codec_bytes()?
+            .encode(bytes, self.endian)?
+            .into_owned())
     }
 }
 
@@ -93,13 +111,7 @@ where
             .partial_decode_many(Box::new(byte_ranges), options)?;
 
         let decoded = if let Some(decoded) = decoded {
-            let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut decoded, &self.data_type);
-            }
-            ArrayBytes::from(decoded)
+            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
@@ -165,13 +177,7 @@ where
             .await?;
 
         let decoded = if let Some(decoded) = decoded {
-            let mut decoded = decoded.concat();
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut decoded, &self.data_type);
-            }
-            ArrayBytes::from(decoded)
+            ArrayBytes::from(self.decode_bytes(decoded.concat())?)
         } else {
             ArrayBytes::new_fill_value(&self.data_type, indexer.len(), &self.fill_value)?
         };
@@ -222,12 +228,7 @@ where
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
-            let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut bytes_to_encode, &self.data_type);
-            }
+            let bytes_to_encode = self.encode_bytes(bytes.clone().into_fixed()?)?;
 
             let offset_bytes: Vec<_> = byte_ranges
                 .scan(0usize, |offset_in, range_out| {
@@ -256,16 +257,12 @@ where
                 bytes,
                 self.data_type.size(),
             )?;
-            let mut chunk_bytes: Vec<u8> = chunk_bytes
+            let chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut chunk_bytes, &self.data_type);
-            }
+            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
 
             self.input_output_handle
                 .partial_encode(0, Cow::Owned(chunk_bytes), options)
@@ -318,12 +315,7 @@ where
             let chunk_shape = bytemuck::must_cast_slice(&self.shape);
             let byte_ranges = indexer.iter_contiguous_byte_ranges(chunk_shape, data_type_size)?;
 
-            let mut bytes_to_encode = bytes.clone().into_fixed()?.into_owned();
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut bytes_to_encode, &self.data_type);
-            }
+            let bytes_to_encode = self.encode_bytes(bytes.clone().into_fixed()?)?;
 
             let offset_bytes: Vec<_> = byte_ranges
                 .scan(0usize, |offset_in, range_out| {
@@ -353,16 +345,12 @@ where
                 bytes,
                 self.data_type.size(),
             )?;
-            let mut chunk_bytes: Vec<u8> = chunk_bytes
+            let chunk_bytes: Vec<u8> = chunk_bytes
                 .into_fixed()
                 .expect("fixed data type")
                 .into_owned();
 
-            if let Some(endian) = &self.endian
-                && !endian.is_native()
-            {
-                reverse_endianness(&mut chunk_bytes, &self.data_type);
-            }
+            let chunk_bytes = self.encode_bytes(Cow::Owned(chunk_bytes))?;
 
             self.input_output_handle
                 .partial_encode(0, Cow::Owned(chunk_bytes), options)
