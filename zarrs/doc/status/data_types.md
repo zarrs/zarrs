@@ -45,6 +45,7 @@
 | [`ComplexFloat8E8M0FNU`]†     | `complex_float8_e8m0fnu`     |               | [`Complex<microfloat::f8e8m0fnu>`] (`microfloat`) |
 | [`Optional`]                  | 🚧`zarrs.optional`           |               | [`Option`]                                       |
 | [`RawBits`]                   | `r*`                         | `\|V*`        | `[u8; N]` / `&[u8; N]`                           |
+| [`FixedLengthUTF32`]          | `fixed_length_utf32`         | `<U*` `>U*`   | `Vec<char>` / `&[char]`<br>`[char; N]` / `&[char; N]` |
 | [`String`]                    | `string`                     | `\|O`         | [`String`] / [`&str`]                            |
 | [`Bytes`]                     | `bytes`<br>~~`binary`~~<br>🚧`variable_length_bytes` | `\|VX`        | [`Vec<u8>`] / `&[u8]`                            |
 | [`NumpyDateTime64`]           | `numpy.datetime64`           |               | [`i64`]<br>[`chrono::DateTime<Utc>`] (`chrono`)<br>[`jiff::Timestamp`] (`jiff`)  |
@@ -99,6 +100,7 @@
 [`Complex128`]: crate::array::data_type::Complex128DataType
 [`Optional`]: crate::array::data_type::OptionalDataType
 [`RawBits`]: crate::array::data_type::RawBitsDataType
+[`FixedLengthUTF32`]: crate::array::data_type::FixedLengthUTF32DataType
 [`String`]: crate::array::data_type::StringDataType
 [`Bytes`]: crate::array::data_type::BytesDataType
 [`NumpyDateTime64`]: crate::array::data_type::NumpyDateTime64DataType

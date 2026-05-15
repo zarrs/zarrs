@@ -18,6 +18,7 @@ mod bool;
 mod bytes;
 mod complex_float;
 mod complex_subfloat;
+mod fixed_length_utf32;
 mod float;
 mod int;
 mod int2;
@@ -48,6 +49,7 @@ pub use zarrs_data_type as api;
 pub use zarrs_metadata_ext::data_type::NumpyTimeUnit;
 
 pub use self::bool::BoolDataType;
+pub use self::fixed_length_utf32::FixedLengthUTF32DataType;
 pub use self::string::StringDataType;
 pub use bytes::BytesDataType;
 pub use complex_float::{
@@ -317,6 +319,15 @@ pub fn bytes() -> DataType {
 #[must_use]
 pub fn raw_bits(size_bytes: usize) -> DataType {
     Arc::new(RawBitsDataType::new(size_bytes)).into()
+}
+/// Create a `fixed_length_utf32` data type with the given size in bytes.
+///
+/// `length_bytes` must be at least 4 and a multiple of 4.
+///
+/// # Errors
+/// Returns an error if `length_bytes` is not at least 4 or not a multiple of 4.
+pub fn fixed_length_utf32(length_bytes: u32) -> Result<DataType, zarrs_plugin::PluginCreateError> {
+    Ok(Arc::new(FixedLengthUTF32DataType::new(length_bytes)?).into())
 }
 
 // NumPy time types
