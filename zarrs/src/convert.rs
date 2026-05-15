@@ -1,6 +1,5 @@
 //! Zarr V2 to V3 conversion.
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use thiserror::Error;
@@ -41,38 +40,6 @@ use crate::{
 
 #[cfg(feature = "zfp")]
 use crate::array::codec::{ZfpCodec, ZfpyCodec};
-
-/// Try to find a V3 default name for a V2 data type name by creating an instance.
-///
-/// Returns `Some(default_v3_name)` if a match is found, `None` otherwise.
-#[must_use]
-fn data_type_v2_to_v3_name(v2_name: &str) -> Option<Cow<'static, str>> {
-    use zarrs_data_type::DataTypePluginV2;
-
-    // Special handling for RawBits V2 format (|V8 -> r64)
-    // Must be checked before plugin iteration since the plugin won't know the size
-    if data_type::RawBitsDataType::matches_name_v2(v2_name) {
-        if let Some(size_str) = v2_name.strip_prefix("|V")
-            && let Ok(size_bytes) = size_str.parse::<usize>()
-        {
-            return Some(Cow::Owned(format!("r{}", size_bytes * 8)));
-        }
-        // If it's already in r* format, return as-is
-        return Some(Cow::Owned(v2_name.to_string()));
-    }
-
-    // Check if any V2 plugin matches the name and create an instance to get the V3 name
-    let metadata = DataTypeMetadataV2::Simple(v2_name.to_string());
-    for plugin in inventory::iter::<DataTypePluginV2> {
-        if plugin.match_name(v2_name)
-            && let Ok(data_type) = plugin.create(&metadata)
-        {
-            return data_type.name_v3();
-        }
-    }
-
-    None
-}
 
 /// Try to convert V2 codec metadata to V3 metadata.
 ///
@@ -369,15 +336,41 @@ pub fn data_type_metadata_v2_to_v3(
 ) -> Result<MetadataV3, ArrayMetadataV2ToV3Error> {
     match data_type {
         DataTypeMetadataV2::Simple(name) => {
-            // Look up the V3 name using the built-in data type registry
-            if let Some(v3_name) = data_type_v2_to_v3_name(name) {
-                Ok(MetadataV3::new(v3_name.to_string()))
-            } else {
-                // Unknown data type
-                Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
-                    data_type.clone(),
-                ))
+            // Special handling for RawBits V2 format (|V8 -> r64)
+            if data_type::RawBitsDataType::matches_name_v2(name) {
+                let v3_name = if let Some(size_str) = name.strip_prefix("|V")
+                    && let Ok(size_bytes) = size_str.parse::<usize>()
+                {
+                    format!("r{}", size_bytes * 8)
+                } else {
+                    name.to_string()
+                };
+                return Ok(MetadataV3::new(v3_name));
             }
+
+            // Look up the V3 name and configuration using the built-in data type registry
+            let metadata = DataTypeMetadataV2::Simple(name.to_string());
+            for plugin in inventory::iter::<zarrs_data_type::DataTypePluginV2> {
+                if plugin.match_name(name)
+                    && let Ok(dt) = plugin.create(&metadata)
+                    && let Some(v3_name) = dt.name_v3()
+                {
+                    let configuration = dt.configuration_v3();
+                    if configuration.is_empty() {
+                        return Ok(MetadataV3::new(v3_name.to_string()));
+                    } else {
+                        return Ok(MetadataV3::new_with_configuration(
+                            v3_name.to_string(),
+                            configuration,
+                        ));
+                    }
+                }
+            }
+
+            // Unknown data type
+            Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
+                data_type.clone(),
+            ))
         }
         DataTypeMetadataV2::Structured(_) => Err(ArrayMetadataV2ToV3Error::UnsupportedDataType(
             data_type.clone(),
