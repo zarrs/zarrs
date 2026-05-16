@@ -152,7 +152,7 @@ impl FixedLengthUTF32DataType {
     /// # Errors
     /// Returns [`PluginCreateError`] if `length_bytes` is invalid.
     pub fn new(length_bytes: u32) -> Result<Self, PluginCreateError> {
-        if length_bytes < 4 || length_bytes % 4 != 0 {
+        if length_bytes < 4 || !length_bytes.is_multiple_of(4) {
             return Err(PluginCreateError::Other(format!(
                 "length_bytes must be at least 4 and a multiple of 4, got {length_bytes}"
             )));
@@ -450,15 +450,9 @@ mod tests {
         let bytes_cow: std::borrow::Cow<'_, [u8]> = Cow::Owned(bytes.clone());
 
         // Encode to little endian (same as native on LE)
-        let encoded = if cfg!(target_endian = "little") {
-            data_type
-                .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
-                .unwrap()
-        } else {
-            data_type
-                .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
-                .unwrap()
-        };
+        let encoded = data_type
+            .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
+            .unwrap();
 
         // On LE, little endian should be a no-op
         if cfg!(target_endian = "little") {

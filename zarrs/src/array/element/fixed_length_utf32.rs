@@ -28,10 +28,8 @@ fn utf32_ne_bytes_to_trimmed_chars(bytes: &[u8]) -> Vec<char> {
         let mut padded = [0u8; 4];
         padded[..remainder.len()].copy_from_slice(remainder);
         let code_unit = u32::from_ne_bytes(padded);
-        if code_unit != 0 {
-            if let Some(ch) = char::from_u32(code_unit) {
-                chars.push(ch);
-            }
+        if code_unit != 0 && let Some(ch) = char::from_u32(code_unit) {
+            chars.push(ch);
         }
     }
 
@@ -83,7 +81,7 @@ impl Element for &[char] {
 
         let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
         for element in elements {
-            let slice: &[char] = *element;
+            let slice: &[char] = element;
             if slice.len() > capacity {
                 return Err(ElementError::InvalidElementValue);
             }
@@ -227,7 +225,7 @@ impl<const N: usize> Element for &[char; N] {
 
         let mut bytes = Vec::with_capacity(elements.len() * N * 4);
         for element in elements {
-            let arr: &[char; N] = *element;
+            let arr: &[char; N] = element;
             for &ch in arr {
                 bytes.extend_from_slice(&(ch as u32).to_ne_bytes());
             }
