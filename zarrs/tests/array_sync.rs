@@ -372,6 +372,44 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[rustfmt::skip]
+#[test]
+fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
+    let store = std::sync::Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(
+        vec![4, 4],
+        vec![2, 2],
+        data_type::float32(),
+        0.0,
+    )
+    .build(store, "/array")?;
+
+    let chunk = ndarray::array![[1.0f32, 2.0], [3.0, 4.0]];
+    array.store_chunk(&[0, 0], &chunk)?;
+    assert_eq!(
+        array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0])?,
+        chunk.clone().into_dyn()
+    );
+
+    let subset = ndarray::array![
+        [5.0f32, 6.0, 7.0],
+        [8.0, 9.0, 10.0],
+        [11.0, 12.0, 13.0],
+    ];
+    let transposed = subset.t();
+    array.store_array_subset(&[1..4, 1..4], &transposed)?;
+    assert_eq!(
+        array.retrieve_array_subset::<ndarray::ArrayD<f32>>(&[1..4, 1..4])?,
+        ndarray::array![
+            [5.0, 8.0, 11.0],
+            [6.0, 9.0, 12.0],
+            [7.0, 10.0, 13.0],
+        ].into_dyn()
+    );
+
+    Ok(())
+}
+
 #[cfg(feature = "zfp")]
 #[test]
 fn array_5d_zfp() -> Result<(), Box<dyn std::error::Error>> {
