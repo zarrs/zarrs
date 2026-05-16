@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs_metadata_ext-v0.4.3...HEAD)
 
+### Added
+- Add `FixedLengthUTF32DataTypeConfigurationV1` for the `fixed_length_utf32` data type
+
 ## [0.4.3](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.3) - 2026-05-13
 
 ### Added

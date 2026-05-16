@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.11...HEAD)
 
+### Added
+- Add the `fixed_length_utf32` data type
+  - Supports `[char; N]`, `Vec<char>`, and `&[char]` as `Element[Owned]`
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.4
+
 ## [0.23.11](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.11) - 2026-05-13
 
 ### Added

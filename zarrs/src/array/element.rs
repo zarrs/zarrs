@@ -3,6 +3,7 @@ use super::{ArrayBytes, DataType};
 mod bool;
 mod bytes;
 mod error;
+mod fixed_length_utf32;
 mod numpy;
 mod optional;
 mod pod;
