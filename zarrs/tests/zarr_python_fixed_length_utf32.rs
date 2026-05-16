@@ -31,7 +31,7 @@ fn zarr_python_v3_fixed_length_utf32_le() -> Result<(), Box<dyn Error>> {
         let s: String = chars.iter().collect();
         assert_eq!(&s, &TEST_DATA[i], "element {i} mismatch");
     }
-    
+
     let elements = array.retrieve_array_subset::<Vec<[char; 4]>>(&subset_all)?;
     for (i, chars) in elements.iter().enumerate() {
         let s: String = chars.iter().take_while(|&c| *c != '\0').collect();

@@ -29,8 +29,7 @@ pub struct FixedLengthUTF32DataType {
 impl zarrs_data_type::DataTypeTraitsV3 for FixedLengthUTF32DataType {
     fn create(metadata: &MetadataV3) -> Result<DataType, PluginCreateError> {
         let config: FixedLengthUTF32DataTypeConfigurationV1 = metadata.to_typed_configuration()?;
-        Ok(Arc::new(FixedLengthUTF32DataType::new(config.length_bytes)?)
-            .into())
+        Ok(Arc::new(FixedLengthUTF32DataType::new(config.length_bytes)?).into())
     }
 }
 
@@ -71,18 +70,15 @@ impl zarrs_data_type::DataTypeTraitsV2 for FixedLengthUTF32DataType {
             });
         };
 
-        let n: u32 = n_str
-            .parse()
-            .map_err(|_| PluginCreateError::NameInvalid {
-                name: name.to_string(),
-            })?;
+        let n: u32 = n_str.parse().map_err(|_| PluginCreateError::NameInvalid {
+            name: name.to_string(),
+        })?;
 
         let length_bytes = n
             .checked_mul(4)
             .ok_or_else(|| PluginCreateError::Other("length_bytes overflow".to_string()))?;
 
-        Ok(Arc::new(FixedLengthUTF32DataType::new(length_bytes)?)
-            .into())
+        Ok(Arc::new(FixedLengthUTF32DataType::new(length_bytes)?).into())
     }
 }
 
@@ -132,9 +128,7 @@ static FIXEDLENGTHUTF32DATATYPE_ALIASES_V2: std::sync::LazyLock<
     std::sync::RwLock::new(zarrs_plugin::ExtensionAliasesConfig::new(
         "", // V2 name is instance-specific (<U12, >U12 etc)
         vec![],
-        vec![
-            Regex::new(r"^[<>]U\d+$").unwrap(),
-        ],
+        vec![Regex::new(r"^[<>]U\d+$").unwrap()],
     ))
 });
 
@@ -277,8 +271,8 @@ zarrs_data_type::codec_traits::impl_bytes_data_type_traits!(FixedLengthUTF32Data
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zarrs_plugin::ExtensionName;
     use zarrs_metadata::v3::MetadataV3;
+    use zarrs_plugin::ExtensionName;
 
     fn data_type_metadata(data_type: &DataType) -> MetadataV3 {
         let name = data_type
@@ -331,7 +325,10 @@ mod tests {
         // Verify that the V2 plugin correctly parses <U12 format
         let dt = FixedLengthUTF32DataType::new(48).unwrap();
         // V3 name should be fixed_length_utf32
-        assert_eq!(dt.name(ZarrVersion::V3).unwrap().as_ref(), "fixed_length_utf32");
+        assert_eq!(
+            dt.name(ZarrVersion::V3).unwrap().as_ref(),
+            "fixed_length_utf32"
+        );
         // V2 name should be <U12
         assert_eq!(dt.name(ZarrVersion::V2).unwrap().as_ref(), "<U12");
     }
@@ -446,14 +443,21 @@ mod tests {
         let data_type = FixedLengthUTF32DataType::new(12).unwrap();
         // "abc" = 3 code points in native endian
         let chars = ['a', 'b', 'c'];
-        let bytes: Vec<u8> = chars.iter().flat_map(|&c| (c as u32).to_ne_bytes()).collect();
+        let bytes: Vec<u8> = chars
+            .iter()
+            .flat_map(|&c| (c as u32).to_ne_bytes())
+            .collect();
         let bytes_cow: std::borrow::Cow<'_, [u8]> = Cow::Owned(bytes.clone());
 
         // Encode to little endian (same as native on LE)
         let encoded = if cfg!(target_endian = "little") {
-            data_type.encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little)).unwrap()
+            data_type
+                .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
+                .unwrap()
         } else {
-            data_type.encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little)).unwrap()
+            data_type
+                .encode(bytes_cow.clone(), Some(zarrs_metadata::Endianness::Little))
+                .unwrap()
         };
 
         // On LE, little endian should be a no-op
@@ -470,11 +474,17 @@ mod tests {
         let data_type = FixedLengthUTF32DataType::new(12).unwrap();
         // "abc" = 3 code points
         let chars = ['a', 'b', 'c'];
-        let native_bytes: Vec<u8> = chars.iter().flat_map(|&c| (c as u32).to_ne_bytes()).collect();
+        let native_bytes: Vec<u8> = chars
+            .iter()
+            .flat_map(|&c| (c as u32).to_ne_bytes())
+            .collect();
 
         // Encode to big endian
         let encoded = data_type
-            .encode(Cow::Owned(native_bytes.clone()), Some(zarrs_metadata::Endianness::Big))
+            .encode(
+                Cow::Owned(native_bytes.clone()),
+                Some(zarrs_metadata::Endianness::Big),
+            )
             .unwrap();
 
         // Each 4-byte code unit should be byte-swapped

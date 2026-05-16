@@ -57,7 +57,9 @@ fn utf32_ne_bytes_to_exact_chars<const N: usize>(bytes: &[u8]) -> [char; N] {
 impl Element for &[char] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         if data_type.is::<data_type::FixedLengthUTF32DataType>()
-            || data_type.compatible_element_types().contains(&TypeId::of::<&[char]>())
+            || data_type
+                .compatible_element_types()
+                .contains(&TypeId::of::<&[char]>())
         {
             Ok(())
         } else {
@@ -70,7 +72,9 @@ impl Element for &[char] {
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let Some(fixed_length_utf32) = data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>() else {
+        let Some(fixed_length_utf32) =
+            data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>()
+        else {
             return Err(IET);
         };
 
@@ -107,7 +111,9 @@ impl Element for &[char] {
 impl Element for Vec<char> {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         if data_type.is::<data_type::FixedLengthUTF32DataType>()
-            || data_type.compatible_element_types().contains(&TypeId::of::<Vec<char>>())
+            || data_type
+                .compatible_element_types()
+                .contains(&TypeId::of::<Vec<char>>())
         {
             Ok(())
         } else {
@@ -120,7 +126,9 @@ impl Element for Vec<char> {
         elements: &'a [Self],
     ) -> Result<ArrayBytes<'a>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let Some(fixed_length_utf32) = data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>() else {
+        let Some(fixed_length_utf32) =
+            data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>()
+        else {
             return Err(IET);
         };
 
@@ -148,7 +156,9 @@ impl Element for Vec<char> {
         elements: Vec<Self>,
     ) -> Result<ArrayBytes<'static>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let Some(fixed_length_utf32) = data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>() else {
+        let Some(fixed_length_utf32) =
+            data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>()
+        else {
             return Err(IET);
         };
 
@@ -175,7 +185,9 @@ impl ElementOwned for Vec<char> {
         bytes: ArrayBytes<'_>,
     ) -> Result<Vec<Self>, ElementError> {
         Self::validate_data_type(data_type)?;
-        let Some(fixed_length_utf32) = data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>() else {
+        let Some(fixed_length_utf32) =
+            data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>()
+        else {
             return Err(IET);
         };
 
@@ -197,7 +209,9 @@ impl ElementOwned for Vec<char> {
 impl<const N: usize> Element for &[char; N] {
     fn validate_data_type(data_type: &DataType) -> Result<(), ElementError> {
         if data_type.is::<data_type::FixedLengthUTF32DataType>() {
-            let fixed_length_utf32 = data_type.downcast_ref::<data_type::FixedLengthUTF32DataType>().unwrap();
+            let fixed_length_utf32 = data_type
+                .downcast_ref::<data_type::FixedLengthUTF32DataType>()
+                .unwrap();
             if fixed_length_utf32.capacity_code_points() as usize == N {
                 return Ok(());
             }
@@ -301,11 +315,7 @@ mod tests {
     #[test]
     fn vec_char_round_trip() {
         let data_type = make_data_type(8);
-        let elements: Vec<Vec<char>> = vec![
-            vec!['a'],
-            vec!['a', 'b'],
-            vec!['🎉', '🦀'],
-        ];
+        let elements: Vec<Vec<char>> = vec![vec!['a'], vec!['a', 'b'], vec!['🎉', '🦀']];
 
         let bytes = Vec::<char>::to_array_bytes(&data_type, &elements).unwrap();
         let fixed = bytes.clone().into_fixed().unwrap();
@@ -320,10 +330,7 @@ mod tests {
     #[test]
     fn char_array_2_round_trip() {
         let data_type = make_data_type(8);
-        let elements: Vec<[char; 2]> = vec![
-            ['a', 'b'],
-            ['🎉', '🦀'],
-        ];
+        let elements: Vec<[char; 2]> = vec![['a', 'b'], ['🎉', '🦀']];
 
         let bytes = <[char; 2] as Element>::to_array_bytes(&data_type, &elements).unwrap();
         let fixed = bytes.clone().into_fixed().unwrap();
@@ -343,10 +350,7 @@ mod tests {
     #[test]
     fn ref_char_slice_padding() {
         let data_type = make_data_type(12);
-        let elements: Vec<&[char]> = vec![
-            &['a'],
-            &['a', 'b', 'c'],
-        ];
+        let elements: Vec<&[char]> = vec![&['a'], &['a', 'b', 'c']];
 
         let bytes = <&[char] as Element>::to_array_bytes(&data_type, &elements).unwrap();
         let fixed = bytes.into_fixed().unwrap();
