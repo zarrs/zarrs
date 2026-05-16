@@ -28,7 +28,9 @@ fn utf32_ne_bytes_to_trimmed_chars(bytes: &[u8]) -> Vec<char> {
         let mut padded = [0u8; 4];
         padded[..remainder.len()].copy_from_slice(remainder);
         let code_unit = u32::from_ne_bytes(padded);
-        if code_unit != 0 && let Some(ch) = char::from_u32(code_unit) {
+        if code_unit != 0
+            && let Some(ch) = char::from_u32(code_unit)
+        {
             chars.push(ch);
         }
     }
