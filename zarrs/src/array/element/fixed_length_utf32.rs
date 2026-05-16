@@ -90,7 +90,7 @@ fn decode_elements<T, F>(
 where
     F: FnMut(&[[u8; 4]]) -> T,
 {
-    if bytes_fixed.len() % length_bytes != 0 {
+    if !bytes_fixed.len().is_multiple_of(length_bytes) {
         return Err(ElementError::Other(
             "byte length is not a multiple of element size".into(),
         ));
