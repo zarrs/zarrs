@@ -147,7 +147,7 @@
 //!     &[0.2f32, 0.3, 1.2, 1.3]
 //! )?;
 //! array.store_array_subset(
-//!     &[1, 1], // array index (start of subset)
+//!     &[1..3, 1..3], // array indices
 //!     &ndarray::array![[-1.1f32, -1.2], [-2.1, -2.2]]
 //! )?;
 //! array.erase_chunk(&[1, 1])?;
@@ -170,7 +170,7 @@
 //! // Retrieve a subchunk
 //! use zarrs::array::ArrayShardedReadableExt;
 //! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
-//! let array_subchunk = array.retrieve_subchunk_ndarray_opt::<f32>(
+//! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk_opt(
 //!     &shard_index_cache,
 //!     &[0, 3], // subchunk index
 //!     &zarrs::array::CodecOptions::default(),
