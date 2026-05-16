@@ -78,8 +78,8 @@ impl Element for &[char] {
             return Err(IET);
         };
 
-        let length_bytes = fixed_length_utf32.length_bytes() as usize;
-        let capacity = fixed_length_utf32.capacity_code_points() as usize;
+        let length_bytes = usize::try_from(fixed_length_utf32.length_bytes().get()).unwrap();
+        let capacity = usize::try_from(fixed_length_utf32.capacity_code_points().get()).unwrap();
 
         let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
         for element in elements {
@@ -132,8 +132,8 @@ impl Element for Vec<char> {
             return Err(IET);
         };
 
-        let length_bytes = fixed_length_utf32.length_bytes() as usize;
-        let capacity = fixed_length_utf32.capacity_code_points() as usize;
+        let length_bytes = usize::try_from(fixed_length_utf32.length_bytes().get()).unwrap();
+        let capacity = usize::try_from(fixed_length_utf32.capacity_code_points().get()).unwrap();
 
         let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
         for element in elements {
@@ -162,8 +162,8 @@ impl Element for Vec<char> {
             return Err(IET);
         };
 
-        let length_bytes = fixed_length_utf32.length_bytes() as usize;
-        let capacity = fixed_length_utf32.capacity_code_points() as usize;
+        let length_bytes = usize::try_from(fixed_length_utf32.length_bytes().get()).unwrap();
+        let capacity = usize::try_from(fixed_length_utf32.capacity_code_points().get()).unwrap();
 
         let mut bytes = Vec::with_capacity(elements.len() * length_bytes);
         for element in &elements {
@@ -191,7 +191,7 @@ impl ElementOwned for Vec<char> {
             return Err(IET);
         };
 
-        let length_bytes = fixed_length_utf32.length_bytes() as usize;
+        let length_bytes = usize::try_from(fixed_length_utf32.length_bytes().get()).unwrap();
         let bytes_fixed = bytes.into_fixed()?;
 
         let mut elements = Vec::new();
@@ -212,7 +212,7 @@ impl<const N: usize> Element for &[char; N] {
             let fixed_length_utf32 = data_type
                 .downcast_ref::<data_type::FixedLengthUTF32DataType>()
                 .unwrap();
-            if fixed_length_utf32.capacity_code_points() as usize == N {
+            if fixed_length_utf32.capacity_code_points().get() as usize == N {
                 return Ok(());
             }
         }
@@ -308,8 +308,14 @@ mod tests {
     use crate::array::data_type;
     use std::sync::Arc;
 
+    use std::num::NonZeroU64;
+
     fn make_data_type(length_bytes: u32) -> DataType {
-        Arc::new(data_type::FixedLengthUTF32DataType::new(length_bytes).unwrap()).into()
+        Arc::new(
+            data_type::FixedLengthUTF32DataType::new(NonZeroU64::new(length_bytes as u64).unwrap())
+                .unwrap(),
+        )
+        .into()
     }
 
     #[test]

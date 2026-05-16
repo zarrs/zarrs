@@ -1,5 +1,7 @@
 //! `fixed_length_utf32` data type metadata.
 
+use std::num::NonZeroU64;
+
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use zarrs_metadata::ConfigurationSerialize;
@@ -10,7 +12,7 @@ use zarrs_metadata::ConfigurationSerialize;
 #[display("{}", serde_json::to_string(self).unwrap_or_default())]
 pub struct FixedLengthUTF32DataTypeConfigurationV1 {
     /// The length of each element in bytes (must be a multiple of 4, at least 4).
-    pub length_bytes: u32,
+    pub length_bytes: NonZeroU64,
 }
 
 impl ConfigurationSerialize for FixedLengthUTF32DataTypeConfigurationV1 {}
@@ -23,7 +25,7 @@ mod tests {
     fn valid_config() {
         let config: FixedLengthUTF32DataTypeConfigurationV1 =
             serde_json::from_str(r#"{"length_bytes":16}"#).unwrap();
-        assert_eq!(config.length_bytes, 16);
+        assert_eq!(config.length_bytes, NonZeroU64::new(16).unwrap());
     }
 
     #[test]

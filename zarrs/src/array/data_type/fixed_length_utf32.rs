@@ -6,6 +6,8 @@ use std::any::TypeId;
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use std::num::NonZeroU64;
+
 use zarrs_data_type::DataType;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_metadata::{Configuration, DataTypeSize, FillValueMetadata};
@@ -20,7 +22,7 @@ use zarrs_metadata_ext::data_type::fixed_length_utf32::FixedLengthUTF32DataTypeC
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FixedLengthUTF32DataType {
     /// Total size of each element in bytes (must be a multiple of 4, at least 4).
-    length_bytes: u32,
+    length_bytes: NonZeroU64,
 }
 
 // FixedLengthUTF32DataType uses instance-specific names based on length_bytes.
@@ -77,6 +79,12 @@ impl zarrs_data_type::DataTypeTraitsV2 for FixedLengthUTF32DataType {
         let length_bytes = n
             .checked_mul(4)
             .ok_or_else(|| PluginCreateError::Other("length_bytes overflow".to_string()))?;
+
+        let length_bytes = NonZeroU64::new(length_bytes as u64).ok_or_else(|| {
+            PluginCreateError::Other(
+                "length_bytes must be at least 4 and a multiple of 4".to_string(),
+            )
+        })?;
 
         Ok(Arc::new(FixedLengthUTF32DataType::new(length_bytes)?).into())
     }
@@ -150,11 +158,12 @@ impl FixedLengthUTF32DataType {
     /// `length_bytes` must be at least 4 and a multiple of 4.
     ///
     /// # Errors
-    /// Returns [`PluginCreateError`] if `length_bytes` is invalid.
-    pub fn new(length_bytes: u32) -> Result<Self, PluginCreateError> {
-        if length_bytes < 4 || !length_bytes.is_multiple_of(4) {
+    /// Returns [`PluginCreateError`] if `length_bytes` is not a multiple of 4 or is less than 4.
+    pub fn new(length_bytes: NonZeroU64) -> Result<Self, PluginCreateError> {
+        if length_bytes.get() < 4 || !length_bytes.get().is_multiple_of(4) {
             return Err(PluginCreateError::Other(format!(
-                "length_bytes must be at least 4 and a multiple of 4, got {length_bytes}"
+                "length_bytes must be at least 4 and a multiple of 4, got {}",
+                length_bytes.get()
             )));
         }
         Ok(Self { length_bytes })
@@ -162,14 +171,14 @@ impl FixedLengthUTF32DataType {
 
     /// Returns the size of each element in bytes.
     #[must_use]
-    pub const fn length_bytes(&self) -> u32 {
+    pub const fn length_bytes(&self) -> NonZeroU64 {
         self.length_bytes
     }
 
     /// Returns the number of code points each element can hold (length_bytes / 4).
     #[must_use]
-    pub const fn capacity_code_points(&self) -> u32 {
-        self.length_bytes / 4
+    pub const fn capacity_code_points(&self) -> NonZeroU64 {
+        NonZeroU64::new(self.length_bytes.get() / 4).unwrap()
     }
 }
 
@@ -181,7 +190,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
     }
 
     fn size(&self) -> DataTypeSize {
-        DataTypeSize::Fixed(self.length_bytes as usize)
+        DataTypeSize::Fixed(self.length_bytes.get() as usize)
     }
 
     fn fill_value(
@@ -195,7 +204,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         };
 
         let chars: Vec<char> = s.chars().collect();
-        let capacity = self.capacity_code_points() as usize;
+        let capacity = self.capacity_code_points().get() as usize;
 
         // Check that the string fits
         if chars.len() > capacity {
@@ -203,7 +212,7 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         }
 
         // Encode as native-endian UTF-32, padded with U+0000
-        let mut bytes = Vec::with_capacity(self.length_bytes as usize);
+        let mut bytes = Vec::with_capacity(self.length_bytes.get() as usize);
         for &ch in &chars {
             bytes.extend_from_slice(&(ch as u32).to_ne_bytes());
         }
@@ -220,12 +229,12 @@ impl zarrs_data_type::DataTypeTraits for FixedLengthUTF32DataType {
         fill_value: &zarrs_data_type::FillValue,
     ) -> Result<FillValueMetadata, zarrs_data_type::DataTypeFillValueError> {
         let bytes = fill_value.as_ne_bytes();
-        if bytes.len() != self.length_bytes as usize {
+        if bytes.len() != self.length_bytes.get() as usize {
             return Err(zarrs_data_type::DataTypeFillValueError);
         }
 
         // Decode all UTF-32 code units (native-endian)
-        let capacity = self.capacity_code_points() as usize;
+        let capacity = self.capacity_code_points().get() as usize;
         let mut chars = Vec::with_capacity(capacity);
 
         for i in 0..capacity {
@@ -323,7 +332,7 @@ mod tests {
     #[test]
     fn v2_name_parsing_lt_u12() {
         // Verify that the V2 plugin correctly parses <U12 format
-        let dt = FixedLengthUTF32DataType::new(48).unwrap();
+        let dt = FixedLengthUTF32DataType::new(NonZeroU64::new(48).unwrap()).unwrap();
         // V3 name should be fixed_length_utf32
         assert_eq!(
             dt.name(ZarrVersion::V3).unwrap().as_ref(),
@@ -335,14 +344,14 @@ mod tests {
 
     #[test]
     fn v2_name_parsing_gt_u12() {
-        let dt = FixedLengthUTF32DataType::new(48).unwrap();
+        let dt = FixedLengthUTF32DataType::new(NonZeroU64::new(48).unwrap()).unwrap();
         // V2 name is always <U{N} (we use little-endian as default)
         assert_eq!(dt.name(ZarrVersion::V2).unwrap().as_ref(), "<U12");
     }
 
     #[test]
     fn fill_value_empty() {
-        let data_type = FixedLengthUTF32DataType::new(8).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(8).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         let metadata = FillValueMetadata::from("");
         let fill_value = dt.fill_value_v3(&metadata).unwrap();
@@ -355,7 +364,7 @@ mod tests {
 
     #[test]
     fn fill_value_exact() {
-        let data_type = FixedLengthUTF32DataType::new(8).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(8).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // "ab" = 2 code points = 8 bytes
         let metadata = FillValueMetadata::from("ab");
@@ -372,7 +381,7 @@ mod tests {
 
     #[test]
     fn fill_value_shorter() {
-        let data_type = FixedLengthUTF32DataType::new(12).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // "a" = 1 code point, padded to 3 code points (12 bytes)
         let metadata = FillValueMetadata::from("a");
@@ -389,7 +398,7 @@ mod tests {
 
     #[test]
     fn fill_value_overlong() {
-        let data_type = FixedLengthUTF32DataType::new(8).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(8).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // "abc" = 3 code points = 12 bytes > 8 byte capacity
         let metadata = FillValueMetadata::from("abc");
@@ -398,7 +407,7 @@ mod tests {
 
     #[test]
     fn fill_value_with_interior_null() {
-        let data_type = FixedLengthUTF32DataType::new(12).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // "a\0b" = 3 code points = 12 bytes, interior U+0000
         let metadata = FillValueMetadata::from("a\0b");
@@ -412,7 +421,7 @@ mod tests {
 
     #[test]
     fn fill_value_trailing_padding_trim() {
-        let data_type = FixedLengthUTF32DataType::new(16).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(16).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // "ab" = 2 code points, padded to 4 code points (16 bytes)
         let metadata = FillValueMetadata::from("ab");
@@ -424,7 +433,7 @@ mod tests {
 
     #[test]
     fn fill_value_non_ascii() {
-        let data_type = FixedLengthUTF32DataType::new(8).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(8).unwrap()).unwrap();
         let dt = DataType::new(data_type);
         // '🎉' (U+1F389) is a single code point = 4 bytes
         let metadata = FillValueMetadata::from("🎉");
@@ -440,7 +449,7 @@ mod tests {
         use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
 
-        let data_type = FixedLengthUTF32DataType::new(12).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points in native endian
         let chars = ['a', 'b', 'c'];
         let bytes: Vec<u8> = chars
@@ -465,7 +474,7 @@ mod tests {
         use std::borrow::Cow;
         use zarrs_data_type::codec_traits::bytes::BytesDataTypeTraits;
 
-        let data_type = FixedLengthUTF32DataType::new(12).unwrap();
+        let data_type = FixedLengthUTF32DataType::new(NonZeroU64::new(12).unwrap()).unwrap();
         // "abc" = 3 code points
         let chars = ['a', 'b', 'c'];
         let native_bytes: Vec<u8> = chars

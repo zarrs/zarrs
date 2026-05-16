@@ -33,7 +33,7 @@ mod uint2;
 mod uint4;
 
 use std::borrow::Cow;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU64};
 use std::sync::Arc;
 
 use zarrs_data_type::DataType;
@@ -320,13 +320,16 @@ pub fn bytes() -> DataType {
 pub fn raw_bits(size_bytes: usize) -> DataType {
     Arc::new(RawBitsDataType::new(size_bytes)).into()
 }
+
 /// Create a `fixed_length_utf32` data type with the given size in bytes.
 ///
 /// `length_bytes` must be at least 4 and a multiple of 4.
 ///
 /// # Errors
 /// Returns an error if `length_bytes` is not at least 4 or not a multiple of 4.
-pub fn fixed_length_utf32(length_bytes: u32) -> Result<DataType, zarrs_plugin::PluginCreateError> {
+pub fn fixed_length_utf32(
+    length_bytes: NonZeroU64,
+) -> Result<DataType, zarrs_plugin::PluginCreateError> {
     Ok(Arc::new(FixedLengthUTF32DataType::new(length_bytes)?).into())
 }
 
