@@ -132,7 +132,6 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
@@ -276,7 +275,6 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     array_str_impl(array)
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
@@ -527,7 +525,6 @@ fn array_sync_read_into_uncompressed() -> Result<(), Box<dyn std::error::Error>>
     array_sync_read_into(&array)
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn array_sync_read_into_sharded() -> Result<(), Box<dyn std::error::Error>> {

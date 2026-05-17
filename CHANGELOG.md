@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implement `IntoArrayBytes` for `&ndarray::ArrayBase`
 
+### Changed
+- Soft deprecate the `sharding` feature flag
+  - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
+
 ## [0.23.12](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.12) - 2026-05-16
 
 ### Added

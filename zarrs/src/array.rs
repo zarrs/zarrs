@@ -40,9 +40,7 @@ pub mod storage_transformer;
 
 #[cfg(feature = "dlpack")]
 mod array_dlpack_ext;
-#[cfg(feature = "sharding")]
 mod array_sharded_ext;
-#[cfg(feature = "sharding")]
 mod array_sync_sharded_readable_ext;
 
 use std::borrow::Cow;
@@ -103,13 +101,11 @@ pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
-#[cfg(all(feature = "sharding", feature = "async"))]
+#[cfg(feature = "async")]
 pub use array_async_sharded_readable_ext::{
     AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
 };
-#[cfg(feature = "sharding")]
 pub use array_sharded_ext::ArrayShardedExt;
-#[cfg(feature = "sharding")]
 pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
@@ -1308,7 +1304,7 @@ mod array_async_writable;
 #[cfg(feature = "async")]
 mod array_async_readable_writable;
 
-#[cfg(all(feature = "sharding", feature = "async"))]
+#[cfg(feature = "async")]
 mod array_async_sharded_readable_ext;
 
 /// Transmute from `&[u8]` to `Vec<T>`.

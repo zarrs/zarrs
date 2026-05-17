@@ -25,7 +25,6 @@ async fn array_async_read(shard: bool) -> Result<(), Box<dyn std::error::Error>>
     );
     // builder.storage_transformers(vec![].into());
     if shard {
-        #[cfg(feature = "sharding")]
         builder
             .subchunk_shape(vec![1, 1])
             .bytes_to_bytes_codecs(vec![
@@ -386,7 +385,6 @@ async fn array_async_read_into_uncompressed() -> Result<(), Box<dyn std::error::
     array_async_read_into(&array).await
 }
 
-#[cfg(feature = "sharding")]
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn array_async_read_into_sharded() -> Result<(), Box<dyn std::error::Error>> {

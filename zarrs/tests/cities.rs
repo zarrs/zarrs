@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-#![cfg(all(feature = "sharding", feature = "zstd"))]
+#![cfg(feature = "zstd")]
 
 use std::error::Error;
 use std::fs::File;

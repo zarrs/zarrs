@@ -33,7 +33,6 @@ pub use array_to_bytes::optional::*;
 pub use array_to_bytes::packbits::*;
 #[cfg(feature = "pcodec")]
 pub use array_to_bytes::pcodec::*;
-#[cfg(feature = "sharding")]
 pub use array_to_bytes::sharding::*;
 pub use array_to_bytes::vlen::*;
 pub use array_to_bytes::vlen_array::*;

@@ -1,5 +1,4 @@
 #![allow(missing_docs)]
-#![cfg(feature = "sharding")]
 
 use std::num::NonZeroU64;
 use std::sync::Arc;

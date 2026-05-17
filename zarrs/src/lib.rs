@@ -195,7 +195,7 @@
 //! #### Default
 //!  - `filesystem`: Re-export [`zarrs_filesystem`] as [`zarrs::filesystem`](crate::filesystem`).
 //!  - `ndarray`: [`ndarray`] utility functions for [`Array`](crate::array::Array).
-//!  - Codecs: `blosc`, `crc32c`, `gzip`, `sharding`, `transpose`, `zstd`.
+//!  - Codecs: `blosc`, `crc32c`, `gzip`, `transpose`, `zstd`.
 //!
 //! #### Non-Default
 //!  - `async`: an **experimental** asynchronous API for [`stores`](storage), [`Array`](crate::array::Array), and [`Group`](group::Group).

@@ -1593,7 +1593,6 @@ fn codec_registry() -> Vec<CodecDef> {
         dt.as_optional().is_some()
     }
 
-    #[cfg(feature = "sharding")]
     codecs.push(CodecDef {
         name: ShardingCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToBytes,

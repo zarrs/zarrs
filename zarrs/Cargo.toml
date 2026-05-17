@@ -25,7 +25,7 @@ fletcher32 = [] # Enable the fletcher32 checksum codec
 gdeflate = ["dep:gdeflate-sys"] # Enable the experimental gdeflate codec
 gzip = ["dep:flate2"] # Enable the gzip codec
 pcodec = ["dep:pco"] # Enable the pcodec codec
-sharding = [] # Enable the sharding codec
+sharding = [] # Enable the sharding codec (DEPRECATED, now always enabled)
 transpose = ["dep:ndarray"] # Enable the transpose codec
 zfp = ["dep:zfp-sys"] # Enable the zfp codec
 zlib = ["dep:flate2"] # Enable the zlib codec
@@ -168,7 +168,7 @@ doc-scrape-examples = true
 
 [[example]]
 name = "sharded_array_write_read"
-required-features = ["filesystem", "ndarray", "sharding"]
+required-features = ["filesystem", "ndarray"]
 
 [[bench]]
 name = "array_subset"
@@ -193,4 +193,4 @@ harness = false
 [[bench]]
 name = "sharded_partial_read"
 harness = false
-required-features = ["sharding", "filesystem"]
+required-features = ["filesystem"]
