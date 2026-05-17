@@ -34,11 +34,11 @@ check: build test clippy doc
 
 # Build (WASM)
 build_wasm:
-    cargo check -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async"
+    cargo check -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip transpose async"
 
 # Build/clippy (WASM)
 check_wasm: build_wasm
-    cargo clippy -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async" -- -A clippy::arc_with_non_send_sync
+    cargo clippy -p zarrs --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip transpose async" -- -A clippy::arc_with_non_send_sync
 
 # Run clippy with extra lints
 _clippy_extra:
