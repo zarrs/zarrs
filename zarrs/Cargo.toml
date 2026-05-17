@@ -14,7 +14,7 @@ categories = ["encoding", "science"]
 exclude = [".github/", "doc/TODO.md", "tests/"]
 
 [features]
-default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "transpose", "zstd"]
+default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
 filesystem = ["dep:zarrs_filesystem"] # Re-export zarrs_filesystem as zarrs::filesystem
 adler32 = ["dep:simd-adler32"] # Enable the adler32 checksum codec
 bitround = [] # Enable the bitround codec
