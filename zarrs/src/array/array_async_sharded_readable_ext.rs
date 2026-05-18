@@ -7,7 +7,6 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use super::codec::ShardingCodec;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
 use super::concurrency::concurrency_chunks_and_codec;
-use super::element::ElementOwned;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
@@ -22,7 +21,7 @@ use zarrs_codec::{
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::codec::sharding::ShardingCodecConfiguration;
 use zarrs_storage::byte_range::ByteRange;
-use zarrs_storage::{AsyncReadableStorageTraits, MaybeSend, MaybeSync, StorageHandle};
+use zarrs_storage::{AsyncReadableStorageTraits, MaybeSend, StorageHandle};
 
 // TODO: Remove with trait upcasting
 #[derive(Clone)]
@@ -243,37 +242,6 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_subchunk_opt::<Vec<T>>() instead"
-    )]
-    /// Read and decode the subchunk at `subchunk_indices` into a vector of its elements.
-    ///
-    /// See [`Array::retrieve_chunk_elements_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_subchunk_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>;
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_subchunk_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the subchunk at `subchunk_indices` into an [`ndarray::ArrayD`].
-    ///
-    /// See [`Array::retrieve_chunk_ndarray_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_subchunk_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>;
-
     /// Read and decode the chunks at `chunks`.
     ///
     /// See [`Array::retrieve_chunks_opt`].
@@ -285,37 +253,6 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_subchunks_opt::<Vec<T>>() instead"
-    )]
-    /// Read and decode the subchunks at `subchunks` into a vector of their elements.
-    ///
-    /// See [`Array::retrieve_chunks_elements_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_subchunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>;
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_subchunks_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the subchunks at `subchunks` into an [`ndarray::ArrayD`].
-    ///
-    /// See [`Array::retrieve_chunks_ndarray_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_subchunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>;
-
     /// Read and decode the `array_subset` of array.
     ///
     /// See [`Array::retrieve_array_subset_opt`].
@@ -326,41 +263,6 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
         array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset_sharded_opt::<Vec<T>>() instead"
-    )]
-    /// Read and decode the `array_subset` of array into a vector of its elements.
-    ///
-    /// See [`Array::retrieve_array_subset_elements_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_array_subset_elements_sharded_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>;
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset_sharded_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the `array_subset` of array into an [`ndarray::ArrayD`].
-    ///
-    /// See [`Array::retrieve_array_subset_ndarray_opt`].
-    #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_array_subset_ndarray_sharded_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>;
 }
 
 fn subchunk_shard_index_and_subset<TStorage: ?Sized + AsyncReadableStorageTraits + 'static>(
@@ -487,27 +389,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         }
     }
 
-    async fn async_retrieve_subchunk_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_subchunk_opt(cache, subchunk_indices, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    async fn async_retrieve_subchunk_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_subchunk_opt(cache, subchunk_indices, options)
-            .await
-    }
-
     async fn async_retrieve_subchunks_opt<T: FromArrayBytes + MaybeSend>(
         &self,
         cache: &AsyncArrayShardedReadableExtCache,
@@ -527,27 +408,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         } else {
             self.async_retrieve_chunks_opt(subchunks, options).await
         }
-    }
-
-    async fn async_retrieve_subchunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_subchunks_opt(cache, subchunks, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    async fn async_retrieve_subchunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        subchunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_subchunks_opt(cache, subchunks, options)
-            .await
     }
 
     #[allow(clippy::too_many_lines)]
@@ -689,31 +549,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
             self.async_retrieve_array_subset_opt(array_subset, options)
                 .await
         }
-    }
-
-    async fn async_retrieve_array_subset_elements_sharded_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_array_subset_sharded_opt(cache, array_subset, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    async fn async_retrieve_array_subset_ndarray_sharded_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        cache: &AsyncArrayShardedReadableExtCache,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_array_subset_sharded_opt(cache, array_subset, options)
-            .await
     }
 }
 
@@ -878,7 +713,7 @@ mod tests {
             );
             // assert_eq!(
             //     u16::from_array_bytes(array.data_type(), encoded_subchunk.into())?,
-            //     array.async_retrieve_chunk_elements::<u16>(&[0, 0])?
+            //     array.async_retrieve_chunk::<Vec<u16>>(&[0, 0]).await?
             // );
         } else {
             assert_eq!(array.subchunk_shape(), None);

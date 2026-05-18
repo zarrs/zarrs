@@ -6,7 +6,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use super::concurrency::concurrency_chunks_and_codec;
 use super::{
     Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
-    Element, IntoArrayBytes,
+    IntoArrayBytes,
 };
 use crate::array::ArraySubsetTraits;
 use crate::config::MetadataEraseVersion;
@@ -92,47 +92,6 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         self.store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
     }
 
-    #[deprecated(since = "0.23.0", note = "Use store_chunk() instead")]
-    /// Encode `chunk_elements` and store at `chunk_indices`.
-    ///
-    /// Use [`store_chunk_elements_opt`](Array::store_chunk_elements_opt) to control codec options.
-    /// A chunk composed entirely of the fill value will not be written to the store.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the size of  `T` does not match the data type size, or
-    ///  - a [`store_chunk`](Array::store_chunk) error condition is met.
-    pub fn store_chunk_elements<T: Element>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_elements: &[T],
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_elements, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use store_chunk()  instead")]
-    /// Encode `chunk_array` and store at `chunk_indices`.
-    ///
-    /// Use [`store_chunk_ndarray_opt`](Array::store_chunk_ndarray_opt) to control codec options.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the shape of the array does not match the shape of the chunk,
-    ///  - a [`store_chunk_elements`](Array::store_chunk_elements) error condition is met.
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunk_ndarray<T: Element, D: ndarray::Dimension>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_array: &ndarray::ArrayRef<T, D>,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(
-            chunk_indices,
-            chunk_array.as_standard_layout().to_owned(),
-            &CodecOptions::default(),
-        )
-    }
-
     /// Encode `chunks_data` and store at the chunks with indices represented by the `chunks` array subset.
     ///
     /// Use [`store_chunks_opt`](Array::store_chunks_opt) to control codec options.
@@ -152,43 +111,6 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         chunks_data: impl IntoArrayBytes<'a>,
     ) -> Result<(), ArrayError> {
         self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use store_chunks() instead")]
-    /// Encode `chunks_elements` and store at the chunks with indices represented by the `chunks` array subset.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the size of  `T` does not match the data type size, or
-    ///  - a [`store_chunks`](Array::store_chunks) error condition is met.
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunks_elements<T: Element>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_elements: &[T],
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_elements, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use store_chunks()  instead")]
-    /// Encode `chunks_array` and store at the chunks with indices represented by the `chunks` array subset.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the shape of the array does not match the shape of the chunks,
-    ///  - a [`store_chunks_elements`](Array::store_chunks_elements) error condition is met.
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunks_ndarray<T: Element, D: ndarray::Dimension>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_array: &ndarray::ArrayRef<T, D>,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(
-            chunks,
-            chunks_array.as_standard_layout().to_owned(),
-            &CodecOptions::default(),
-        )
     }
 
     /// Erase the metadata with default [`MetadataEraseVersion`] options.
@@ -325,35 +247,6 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
-    #[deprecated(since = "0.23.0", note = "Use store_chunk_opt() instead")]
-    /// Explicit options version of [`store_chunk_elements`](Array::store_chunk_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_elements_opt<T: Element>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_elements: &[T],
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_elements, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use store_chunk_opt()  instead")]
-    /// Explicit options version of [`store_chunk_ndarray`](Array::store_chunk_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_ndarray_opt<T: Element, D: ndarray::Dimension>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_array: &ndarray::ArrayRef<T, D>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(
-            chunk_indices,
-            chunk_array.as_standard_layout().to_owned(),
-            options,
-        )
-    }
-
     /// Explicit options version of [`store_chunks`](Array::store_chunks).
     #[allow(clippy::similar_names)]
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
@@ -405,35 +298,5 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         }
 
         Ok(())
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use store_chunks_opt() instead")]
-    /// Explicit options version of [`store_chunks_elements`](Array::store_chunks_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunks_elements_opt<T: Element>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_elements: &[T],
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        let chunks_bytes = T::to_array_bytes(self.data_type(), chunks_elements)?;
-        self.store_chunks_opt(chunks, chunks_bytes, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use store_chunks_opt()  instead")]
-    /// Explicit options version of [`store_chunks_ndarray`](Array::store_chunks_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunks_ndarray_opt<T: Element, D: ndarray::Dimension>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_array: &ndarray::ArrayRef<T, D>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(
-            chunks,
-            chunks_array.as_standard_layout().to_owned(),
-            options,
-        )
     }
 }

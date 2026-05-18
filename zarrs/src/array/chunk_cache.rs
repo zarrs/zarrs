@@ -26,9 +26,6 @@
 //!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
 //!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
 //!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
-//!
-//! `_elements` and `_ndarray` variants are also available.
-//!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
 //! The above caches use internal locking to support multithreading, which has a performance overhead.
@@ -48,7 +45,7 @@ use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::from_array_bytes::FromArrayBytes;
 use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits, ElementOwned,
+    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits,
     IncompatibleDimensionalityError,
 };
 use crate::iter_concurrent_limit;
@@ -128,38 +125,6 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         T::from_array_bytes_arc(bytes, &shape, self.array().data_type())
     }
 
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunk::<Vec<T>>() instead")]
-    /// Cached variant of [`retrieve_chunk_elements_opt`](Array::retrieve_chunk_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_elements<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunk(chunk_indices, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_chunk_ndarray_opt`](Array::retrieve_chunk_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_ndarray<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunk(chunk_indices, options)
-    }
-
     /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_subset_bytes(
@@ -182,43 +147,6 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     {
         let bytes = self.retrieve_chunk_subset_bytes(chunk_indices, chunk_subset, options)?;
         T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset::<Vec<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_chunk_subset_elements_opt`](Array::retrieve_chunk_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset_elements<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunk_subset(chunk_indices, chunk_subset, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_chunk_subset_ndarray_opt`](Array::retrieve_chunk_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset_ndarray<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunk_subset(chunk_indices, chunk_subset, options)
     }
 
     /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt) returning the cached bytes.
@@ -324,41 +252,6 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset::<Vec<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_array_subset_elements_opt`](Array::retrieve_array_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_array_subset_elements<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_array_subset(array_subset, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_array_subset_ndarray_opt`](Array::retrieve_array_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_array_subset_ndarray<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_array_subset(array_subset, options)
-    }
-
     /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunks_bytes(
@@ -391,38 +284,6 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         let bytes = self.retrieve_chunks_bytes(chunks, options)?;
         let array_subset = self.array().chunks_subset(chunks)?;
         T::from_array_bytes_arc(bytes, array_subset.shape(), self.array().data_type())
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunks::<Vec<T>>() instead")]
-    /// Cached variant of [`retrieve_chunks_elements_opt`](Array::retrieve_chunks_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_elements<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunks(chunks, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunks::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Cached variant of [`retrieve_chunks_ndarray_opt`](Array::retrieve_chunks_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_ndarray<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        self.retrieve_chunks(chunks, options)
     }
 
     /// Return the number of chunks in the cache. For a thread-local cache, returns the number of chunks cached on the current thread.

@@ -5,7 +5,6 @@ use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::concurrency::concurrency_chunks_and_codec;
-use super::element::ElementOwned;
 use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError,
     ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataV2, ArrayMetadataV3, ChunkShapeTraits,
@@ -24,9 +23,7 @@ use super::array_bytes_internal::{
     build_nested_optional_target, extract_target_views, merge_chunks_vlen,
     merge_chunks_vlen_optional, optional_nesting_depth,
 };
-use zarrs_storage::{
-    AsyncReadableStorageTraits, Bytes, MaybeSend, MaybeSync, StorageError, StorageHandle,
-};
+use zarrs_storage::{AsyncReadableStorageTraits, Bytes, StorageError, StorageHandle};
 
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
     /// Async variant of [`open`](Array::open).
@@ -99,34 +96,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
     }
 
-    #[deprecated(since = "0.23.0", note = "Use async_retrieve_chunk_if_exists instead")]
-    /// Async variant of [`retrieve_chunk_elements_if_exists`](Array::retrieve_chunk_elements_if_exists).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_elements_if_exists<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<Vec<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_if_exists::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_ndarray_if_exists`](Array::retrieve_chunk_ndarray_if_exists).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_ndarray_if_exists<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, &self.codec_options)
-            .await
-    }
-
     /// Retrieve the encoded bytes of a chunk.
     ///
     /// # Errors
@@ -157,70 +126,12 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .await
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_elements`](Array::retrieve_chunk_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_elements<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_ndarray`](Array::retrieve_chunk_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, &self.codec_options)
-            .await
-    }
-
     /// Async variant of [`retrieve_chunks`](Array::retrieve_chunks).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
-            .await
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunks::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunks_elements`](Array::retrieve_chunks_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunks_elements<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunks::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunks_ndarray`](Array::retrieve_chunks_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunks_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.async_retrieve_chunks_opt(chunks, &self.codec_options)
             .await
     }
@@ -232,37 +143,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
-            .await
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_subset::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_subset_elements`](Array::retrieve_chunk_subset_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_subset_elements<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_subset_ndarray`](Array::retrieve_chunk_subset_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_chunk_subset_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &self.codec_options)
             .await
     }
@@ -285,35 +165,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         self.async_retrieve_array_subset_into_opt(array_subset, output_target, &self.codec_options)
-            .await
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_array_subset_elements`](Array::retrieve_array_subset_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_array_subset_elements<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_array_subset_ndarray`](Array::retrieve_array_subset_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_retrieve_array_subset_ndarray<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, &self.codec_options)
             .await
     }
 
@@ -443,70 +294,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         }
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_if_exists_opt::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_elements_if_exists_opt`](Array::retrieve_chunk_elements_if_exists_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_elements_if_exists_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Vec<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, options)
-            .await
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_opt::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_elements_opt`](Array::retrieve_chunk_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, options).await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_if_exists_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_ndarray_if_exists_opt`](Array::retrieve_chunk_ndarray_if_exists_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_ndarray_if_exists_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.async_retrieve_chunk_if_exists_opt(chunk_indices, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_ndarray_opt`](Array::retrieve_chunk_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_opt(chunk_indices, options).await
-    }
-
     /// Retrieve the encoded bytes of the chunks in `chunks`.
     ///
     /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
@@ -559,35 +346,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         let array_subset = self.chunks_subset(chunks)?;
         self.async_retrieve_array_subset_opt(&array_subset, options)
             .await
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunks_opt::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunks_elements_opt`](Array::retrieve_chunks_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunks_elements_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, options).await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunks_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunks_ndarray_opt`](Array::retrieve_chunks_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunks_ndarray_opt<T: ElementOwned + MaybeSend + MaybeSync>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunks_opt(chunks, options).await
     }
 
     /// Helper method to retrieve multiple chunks with variable-length data types (async).
@@ -1009,41 +767,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset_opt::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_array_subset_elements_opt`](Array::retrieve_array_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_array_subset_elements_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_array_subset_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_array_subset_ndarray_opt`](Array::retrieve_array_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_array_subset_ndarray_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_array_subset_opt(array_subset, options)
-            .await
-    }
-
     /// Async variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_retrieve_chunk_subset_opt<T: FromArrayBytes>(
@@ -1143,43 +866,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 .await?;
             Ok(())
         }
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_subset_opt::<Vec<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_subset_elements_opt`](Array::retrieve_chunk_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_subset_elements_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use async_retrieve_chunk_subset_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Async variant of [`retrieve_chunk_subset_ndarray_opt`](Array::retrieve_chunk_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_retrieve_chunk_subset_ndarray_opt<
-        T: ElementOwned + MaybeSend + MaybeSync,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.async_retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
-            .await
     }
 
     /// Async variant of [`partial_decoder_opt`](Array::partial_decoder_opt).

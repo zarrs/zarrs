@@ -255,7 +255,7 @@ pub trait DataTypeTraitsV2 {
 /// For example, a Rust struct that has padding bytes can be converted to tightly packed bytes before it is passed into the codec pipeline for encoding, and vice versa for decoding.
 ///
 /// It is recommended to define a concrete structure representing a single element of a custom data type that implements [`Element`](https://docs.rs/zarrs/latest/zarrs/array/trait.Element.html) and [`ElementOwned`](https://docs.rs/zarrs/latest/zarrs/array/trait.ElementOwned.html).
-/// These traits have `into_array_bytes` and `from_array_bytes` methods for this purpose that enable custom data types to be used with the [`Array::{store,retrieve}_*_elements`](https://docs.rs/zarrs/latest/zarrs/array/struct.Array.html) variants.
+/// These traits have `into_array_bytes` and `from_array_bytes` methods for this purpose that enable custom data types to be used with the generic [`Array`](https://docs.rs/zarrs/latest/zarrs/array/struct.Array.html) store and retrieve methods.
 /// These methods should encode data to and from native endianness if endianness is applicable, unless the endianness should be explicitly fixed.
 /// Note that codecs that act on numerical data typically expect the data to be in native endianness.
 ///

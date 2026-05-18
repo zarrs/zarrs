@@ -320,7 +320,7 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The [`ArrayShardedExt`] trait provides additional methods to [`Array`] to query if an array is sharded and retrieve the subchunk shape.
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
-/// The [`ArrayShardedReadableExt`] trait adds [`Array`] methods to conveniently and efficiently access the data in a sharded array (with `_elements` and `_ndarray` variants):
+/// The [`ArrayShardedReadableExt`] trait adds [`Array`] methods to conveniently and efficiently access the data in a sharded array:
 ///  - [`retrieve_subchunk_opt`](ArrayShardedReadableExt::retrieve_subchunk_opt)
 ///  - [`retrieve_subchunks_opt`](ArrayShardedReadableExt::retrieve_subchunks_opt)
 ///  - [`retrieve_array_subset_sharded_opt`](ArrayShardedReadableExt::retrieve_array_subset_sharded_opt)
