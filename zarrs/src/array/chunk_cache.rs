@@ -26,6 +26,7 @@
 //!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
 //!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
 //!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
+//!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
 //! The above caches use internal locking to support multithreading, which has a performance overhead.
