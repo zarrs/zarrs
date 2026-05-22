@@ -144,6 +144,7 @@ impl CodecTraitsV3 for ReshapeCodec {
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
+    use std::sync::Mutex;
 
     use super::*;
     use crate::array::codec::BytesCodec;
@@ -411,6 +412,91 @@ mod tests {
             .to_vec()
     }
 
+    fn partial_encode_u16(
+        codec: Arc<ReshapeCodec>,
+        shape: &[NonZeroU64],
+        elements: Vec<u16>,
+        indexer: &dyn Indexer,
+        elements_partial_encode: Vec<u16>,
+    ) -> Vec<u16> {
+        let data_type = data_type::uint16();
+        let fill_value = FillValue::from(0u16);
+        let bytes = crate::array::transmute_to_bytes_vec(elements);
+        let bytes: ArrayBytes = bytes.into();
+        let encoded = codec
+            .encode(
+                bytes,
+                shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+
+        let bytes_codec = Arc::new(BytesCodec::default());
+        let (encoded_shape, encoded_data_type, encoded_fill_value) = codec
+            .encoded_representation(shape, &data_type, &fill_value)
+            .unwrap();
+        let encoded_chunk = bytes_codec
+            .encode(
+                encoded,
+                &encoded_shape,
+                &encoded_data_type,
+                &encoded_fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap()
+            .into_owned();
+        let output = Arc::new(Mutex::new(Some(encoded_chunk)));
+        let input_output_handle = bytes_codec
+            .clone()
+            .partial_encoder(
+                output.clone(),
+                &encoded_shape,
+                &encoded_data_type,
+                &encoded_fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let partial_encoder = codec
+            .clone()
+            .partial_encoder(
+                input_output_handle,
+                shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert!(partial_encoder.supports_partial_encode());
+
+        let bytes = crate::array::transmute_to_bytes_vec(elements_partial_encode);
+        partial_encoder
+            .partial_encode(indexer, &ArrayBytes::from(bytes), &CodecOptions::default())
+            .unwrap();
+
+        let output = output.lock().unwrap().clone().unwrap();
+        let decoded_encoded = bytes_codec
+            .decode(
+                output.into(),
+                &encoded_shape,
+                &encoded_data_type,
+                &encoded_fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        let decoded = codec
+            .decode(
+                decoded_encoded,
+                shape,
+                &data_type,
+                &fill_value,
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        crate::array::convert_from_bytes_slice::<u16>(&decoded.into_fixed().unwrap()).to_vec()
+    }
+
     #[test]
     fn codec_reshape_partial_decode_array_subset() {
         // Decoded shape [2, 3, 4]:
@@ -634,6 +720,93 @@ mod tests {
             partial_decoder
                 .partial_decode(&out_of_bounds, &CodecOptions::default())
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn codec_reshape_partial_encode_array_subset() {
+        // Decoded shape [2, 3, 4]:
+        //
+        //   decoded[0, :, :]          decoded[1, :, :]
+        //   00 01 02 03              12 13 14 15
+        //   04 05 06 07              16 17 18 19  <- write 100 101 102
+        //   08 09 10 11              20 21 22 23  <- write 103 104 105
+        //
+        // Encoded shape [4, 6] after [[2], [0, 1]]:
+        //
+        //   00 01 02 03 04 05
+        //   06 07 08 09 10 11
+        //   12 13 14 15 16 17
+        //   18 19 20 21 22 23
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![2]),
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])));
+        let shape = vec![
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+        ];
+        let decoded_region = ArraySubset::new_with_ranges(&[1..2, 1..3, 1..4]);
+
+        assert_eq!(
+            partial_encode_u16(
+                codec,
+                &shape,
+                (0..24).collect(),
+                &decoded_region,
+                vec![100, 101, 102, 103, 104, 105],
+            ),
+            [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 100, 101, 102, 20, 103,
+                104, 105,
+            ]
+        );
+    }
+
+    #[test]
+    fn codec_reshape_partial_encode_indexer() {
+        // Decoded shape [2, 3, 4]:
+        //
+        //   decoded[0, :, :]          decoded[1, :, :]
+        //   00 01 02 03              12 13 14 15
+        //   04 05 06 07              16 17 18 19
+        //   08 09 10 11              20 21 22 23
+        //
+        // Encoded shape [4, 6] after [[2], [0, 1]]:
+        //
+        //   00 01 02 03 04 05
+        //   06 07 08 09 10 11
+        //   12 13 14 15 16 17
+        //   18 19 20 21 22 23
+        //
+        // Writes:
+        //   decoded[1, 2, 3] -> encoded[3, 5] <- 100
+        //   decoded[0, 0, 1] -> encoded[0, 1] <- 101
+        //   decoded[1, 0, 2] -> encoded[2, 2] <- 102
+        let codec = Arc::new(ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![2]),
+            ReshapeDim::InputDims(vec![0, 1]),
+        ])));
+        let shape = vec![
+            NonZeroU64::new(2).unwrap(),
+            NonZeroU64::new(3).unwrap(),
+            NonZeroU64::new(4).unwrap(),
+        ];
+        let indexer = vec![vec![1, 2, 3], vec![0, 0, 1], vec![1, 0, 2]];
+
+        assert_eq!(
+            partial_encode_u16(
+                codec,
+                &shape,
+                (0..24).collect(),
+                &indexer,
+                vec![100, 101, 102],
+            ),
+            [
+                0, 101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 102, 15, 16, 17, 18, 19, 20, 21,
+                22, 100,
+            ]
         );
     }
 }

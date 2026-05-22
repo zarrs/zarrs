@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 
 ### Fixed
-- Support partial decoding in the `reshape` codec
+- Support partial encoding and decoding in the `reshape` codec
   - This codec remains unregistered and aliased as `zarrs.reshape`
 
 ### Removed

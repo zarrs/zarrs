@@ -3,17 +3,48 @@ use std::sync::Arc;
 
 use super::get_reshaped_indexer;
 use crate::array::{DataType, FillValue};
+use zarrs_codec::{
+    ArrayBytes, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError, CodecOptions,
+};
 #[cfg(feature = "async")]
-use zarrs_codec::AsyncArrayPartialDecoderTraits;
-use zarrs_codec::{ArrayBytes, ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_storage::StorageError;
 
-/// Partial decoder for the Reshape codec.
+/// Partial codec for the Reshape codec.
 pub(crate) struct ReshapeCodecPartial<T: ?Sized> {
     input_handle: Arc<T>,
     decoded_shape: Vec<NonZeroU64>,
     encoded_shape: Vec<NonZeroU64>,
     data_type: DataType,
+}
+
+impl<T: ?Sized> ArrayPartialEncoderTraits for ReshapeCodecPartial<T>
+where
+    T: ArrayPartialEncoderTraits,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    fn erase(&self) -> Result<(), CodecError> {
+        self.input_handle.erase()
+    }
+
+    fn partial_encode(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let reshaped_indexer =
+            get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
+        self.input_handle
+            .partial_encode(&reshaped_indexer, bytes, options)
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_handle.supports_partial_encode()
+    }
 }
 
 impl<T: ?Sized> ReshapeCodecPartial<T> {
@@ -31,6 +62,39 @@ impl<T: ?Sized> ReshapeCodecPartial<T> {
             encoded_shape,
             data_type: data_type.clone(),
         }
+    }
+}
+
+#[cfg(feature = "async")]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl<T: ?Sized> AsyncArrayPartialEncoderTraits for ReshapeCodecPartial<T>
+where
+    T: AsyncArrayPartialEncoderTraits,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn AsyncArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    async fn erase(&self) -> Result<(), CodecError> {
+        self.input_handle.erase().await
+    }
+
+    async fn partial_encode(
+        &self,
+        indexer: &dyn crate::array::Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let reshaped_indexer =
+            get_reshaped_indexer(indexer, &self.decoded_shape, &self.encoded_shape)?;
+        self.input_handle
+            .partial_encode(&reshaped_indexer, bytes, options)
+            .await
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.input_handle.supports_partial_encode()
     }
 }
 
