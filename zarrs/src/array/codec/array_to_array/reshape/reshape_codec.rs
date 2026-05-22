@@ -6,13 +6,13 @@ use std::sync::Arc;
 use zarrs_plugin::ZarrVersion;
 
 use crate::array::{ChunkShape, DataType, FillValue};
-#[cfg(feature = "async")]
-use zarrs_codec::AsyncArrayPartialDecoderTraits;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
     ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
+#[cfg(feature = "async")]
+use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::reshape::{
     ReshapeCodecConfiguration, ReshapeCodecConfigurationV1, ReshapeShape,
@@ -137,44 +137,83 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
+        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        // TODO: reshape partial decoding
-        Err(CodecError::Other(
-            "partial decoding with the reshape codec is not yet supported".to_string(),
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
         ))
     }
 
     fn partial_encoder(
         self: Arc<Self>,
-        _input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
+        input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        // TODO: reshape partial encoding
-        Err(CodecError::Other(
-            "partial encoding with the reshape codec is not yet supported".to_string(),
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_output_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
         ))
     }
 
     #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
+        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        // TODO: reshape partial decoding
-        Err(CodecError::Other(
-            "partial decoding with the reshape codec is not yet supported".to_string(),
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
+        ))
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
+        _options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_output_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
         ))
     }
 }

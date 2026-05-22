@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Implement `IntoArrayBytes` for `&ndarray::ArrayBase`
 
+### Fixed
+- Support partial encoding and decoding in the `reshape` codec
+  - This codec remains unregistered and aliased as `zarrs.reshape`
+
 ## [0.23.12](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.12) - 2026-05-16
 
 ### Added
