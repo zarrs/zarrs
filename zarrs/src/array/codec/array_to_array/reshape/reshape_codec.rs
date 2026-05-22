@@ -137,15 +137,21 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
 
     fn partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn ArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
+        input_handle: Arc<dyn ArrayPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        // TODO: reshape partial decoding
-        Err(CodecError::Other(
-            "partial decoding with the reshape codec is not yet supported".to_string(),
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
         ))
     }
 
@@ -166,15 +172,21 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     #[cfg(feature = "async")]
     async fn async_partial_decoder(
         self: Arc<Self>,
-        _input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
+        input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        // TODO: reshape partial decoding
-        Err(CodecError::Other(
-            "partial decoding with the reshape codec is not yet supported".to_string(),
+        let encoded_shape = super::get_encoded_shape(&self.shape, shape)?;
+        Ok(Arc::new(
+            super::reshape_codec_partial::ReshapeCodecPartial::new(
+                input_handle,
+                shape,
+                data_type,
+                fill_value,
+                encoded_shape,
+            ),
         ))
     }
 }
