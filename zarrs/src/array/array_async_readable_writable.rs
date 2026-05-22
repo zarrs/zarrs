@@ -1,15 +1,13 @@
 use futures::{StreamExt, TryStreamExt};
 
 use super::concurrency::concurrency_chunks_and_codec;
-use super::{Array, ArrayError, ArrayIndicesTinyVec, Element, IntoArrayBytes};
-use crate::array::{ArraySubset, ArraySubsetTraits};
+use super::{Array, ArrayError, ArrayIndicesTinyVec, IntoArrayBytes};
+use crate::array::ArraySubsetTraits;
 use zarrs_codec::{
     ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
     StoragePartialEncoder, update_array_bytes,
 };
-use zarrs_storage::{
-    AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend, MaybeSync,
-};
+use zarrs_storage::{AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend};
 
 impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
     /// Return a read-only instantiation of the array.
@@ -35,54 +33,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         .await
     }
 
-    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_subset() instead")]
-    /// Async variant of [`store_chunk_subset_elements`](Array::store_chunk_subset_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset_elements<T: Element + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_elements: &[T],
-    ) -> Result<(), ArrayError> {
-        self.async_store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_elements,
-            &self.codec_options,
-        )
-        .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_subset() instead")]
-    /// Async variant of [`store_chunk_subset_ndarray`](Array::store_chunk_subset_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset_ndarray<
-        T: Element + MaybeSend + MaybeSync,
-        D: ndarray::Dimension,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset_start: &[u64],
-        chunk_subset_array: &ndarray::ArrayRef<T, D>,
-    ) -> Result<(), ArrayError> {
-        let chunk_subset_start = ArraySubset::new_with_start_shape(
-            chunk_subset_start.to_vec(),
-            chunk_subset_array
-                .shape()
-                .iter()
-                .map(|&x| x as u64)
-                .collect(),
-        )?;
-        self.async_store_chunk_subset_opt(
-            chunk_indices,
-            &chunk_subset_start,
-            chunk_subset_array.as_standard_layout().to_owned(),
-            &self.codec_options,
-        )
-        .await
-    }
-
     /// Async variant of [`store_array_subset`](Array::store_array_subset).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn async_store_array_subset<'a>(
@@ -92,42 +42,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
     ) -> Result<(), ArrayError> {
         self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
             .await
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use async_store_array_subset() instead")]
-    /// Async variant of [`store_array_subset_elements`](Array::store_array_subset_elements).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_array_subset_elements<T: Element + MaybeSend + MaybeSync>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_elements: &[T],
-    ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_elements, &self.codec_options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use async_store_array_subset()  instead")]
-    /// Async variant of [`store_array_subset_ndarray`](Array::store_array_subset_ndarray).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_array_subset_ndarray<
-        T: Element + MaybeSend + MaybeSync,
-        D: ndarray::Dimension,
-    >(
-        &self,
-        subset_start: &[u64],
-        subset_array: &ndarray::ArrayRef<T, D>,
-    ) -> Result<(), ArrayError> {
-        let subset = ArraySubset::new_with_start_shape(
-            subset_start.to_vec(),
-            subset_array.shape().iter().map(|&x| x as u64).collect(),
-        )?;
-        self.async_store_array_subset_opt(
-            &subset,
-            subset_array.as_standard_layout().to_owned(),
-            &self.codec_options,
-        )
-        .await
     }
 
     /// Async variant of [`compact_chunk`](Array::compact_chunk).
@@ -242,55 +156,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         }
     }
 
-    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_subset_opt() instead")]
-    /// Async variant of [`store_chunk_subset_elements_opt`](Array::store_chunk_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset_elements_opt<T: Element + MaybeSend + MaybeSync>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_elements: &[T],
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.async_store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_elements,
-            options,
-        )
-        .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use async_store_chunk_subset_opt()  instead")]
-    /// Async variant of [`store_chunk_subset_ndarray_opt`](Array::store_chunk_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset_ndarray_opt<
-        T: Element + MaybeSend + MaybeSync,
-        D: ndarray::Dimension,
-    >(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset_start: &[u64],
-        chunk_subset_array: &ndarray::ArrayRef<T, D>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        let chunk_subset = ArraySubset::new_with_start_shape(
-            chunk_subset_start.to_vec(),
-            chunk_subset_array
-                .shape()
-                .iter()
-                .map(|&x| x as u64)
-                .collect(),
-        )?;
-        let chunk_subset_array = chunk_subset_array
-            .as_standard_layout()
-            .to_owned()
-            .into_array_bytes(self.data_type())?;
-        self.async_store_chunk_subset_opt(chunk_indices, &chunk_subset, chunk_subset_array, options)
-            .await
-    }
-
     /// Async variant of [`store_array_subset_opt`](Array::store_array_subset_opt).
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     #[allow(clippy::too_many_lines)]
@@ -383,44 +248,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
                 .await?;
         }
         Ok(())
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use async_store_array_subset_opt() instead")]
-    /// Async variant of [`store_array_subset_elements_opt`](Array::store_array_subset_elements_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_array_subset_elements_opt<T: Element + MaybeSend + MaybeSync>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_elements: &[T],
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_elements, options)
-            .await
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(since = "0.23.0", note = "Use async_store_array_subset_opt()  instead")]
-    /// Async variant of [`store_array_subset_ndarray_opt`](Array::store_array_subset_ndarray_opt).
-    #[allow(clippy::missing_errors_doc)]
-    pub async fn async_store_array_subset_ndarray_opt<
-        T: Element + MaybeSend + MaybeSync,
-        D: ndarray::Dimension,
-    >(
-        &self,
-        subset_start: &[u64],
-        subset_array: &ndarray::ArrayRef<T, D>,
-        options: &CodecOptions,
-    ) -> Result<(), ArrayError> {
-        let subset = ArraySubset::new_with_start_shape(
-            subset_start.to_vec(),
-            subset_array.shape().iter().map(|&x| x as u64).collect(),
-        )?;
-        let subset_array = subset_array
-            .as_standard_layout()
-            .to_owned()
-            .into_array_bytes(self.data_type())?;
-        self.async_store_array_subset_opt(&subset, subset_array, options)
-            .await
     }
 
     /// Initialises an asynchronous partial encoder for the chunk at `chunk_indices`.

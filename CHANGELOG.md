@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 
+### Removed
+- Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
+  - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+
 ## [0.23.12](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.12) - 2026-05-16
 
 ### Added

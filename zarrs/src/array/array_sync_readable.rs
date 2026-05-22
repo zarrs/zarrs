@@ -6,7 +6,6 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
 use super::concurrency::concurrency_chunks_and_codec;
-use super::element::ElementOwned;
 use super::{
     Array, ArrayBytesFixedDisjointView, ArrayCreateError, ArrayError, ArrayIndicesTinyVec,
     ArrayMetadata, ArrayMetadataV3, DataType, FromArrayBytes,
@@ -108,50 +107,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         self.retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_if_exists::<Vec<T>>() instead"
-    )]
-    /// Read and decode the chunk at `chunk_indices` into a vector of its elements if it exists with default codec options.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the size of `T` does not match the data type size,
-    ///  - the decoded bytes cannot be transmuted,
-    ///  - `chunk_indices` are invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    pub fn retrieve_chunk_elements_if_exists<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<Vec<T>>, ArrayError> {
-        self.retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_if_exists::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the chunk at `chunk_indices` into an [`ndarray::ArrayD`] if it exists.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - the size of `T` does not match the data type size,
-    ///  - the decoded bytes cannot be transmuted,
-    ///  - the chunk indices are invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    ///
-    /// # Panics
-    /// Will panic if a chunk dimension is larger than `usize::MAX`.
-    pub fn retrieve_chunk_ndarray_if_exists<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
-    }
-
     /// Retrieve the encoded bytes of a chunk.
     ///
     /// # Errors
@@ -185,47 +140,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         &self,
         chunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunk::<Vec<T>>() instead")]
-    /// Read and decode the chunk at `chunk_indices` into a vector of its elements or the fill value if it does not exist.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - the size of `T` does not match the data type size,
-    ///  - the decoded bytes cannot be transmuted,
-    ///  - `chunk_indices` are invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    pub fn retrieve_chunk_elements<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<Vec<T>, ArrayError> {
-        self.retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the chunk at `chunk_indices` into an [`ndarray::ArrayD`]. It is filled with the fill value if it does not exist.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - the size of `T` does not match the data type size,
-    ///  - the decoded bytes cannot be transmuted,
-    ///  - the chunk indices are invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    ///
-    /// # Panics
-    /// Will panic if a chunk dimension is larger than `usize::MAX`.
-    pub fn retrieve_chunk_ndarray<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
     }
 
@@ -278,40 +192,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         self.retrieve_chunks_opt(chunks, &CodecOptions::default())
     }
 
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunks::<Vec<T>>() instead")]
-    /// Read and decode the chunks at `chunks` into a vector of their elements.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if any chunk indices in `chunks` are invalid or an error condition in [`Array::retrieve_chunks_opt`].
-    ///
-    /// # Panics
-    /// Panics if the number of array elements in the chunks exceeds `usize::MAX`.
-    pub fn retrieve_chunks_elements<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.retrieve_chunks_opt(chunks, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunks::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the chunks at `chunks` into an [`ndarray::ArrayD`].
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if any chunk indices in `chunks` are invalid or an error condition in [`Array::retrieve_chunks_elements_opt`].
-    ///
-    /// # Panics
-    /// Panics if the number of array elements in the chunks exceeds `usize::MAX`.
-    pub fn retrieve_chunks_ndarray<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_chunks_opt(chunks, &CodecOptions::default())
-    }
-
     /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
     ///
     /// # Errors
@@ -328,50 +208,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset::<Vec<T>>() instead"
-    )]
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its elements.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    pub fn retrieve_chunk_subset_elements<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into an [`ndarray::ArrayD`].
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - the chunk indices are invalid,
-    ///  - the chunk subset is invalid,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    ///
-    /// # Panics
-    /// Will panic if the number of elements in `chunk_subset` is `usize::MAX` or larger.
-    pub fn retrieve_chunk_subset_ndarray<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
         self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
     }
 
@@ -413,48 +249,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         output_target: ArrayBytesDecodeIntoTarget<'_>,
     ) -> Result<(), ArrayError> {
         self.retrieve_array_subset_into_opt(array_subset, output_target, &CodecOptions::default())
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset::<Vec<T>>() instead"
-    )]
-    /// Read and decode the `array_subset` of array into a vector of its elements.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - the size of `T` does not match the data type size,
-    ///  - the decoded bytes cannot be transmuted,
-    ///  - an array subset is invalid or out of bounds of the array,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    pub fn retrieve_array_subset_elements<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<Vec<T>, ArrayError> {
-        self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Read and decode the `array_subset` of array into an [`ndarray::ArrayD`].
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if:
-    ///  - an array subset is invalid or out of bounds of the array,
-    ///  - there is a codec decoding error, or
-    ///  - an underlying store error.
-    ///
-    /// # Panics
-    /// Will panic if any dimension in `chunk_subset` is `usize::MAX` or larger.
-    pub fn retrieve_array_subset_ndarray<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
     }
 
     /// Initialises a partial decoder for the chunk at `chunk_indices`.
@@ -574,70 +368,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         }
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_if_exists_opt::<Vec<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunk_elements_if_exists`](Array::retrieve_chunk_elements_if_exists).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_elements_if_exists_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Vec<T>>, ArrayError> {
-        if let Some(bytes) =
-            self.retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(chunk_indices, options)?
-        {
-            Ok(Some(T::from_array_bytes(self.data_type(), bytes)?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunk_opt::<Vec<T>>() instead")]
-    /// Explicit options version of [`retrieve_chunk_elements`](Array::retrieve_chunk_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_elements_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        Ok(T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
-        )?)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_if_exists_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunk_ndarray_if_exists`](Array::retrieve_chunk_ndarray_if_exists).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_ndarray_if_exists_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<ndarray::ArrayD<T>>, ArrayError> {
-        self.retrieve_chunk_if_exists_opt(chunk_indices, options)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunk_ndarray`](Array::retrieve_chunk_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_ndarray_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_chunk_opt(chunk_indices, options)
-    }
-
     /// Explicit options version of [`retrieve_chunks`](Array::retrieve_chunks).
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunks_opt<T: FromArrayBytes>(
@@ -654,35 +384,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
 
         let array_subset = self.chunks_subset(chunks)?;
         self.retrieve_array_subset_opt(&array_subset, options)
-    }
-
-    #[deprecated(since = "0.23.0", note = "Use retrieve_chunks_opt::<Vec<T>>() instead")]
-    /// Explicit options version of [`retrieve_chunks_elements`](Array::retrieve_chunks_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunks_elements_opt<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        Ok(T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_chunks_opt::<ArrayBytes<'static>>(chunks, options)?,
-        )?)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunks_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunks_ndarray`](Array::retrieve_chunks_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunks_ndarray_opt<T: ElementOwned>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_chunks_opt(chunks, options)
     }
 
     /// Helper method to retrieve multiple chunks with variable-length data types.
@@ -1080,38 +781,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset_opt::<Vec<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_array_subset_elements`](Array::retrieve_array_subset_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_array_subset_elements_opt<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        Ok(T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_array_subset_opt::<ArrayBytes<'static>>(array_subset, options)?,
-        )?)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_array_subset_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_array_subset_ndarray`](Array::retrieve_array_subset_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_array_subset_ndarray_opt<T: ElementOwned>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_array_subset_opt(array_subset, options)
-    }
-
     /// Explicit options version of [`retrieve_chunk_subset`](Array::retrieve_chunk_subset).
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
@@ -1200,44 +869,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> Array<TStorage> {
                 .partial_decode_into(chunk_subset, output_target, options)?;
             Ok(())
         }
-    }
-
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset_opt::<Vec<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunk_subset_elements`](Array::retrieve_chunk_subset_elements).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_subset_elements_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Vec<T>, ArrayError> {
-        Ok(T::from_array_bytes(
-            self.data_type(),
-            self.retrieve_chunk_subset_opt::<ArrayBytes<'static>>(
-                chunk_indices,
-                chunk_subset,
-                options,
-            )?,
-        )?)
-    }
-
-    #[cfg(feature = "ndarray")]
-    #[deprecated(
-        since = "0.23.0",
-        note = "Use retrieve_chunk_subset_opt::<ndarray::ArrayD<T>>() instead"
-    )]
-    /// Explicit options version of [`retrieve_chunk_subset_ndarray`](Array::retrieve_chunk_subset_ndarray).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk_subset_ndarray_opt<T: ElementOwned>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<ndarray::ArrayD<T>, ArrayError> {
-        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, options)
     }
 
     /// Explicit options version of [`partial_decoder`](Array::partial_decoder).
