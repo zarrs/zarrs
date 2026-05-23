@@ -5,22 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.12...HEAD)
-
-### Added
-- Implement `IntoArrayBytes` for `&ndarray::ArrayBase`
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
 
 ### Changed
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 
-### Fixed
-- Support partial encoding and decoding in the `reshape` codec
-  - This codec remains unregistered and aliased as `zarrs.reshape`
-
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+
+## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
+
+### Added
+- Implement `IntoArrayBytes` for `&ndarray::ArrayBase`
+
+### Fixed
+- Support partial encoding and decoding in the `reshape` codec
+  - This codec remains unregistered and aliased as `zarrs.reshape`
 
 ## [0.23.12](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.12) - 2026-05-16
 
