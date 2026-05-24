@@ -1,6 +1,7 @@
 use super::codec::ShardingCodecConfiguration;
 use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
+use crate::array::{ArrayError, ArraySubset};
 use zarrs_metadata::ConfigurationSerialize;
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
@@ -96,6 +97,48 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
     fn subchunk_grid_shape(&self) -> ArrayShape {
         self.subchunk_grid().grid_shape().to_vec()
     }
+}
+
+pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    subchunk_grid: &ChunkGrid,
+    subchunk_indices: &[u64],
+) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
+    // TODO: Can this logic be simplified?
+    let array_subset = subchunk_grid
+        .subset(subchunk_indices)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    let shards = array
+        .chunks_in_array_subset(&array_subset)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    if shards.num_elements() != 1 {
+        // This should not happen, but it is checked just in case.
+        return Err(ArrayError::InvalidChunkGridIndicesError(
+            subchunk_indices.to_vec(),
+        ));
+    }
+    let shard_indices = shards.start();
+    let shard_origin = array.chunk_origin(shard_indices)?;
+    let shard_subset = array_subset.relative_to(&shard_origin)?;
+    Ok((shard_indices.to_vec(), shard_subset))
+}
+
+pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    subchunk_grid: &ChunkGrid,
+    subchunk_indices: &[u64],
+) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
+    // TODO: Simplify this?
+    let (shard_indices, shard_subset) =
+        subchunk_shard_index_and_subset(array, subchunk_grid, subchunk_indices)?;
+    let effective_subchunk_shape = array.effective_subchunk_shape().expect("array is sharded");
+    let chunk_indices: Vec<u64> = shard_subset
+        .start()
+        .iter()
+        .zip(effective_subchunk_shape.as_slice())
+        .map(|(o, s)| o / s.get())
+        .collect();
+    Ok((shard_indices, chunk_indices))
 }
 
 mod private {

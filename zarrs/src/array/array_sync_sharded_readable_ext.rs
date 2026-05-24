@@ -5,6 +5,9 @@ use std::sync::Arc;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::array_sharded_ext::{
+    subchunk_shard_index_and_chunk_index, subchunk_shard_index_and_subset,
+};
 use super::codec::ShardingCodec;
 use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
 use super::concurrency::concurrency_chunks_and_codec;
@@ -237,48 +240,6 @@ pub trait ArrayShardedReadableExt<TStorage: ?Sized + ReadableStorageTraits + 'st
         array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
-}
-
-fn subchunk_shard_index_and_subset<TStorage: ?Sized + ReadableStorageTraits + 'static>(
-    array: &Array<TStorage>,
-    subchunk_grid: &ChunkGrid,
-    subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
-    // TODO: Can this logic be simplified?
-    let array_subset = subchunk_grid
-        .subset(subchunk_indices)?
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    let shards = array
-        .chunks_in_array_subset(&array_subset)?
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    if shards.num_elements() != 1 {
-        // This should not happen, but it is checked just in case.
-        return Err(ArrayError::InvalidChunkGridIndicesError(
-            subchunk_indices.to_vec(),
-        ));
-    }
-    let shard_indices = shards.start();
-    let shard_origin = array.chunk_origin(shard_indices)?;
-    let shard_subset = array_subset.relative_to(&shard_origin)?;
-    Ok((shard_indices.to_vec(), shard_subset))
-}
-
-fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized + ReadableStorageTraits + 'static>(
-    array: &Array<TStorage>,
-    subchunk_grid: &ChunkGrid,
-    subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
-    // TODO: Simplify this?
-    let (shard_indices, shard_subset) =
-        subchunk_shard_index_and_subset(array, subchunk_grid, subchunk_indices)?;
-    let effective_subchunk_shape = array.effective_subchunk_shape().expect("array is sharded");
-    let chunk_indices: Vec<u64> = shard_subset
-        .start()
-        .iter()
-        .zip(effective_subchunk_shape.as_slice())
-        .map(|(o, s)| o / s.get())
-        .collect();
-    Ok((shard_indices, chunk_indices))
 }
 
 impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayShardedReadableExt<TStorage>
