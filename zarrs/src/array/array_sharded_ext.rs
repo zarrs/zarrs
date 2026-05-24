@@ -47,7 +47,10 @@ fn compute_dimension_subchunk_info(
     let subchunk_size = subchunk_shape[dim];
 
     if grid_shape[dim] == 0 {
-        if decoded_chunk_shape[dim].get().is_multiple_of(subchunk_size.get()) {
+        if decoded_chunk_shape[dim]
+            .get()
+            .is_multiple_of(subchunk_size.get())
+        {
             return Some((0, ChunkEdgeLengths::Scalar(subchunk_shape[dim])));
         }
         return None;
