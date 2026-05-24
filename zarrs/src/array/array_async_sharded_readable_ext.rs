@@ -796,12 +796,12 @@ mod tests {
                 ])
             );
             assert_eq!(
-                array.effective_subchunk_shape(),
-                Some(vec![
+                array.partial_decode_granularity(&[0, 0, 0])?,
+                vec![
                     NonZeroU64::new(2).unwrap(),
                     NonZeroU64::new(1).unwrap(),
                     NonZeroU64::new(3).unwrap()
-                ])
+                ]
             ); // NOTE: transposed
             assert_eq!(subchunk_grid.grid_shape(), &[8, 16, 3]);
         } else {
