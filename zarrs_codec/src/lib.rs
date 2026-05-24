@@ -1212,9 +1212,10 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the shapes are not supported by this codec.
+    #[expect(unused_variables)]
     fn partial_decode_granularity(
         &self,
-        _decoded_shape: &[NonZeroU64],
+        decoded_shape: &[NonZeroU64],
         encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
         Ok(encoded_granularity.to_vec())
