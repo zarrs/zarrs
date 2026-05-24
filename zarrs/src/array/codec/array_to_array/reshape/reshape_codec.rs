@@ -106,11 +106,12 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         super::get_encoded_shape(&self.shape, decoded_shape)
     }
 
-    fn decoded_shape(
+    fn partial_decode_granularity(
         &self,
-        _encoded_shape: &[NonZeroU64],
-    ) -> Result<Option<ChunkShape>, CodecError> {
-        Ok(None)
+        decoded_shape: &[NonZeroU64],
+        _encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(decoded_shape.to_vec())
     }
 
     fn encode<'a>(

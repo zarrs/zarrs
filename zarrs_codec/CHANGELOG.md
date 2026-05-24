@@ -8,10 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Add `ArrayToArrayCodecTraits::partial_decode_granularity`
+- Add `ArrayTo{Array,Bytes}CodecTraits::partial_decode_granularity`
 
-### Changed
-- Deprecate `ArrayToArrayCodecTraits::decoded_shape`
+### Removed
+- Remove `ArrayToArrayCodecTraits::decoded_shape`
+- Remove `ArrayCodecTraits::partial_decode_granularity`
 
 ## [0.2.1] - 2026-03-21
 

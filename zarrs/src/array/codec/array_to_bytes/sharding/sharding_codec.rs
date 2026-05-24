@@ -152,10 +152,6 @@ impl ArrayCodecTraits for ShardingCodec {
         let num_elements = chunks_per_shard.num_elements_nonzero_usize();
         Ok(RecommendedConcurrency::new_maximum(num_elements.into()))
     }
-
-    fn partial_decode_granularity(&self, _shape: &[NonZeroU64]) -> ChunkShape {
-        self.subchunk_shape.clone()
-    }
 }
 
 #[cfg_attr(
@@ -166,6 +162,10 @@ impl ArrayCodecTraits for ShardingCodec {
 impl ArrayToBytesCodecTraits for ShardingCodec {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
         self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn partial_decode_granularity(&self, _shape: &[NonZeroU64]) -> ChunkShape {
+        self.subchunk_shape.clone()
     }
 
     fn with_codec_specific_options(

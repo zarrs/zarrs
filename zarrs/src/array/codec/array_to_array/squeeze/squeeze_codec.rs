@@ -111,11 +111,36 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         }
     }
 
-    fn decoded_shape(
+    fn partial_decode_granularity(
         &self,
-        _encoded_shape: &[NonZeroU64],
-    ) -> Result<Option<ChunkShape>, CodecError> {
-        Ok(None)
+        decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_shape.len() != encoded_granularity.len() {
+            return Err(CodecError::Other(
+                "encoded granularity dimensionality does not match encoded shape".to_string(),
+            ));
+        }
+
+        let one = NonZeroU64::new(1).unwrap();
+        if decoded_shape.iter().all(|dim| dim.get() == 1) {
+            return Ok(vec![one; decoded_shape.len()]);
+        }
+
+        let mut encoded_granularity = encoded_granularity.iter();
+        Ok(decoded_shape
+            .iter()
+            .map(|dim| {
+                if dim.get() == 1 {
+                    one
+                } else {
+                    *encoded_granularity
+                        .next()
+                        .expect("non-singleton dimensions match encoded shape")
+                }
+            })
+            .collect())
     }
 
     fn encode<'a>(

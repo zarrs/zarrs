@@ -430,15 +430,6 @@ pub trait ArrayCodecTraits: CodecTraits {
         shape: &[NonZeroU64],
         data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError>;
-
-    /// Return the partial decode granularity.
-    ///
-    /// This represents the shape of the smallest subset of a chunk that can be efficiently decoded if the chunk were subdivided into a regular grid.
-    /// For most codecs, this is just the shape of the chunk.
-    /// It is the shape of the sub chunks (inner chunks) for the sharding codec.
-    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
-        shape.to_vec()
-    }
 }
 
 /// Partial bytes decoder traits.
@@ -1214,25 +1205,6 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         Ok(decoded_shape.to_vec())
     }
 
-    /// Returns the shape of the decoded chunk for a given encoded chunk shape.
-    ///
-    /// The default implementation returns the shape unchanged.
-    ///
-    /// Returns [`None`] if the decoded shape cannot be determined from the encoded shape.
-    ///
-    /// # Errors
-    /// Returns a [`CodecError`] if the shape is not supported by this codec.
-    #[deprecated(
-        since = "0.2.2",
-        note = "superseded by `partial_decode_granularity`",
-    )]
-    fn decoded_shape(
-        &self,
-        encoded_shape: &[NonZeroU64],
-    ) -> Result<Option<ChunkShape>, CodecError> {
-        Ok(Some(encoded_shape.to_vec()))
-    }
-
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///
     /// The default implementation is for shape-preserving codecs, where the granularity is unchanged.
@@ -1428,6 +1400,15 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         data_type: &DataType,
         fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError>;
+
+    /// Return the partial decode granularity.
+    ///
+    /// This represents the shape of the smallest subset of a chunk that can be efficiently decoded if the chunk were subdivided into a regular grid.
+    /// For most codecs, this is just the shape of the chunk.
+    /// It is the shape of the sub chunks (inner chunks) for the sharding codec.
+    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
+        shape.to_vec()
+    }
 
     /// Encode a chunk.
     ///

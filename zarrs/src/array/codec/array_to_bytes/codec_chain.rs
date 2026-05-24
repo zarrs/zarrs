@@ -357,6 +357,41 @@ impl ArrayToBytesCodecTraits for CodecChain {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
+        let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
+        array_shapes.push(shape.to_vec());
+        for codec in &self.array_to_array {
+            let Some(decoded_shape) = array_shapes.last() else {
+                return shape.to_vec();
+            };
+            let Ok(encoded_shape) = codec.encoded_shape(decoded_shape) else {
+                return shape.to_vec();
+            };
+            array_shapes.push(encoded_shape);
+        }
+
+        let Some(encoded_shape) = array_shapes.last() else {
+            return shape.to_vec();
+        };
+        let mut granularity = self
+            .array_to_bytes
+            .partial_decode_granularity(encoded_shape);
+
+        for (codec, decoded_shape) in self
+            .array_to_array
+            .iter()
+            .rev()
+            .zip(array_shapes.iter().rev())
+        {
+            match codec.partial_decode_granularity(decoded_shape, &granularity) {
+                Ok(decoded_granularity) => granularity = decoded_granularity,
+                Err(_) => return decoded_shape.to_vec(),
+            }
+        }
+
+        granularity
+    }
+
     fn encode<'a>(
         &self,
         mut bytes: ArrayBytes<'a>,
@@ -873,14 +908,6 @@ impl ArrayCodecTraits for CodecChain {
         );
 
         Ok(recommended_concurrency)
-    }
-
-    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
-        if let Some(array_to_array) = self.array_to_array.first() {
-            array_to_array.partial_decode_granularity(shape)
-        } else {
-            self.array_to_bytes.partial_decode_granularity(shape)
-        }
     }
 }
 
