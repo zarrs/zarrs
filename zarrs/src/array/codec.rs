@@ -22,6 +22,7 @@ use std::sync::Arc;
 #[cfg(feature = "bitround")]
 pub use array_to_array::bitround::*;
 pub use array_to_array::fixedscaleoffset::*;
+pub use array_to_array::morton::*;
 pub use array_to_array::reshape::*;
 pub use array_to_array::squeeze::*;
 #[cfg(feature = "transpose")]

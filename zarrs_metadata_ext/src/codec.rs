@@ -42,6 +42,8 @@ pub use registered::*;
 mod zarrs {
     /// `gdeflate` codec metadata (`zarrs` experimental).
     pub mod gdeflate;
+    /// `morton` codec metadata (`zarrs` experimental).
+    pub mod morton;
     /// `squeeze` codec metadata (`zarrs` experimental).
     pub mod squeeze;
     /// `vlen` codec metadata (`zarrs` experimental).

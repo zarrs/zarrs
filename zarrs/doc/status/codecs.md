@@ -4,6 +4,7 @@
 |                | 🚧[`reshape`]                      | -                                   |               |
 |                | 🚧[`numcodecs.fixedscaleoffset`]   | `fixedscaleoffset`                  |               |
 |                | [`bitround`]                       | `bitround`                          | bitround      |
+|                | 🚧[`zarrs.morton`]                 | -                                   |               |
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
 | Array to Bytes | [`bytes`]                          | (implicit array-to-bytes)           |               |
 |                | 🚧[`zarrs.optional`]               | -                                   |               |
@@ -47,6 +48,7 @@
 [`reshape`]: crate::array::codec::array_to_array::reshape
 [`bitround`]: crate::array::codec::array_to_array::bitround
 [`numcodecs.fixedscaleoffset`]: crate::array::codec::array_to_array::fixedscaleoffset
+[`zarrs.morton`]: crate::array::codec::array_to_array::morton
 [`zarrs.squeeze`]: crate::array::codec::array_to_array::squeeze
 
 [`bytes`]: crate::array::codec::array_to_bytes::bytes

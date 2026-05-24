@@ -1521,6 +1521,16 @@ fn codec_registry() -> Vec<CodecDef> {
     });
 
     codecs.push(CodecDef {
+        name: MortonCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: None,
+        factory: |_dt| CodecInstance::ArrayToArray(Arc::new(MortonCodec::new())),
+        lossy: false,
+        non_deterministic: false,
+        skip: None,
+    });
+
+    codecs.push(CodecDef {
         name: ReshapeCodec::aliases_v3().default_name.clone(),
         category: CodecCategory::ArrayToArray,
         name_suffix: Some("flatten"),
@@ -1913,6 +1923,7 @@ mod compatibility_matrix {
                 codec::ReshapeCodec::aliases_v3().default_name.clone(),
                 "a2a",
             ),
+            (codec::MortonCodec::aliases_v3().default_name.clone(), "a2a"),
             (
                 codec::SqueezeCodec::aliases_v3().default_name.clone(),
                 "a2a",
