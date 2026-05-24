@@ -1,8 +1,149 @@
+use std::num::NonZeroU64;
+
+use super::chunk_grid::{RectilinearChunkGrid, RegularChunkGrid};
 use super::codec::ShardingCodecConfiguration;
-use super::{Array, ArrayShape, ChunkGrid, ChunkShape};
+use super::{Array, ArrayError, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
+use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
-use crate::array::{ArrayError, ArraySubset};
+use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_metadata::ConfigurationSerialize;
+use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
+
+/// Iterate over subchunk sizes for a parent chunk along a single dimension.
+fn subchunk_sizes(chunk_size: u64, subchunk_size: NonZeroU64) -> impl Iterator<Item = NonZeroU64> {
+    let subchunk_size = subchunk_size.get();
+    (0..chunk_size.div_ceil(subchunk_size)).map(move |i| {
+        let start = i * subchunk_size;
+        let remaining = chunk_size - start;
+        NonZeroU64::new(remaining.min(subchunk_size)).expect("size is non-zero")
+    })
+}
+
+fn chunk_size_in_dimension(
+    chunk_grid: &ChunkGrid,
+    chunk_indices: &[u64],
+    dim: usize,
+) -> Option<u64> {
+    chunk_grid
+        .chunk_shape(chunk_indices)
+        .ok()
+        .flatten()
+        .map(|chunk_shape| chunk_shape[dim].get())
+}
+
+/// Compute the subchunk grid shape and edge lengths for a single dimension.
+///
+/// Returns `None` if the dimension has zero grid shape and the decoded chunk
+/// shape is not evenly divisible by the subchunk size (caller should return
+/// the original chunk grid unchanged).
+fn compute_dimension_subchunk_info(
+    dim: usize,
+    dimensionality: usize,
+    grid_shape: &[u64],
+    decoded_chunk_shape: &ChunkShape,
+    subchunk_shape: &ChunkShape,
+    chunk_grid: &ChunkGrid,
+) -> Option<(u64, ChunkEdgeLengths)> {
+    let subchunk_size = subchunk_shape[dim];
+
+    if grid_shape[dim] == 0 {
+        if decoded_chunk_shape[dim].get().is_multiple_of(subchunk_size.get()) {
+            return Some((0, ChunkEdgeLengths::Scalar(subchunk_shape[dim])));
+        }
+        return None;
+    }
+
+    let mut chunk_indices = vec![0; dimensionality];
+    let mut dimension_shape = 0;
+    let mut sizes: Option<Vec<RunLengthElement>> = None;
+    let mut regular_subchunk_count = 0;
+
+    for chunk_index in 0..grid_shape[dim] {
+        chunk_indices[dim] = chunk_index;
+        let chunk_size = chunk_size_in_dimension(chunk_grid, &chunk_indices, dim)?;
+        dimension_shape += chunk_size;
+
+        if chunk_size % subchunk_size.get() == 0 {
+            let count = chunk_size / subchunk_size.get();
+            if let Some(sizes) = &mut sizes {
+                sizes.push(RunLengthElement::Repeated([
+                    subchunk_size,
+                    NonZeroU64::new(count).expect("chunk size is non-zero"),
+                ]));
+            } else {
+                regular_subchunk_count += count;
+            }
+        } else {
+            let sizes = sizes.get_or_insert_with(|| {
+                if let Some(count) = NonZeroU64::new(regular_subchunk_count) {
+                    vec![RunLengthElement::Repeated([subchunk_size, count])]
+                } else {
+                    Vec::new()
+                }
+            });
+            sizes.extend(subchunk_sizes(chunk_size, subchunk_size).map(RunLengthElement::Single));
+        }
+    }
+
+    let edge_lengths = if let Some(sizes) = sizes {
+        ChunkEdgeLengths::Varying(sizes)
+    } else {
+        ChunkEdgeLengths::Scalar(subchunk_size)
+    };
+
+    Some((dimension_shape, edge_lengths))
+}
+
+pub(crate) fn create_subchunk_grid(
+    chunk_grid: &ChunkGrid,
+    codecs: &CodecChain,
+) -> Option<ChunkGrid> {
+    if !codecs.array_to_bytes_codec().as_any().is::<ShardingCodec>() {
+        return None;
+    }
+
+    let dimensionality = chunk_grid.dimensionality();
+    let origin_chunk = vec![0; dimensionality];
+    let decoded_chunk_shape = chunk_grid.chunk_shape(&origin_chunk).ok().flatten()?;
+    let subchunk_shape = codecs.partial_decode_granularity(&decoded_chunk_shape);
+    if subchunk_shape == decoded_chunk_shape {
+        return Some(chunk_grid.clone());
+    }
+
+    let grid_shape = chunk_grid.grid_shape();
+    let mut needs_rectilinear = false;
+    let mut subchunk_grid_shape = Vec::with_capacity(dimensionality);
+    let mut chunk_edge_lengths = Vec::with_capacity(dimensionality);
+
+    for dim in 0..dimensionality {
+        let Some((dimension_shape, edge_lengths)) = compute_dimension_subchunk_info(
+            dim,
+            dimensionality,
+            grid_shape,
+            &decoded_chunk_shape,
+            &subchunk_shape,
+            chunk_grid,
+        ) else {
+            return Some(chunk_grid.clone());
+        };
+
+        if let ChunkEdgeLengths::Varying(_) = &edge_lengths {
+            needs_rectilinear = true;
+        }
+        subchunk_grid_shape.push(dimension_shape);
+        chunk_edge_lengths.push(edge_lengths);
+    }
+
+    if needs_rectilinear {
+        Some(ChunkGrid::new(
+            RectilinearChunkGrid::new(subchunk_grid_shape, &chunk_edge_lengths).ok()?,
+        ))
+    } else {
+        Some(ChunkGrid::new(
+            RegularChunkGrid::new(subchunk_grid_shape, subchunk_shape).ok()?,
+        ))
+    }
+}
 
 /// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
 pub trait ArrayShardedExt: private::Sealed {
@@ -17,18 +158,7 @@ pub trait ArrayShardedExt: private::Sealed {
     /// Returns [`None`] for an unsharded array.
     fn subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// The effective subchunk shape.
-    ///
-    /// The effective subchunk shape is the "read granularity" of the sharded array that accounts for array-to-array codecs preceding the sharding codec.
-    /// For example, the transpose codec changes the shape of an array subset that corresponds to a single subchunk.
-    /// The effective subchunk shape is used when determining the subchunk grid of a sharded array.
-    ///
-    /// Returns [`None`] for an unsharded array of if the effective subchunk shape is indeterminate.
-    fn effective_subchunk_shape(&self) -> Option<ChunkShape>;
-
     /// Retrieve the subchunk grid.
-    ///
-    /// This uses the effective subchunk shape so that reading a subchunk reads only one contiguous byte range.
     ///
     /// Returns the normal chunk grid for an unsharded array.
     fn subchunk_grid(&self) -> ChunkGrid;
@@ -68,30 +198,10 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
         }
     }
 
-    fn effective_subchunk_shape(&self) -> Option<ChunkShape> {
-        let mut subchunk_shape = self.subchunk_shape()?;
-        for codec in self.codecs().array_to_array_codecs().iter().rev() {
-            if let Ok(Some(subchunk_shape_)) = codec.decoded_shape(&subchunk_shape) {
-                subchunk_shape = subchunk_shape_;
-            } else {
-                return None;
-            }
-        }
-        Some(subchunk_shape)
-    }
-
     fn subchunk_grid(&self) -> ChunkGrid {
-        // FIXME: Create the subchunk grid in `Array` and return a ref
-        if let Some(subchunk_shape) = self.effective_subchunk_shape() {
-            ChunkGrid::new(
-                crate::array::chunk_grid::RegularChunkGrid::new(
-                    self.shape().to_vec(),
-                    subchunk_shape,
-                ).expect("the subchunk grid dimensionality is already confirmed to match the array dimensionality"),
-            )
-        } else {
-            self.chunk_grid().clone()
-        }
+        self.subchunk_grid
+            .clone()
+            .unwrap_or_else(|| self.chunk_grid().clone())
     }
 
     fn subchunk_grid_shape(&self) -> ArrayShape {
@@ -131,16 +241,17 @@ pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
     // TODO: Simplify this?
     let (shard_indices, shard_subset) =
         subchunk_shard_index_and_subset(array, subchunk_grid, subchunk_indices)?;
-    let effective_subchunk_shape = array.effective_subchunk_shape().expect("array is sharded");
+    let subchunk_shape = subchunk_grid
+        .chunk_shape(subchunk_indices)?
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
     let chunk_indices: Vec<u64> = shard_subset
         .start()
         .iter()
-        .zip(effective_subchunk_shape.as_slice())
+        .zip(subchunk_shape.as_slice())
         .map(|(o, s)| o / s.get())
         .collect();
     Ok((shard_indices, chunk_indices))
 }
-
 mod private {
     use super::Array;
 

@@ -654,6 +654,75 @@ mod tests {
         array_sharded_ext_impl(false)
     }
 
+    #[test]
+    #[expect(clippy::single_range_in_vec_init)]
+    fn array_sharded_ext_subchunk_grid_non_divisible_shard_shape()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![10], // array shape
+            vec![5],  // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.subchunk_shape(vec![2]);
+        let mut array = builder.build(store, array_path)?;
+
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[0])?.unwrap(),
+            ArraySubset::new_with_ranges(&[0..2])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[1])?.unwrap(),
+            ArraySubset::new_with_ranges(&[2..4])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[2])?.unwrap(),
+            ArraySubset::new_with_ranges(&[4..5])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[3])?.unwrap(),
+            ArraySubset::new_with_ranges(&[5..7])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+
+        array.set_shape(vec![9])?;
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+
+        array.set_shape(vec![8])?;
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+
+        Ok(())
+    }
+
     fn array_sharded_ext_impl_transpose(
         valid_subchunk_shape: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
