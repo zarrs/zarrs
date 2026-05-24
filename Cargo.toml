@@ -40,7 +40,7 @@ version = "0.2.0"
 path = "zarrs_chunk_key_encoding"
 
 [workspace.dependencies.zarrs_codec]
-version = "0.2.1"
+version = "0.2.2"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]

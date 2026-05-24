@@ -1222,11 +1222,31 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the shape is not supported by this codec.
+    #[deprecated(
+        since = "0.2.2",
+        note = "superseded by `partial_decode_granularity`",
+    )]
     fn decoded_shape(
         &self,
         encoded_shape: &[NonZeroU64],
     ) -> Result<Option<ChunkShape>, CodecError> {
         Ok(Some(encoded_shape.to_vec()))
+    }
+
+    /// Map a partial decode granularity from the encoded representation to the decoded representation.
+    ///
+    /// The default implementation is for shape-preserving codecs, where the granularity is unchanged.
+    /// Codecs with indeterminate or non-rectangular mappings should return `decoded_shape.to_vec()`,
+    /// which means the whole decoded chunk is the smallest rectangular granularity.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the shapes are not supported by this codec.
+    fn partial_decode_granularity(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(encoded_granularity.to_vec())
     }
 
     /// Returns the encoded chunk representation given the decoded chunk representation.
