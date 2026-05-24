@@ -1207,9 +1207,8 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
 
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///
-    /// The default implementation is for shape-preserving codecs, where the granularity is unchanged.
-    /// Codecs with indeterminate or non-rectangular mappings should return `decoded_shape.to_vec()`,
-    /// which means the whole decoded chunk is the smallest rectangular granularity.
+    /// The default implementation is for shape and order-preserving codecs, where the granularity is unchanged.
+    /// Codecs may return `decoded_shape` if they do not support granular access or otherwise calculate a different granularity for partial decoding.
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the shapes are not supported by this codec.
