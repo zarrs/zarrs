@@ -4,6 +4,9 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt};
 use unsafe_cell_slice::UnsafeCellSlice;
 
+use super::array_sharded_ext::{
+    subchunk_shard_index_and_chunk_index, subchunk_shard_index_and_subset,
+};
 use super::codec::ShardingCodec;
 use super::codec::array_to_bytes::sharding::AsyncShardingPartialDecoder;
 use super::concurrency::concurrency_chunks_and_codec;
@@ -12,8 +15,8 @@ use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
     ArrayShardedExt, ChunkGrid, DataTypeSize,
 };
+use crate::array::ArraySubsetTraits;
 use crate::array::array_bytes_internal::merge_chunks_vlen;
-use crate::array::{ArraySubset, ArraySubsetTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, AsyncArrayPartialDecoderTraits, AsyncStoragePartialDecoder,
     CodecError, CodecOptions,
@@ -265,49 +268,6 @@ pub trait AsyncArrayShardedReadableExt<TStorage: ?Sized + AsyncReadableStorageTr
     ) -> Result<T, ArrayError>;
 }
 
-fn subchunk_shard_index_and_subset<TStorage: ?Sized + AsyncReadableStorageTraits + 'static>(
-    array: &Array<TStorage>,
-    cache: &AsyncArrayShardedReadableExtCache,
-    subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
-    // TODO: Can this logic be simplified?
-    let array_subset = cache
-        .subchunk_grid()
-        .subset(subchunk_indices)?
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    let shards = array
-        .chunks_in_array_subset(&array_subset)?
-        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    if shards.num_elements() != 1 {
-        // This should not happen, but it is checked just in case.
-        return Err(ArrayError::InvalidChunkGridIndicesError(
-            subchunk_indices.to_vec(),
-        ));
-    }
-    let shard_indices = shards.start();
-    let shard_origin = array.chunk_origin(shard_indices)?;
-    let shard_subset = array_subset.relative_to(&shard_origin)?;
-    Ok((shard_indices.to_vec(), shard_subset))
-}
-
-fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized + AsyncReadableStorageTraits + 'static>(
-    array: &Array<TStorage>,
-    cache: &AsyncArrayShardedReadableExtCache,
-    subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
-    // TODO: Simplify this?
-    let (shard_indices, shard_subset) =
-        subchunk_shard_index_and_subset(array, cache, subchunk_indices)?;
-    let effective_subchunk_shape = array.effective_subchunk_shape().expect("array is sharded");
-    let chunk_indices: Vec<u64> = shard_subset
-        .start()
-        .iter()
-        .zip(effective_subchunk_shape.as_slice())
-        .map(|(o, s)| o / s.get())
-        .collect();
-    Ok((shard_indices, chunk_indices))
-}
-
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedReadableExt<TStorage>
@@ -319,8 +279,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         subchunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, ArrayError> {
         if cache.array_is_exclusively_sharded() {
-            let (shard_indices, chunk_indices) =
-                subchunk_shard_index_and_chunk_index(self, cache, subchunk_indices)?;
+            let (shard_indices, chunk_indices) = subchunk_shard_index_and_chunk_index(
+                self,
+                cache.subchunk_grid(),
+                subchunk_indices,
+            )?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
             let MaybeShardingPartialDecoder::Sharding(partial_decoder) = partial_decoder else {
                 unreachable!("exlusively sharded")
@@ -345,8 +308,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
         if cache.array_is_exclusively_sharded() {
-            let (shard_indices, chunk_indices) =
-                subchunk_shard_index_and_chunk_index(self, cache, subchunk_indices)?;
+            let (shard_indices, chunk_indices) = subchunk_shard_index_and_chunk_index(
+                self,
+                cache.subchunk_grid(),
+                subchunk_indices,
+            )?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
             let MaybeShardingPartialDecoder::Sharding(partial_decoder) = partial_decoder else {
                 unreachable!("exlusively sharded")
@@ -376,7 +342,7 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayShardedR
     ) -> Result<T, ArrayError> {
         if cache.array_is_sharded() {
             let (shard_indices, shard_subset) =
-                subchunk_shard_index_and_subset(self, cache, subchunk_indices)?;
+                subchunk_shard_index_and_subset(self, cache.subchunk_grid(), subchunk_indices)?;
             let partial_decoder = cache.retrieve(self, &shard_indices).await?;
             let bytes = partial_decoder
                 .partial_decode(&shard_subset, options)
