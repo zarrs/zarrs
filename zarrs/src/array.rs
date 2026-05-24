@@ -1056,6 +1056,21 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
 
+    /// Return the partial decode granularity of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    ///
+    /// # Panics
+    /// Panics if any component of the shape of the chunk at `chunk_indices` exceeds [`usize::MAX`].
+    pub fn partial_decode_granularity(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError> {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        Ok(self.codecs().partial_decode_granularity(&chunk_shape))
+    }
+
     /// Return an array subset that spans the entire array.
     #[must_use]
     pub fn subset_all(&self) -> ArraySubset {
