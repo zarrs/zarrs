@@ -111,6 +111,7 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
         decoded_shape: &[NonZeroU64],
         _encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
+        // TODO: This could be refined in some situations depending on the encoded granularity, decoded shape, and reshape parameters.
         Ok(decoded_shape.to_vec())
     }
 
