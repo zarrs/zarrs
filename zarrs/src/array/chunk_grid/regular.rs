@@ -165,10 +165,9 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
             if self.array_shape.contains(&0) {
-                Ok(None)
-            } else {
-                Ok(Some(self.chunk_shape.clone()))
+                return Ok(None);
             }
+            Ok(Some(self.chunk_shape.clone()))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -183,10 +182,9 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
             if self.array_shape.contains(&0) {
-                Ok(None)
-            } else {
-                Ok(Some(self.chunk_shape_u64()))
+                return Ok(None);
             }
+            Ok(Some(self.chunk_shape_u64()))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -243,14 +241,13 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if array_indices.len() == self.dimensionality() {
             if self.array_shape.contains(&0) {
-                Ok(None)
-            } else {
-                Ok(Some(
-                    std::iter::zip(array_indices, self.chunk_shape.as_slice())
-                        .map(|(i, s)| i % s.get())
-                        .collect(),
-                ))
+                return Ok(None);
             }
+            Ok(Some(
+                std::iter::zip(array_indices, self.chunk_shape.as_slice())
+                    .map(|(i, s)| i % s.get())
+                    .collect(),
+            ))
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),

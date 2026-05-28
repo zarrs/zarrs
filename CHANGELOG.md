@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
-- Zero sized array dimensions are no longer considered _unlimited_ with certain chunk grids (e.g. `regular`)
-  - An array with a zero sized dimension will have zero chunks and query operations will return `None` for all chunks
-  - Reading/writing from chunks that are completely out-of-bounds of the array shape now returns `ArrayError::InvalidChunkGridIndices`
+- **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
+  - Reading/writing completely out-of-bounds chunks is now an error
+  - Querying completely out-of-bounds chunks always returns `None`
+  - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 
