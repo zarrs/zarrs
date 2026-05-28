@@ -4,7 +4,7 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::ArraySubset;
+use zarrs_chunk_grid::{ArraySubset, ChunkGridTraits};
 use zarrs_data_type::FillValue;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
@@ -364,7 +364,8 @@ fn partial_decode_fixed_array_subset_into(
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid
             .subset(&chunk_indices)
-            .expect("matching dimensionality");
+            .expect("matching dimensionality")
+            .expect("subchunk always within shard");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
         // Calculate the chunk's position in the output view coordinate space
         let chunk_relative = chunk_subset_overlap.relative_to(&array_subset_start)?;
@@ -398,7 +399,9 @@ fn partial_decode_fixed_array_subset_into(
         }
     };
 
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
     crate::iter_concurrent_limit!(
         subchunk_concurrent_limit,
         chunks.indices(),
@@ -451,7 +454,8 @@ fn partial_decode_variable_array_subset(
         // Get the subset of bytes from the chunk which intersect the array
         let chunk_subset = shard_chunk_grid
             .subset(&chunk_indices)
-            .expect("matching dimensionality");
+            .expect("matching dimensionality")
+            .expect("subchunk always within shard");
         let chunk_subset_overlap = array_subset.overlap(&chunk_subset)?;
 
         let chunk_subset_bytes = if offset == u64::MAX && size == u64::MAX {
@@ -487,7 +491,9 @@ fn partial_decode_variable_array_subset(
         ))
     };
     // Decode the subchunk subsets
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
     let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
         subchunk_concurrent_limit,
         chunks.indices(),
