@@ -34,7 +34,8 @@ use itertools::izip;
 pub type RegularBoundedChunkGridConfiguration = super::RegularChunkGridConfiguration; // TODO: move to zarrs_metadata_ex on stabilisation
 
 use crate::array::{
-    ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
+    ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionError,
+    IncompatibleDimensionalityError,
 };
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
@@ -126,6 +127,31 @@ unsafe impl ChunkGridTraits for RegularBoundedChunkGrid {
 
     fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
+    }
+
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+        if dimension >= self.dimensionality() {
+            return Err(IncompatibleDimensionError::new(
+                dimension,
+                self.dimensionality(),
+            ));
+        }
+        if self.array_shape[dimension] == 0 {
+            return Ok(Vec::new());
+        }
+        let chunk_size = self.chunk_shape.as_slice()[dimension];
+        let n_chunks = self.grid_shape[dimension] as usize;
+        let mut result = Vec::with_capacity(n_chunks);
+        result.resize(n_chunks - 1, chunk_size);
+        let last_edge = self.array_shape[dimension] - (n_chunks - 1) as u64 * chunk_size.get();
+        result.push(
+            // SAFETY: last_edge > 0 because n_chunks = ceil(array_shape / chunk_size)
+            unsafe { NonZeroU64::new_unchecked(last_edge) },
+        );
+        Ok(result)
     }
 
     fn chunk_shape(
@@ -291,6 +317,41 @@ mod tests {
 
     use super::*;
     use crate::array::{ArrayIndicesTinyVec, ArraySubset};
+
+    #[test]
+    fn chunk_grid_regular_bounded_edge_lengths() {
+        let array_shape: ArrayShape = vec![10, 20];
+        let chunk_shape: ChunkShape =
+            vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(7).unwrap()];
+        let grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
+
+        assert_eq!(
+            grid.chunk_edge_lengths(0).unwrap(),
+            vec![
+                NonZeroU64::new(3).unwrap(),
+                NonZeroU64::new(3).unwrap(),
+                NonZeroU64::new(3).unwrap(),
+                NonZeroU64::new(1).unwrap(),
+            ]
+        );
+        assert_eq!(
+            grid.chunk_edge_lengths(1).unwrap(),
+            vec![
+                NonZeroU64::new(7).unwrap(),
+                NonZeroU64::new(7).unwrap(),
+                NonZeroU64::new(6).unwrap(),
+            ]
+        );
+
+        let unlimited = RegularBoundedChunkGrid::new(vec![0, 20], chunk_shape.clone()).unwrap();
+        assert_eq!(
+            unlimited.chunk_edge_lengths(0).unwrap(),
+            Vec::<NonZeroU64>::new()
+        );
+
+        let result = grid.chunk_edge_lengths(2);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn chunk_grid_regular_bounded_metadata() {

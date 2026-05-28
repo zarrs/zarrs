@@ -25,7 +25,8 @@ use std::num::NonZeroU64;
 use thiserror::Error;
 
 use crate::array::{
-    ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionalityError,
+    ArrayIndices, ArrayShape, ArraySubset, ChunkShape, IncompatibleDimensionError,
+    IncompatibleDimensionalityError,
 };
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
@@ -135,6 +136,23 @@ unsafe impl ChunkGridTraits for RegularChunkGrid {
 
     fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
+    }
+
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+        if dimension >= self.dimensionality() {
+            return Err(IncompatibleDimensionError::new(
+                dimension,
+                self.dimensionality(),
+            ));
+        }
+        if self.array_shape[dimension] == 0 {
+            return Ok(Vec::new());
+        }
+        let edge_length = self.chunk_shape.as_slice()[dimension];
+        Ok(vec![edge_length; self.grid_shape[dimension] as usize])
     }
 
     fn subset(
@@ -264,6 +282,36 @@ mod tests {
     use super::*;
     use crate::array::{ArrayIndicesTinyVec, ArraySubset};
     use zarrs_chunk_grid::{ChunkGrid, ChunkGridTraitsIterators};
+
+    #[test]
+    fn chunk_grid_regular_edge_lengths() {
+        let array_shape: ArrayShape = vec![10, 20];
+        let chunk_shape: ChunkShape =
+            vec![NonZeroU64::new(3).unwrap(), NonZeroU64::new(7).unwrap()];
+        let grid = RegularChunkGrid::new(array_shape, chunk_shape.clone()).unwrap();
+
+        assert_eq!(
+            grid.chunk_edge_lengths(0).unwrap(),
+            vec![chunk_shape[0]; 4usize]
+        );
+        assert_eq!(
+            grid.chunk_edge_lengths(1).unwrap(),
+            vec![chunk_shape[1]; 3usize]
+        );
+
+        let unlimited = RegularChunkGrid::new(vec![0, 20], chunk_shape.clone()).unwrap();
+        assert_eq!(
+            unlimited.chunk_edge_lengths(0).unwrap(),
+            Vec::<NonZeroU64>::new()
+        );
+        assert_eq!(
+            unlimited.chunk_edge_lengths(1).unwrap(),
+            vec![chunk_shape[1]; 3usize]
+        );
+
+        let result = grid.chunk_edge_lengths(2);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn chunk_grid_regular_configuration() {
