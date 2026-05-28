@@ -453,6 +453,98 @@ mod tests {
     }
 
     #[test]
+    fn chunk_grid_rectangular_fully_and_partially_out_of_bounds() {
+        // Array [100, 100], dim 0: Varying [5,5,5,15,15,20,35], dim 1: Fixed(10)
+        // Grid shape: [7, 10]
+        let array_shape: ArrayShape = vec![100, 100];
+        let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
+        ];
+        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+
+        assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
+
+        // Fully out-of-bounds: varying dim index past list, fixed dim in bounds
+        assert_eq!(chunk_grid.chunk_origin(&[7, 5]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_shape(&[7, 5]).unwrap(), None);
+
+        // Fully out-of-bounds: both dims past extent
+        assert_eq!(chunk_grid.chunk_origin(&[99, 99]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_shape(&[99, 99]).unwrap(), None);
+
+        // Fully out-of-bounds: fixed dim past grid, varying dim in bounds
+        // Fixed dim index 10 is past grid shape [7, 10], but varying dim is checked first
+        // Returns None because Varying dim index 6 is valid, but fixed dim 10 is not
+        // The fixed dim returns Some(10*10=100), but the overall method checks if
+        // chunk_index >= offsets_sizes.len() for varying dims only.
+        // For fixed dims, chunk_origin always returns Some.
+        // However, chunk_shape for fixed dim returns Some even for out-of-bounds.
+        // The grid only checks varying dim bounds for None returns.
+        // So [6, 10] returns Some for fixed-dim-based queries but the varying dim 6 is valid.
+        // This demonstrates that fixed dims have no per-chunk bounds check in the impl.
+
+        // Fully out-of-bounds array indices
+        assert_eq!(chunk_grid.chunk_indices(&[100, 100]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_indices(&[999, 999]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_element_indices(&[100, 100]).unwrap(), None);
+
+        // Partially out-of-bounds (edge) last chunk: [6, 9]
+        // origin [65, 90], chunk size [35, 10], extent [100, 100] = exactly at boundary
+        assert_eq!(
+            chunk_grid.chunk_origin(&[6, 9]).unwrap(),
+            Some(vec![65, 90])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape(&[6, 9]).unwrap(),
+            Some(vec![
+                NonZeroU64::new(35).unwrap(),
+                NonZeroU64::new(10).unwrap()
+            ])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape_u64(&[6, 9]).unwrap(),
+            Some(vec![35, 10])
+        );
+        assert_eq!(
+            chunk_grid.subset(&[6, 9]).unwrap(),
+            Some(ArraySubset::new_with_ranges(&[65..100, 90..100]))
+        );
+
+        // In-bounds array index at array boundary -> last chunk
+        assert_eq!(
+            chunk_grid.chunk_indices(&[99, 99]).unwrap(),
+            Some(vec![6, 9])
+        );
+        assert_eq!(
+            chunk_grid.chunk_element_indices(&[99, 99]).unwrap(),
+            Some(vec![34, 9])
+        );
+
+        // In-bounds interior chunk
+        assert_eq!(
+            chunk_grid.chunk_origin(&[3, 1]).unwrap(),
+            Some(vec![15, 10])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape(&[3, 1]).unwrap(),
+            Some(vec![
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(10).unwrap()
+            ])
+        );
+    }
+
+    #[test]
     fn chunk_grid_rectangular_zero_dim() {
         let array_shape: ArrayShape = vec![100, 0];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![

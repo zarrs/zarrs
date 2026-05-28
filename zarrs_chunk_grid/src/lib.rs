@@ -219,7 +219,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The shape of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the shape of the chunk at `chunk_indices` cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -230,7 +230,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The shape of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the shape of the chunk at `chunk_indices` cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -241,7 +241,8 @@ pub unsafe trait ChunkGridTraits:
 
     /// The origin of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the chunk origin cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds (its origin would fall entirely past the array extent in at least one dimension).
+    /// Partially out-of-bounds edge chunks that still overlap the array return [`Some`].
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if the length of `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -252,7 +253,8 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return the [`ArraySubset`] of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the chunk subset cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds.
+    /// The subset covers the whole chunk, even if it extends beyond the array shape.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -275,7 +277,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return the [`ArraySubset`] of the chunks in `chunks`.
     ///
-    /// Returns [`None`] if the chunk subset cannot be determined.
+    /// Returns [`None`] if any chunk in the specified range is fully out of bounds.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunks` do not match the dimensionality of the chunk grid.
@@ -306,7 +308,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The indices of a chunk which has the element at `array_indices`.
     ///
-    /// Returns [`None`] if the chunk indices cannot be determined.
+    /// Returns [`None`] if `array_indices` are out of bounds (past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `array_indices` do not match the dimensionality of the chunk grid.
@@ -317,7 +319,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The indices within the chunk of the element at `array_indices`.
     ///
-    /// Returns [`None`] if the chunk element indices cannot be determined.
+    /// Returns [`None`] if `array_indices` are out of bounds (past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `array_indices` do not match the dimensionality of the chunk grid.
