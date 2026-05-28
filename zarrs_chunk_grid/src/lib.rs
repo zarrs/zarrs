@@ -212,13 +212,9 @@ pub unsafe trait ChunkGridTraits:
     fn dimensionality(&self) -> usize;
 
     /// The array shape (i.e. number of elements).
-    ///
-    /// If supported by the chunk grid, zero sized dimensions are considered "unlimited".
     fn array_shape(&self) -> &[u64];
 
     /// The grid shape (i.e. number of chunks).
-    ///
-    /// If supported by the chunk grid, the grid will have zero sized dimensions where the array shape is zero, which is considered "unlimited".
     fn grid_shape(&self) -> &[u64];
 
     /// The shape of the chunk at `chunk_indices`.
@@ -333,23 +329,21 @@ pub unsafe trait ChunkGridTraits:
     /// Check if array indices are in-bounds.
     ///
     /// Ensures array indices are within the array shape.
-    /// Zero sized array dimensions are considered "unlimited" and always in-bounds.
     #[must_use]
     fn array_indices_inbounds(&self, array_indices: &[u64]) -> bool {
         array_indices.len() == self.dimensionality()
             && std::iter::zip(array_indices, self.array_shape())
-                .all(|(&index, &shape)| shape == 0 || index < shape)
+                .all(|(&index, &shape)| index < shape)
     }
 
     /// Check if chunk indices are in-bounds.
     ///
     /// Ensures chunk grid indices are within the chunk grid shape.
-    /// Zero sized array dimensions are considered "unlimited" and always in-bounds.
     #[must_use]
     fn chunk_indices_inbounds(&self, chunk_indices: &[u64]) -> bool {
         chunk_indices.len() == self.dimensionality()
             && std::iter::zip(chunk_indices, self.grid_shape())
-                .all(|(&index, &shape)| shape == 0 || index < shape)
+                .all(|(&index, &shape)| index < shape)
     }
 
     /// Return an array subset indicating the chunks intersecting the given `region`.

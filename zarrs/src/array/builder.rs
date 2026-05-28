@@ -140,7 +140,6 @@ impl ArrayBuilder {
     /// Create a new array builder for an array at `path` from an array shape and chunk grid metadata.
     ///
     /// The length of the array shape must match the dimensionality of the intended array.
-    /// Some chunk grids (e.g. `regular`) support all zero shape, indicating the shape is unbounded.
     #[must_use]
     pub fn new(
         shape: impl Into<ArrayShape>,

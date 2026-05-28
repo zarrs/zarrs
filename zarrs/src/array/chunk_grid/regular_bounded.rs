@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn chunk_grid_regular_bounded_unlimited() {
+    fn chunk_grid_regular_bounded_zero_dim() {
         let array_shape: ArrayShape = vec![5, 7, 0];
         let chunk_shape: ChunkShape = vec![
             NonZeroU64::new(1).unwrap(),
@@ -407,13 +407,18 @@ mod tests {
         ];
         let chunk_grid = RegularBoundedChunkGrid::new(array_shape, chunk_shape).unwrap();
 
-        let array_indices: ArrayIndices = vec![3, 5, 1000];
-        assert_eq!(chunk_grid.chunk_indices(&array_indices).unwrap(), None);
-
+        // Grid shape has 0 for zero-dim
         assert_eq!(chunk_grid.grid_shape(), &[5, 4, 0]);
 
-        let chunk_indices: ArrayShape = vec![3, 1, 1000];
-        assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
+        // No indices are in-bounds for zero-dim
+        assert!(!chunk_grid.chunk_indices_inbounds(&[3, 1, 0]));
+        assert!(!chunk_grid.array_indices_inbounds(&[3, 5, 0]));
+
+        // Query methods return None for zero-dim
+        let array_indices: ArrayIndices = vec![3, 5, 1000];
+        assert_eq!(chunk_grid.chunk_indices(&array_indices).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_origin(&[0, 0, 0]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_shape(&[0, 0, 0]).unwrap(), None);
     }
 
     #[test]

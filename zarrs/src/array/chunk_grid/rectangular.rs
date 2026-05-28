@@ -197,19 +197,23 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
-                    RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                        let chunk_index = usize::try_from(*chunk_index).unwrap();
-                        if chunk_index < offsets_sizes.len() {
-                            Some(offsets_sizes[chunk_index].size)
-                        } else {
-                            None
+            if self.array_shape.contains(&0) {
+                Ok(None)
+            } else {
+                Ok(std::iter::zip(chunk_indices, &self.chunks)
+                    .map(|(chunk_index, chunks)| match chunks {
+                        RectangularChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
+                        RectangularChunkGridDimension::Varying(offsets_sizes) => {
+                            let chunk_index = usize::try_from(*chunk_index).unwrap();
+                            if chunk_index < offsets_sizes.len() {
+                                Some(offsets_sizes[chunk_index].size)
+                            } else {
+                                None
+                            }
                         }
-                    }
-                })
-                .collect::<Option<Vec<_>>>())
+                    })
+                    .collect::<Option<Vec<_>>>())
+            }
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -223,19 +227,23 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
-                    RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                        let chunk_index = usize::try_from(*chunk_index).unwrap();
-                        if chunk_index < offsets_sizes.len() {
-                            Some(offsets_sizes[chunk_index].size.get())
-                        } else {
-                            None
+            if self.array_shape.contains(&0) {
+                Ok(None)
+            } else {
+                Ok(std::iter::zip(chunk_indices, &self.chunks)
+                    .map(|(chunk_index, chunks)| match chunks {
+                        RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
+                        RectangularChunkGridDimension::Varying(offsets_sizes) => {
+                            let chunk_index = usize::try_from(*chunk_index).unwrap();
+                            if chunk_index < offsets_sizes.len() {
+                                Some(offsets_sizes[chunk_index].size.get())
+                            } else {
+                                None
+                            }
                         }
-                    }
-                })
-                .collect::<Option<Vec<_>>>())
+                    })
+                    .collect::<Option<Vec<_>>>())
+            }
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -249,21 +257,25 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
-            Ok(std::iter::zip(chunk_indices, &self.chunks)
-                .map(|(chunk_index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(chunk_size) => {
-                        Some(chunk_index * chunk_size.get())
-                    }
-                    RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                        let chunk_index = usize::try_from(*chunk_index).unwrap();
-                        if chunk_index < offsets_sizes.len() {
-                            Some(offsets_sizes[chunk_index].offset)
-                        } else {
-                            None
+            if self.array_shape.contains(&0) {
+                Ok(None)
+            } else {
+                Ok(std::iter::zip(chunk_indices, &self.chunks)
+                    .map(|(chunk_index, chunks)| match chunks {
+                        RectangularChunkGridDimension::Fixed(chunk_size) => {
+                            Some(chunk_index * chunk_size.get())
                         }
-                    }
-                })
-                .collect())
+                        RectangularChunkGridDimension::Varying(offsets_sizes) => {
+                            let chunk_index = usize::try_from(*chunk_index).unwrap();
+                            if chunk_index < offsets_sizes.len() {
+                                Some(offsets_sizes[chunk_index].offset)
+                            } else {
+                                None
+                            }
+                        }
+                    })
+                    .collect())
+            }
         } else {
             Err(IncompatibleDimensionalityError::new(
                 chunk_indices.len(),
@@ -277,31 +289,35 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         array_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if array_indices.len() == self.dimensionality() {
-            Ok(std::iter::zip(array_indices, &self.chunks)
-                .map(|(index, chunks)| match chunks {
-                    RectangularChunkGridDimension::Fixed(size) => Some(index / size.get()),
-                    RectangularChunkGridDimension::Varying(offsets_sizes) => {
-                        let last_default = OffsetSize {
-                            offset: 0,
-                            // SAFETY: 1 is non-zero
-                            size: unsafe { NonZeroU64::new_unchecked(1) },
-                        };
-                        let last = offsets_sizes.last().unwrap_or(&last_default);
-                        if *index < last.offset + last.size.get() {
-                            let partition = offsets_sizes
-                                .partition_point(|offset_size| *index >= offset_size.offset);
-                            if partition <= offsets_sizes.len() {
-                                let partition = partition as u64;
-                                Some(std::cmp::max(partition, 1) - 1)
+            if self.array_shape.contains(&0) {
+                Ok(None)
+            } else {
+                Ok(std::iter::zip(array_indices, &self.chunks)
+                    .map(|(index, chunks)| match chunks {
+                        RectangularChunkGridDimension::Fixed(size) => Some(index / size.get()),
+                        RectangularChunkGridDimension::Varying(offsets_sizes) => {
+                            let last_default = OffsetSize {
+                                offset: 0,
+                                // SAFETY: 1 is non-zero
+                                size: unsafe { NonZeroU64::new_unchecked(1) },
+                            };
+                            let last = offsets_sizes.last().unwrap_or(&last_default);
+                            if *index < last.offset + last.size.get() {
+                                let partition = offsets_sizes
+                                    .partition_point(|offset_size| *index >= offset_size.offset);
+                                if partition <= offsets_sizes.len() {
+                                    let partition = partition as u64;
+                                    Some(std::cmp::max(partition, 1) - 1)
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             }
-                        } else {
-                            None
                         }
-                    }
-                })
-                .collect())
+                    })
+                    .collect())
+            }
         } else {
             Err(IncompatibleDimensionalityError::new(
                 array_indices.len(),
@@ -332,7 +348,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         array_indices.len() == self.dimensionality()
             && itertools::izip!(array_indices, self.array_shape(), &self.chunks).all(
                 |(array_index, array_size, chunks)| {
-                    (*array_size == 0 || array_index < array_size)
+                    array_index < array_size
                         && match chunks {
                             RectangularChunkGridDimension::Fixed(_) => true,
                             RectangularChunkGridDimension::Varying(offsets_sizes) => offsets_sizes
@@ -437,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn chunk_grid_rectangular_unlimited() {
+    fn chunk_grid_rectangular_zero_dim() {
         let array_shape: ArrayShape = vec![100, 0];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
             vec![
@@ -456,18 +472,20 @@ mod tests {
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 0]);
 
-        let array_indices: ArrayIndices = vec![101, 150];
-        assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
-
-        let chunk_indices: ArrayShape = vec![6, 9];
-        assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
-        assert!(chunk_grid.chunk_origin(&chunk_indices).unwrap().is_some());
-
-        let chunk_indices: ArrayShape = vec![7, 9];
+        // No indices are in-bounds for zero-dim
+        let chunk_indices: ArrayShape = vec![6, 0];
         assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
-        assert!(chunk_grid.chunk_origin(&chunk_indices).unwrap().is_none());
 
-        let chunk_indices: ArrayShape = vec![6, 123];
-        assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
+        // Out of bounds in first dimension
+        let chunk_indices: ArrayShape = vec![7, 0];
+        assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
+
+        // No array indices are in-bounds when second dimension is zero
+        let array_indices: ArrayIndices = vec![50, 0];
+        assert!(!chunk_grid.array_indices_inbounds(&array_indices));
+
+        // Array indices beyond explicit chunks in the first dimension
+        let array_indices: ArrayIndices = vec![101, 0];
+        assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
     }
 }
