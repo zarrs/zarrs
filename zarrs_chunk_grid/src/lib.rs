@@ -34,6 +34,8 @@ pub type ArrayIndices = Vec<u64>;
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
 pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 
+use std::num::NonZeroU64;
+
 use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 
 use zarrs_metadata::Configuration;
@@ -52,6 +54,21 @@ pub struct IncompatibleDimensionalityError(usize, usize);
 
 impl IncompatibleDimensionalityError {
     /// Create a new incompatible dimensionality error.
+    #[must_use]
+    pub const fn new(got: usize, expected: usize) -> Self {
+        Self(got, expected)
+    }
+}
+
+/// An incompatible dimension error.
+///
+/// Raised when a dimension index is out of bounds for the given dimensionality.
+#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[error("dimension {0} is out of bounds, expected less than {1}")]
+pub struct IncompatibleDimensionError(usize, usize);
+
+impl IncompatibleDimensionError {
+    /// Create a new incompatible dimension error.
     #[must_use]
     pub const fn new(got: usize, expected: usize) -> Self {
         Self(got, expected)
@@ -216,6 +233,18 @@ pub unsafe trait ChunkGridTraits:
 
     /// The grid shape (i.e. number of chunks).
     fn grid_shape(&self) -> &[u64];
+
+    /// Return the edge length of each chunk along a given dimension.
+    ///
+    /// The returned vector has length equal to the grid shape for that dimension.
+    /// Each element represents the size of the corresponding chunk along that axis.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleDimensionError`] if `dimension` is out of bounds given the chunk grid's dimensionality.
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError>;
 
     /// The shape of the chunk at `chunk_indices`.
     ///

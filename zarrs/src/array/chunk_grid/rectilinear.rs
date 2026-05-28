@@ -74,7 +74,10 @@ pub use zarrs_metadata_ext::chunk_grid::rectilinear::{
     ChunkEdgeLengths, RectilinearChunkGridConfiguration, RunLengthElement,
 };
 
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
+use crate::array::{
+    ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionError,
+    IncompatibleDimensionalityError,
+};
 use zarrs_plugin::PluginCreateError;
 
 zarrs_plugin::impl_extension_aliases!(RectilinearChunkGrid, v3: "rectilinear");
@@ -256,6 +259,29 @@ unsafe impl ChunkGridTraits for RectilinearChunkGrid {
 
     fn grid_shape(&self) -> &[u64] {
         &self.grid_shape
+    }
+
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+        if dimension >= self.dimensionality() {
+            return Err(IncompatibleDimensionError::new(
+                dimension,
+                self.dimensionality(),
+            ));
+        }
+        if self.array_shape[dimension] == 0 {
+            return Ok(Vec::new());
+        }
+        match &self.chunks[dimension] {
+            RectilinearChunkGridDimension::Fixed(size) => {
+                Ok(vec![*size; self.grid_shape[dimension] as usize])
+            }
+            RectilinearChunkGridDimension::Varying(offsets_sizes) => {
+                Ok(offsets_sizes.iter().map(|os| os.size).collect())
+            }
+        }
     }
 
     fn chunk_shape(
@@ -441,6 +467,42 @@ mod tests {
             .iter()
             .map(|&v| NonZeroU64::try_from(v).map(RunLengthElement::Single))
             .collect()
+    }
+
+    #[test]
+    fn chunk_grid_rectilinear_edge_lengths() {
+        let array_shape: ArrayShape = vec![100, 100];
+        let chunk_shapes: Vec<ChunkEdgeLengths> = vec![
+            ChunkEdgeLengths::Varying(from_slice_u64(&[5, 5, 5, 15, 15, 20, 35]).unwrap()),
+            ChunkEdgeLengths::Scalar(NonZeroU64::new(10).unwrap()),
+        ];
+        let grid = RectilinearChunkGrid::new(array_shape, &chunk_shapes).unwrap();
+
+        assert_eq!(
+            grid.chunk_edge_lengths(0).unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+        );
+        assert_eq!(
+            grid.chunk_edge_lengths(1).unwrap(),
+            vec![NonZeroU64::new(10).unwrap(); 10usize]
+        );
+
+        let unlimited = RectilinearChunkGrid::new(vec![0, 100], &chunk_shapes).unwrap();
+        assert_eq!(
+            unlimited.chunk_edge_lengths(0).unwrap(),
+            Vec::<NonZeroU64>::new()
+        );
+
+        let result = grid.chunk_edge_lengths(2);
+        assert!(result.is_err());
     }
 
     #[test]

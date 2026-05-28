@@ -56,7 +56,8 @@ use crate::node::{NodePath, data_key};
 pub use zarrs_chunk_grid::{
     ArrayIndices, ArrayIndicesTinyVec, ArrayShape, ArraySubset, ArraySubsetError,
     ArraySubsetTraits, ChunkGrid, ChunkGridTraits, ChunkGridTraitsIterators, ChunkShape,
-    ChunkShapeTraits, IncompatibleDimensionalityError, Indexer, IndexerError, iterators,
+    ChunkShapeTraits, IncompatibleDimensionError, IncompatibleDimensionalityError, Indexer,
+    IndexerError, iterators,
 };
 pub use zarrs_chunk_key_encoding::{ChunkKeyEncoding, ChunkKeyEncodingTraits};
 pub use zarrs_codec::{
