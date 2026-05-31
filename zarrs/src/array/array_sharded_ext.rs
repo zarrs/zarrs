@@ -19,18 +19,6 @@ fn subchunk_sizes(chunk_size: u64, subchunk_size: NonZeroU64) -> impl Iterator<I
     })
 }
 
-fn chunk_size_in_dimension(
-    chunk_grid: &ChunkGrid,
-    chunk_indices: &[u64],
-    dim: usize,
-) -> Option<u64> {
-    chunk_grid
-        .chunk_shape(chunk_indices)
-        .ok()
-        .flatten()
-        .map(|chunk_shape| chunk_shape[dim].get())
-}
-
 /// Compute the subchunk grid shape and edge lengths for a single dimension.
 ///
 /// Returns `None` if the dimension has zero grid shape and the decoded chunk
@@ -38,15 +26,13 @@ fn chunk_size_in_dimension(
 /// the original chunk grid unchanged).
 fn compute_dimension_subchunk_info(
     dim: usize,
-    dimensionality: usize,
-    grid_shape: &[u64],
+    chunk_edge_lengths: &[NonZeroU64],
     decoded_chunk_shape: &ChunkShape,
     subchunk_shape: &ChunkShape,
-    chunk_grid: &ChunkGrid,
 ) -> Option<(u64, ChunkEdgeLengths)> {
     let subchunk_size = subchunk_shape[dim];
 
-    if grid_shape[dim] == 0 {
+    if chunk_edge_lengths.is_empty() {
         if decoded_chunk_shape[dim]
             .get()
             .is_multiple_of(subchunk_size.get())
@@ -56,14 +42,11 @@ fn compute_dimension_subchunk_info(
         return None;
     }
 
-    let mut chunk_indices = vec![0; dimensionality];
     let mut dimension_shape = 0;
     let mut sizes: Option<Vec<RunLengthElement>> = None;
     let mut regular_subchunk_count = 0;
 
-    for chunk_index in 0..grid_shape[dim] {
-        chunk_indices[dim] = chunk_index;
-        let chunk_size = chunk_size_in_dimension(chunk_grid, &chunk_indices, dim)?;
+    for chunk_size in chunk_edge_lengths.iter().map(|chunk_size| chunk_size.get()) {
         dimension_shape += chunk_size;
 
         if chunk_size % subchunk_size.get() == 0 {
@@ -113,19 +96,17 @@ pub(crate) fn create_subchunk_grid(
         return Some(chunk_grid.clone());
     }
 
-    let grid_shape = chunk_grid.grid_shape();
     let mut needs_rectilinear = false;
     let mut subchunk_grid_shape = Vec::with_capacity(dimensionality);
-    let mut chunk_edge_lengths = Vec::with_capacity(dimensionality);
+    let mut subchunk_edge_lengths = Vec::with_capacity(dimensionality);
 
     for dim in 0..dimensionality {
+        let chunk_edge_lengths = chunk_grid.chunk_edge_lengths(dim).ok()?;
         let Some((dimension_shape, edge_lengths)) = compute_dimension_subchunk_info(
             dim,
-            dimensionality,
-            grid_shape,
+            &chunk_edge_lengths,
             &decoded_chunk_shape,
             &subchunk_shape,
-            chunk_grid,
         ) else {
             return Some(chunk_grid.clone());
         };
@@ -134,12 +115,12 @@ pub(crate) fn create_subchunk_grid(
             needs_rectilinear = true;
         }
         subchunk_grid_shape.push(dimension_shape);
-        chunk_edge_lengths.push(edge_lengths);
+        subchunk_edge_lengths.push(edge_lengths);
     }
 
     if needs_rectilinear {
         Some(ChunkGrid::new(
-            RectilinearChunkGrid::new(subchunk_grid_shape, &chunk_edge_lengths).ok()?,
+            RectilinearChunkGrid::new(subchunk_grid_shape, &subchunk_edge_lengths).ok()?,
         ))
     } else {
         Some(ChunkGrid::new(
