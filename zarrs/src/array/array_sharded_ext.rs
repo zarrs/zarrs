@@ -193,12 +193,17 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
     }
 }
 
-pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
+struct SubchunkShardLocation {
+    shard_indices: Vec<u64>,
+    shard_origin: Vec<u64>,
+    array_subset: ArraySubset,
+}
+
+fn subchunk_shard_location<TStorage: ?Sized>(
     array: &Array<TStorage>,
     subchunk_grid: &ChunkGrid,
     subchunk_indices: &[u64],
-) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
-    // TODO: Can this logic be simplified?
+) -> Result<SubchunkShardLocation, ArrayError> {
     let array_subset = subchunk_grid
         .subset(subchunk_indices)?
         .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
@@ -213,8 +218,21 @@ pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
     }
     let shard_indices = shards.start();
     let shard_origin = array.chunk_origin(shard_indices)?;
-    let shard_subset = array_subset.relative_to(&shard_origin)?;
-    Ok((shard_indices.to_vec(), shard_subset))
+    Ok(SubchunkShardLocation {
+        shard_indices: shard_indices.to_vec(),
+        shard_origin,
+        array_subset,
+    })
+}
+
+pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
+    array: &Array<TStorage>,
+    subchunk_grid: &ChunkGrid,
+    subchunk_indices: &[u64],
+) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
+    let location = subchunk_shard_location(array, subchunk_grid, subchunk_indices)?;
+    let shard_subset = location.array_subset.relative_to(&location.shard_origin)?;
+    Ok((location.shard_indices, shard_subset))
 }
 
 pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
@@ -222,19 +240,20 @@ pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
     subchunk_grid: &ChunkGrid,
     subchunk_indices: &[u64],
 ) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
-    // TODO: Simplify this?
-    let (shard_indices, shard_subset) =
-        subchunk_shard_index_and_subset(array, subchunk_grid, subchunk_indices)?;
-    let subchunk_shape = subchunk_grid
-        .chunk_shape(subchunk_indices)?
+    let location = subchunk_shard_location(array, subchunk_grid, subchunk_indices)?;
+    let first_subchunk_indices = subchunk_grid
+        .chunk_indices(&location.shard_origin)
+        .map_err(|_| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?
         .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
-    let chunk_indices: Vec<u64> = shard_subset
-        .start()
+    let chunk_indices: Vec<u64> = subchunk_indices
         .iter()
-        .zip(subchunk_shape.as_slice())
-        .map(|(o, s)| o / s.get())
-        .collect();
-    Ok((shard_indices, chunk_indices))
+        .zip(first_subchunk_indices)
+        .map(|(subchunk_index, first_subchunk_index)| {
+            subchunk_index.checked_sub(first_subchunk_index)
+        })
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
+    Ok((location.shard_indices, chunk_indices))
 }
 mod private {
     use super::Array;

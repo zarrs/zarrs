@@ -695,6 +695,50 @@ mod tests {
             subchunk_grid.subset(&[5])?.unwrap(),
             ArraySubset::new_with_ranges(&[9..10])
         );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[0])?,
+            (vec![0], vec![0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[1])?,
+            (vec![0], vec![1])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2])?,
+            (vec![0], vec![2])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[3])?,
+            (vec![1], vec![0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[5])?,
+            (vec![1], vec![2])
+        );
+
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new(
+            vec![10, 10], // array shape
+            vec![5, 5],   // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.subchunk_shape(vec![2, 2]);
+        let array_2d = builder.build(store, "/array_2d")?;
+        let subchunk_grid_2d = array_2d.subchunk_grid();
+        assert_eq!(subchunk_grid_2d.grid_shape(), &[6, 6]);
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[2, 2])?,
+            (vec![0, 0], vec![2, 2])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[3, 3])?,
+            (vec![1, 1], vec![0, 0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[5, 5])?,
+            (vec![1, 1], vec![2, 2])
+        );
 
         array.set_shape(vec![9])?;
         let subchunk_grid = array.subchunk_grid();
