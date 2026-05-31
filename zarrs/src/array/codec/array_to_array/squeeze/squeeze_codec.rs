@@ -114,7 +114,7 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn partial_decode_granularity(
         &self,
         decoded_shape: &[NonZeroU64],
-        encoded_granularity: &[NonZeroU64],
+        _encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
         // TODO: This could be refined in some situations depending on the encoded granularity and decoded shape.
         Ok(decoded_shape.to_vec())
