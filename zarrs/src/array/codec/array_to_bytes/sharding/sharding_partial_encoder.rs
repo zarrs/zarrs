@@ -6,6 +6,7 @@ use itertools::Itertools;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
@@ -167,7 +168,10 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             .max()
             .expect("shards cannot be empty");
 
-        let get_subchunks = |chunk_subset| self.chunk_grid.chunks_in_array_subset(chunk_subset);
+        let get_subchunks = |chunk_subset| {
+            let c = self.chunk_grid.chunks_in_array_subset(chunk_subset)?;
+            Ok::<_, CodecError>(c.expect("subchunks always within shard"))
+        };
         let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
                 &self.data_type,
@@ -221,7 +225,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 let subchunk_subset = self
                     .chunk_grid
                     .subset(&subchunk_indices)
-                    .expect("matching dimensionality");
+                    .expect("matching dimensionality")
+                    .expect("subchunk always within shard");
 
                 // Check if the subchunk straddles the chunk subset
                 if subchunk_subset
@@ -317,7 +322,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
             let subchunk_subset = self
                 .chunk_grid
                 .subset(&subchunk_indices)
-                .expect("matching dimensionality");
+                .expect("matching dimensionality")
+                .expect("subchunk always within shard");
             let subchunk_subset_overlap = chunk_subset_indexer.overlap(&subchunk_subset).unwrap();
             let subchunk_bytes = chunk_subset_bytes.extract_array_subset(
                 &subchunk_subset_overlap

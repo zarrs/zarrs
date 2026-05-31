@@ -34,6 +34,8 @@ pub type ArrayIndices = Vec<u64>;
 /// Uses [`TinyVec`](tinyvec::TinyVec) for stack allocation up to 4 dimensions.
 pub type ArrayIndicesTinyVec = tinyvec::TinyVec<[u64; 4]>;
 
+use std::num::NonZeroU64;
+
 use iterators::{IndicesIntoIterator, ParIndicesIntoIterator};
 
 use zarrs_metadata::Configuration;
@@ -52,6 +54,21 @@ pub struct IncompatibleDimensionalityError(usize, usize);
 
 impl IncompatibleDimensionalityError {
     /// Create a new incompatible dimensionality error.
+    #[must_use]
+    pub const fn new(got: usize, expected: usize) -> Self {
+        Self(got, expected)
+    }
+}
+
+/// An incompatible dimension error.
+///
+/// Raised when a dimension index is out of bounds for the given dimensionality.
+#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[error("dimension {0} is out of bounds, expected less than {1}")]
+pub struct IncompatibleDimensionError(usize, usize);
+
+impl IncompatibleDimensionError {
+    /// Create a new incompatible dimension error.
     #[must_use]
     pub const fn new(got: usize, expected: usize) -> Self {
         Self(got, expected)
@@ -212,18 +229,26 @@ pub unsafe trait ChunkGridTraits:
     fn dimensionality(&self) -> usize;
 
     /// The array shape (i.e. number of elements).
-    ///
-    /// If supported by the chunk grid, zero sized dimensions are considered "unlimited".
     fn array_shape(&self) -> &[u64];
 
     /// The grid shape (i.e. number of chunks).
-    ///
-    /// If supported by the chunk grid, the grid will have zero sized dimensions where the array shape is zero, which is considered "unlimited".
     fn grid_shape(&self) -> &[u64];
+
+    /// Return the edge length of each chunk along a given dimension.
+    ///
+    /// The returned vector has length equal to the grid shape for that dimension.
+    /// Each element represents the size of the corresponding chunk along that axis.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleDimensionError`] if `dimension` is out of bounds given the chunk grid's dimensionality.
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError>;
 
     /// The shape of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the shape of the chunk at `chunk_indices` cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -234,7 +259,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The shape of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the shape of the chunk at `chunk_indices` cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is out of bounds (fully past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -245,7 +270,8 @@ pub unsafe trait ChunkGridTraits:
 
     /// The origin of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the chunk origin cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds (its origin would fall entirely past the array extent in at least one dimension).
+    /// Partially out-of-bounds edge chunks that still overlap the array return [`Some`].
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if the length of `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -256,7 +282,8 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return the [`ArraySubset`] of the chunk at `chunk_indices`.
     ///
-    /// Returns [`None`] if the chunk subset cannot be determined.
+    /// Returns [`None`] if the chunk at `chunk_indices` is fully out of bounds.
+    /// The subset covers the whole chunk, even if it extends beyond the array shape.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunk_indices` do not match the dimensionality of the chunk grid.
@@ -279,7 +306,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// Return the [`ArraySubset`] of the chunks in `chunks`.
     ///
-    /// Returns [`None`] if the chunk subset cannot be determined.
+    /// Returns [`None`] if any chunk in the specified range is fully out of bounds.
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `chunks` do not match the dimensionality of the chunk grid.
@@ -310,7 +337,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The indices of a chunk which has the element at `array_indices`.
     ///
-    /// Returns [`None`] if the chunk indices cannot be determined.
+    /// Returns [`None`] if `array_indices` are out of bounds (past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `array_indices` do not match the dimensionality of the chunk grid.
@@ -321,7 +348,7 @@ pub unsafe trait ChunkGridTraits:
 
     /// The indices within the chunk of the element at `array_indices`.
     ///
-    /// Returns [`None`] if the chunk element indices cannot be determined.
+    /// Returns [`None`] if `array_indices` are out of bounds (past the array extent).
     ///
     /// # Errors
     /// Returns [`IncompatibleDimensionalityError`] if `array_indices` do not match the dimensionality of the chunk grid.
@@ -333,23 +360,21 @@ pub unsafe trait ChunkGridTraits:
     /// Check if array indices are in-bounds.
     ///
     /// Ensures array indices are within the array shape.
-    /// Zero sized array dimensions are considered "unlimited" and always in-bounds.
     #[must_use]
     fn array_indices_inbounds(&self, array_indices: &[u64]) -> bool {
         array_indices.len() == self.dimensionality()
             && std::iter::zip(array_indices, self.array_shape())
-                .all(|(&index, &shape)| shape == 0 || index < shape)
+                .all(|(&index, &shape)| index < shape)
     }
 
     /// Check if chunk indices are in-bounds.
     ///
     /// Ensures chunk grid indices are within the chunk grid shape.
-    /// Zero sized array dimensions are considered "unlimited" and always in-bounds.
     #[must_use]
     fn chunk_indices_inbounds(&self, chunk_indices: &[u64]) -> bool {
         chunk_indices.len() == self.dimensionality()
             && std::iter::zip(chunk_indices, self.grid_shape())
-                .all(|(&index, &shape)| shape == 0 || index < shape)
+                .all(|(&index, &shape)| index < shape)
     }
 
     /// Return an array subset indicating the chunks intersecting the given `region`.

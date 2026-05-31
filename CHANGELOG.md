@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
 
 ### Changed
+- **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
+- **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
+  - Reading/writing completely out-of-bounds chunks is now an error
+  - Querying completely out-of-bounds chunks always returns `None`
+  - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 
