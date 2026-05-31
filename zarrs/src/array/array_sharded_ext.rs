@@ -1,13 +1,15 @@
 use std::num::NonZeroU64;
 
-use super::chunk_grid::{RectilinearChunkGrid, RegularChunkGrid};
+use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};
 use super::codec::ShardingCodecConfiguration;
 use super::{Array, ArrayError, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
 use crate::array::chunk_grid::ChunkEdgeLengths;
+use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
 use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
+use zarrs_plugin::ExtensionAliasesV3;
 
 /// Iterate over subchunk sizes for a parent chunk along a single dimension.
 fn subchunk_sizes(chunk_size: u64, subchunk_size: NonZeroU64) -> impl Iterator<Item = NonZeroU64> {
@@ -80,6 +82,40 @@ fn compute_dimension_subchunk_info(
     Some((dimension_shape, edge_lengths))
 }
 
+fn repeated_subchunk_grid_for_regular_shards(
+    chunk_grid: &ChunkGrid,
+    decoded_chunk_shape: &ChunkShape,
+    subchunk_shape: &ChunkShape,
+) -> Option<ChunkGrid> {
+    if !chunk_grid
+        .name_v3()
+        .is_some_and(|name| RegularChunkGrid::matches_name_v3(name.as_ref()))
+    {
+        return None;
+    }
+
+    let tile_shape: ArrayShape = decoded_chunk_shape
+        .iter()
+        .map(|edge_length| edge_length.get())
+        .collect();
+    let repeats = chunk_grid.grid_shape().to_vec();
+    let inner_chunk_grid = if std::iter::zip(&tile_shape, subchunk_shape)
+        .all(|(tile_size, subchunk_size)| tile_size % subchunk_size.get() == 0)
+    {
+        RegularChunkGrid::new(tile_shape.clone(), subchunk_shape.clone())
+            .ok()?
+            .into()
+    } else {
+        RegularBoundedChunkGrid::new(tile_shape, subchunk_shape.clone())
+            .ok()?
+            .into()
+    };
+
+    RepeatChunkGrid::new(repeats, inner_chunk_grid)
+        .ok()
+        .map(ChunkGrid::new)
+}
+
 pub(crate) fn create_subchunk_grid(
     chunk_grid: &ChunkGrid,
     codecs: &CodecChain,
@@ -94,6 +130,12 @@ pub(crate) fn create_subchunk_grid(
     let subchunk_shape = codecs.partial_decode_granularity(&decoded_chunk_shape);
     if subchunk_shape == decoded_chunk_shape {
         return Some(chunk_grid.clone());
+    }
+
+    if let Some(subchunk_grid) =
+        repeated_subchunk_grid_for_regular_shards(chunk_grid, &decoded_chunk_shape, &subchunk_shape)
+    {
+        return Some(subchunk_grid);
     }
 
     let mut needs_rectilinear = false;
@@ -261,4 +303,179 @@ mod private {
     pub trait Sealed {}
 
     impl<TStorage: ?Sized> Sealed for Array<TStorage> {}
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroU64;
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::array::chunk_grid::{RectangularChunkGrid, RectilinearChunkGrid};
+    use crate::array::{ArrayBuilder, data_type};
+    use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridDimensionConfiguration;
+    use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
+    use zarrs_plugin::ExtensionName;
+    use zarrs_storage::store::MemoryStore;
+
+    fn nz(value: u64) -> NonZeroU64 {
+        NonZeroU64::new(value).unwrap()
+    }
+
+    fn build_array_with_chunk_grid(
+        chunk_grid: impl Into<ChunkGrid>,
+        subchunk_shape: Vec<u64>,
+    ) -> Result<Array<MemoryStore>, Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new_with_chunk_grid(chunk_grid, data_type::uint16(), 0u16);
+        builder.subchunk_shape(subchunk_shape);
+        Ok(builder.build(store, "/array")?)
+    }
+
+    fn assert_subchunk_grid(
+        array: &Array<MemoryStore>,
+        expected_array_shape: &[u64],
+        expected_grid_shape: &[u64],
+        expected_edge_lengths: &[NonZeroU64],
+    ) -> Result<ChunkGrid, Box<dyn std::error::Error>> {
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.array_shape(), expected_array_shape);
+        assert_eq!(subchunk_grid.grid_shape(), expected_grid_shape);
+        assert_eq!(subchunk_grid.chunk_edge_lengths(0)?, expected_edge_lengths);
+        Ok(subchunk_grid)
+    }
+
+    #[test]
+    fn subchunk_grid_regular_outer_uses_repeat_chunk_grid() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new(vec![8, 8], vec![4, 4], data_type::uint16(), 0u16);
+        builder.subchunk_shape(vec![2, 2]);
+        let array = builder.build(store, "/array")?;
+
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.name_v3(), None);
+        assert_eq!(subchunk_grid.array_shape(), &[8, 8]);
+        assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
+        assert_eq!(
+            subchunk_grid.subset(&[2, 3])?,
+            Some(ArraySubset::new_with_ranges(&[4..6, 6..8]))
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2, 3])?,
+            (vec![1, 1], vec![0, 1])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn subchunk_grid_regular_outer_covers_full_repeated_shard_extent()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new(vec![7, 7], vec![4, 4], data_type::uint16(), 0u16);
+        builder.subchunk_shape(vec![2, 2]);
+        let array = builder.build(store, "/array")?;
+
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(array.shape(), &[7, 7]);
+        assert_eq!(array.chunk_grid_shape(), &[2, 2]);
+        assert_eq!(subchunk_grid.name_v3(), None);
+        assert_eq!(subchunk_grid.array_shape(), &[8, 8]);
+        assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
+        assert_eq!(
+            subchunk_grid.subset(&[3, 3])?,
+            Some(ArraySubset::new_with_ranges(&[6..8, 6..8]))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[allow(clippy::single_range_in_vec_init)]
+    fn subchunk_grid_regular_outer_uses_bounded_inner_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new(vec![10], vec![5], data_type::uint16(), 0u16);
+        builder.subchunk_shape(vec![3]);
+        let array = builder.build(store, "/array")?;
+
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.name_v3(), None);
+        assert_eq!(subchunk_grid.array_shape(), &[10]);
+        assert_eq!(subchunk_grid.grid_shape(), &[4]);
+        assert_eq!(
+            subchunk_grid.chunk_edge_lengths(0)?,
+            vec![nz(3), nz(2), nz(3), nz(2)]
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[1])?,
+            Some(ArraySubset::new_with_ranges(&[3..5]))
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[3])?,
+            Some(ArraySubset::new_with_ranges(&[8..10]))
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[3])?,
+            (vec![1], vec![1])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[allow(clippy::single_range_in_vec_init)]
+    fn subchunk_grid_from_varying_shard_edges_uses_rectilinear_subchunk_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let arrays = [
+            build_array_with_chunk_grid(
+                RectilinearChunkGrid::new(
+                    vec![12],
+                    &[ChunkEdgeLengths::Varying(vec![
+                        RunLengthElement::Single(nz(5)),
+                        RunLengthElement::Single(nz(7)),
+                    ])],
+                )?,
+                vec![3],
+            )?,
+            build_array_with_chunk_grid(
+                RectangularChunkGrid::new(
+                    vec![12],
+                    &[RectangularChunkGridDimensionConfiguration::Varying(vec![
+                        nz(5),
+                        nz(7),
+                    ])],
+                )?,
+                vec![3],
+            )?,
+        ];
+
+        for array in arrays {
+            let subchunk_grid =
+                assert_subchunk_grid(&array, &[12], &[5], &[nz(3), nz(2), nz(3), nz(3), nz(1)])?;
+            let subchunk_grid_name = subchunk_grid.name_v3().unwrap();
+            assert!(RectilinearChunkGrid::matches_name_v3(
+                subchunk_grid_name.as_ref()
+            ));
+            assert_eq!(
+                subchunk_grid.subset(&[1])?,
+                Some(ArraySubset::new_with_ranges(&[3..5]))
+            );
+            assert_eq!(
+                subchunk_grid.subset(&[2])?,
+                Some(ArraySubset::new_with_ranges(&[5..8]))
+            );
+            assert_eq!(
+                subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2])?,
+                (vec![1], vec![0])
+            );
+            assert_eq!(
+                subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[4])?,
+                (vec![1], vec![2])
+            );
+        }
+
+        Ok(())
+    }
 }
