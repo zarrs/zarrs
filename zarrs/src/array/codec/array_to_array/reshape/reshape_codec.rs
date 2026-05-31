@@ -25,6 +25,93 @@ pub struct ReshapeCodec {
     shape: ReshapeShape,
 }
 
+/// Return the row-major linear length of an encoded granule if every encoded
+/// granule is contiguous in linear storage order.
+///
+/// Returns `None` if the granularity does not tile the encoded shape or if an
+/// encoded granule spans a non-contiguous rectangle in row-major order.
+fn encoded_granularity_linear_interval_len(
+    encoded_shape: &[NonZeroU64],
+    encoded_granularity: &[NonZeroU64],
+) -> Option<u64> {
+    for (shape, granularity) in encoded_shape.iter().zip(encoded_granularity) {
+        if granularity.get() > shape.get() || !shape.get().is_multiple_of(granularity.get()) {
+            return None;
+        }
+    }
+
+    let Some(first_non_unit_axis) = encoded_granularity
+        .iter()
+        .position(|granularity| granularity.get() > 1)
+    else {
+        return Some(1);
+    };
+
+    let mut interval_len = 1u64;
+    for (axis, (shape, granularity)) in encoded_shape
+        .iter()
+        .zip(encoded_granularity)
+        .enumerate()
+        .skip(first_non_unit_axis)
+    {
+        if axis > first_non_unit_axis && granularity != shape {
+            return None;
+        }
+        interval_len = interval_len.checked_mul(granularity.get())?;
+    }
+
+    Some(interval_len)
+}
+
+/// Convert a row-major linear interval length into a decoded rectangular
+/// granularity.
+///
+/// Returns `None` if the interval cannot tile `decoded_shape` as regular
+/// row-major rectangles.
+fn decoded_granularity_from_linear_interval(
+    decoded_shape: &[NonZeroU64],
+    interval_len: u64,
+) -> Option<ChunkShape> {
+    if interval_len == 0 {
+        return None;
+    }
+
+    let num_elements = decoded_shape
+        .iter()
+        .try_fold(1u64, |product, dim| product.checked_mul(dim.get()))?;
+    if interval_len > num_elements || !num_elements.is_multiple_of(interval_len) {
+        return None;
+    }
+    if interval_len == num_elements {
+        return Some(decoded_shape.to_vec());
+    }
+
+    let mut granularity = vec![NonZeroU64::new(1).unwrap(); decoded_shape.len()];
+    let mut remaining = interval_len;
+    for (dim, decoded_dim) in decoded_shape.iter().enumerate().rev() {
+        if remaining == 1 {
+            break;
+        }
+
+        let decoded_dim = decoded_dim.get();
+        if remaining >= decoded_dim {
+            if !remaining.is_multiple_of(decoded_dim) {
+                return None;
+            }
+            granularity[dim] = NonZeroU64::new(decoded_dim).unwrap();
+            remaining /= decoded_dim;
+        } else {
+            if !decoded_dim.is_multiple_of(remaining) {
+                return None;
+            }
+            granularity[dim] = NonZeroU64::new(remaining).unwrap();
+            remaining = 1;
+        }
+    }
+
+    (remaining == 1).then_some(granularity)
+}
+
 impl ReshapeCodec {
     /// Create a new reshape codec from configuration.
     ///
@@ -109,10 +196,34 @@ impl ArrayToArrayCodecTraits for ReshapeCodec {
     fn partial_decode_granularity(
         &self,
         decoded_shape: &[NonZeroU64],
-        _encoded_granularity: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
-        // TODO: This could be refined in some situations depending on the encoded granularity, decoded shape, and reshape parameters.
-        Ok(decoded_shape.to_vec())
+        let encoded_shape = super::get_encoded_shape(&self.shape, decoded_shape)?;
+        if encoded_granularity.len() != encoded_shape.len() {
+            return Err(CodecError::Other(format!(
+                "encoded granularity dimensionality {} is incompatible with encoded dimensionality {}",
+                encoded_granularity.len(),
+                encoded_shape.len()
+            )));
+        }
+
+        if encoded_shape == decoded_shape {
+            return Ok(encoded_granularity.to_vec());
+        }
+
+        // Reshape preserves row-major linear order, so a decoded rectangular
+        // granularity can be inferred only when each encoded granule is a
+        // contiguous linear interval that also tiles decoded row-major
+        // coordinates as a rectangle. Otherwise, use the full decoded chunk.
+        let Some(interval_len) =
+            encoded_granularity_linear_interval_len(&encoded_shape, encoded_granularity)
+        else {
+            return Ok(decoded_shape.to_vec());
+        };
+        Ok(
+            decoded_granularity_from_linear_interval(decoded_shape, interval_len)
+                .unwrap_or_else(|| decoded_shape.to_vec()),
+        )
     }
 
     fn encode<'a>(
