@@ -114,10 +114,37 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
     fn partial_decode_granularity(
         &self,
         decoded_shape: &[NonZeroU64],
-        _encoded_granularity: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
-        // TODO: This could be refined in some situations depending on the encoded granularity and decoded shape.
-        Ok(decoded_shape.to_vec())
+        let num_unsqueezed_dims = decoded_shape.iter().filter(|dim| dim.get() > 1).count();
+        let expected_encoded_dimensionality = num_unsqueezed_dims.max(1);
+        if encoded_granularity.len() != expected_encoded_dimensionality {
+            return Err(CodecError::Other(format!(
+                "encoded granularity dimensionality {} is incompatible with squeezed dimensionality {}",
+                encoded_granularity.len(),
+                expected_encoded_dimensionality
+            )));
+        }
+
+        // `encoded_granularity` is expressed in squeezed coordinates, where every
+        // decoded dimension of length 1 has been removed. To report granularity
+        // in decoded coordinates, walk `decoded_shape` and reinsert a granularity
+        // of 1 for each squeezed dimension. For example, decoded shape [1, 10]
+        // and encoded granularity [5] map back to decoded granularity [1, 5].
+        let mut encoded_granularity = encoded_granularity.iter();
+        decoded_shape
+            .iter()
+            .map(|dim| {
+                if dim.get() > 1 {
+                    encoded_granularity
+                        .next()
+                        .copied()
+                        .ok_or_else(|| CodecError::Other("missing encoded granularity".to_string()))
+                } else {
+                    Ok(NonZeroU64::new(1).unwrap())
+                }
+            })
+            .collect()
     }
 
     fn encode<'a>(

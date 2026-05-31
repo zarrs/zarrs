@@ -847,9 +847,9 @@ mod tests {
 
         assert_eq!(
             array.partial_decode_granularity(&[0, 0])?,
-            vec![NonZeroU64::new(1).unwrap(), NonZeroU64::new(10).unwrap()]
+            vec![NonZeroU64::new(1).unwrap(), NonZeroU64::new(5).unwrap()]
         );
-        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 2]);
+        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 4]);
 
         Ok(())
     }
