@@ -381,7 +381,7 @@ impl ArrayToBytesCodecTraits for CodecChain {
             .array_to_array
             .iter()
             .rev()
-            .zip(array_shapes.iter().rev())
+            .zip(array_shapes.iter().rev().skip(1))
         {
             match codec.partial_decode_granularity(decoded_shape, &granularity) {
                 Ok(decoded_granularity) => granularity = decoded_granularity,

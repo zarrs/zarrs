@@ -493,8 +493,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::codec::TransposeCodec;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+    use crate::array::codec::{SqueezeCodec, TransposeCodec};
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_metadata_ext::codec::transpose::TransposeOrder;
     use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -824,5 +824,66 @@ mod tests {
                 .to_string(),
             "invalid subchunk shape [1, 3, 3], it must evenly divide shard shape [4, 8, 3]"
         );
+    }
+
+    #[test]
+    fn array_sharded_ext_squeeze_before_sharding_subchunk_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![2, 20], // array shape
+            vec![1, 10], // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())]);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(5).unwrap()], &data_type::uint16())
+                .build(),
+        ));
+
+        let array = builder.build(store, array_path)?;
+
+        assert_eq!(
+            array.partial_decode_granularity(&[0, 0])?,
+            vec![NonZeroU64::new(1).unwrap(), NonZeroU64::new(10).unwrap()]
+        );
+        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 2]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn array_sharded_ext_transpose_before_sharding_subchunk_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![20, 8], // array shape
+            vec![10, 4], // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
+            &[1, 0],
+        )?))]);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(
+                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(5).unwrap()],
+                &data_type::uint16(),
+            )
+            .build(),
+        ));
+
+        let array = builder.build(store, array_path)?;
+
+        assert_eq!(
+            array.partial_decode_granularity(&[0, 0])?,
+            vec![NonZeroU64::new(5).unwrap(), NonZeroU64::new(2).unwrap()]
+        );
+        assert_eq!(array.subchunk_grid().grid_shape(), &[4, 4]);
+
+        Ok(())
     }
 }
