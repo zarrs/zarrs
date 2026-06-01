@@ -127,7 +127,9 @@ pub(crate) fn create_subchunk_grid(
     let dimensionality = chunk_grid.dimensionality();
     let origin_chunk = vec![0; dimensionality];
     let decoded_chunk_shape = chunk_grid.chunk_shape(&origin_chunk).ok().flatten()?;
-    let subchunk_shape = codecs.partial_decode_granularity(&decoded_chunk_shape);
+    let subchunk_shape = codecs
+        .partial_decode_granularity(&decoded_chunk_shape)
+        .ok()?;
     if subchunk_shape == decoded_chunk_shape {
         return Some(chunk_grid.clone());
     }

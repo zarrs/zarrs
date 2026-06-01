@@ -1211,7 +1211,7 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// Codecs may return `decoded_shape` if they do not support granular access or otherwise calculate a different granularity for partial decoding.
     ///
     /// # Errors
-    /// Returns a [`CodecError`] if the shapes are not supported by this codec.
+    /// Returns a [`CodecError`] if the decoded shape or encoded granularity is not supported by this codec.
     #[expect(unused_variables)]
     fn partial_decode_granularity(
         &self,
@@ -1406,8 +1406,14 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     /// This represents the shape of the smallest subset of a chunk that can be efficiently decoded if the chunk were subdivided into a regular grid.
     /// For most codecs, this is just the shape of the chunk.
     /// It is the shape of the sub chunks (inner chunks) for the sharding codec.
-    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
-        shape.to_vec()
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded shape is not supported by this codec.
+    fn partial_decode_granularity(
+        &self,
+        decoded_shape: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(decoded_shape.to_vec())
     }
 
     /// Encode a chunk.

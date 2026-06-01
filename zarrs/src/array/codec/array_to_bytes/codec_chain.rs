@@ -357,25 +357,19 @@ impl ArrayToBytesCodecTraits for CodecChain {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
-    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
+    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
         let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
         array_shapes.push(shape.to_vec());
         for codec in &self.array_to_array {
-            let Some(decoded_shape) = array_shapes.last() else {
-                return shape.to_vec();
-            };
-            let Ok(encoded_shape) = codec.encoded_shape(decoded_shape) else {
-                return shape.to_vec();
-            };
+            let decoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+            let encoded_shape = codec.encoded_shape(decoded_shape)?;
             array_shapes.push(encoded_shape);
         }
 
-        let Some(encoded_shape) = array_shapes.last() else {
-            return shape.to_vec();
-        };
+        let encoded_shape = array_shapes.last().expect("array_shapes is non-empty");
         let mut granularity = self
             .array_to_bytes
-            .partial_decode_granularity(encoded_shape);
+            .partial_decode_granularity(encoded_shape)?;
 
         for (codec, decoded_shape) in self
             .array_to_array
@@ -383,13 +377,10 @@ impl ArrayToBytesCodecTraits for CodecChain {
             .rev()
             .zip(array_shapes.iter().rev().skip(1))
         {
-            match codec.partial_decode_granularity(decoded_shape, &granularity) {
-                Ok(decoded_granularity) => granularity = decoded_granularity,
-                Err(_) => return shape.to_vec(),
-            }
+            granularity = codec.partial_decode_granularity(decoded_shape, &granularity)?;
         }
 
-        granularity
+        Ok(granularity)
     }
 
     fn encode<'a>(

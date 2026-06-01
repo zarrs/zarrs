@@ -1080,7 +1080,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         chunk_indices: &[u64],
     ) -> Result<ChunkShape, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        Ok(self.codecs().partial_decode_granularity(&chunk_shape))
+        Ok(self.codecs().partial_decode_granularity(&chunk_shape)?)
     }
 
     /// Return an array subset that spans the entire array.
