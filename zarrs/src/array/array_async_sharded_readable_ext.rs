@@ -86,7 +86,7 @@ impl AsyncArrayShardedReadableExtCache {
         Self {
             array_is_sharded: array.is_sharded(),
             array_is_exclusively_sharded: array.is_exclusively_sharded(),
-            subchunk_grid,
+            subchunk_grid: subchunk_grid.clone(),
             cache: Arc::new(async_lock::Mutex::new(HashMap::default())),
         }
     }

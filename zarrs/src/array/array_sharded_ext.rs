@@ -189,7 +189,7 @@ pub trait ArrayShardedExt: private::Sealed {
     /// Retrieve the subchunk grid.
     ///
     /// Returns the normal chunk grid for an unsharded array.
-    fn subchunk_grid(&self) -> ChunkGrid;
+    fn subchunk_grid(&self) -> &ChunkGrid;
 
     /// Return the shape of the subchunk grid (i.e., the number of subchunks).
     ///
@@ -226,10 +226,10 @@ impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
         }
     }
 
-    fn subchunk_grid(&self) -> ChunkGrid {
+    fn subchunk_grid(&self) -> &ChunkGrid {
         self.subchunk_grid
-            .clone()
-            .unwrap_or_else(|| self.chunk_grid().clone())
+            .as_ref()
+            .unwrap_or_else(|| self.chunk_grid())
     }
 
     fn subchunk_grid_shape(&self) -> ArrayShape {
@@ -340,7 +340,7 @@ mod tests {
         expected_grid_shape: &[u64],
         expected_edge_lengths: &[NonZeroU64],
     ) -> Result<ChunkGrid, Box<dyn std::error::Error>> {
-        let subchunk_grid = array.subchunk_grid();
+        let subchunk_grid = array.subchunk_grid().clone();
         assert_eq!(subchunk_grid.array_shape(), expected_array_shape);
         assert_eq!(subchunk_grid.grid_shape(), expected_grid_shape);
         assert_eq!(subchunk_grid.chunk_edge_lengths(0)?, expected_edge_lengths);
@@ -364,7 +364,7 @@ mod tests {
             Some(ArraySubset::new_with_ranges(&[4..6, 6..8]))
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2, 3])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[2, 3])?,
             (vec![1, 1], vec![0, 1])
         );
 
@@ -419,7 +419,7 @@ mod tests {
             Some(ArraySubset::new_with_ranges(&[8..10]))
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[3])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[3])?,
             (vec![1], vec![1])
         );
 

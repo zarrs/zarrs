@@ -66,7 +66,7 @@ impl ArrayShardedReadableExtCache {
         Self {
             array_is_sharded: array.is_sharded(),
             array_is_exclusively_sharded: array.is_exclusively_sharded(),
-            subchunk_grid,
+            subchunk_grid: subchunk_grid.clone(),
             cache: Arc::new(std::sync::Mutex::new(HashMap::default())),
         }
     }
@@ -696,23 +696,23 @@ mod tests {
             ArraySubset::new_with_ranges(&[9..10])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[0])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[0])?,
             (vec![0], vec![0])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[1])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[1])?,
             (vec![0], vec![1])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[2])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[2])?,
             (vec![0], vec![2])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[3])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[3])?,
             (vec![1], vec![0])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array, &subchunk_grid, &[5])?,
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[5])?,
             (vec![1], vec![2])
         );
 
@@ -728,15 +728,15 @@ mod tests {
         let subchunk_grid_2d = array_2d.subchunk_grid();
         assert_eq!(subchunk_grid_2d.grid_shape(), &[6, 6]);
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[2, 2])?,
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[2, 2])?,
             (vec![0, 0], vec![2, 2])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[3, 3])?,
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[3, 3])?,
             (vec![1, 1], vec![0, 0])
         );
         assert_eq!(
-            subchunk_shard_index_and_chunk_index(&array_2d, &subchunk_grid_2d, &[5, 5])?,
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[5, 5])?,
             (vec![1, 1], vec![2, 2])
         );
 
