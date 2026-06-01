@@ -394,6 +394,8 @@ pub struct Array<TStorage: ?Sized> {
     data_type: DataType,
     /// The chunk grid of the Zarr array.
     chunk_grid: ChunkGrid,
+    /// The subchunk grid for sharded arrays.
+    subchunk_grid: Option<ChunkGrid>,
     /// The mapping from chunk grid cell coordinates to keys in the underlying store.
     chunk_key_encoding: ChunkKeyEncoding,
     /// Provides an element value to use for uninitialised portions of the Zarr array. It encodes the underlying data type.
@@ -420,6 +422,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path: self.path.clone(),
             data_type: self.data_type.clone(),
             chunk_grid: self.chunk_grid.clone(),
+            subchunk_grid: self.subchunk_grid.clone(),
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
@@ -488,6 +491,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
+        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
 
         // Create fill value from V3 metadata
         let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
@@ -530,6 +534,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
+            subchunk_grid,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -595,6 +600,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
+        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -617,6 +623,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             path,
             data_type,
             chunk_grid,
+            subchunk_grid,
             chunk_key_encoding,
             fill_value,
             codecs,
@@ -739,6 +746,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
+        self.subchunk_grid =
+            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, self.codecs.as_ref());
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {
                 metadata.shape = array_shape;
@@ -779,6 +788,8 @@ impl<TStorage: ?Sized> Array<TStorage> {
         // Create the new chunk grid
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
+        self.subchunk_grid =
+            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, self.codecs.as_ref());
 
         // Update metadata based on version
         match &mut self.metadata {
@@ -1057,6 +1068,21 @@ impl<TStorage: ?Sized> Array<TStorage> {
             .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))
     }
 
+    /// Return the partial decode granularity of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    ///
+    /// # Panics
+    /// Panics if any component of the shape of the chunk at `chunk_indices` exceeds [`usize::MAX`].
+    pub fn partial_decode_granularity(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<ChunkShape, ArrayError> {
+        let chunk_shape = self.chunk_shape(chunk_indices)?;
+        Ok(self.codecs().partial_decode_granularity(&chunk_shape)?)
+    }
+
     /// Return an array subset that spans the entire array.
     #[must_use]
     pub fn subset_all(&self) -> ArraySubset {
@@ -1165,6 +1191,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     path: self.path,
                     data_type: self.data_type,
                     chunk_grid: self.chunk_grid,
+                    subchunk_grid: self.subchunk_grid,
                     chunk_key_encoding: self.chunk_key_encoding,
                     fill_value: self.fill_value,
                     codecs: self.codecs,

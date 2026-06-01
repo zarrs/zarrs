@@ -357,6 +357,32 @@ impl ArrayToBytesCodecTraits for CodecChain {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
+        array_shapes.push(shape.to_vec());
+        for codec in &self.array_to_array {
+            let decoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+            let encoded_shape = codec.encoded_shape(decoded_shape)?;
+            array_shapes.push(encoded_shape);
+        }
+
+        let encoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+        let mut granularity = self
+            .array_to_bytes
+            .partial_decode_granularity(encoded_shape)?;
+
+        for (codec, decoded_shape) in self
+            .array_to_array
+            .iter()
+            .rev()
+            .zip(array_shapes.iter().rev().skip(1))
+        {
+            granularity = codec.partial_decode_granularity(decoded_shape, &granularity)?;
+        }
+
+        Ok(granularity)
+    }
+
     fn encode<'a>(
         &self,
         mut bytes: ArrayBytes<'a>,
@@ -873,14 +899,6 @@ impl ArrayCodecTraits for CodecChain {
         );
 
         Ok(recommended_concurrency)
-    }
-
-    fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
-        if let Some(array_to_array) = self.array_to_array.first() {
-            array_to_array.partial_decode_granularity(shape)
-        } else {
-            self.array_to_bytes.partial_decode_granularity(shape)
-        }
     }
 }
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+- Modify `ArrayToArrayCodecTraits`:
+  - Add `ArrayTo{Array,Bytes}CodecTraits::partial_decode_granularity` with a default implementation
+  - **Breaking**: Remove `ArrayToArrayCodecTraits::decoded_shape`
+
+
+### Removed
+- **Breaking**: Remove `ArrayCodecTraits::partial_decode_granularity`
+
 ## [0.2.1] - 2026-03-21
 
 ### Added

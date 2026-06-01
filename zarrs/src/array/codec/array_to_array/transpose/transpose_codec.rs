@@ -133,18 +133,22 @@ impl ArrayToArrayCodecTraits for TransposeCodec {
         Ok(permute(decoded_shape, &self.order.0).expect("matching dimensionality"))
     }
 
-    fn decoded_shape(
+    fn partial_decode_granularity(
         &self,
-        encoded_shape: &[NonZeroU64],
-    ) -> Result<Option<ChunkShape>, CodecError> {
-        if self.order.0.len() != encoded_shape.len() {
+        decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        if self.order.0.len() != decoded_shape.len()
+            || self.order.0.len() != encoded_granularity.len()
+        {
             return Err(CodecError::Other(
                 "Length of transpose codec `order` does not match array dimensionality".to_string(),
             ));
         }
-        let transposed_shape = permute(encoded_shape, &inverse_permutation(&self.order.0))
-            .expect("matching dimensionality");
-        Ok(Some(transposed_shape))
+        Ok(
+            permute(encoded_granularity, &inverse_permutation(&self.order.0))
+                .expect("matching dimensionality"),
+        )
     }
 
     fn encode<'a>(

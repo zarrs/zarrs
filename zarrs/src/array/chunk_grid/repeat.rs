@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 

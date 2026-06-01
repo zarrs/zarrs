@@ -66,7 +66,7 @@ impl ArrayShardedReadableExtCache {
         Self {
             array_is_sharded: array.is_sharded(),
             array_is_exclusively_sharded: array.is_exclusively_sharded(),
-            subchunk_grid,
+            subchunk_grid: subchunk_grid.clone(),
             cache: Arc::new(std::sync::Mutex::new(HashMap::default())),
         }
     }
@@ -493,8 +493,8 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::array::codec::TransposeCodec;
     use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
+    use crate::array::codec::{SqueezeCodec, TransposeCodec};
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_metadata_ext::codec::transpose::TransposeOrder;
     use zarrs_storage::storage_adapter::performance_metrics::PerformanceMetricsStorageAdapter;
@@ -654,6 +654,119 @@ mod tests {
         array_sharded_ext_impl(false)
     }
 
+    #[test]
+    #[expect(clippy::single_range_in_vec_init)]
+    fn array_sharded_ext_subchunk_grid_non_divisible_shard_shape()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![10], // array shape
+            vec![5],  // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.subchunk_shape(vec![2]);
+        let mut array = builder.build(store, array_path)?;
+
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[0])?.unwrap(),
+            ArraySubset::new_with_ranges(&[0..2])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[1])?.unwrap(),
+            ArraySubset::new_with_ranges(&[2..4])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[2])?.unwrap(),
+            ArraySubset::new_with_ranges(&[4..5])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[3])?.unwrap(),
+            ArraySubset::new_with_ranges(&[5..7])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[0])?,
+            (vec![0], vec![0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[1])?,
+            (vec![0], vec![1])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[2])?,
+            (vec![0], vec![2])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[3])?,
+            (vec![1], vec![0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array, subchunk_grid, &[5])?,
+            (vec![1], vec![2])
+        );
+
+        let store = Arc::new(MemoryStore::default());
+        let mut builder = ArrayBuilder::new(
+            vec![10, 10], // array shape
+            vec![5, 5],   // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.subchunk_shape(vec![2, 2]);
+        let array_2d = builder.build(store, "/array_2d")?;
+        let subchunk_grid_2d = array_2d.subchunk_grid();
+        assert_eq!(subchunk_grid_2d.grid_shape(), &[6, 6]);
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[2, 2])?,
+            (vec![0, 0], vec![2, 2])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[3, 3])?,
+            (vec![1, 1], vec![0, 0])
+        );
+        assert_eq!(
+            subchunk_shard_index_and_chunk_index(&array_2d, subchunk_grid_2d, &[5, 5])?,
+            (vec![1, 1], vec![2, 2])
+        );
+
+        array.set_shape(vec![9])?;
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+
+        array.set_shape(vec![8])?;
+        let subchunk_grid = array.subchunk_grid();
+        assert_eq!(subchunk_grid.grid_shape(), &[6]);
+        assert_eq!(
+            subchunk_grid.subset(&[4])?.unwrap(),
+            ArraySubset::new_with_ranges(&[7..9])
+        );
+        assert_eq!(
+            subchunk_grid.subset(&[5])?.unwrap(),
+            ArraySubset::new_with_ranges(&[9..10])
+        );
+
+        Ok(())
+    }
+
     fn array_sharded_ext_impl_transpose(
         valid_subchunk_shape: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -715,12 +828,12 @@ mod tests {
                 ])
             );
             assert_eq!(
-                array.effective_subchunk_shape(),
-                Some(vec![
+                array.partial_decode_granularity(&[0, 0, 0])?,
+                vec![
                     NonZeroU64::new(2).unwrap(),
                     NonZeroU64::new(1).unwrap(),
                     NonZeroU64::new(3).unwrap()
-                ])
+                ]
             ); // NOTE: transposed
             assert_eq!(subchunk_grid.grid_shape(), &[8, 16, 3]);
         } else {
@@ -755,5 +868,66 @@ mod tests {
                 .to_string(),
             "invalid subchunk shape [1, 3, 3], it must evenly divide shard shape [4, 8, 3]"
         );
+    }
+
+    #[test]
+    fn array_sharded_ext_squeeze_before_sharding_subchunk_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![2, 20], // array shape
+            vec![1, 10], // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.array_to_array_codecs(vec![Arc::new(SqueezeCodec::new())]);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(5).unwrap()], &data_type::uint16())
+                .build(),
+        ));
+
+        let array = builder.build(store, array_path)?;
+
+        assert_eq!(
+            array.partial_decode_granularity(&[0, 0])?,
+            vec![NonZeroU64::new(1).unwrap(), NonZeroU64::new(5).unwrap()]
+        );
+        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 4]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn array_sharded_ext_transpose_before_sharding_subchunk_grid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let array_path = "/array";
+        let mut builder = ArrayBuilder::new(
+            vec![20, 8], // array shape
+            vec![10, 4], // regular chunk shape
+            data_type::uint16(),
+            0u16,
+        );
+        builder.array_to_array_codecs(vec![Arc::new(TransposeCodec::new(TransposeOrder::new(
+            &[1, 0],
+        )?))]);
+        builder.array_to_bytes_codec(Arc::new(
+            ShardingCodecBuilder::new(
+                vec![NonZeroU64::new(2).unwrap(), NonZeroU64::new(5).unwrap()],
+                &data_type::uint16(),
+            )
+            .build(),
+        ));
+
+        let array = builder.build(store, array_path)?;
+
+        assert_eq!(
+            array.partial_decode_granularity(&[0, 0])?,
+            vec![NonZeroU64::new(5).unwrap(), NonZeroU64::new(2).unwrap()]
+        );
+        assert_eq!(array.subchunk_grid().grid_shape(), &[4, 4]);
+
+        Ok(())
     }
 }

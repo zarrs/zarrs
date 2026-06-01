@@ -9,16 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
+- **Breaking**: Bump `zarrs_codec` to 0.3.0
+  - Improves the API for computing partial decoding granularity
 - **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
   - Reading/writing completely out-of-bounds chunks is now an error
   - Querying completely out-of-bounds chunks always returns `None`
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
+- **Breaking**: `ArrayShardedExt::subchunk_grid` now returns a reference
 
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+  - Use `Array::partial_decode_granularity` instead
+
+### Fixed
+- The partial decode granularity potentially being incorrect with multiple array-to-array codecs
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 
