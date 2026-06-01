@@ -105,6 +105,39 @@ fn get_squeezed_indexer(
 
 #[cfg(test)]
 mod tests {
+    fn nz(value: u64) -> NonZeroU64 {
+        NonZeroU64::new(value).unwrap()
+    }
+
+    #[test]
+    fn codec_squeeze_partial_decode_granularity() {
+        let codec = SqueezeCodec::new();
+
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(1), nz(10)], &[nz(5)])
+                .unwrap(),
+            vec![nz(1), nz(5)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(1), nz(10)], &[nz(1), nz(5)])
+                .unwrap(),
+            vec![nz(1), nz(1), nz(5)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(1), nz(1)], &[nz(1)])
+                .unwrap(),
+            vec![nz(1), nz(1)]
+        );
+        assert!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2)], &[nz(1), nz(1)])
+                .is_err()
+        );
+    }
+
     use std::num::NonZeroU64;
     use std::sync::Arc;
 

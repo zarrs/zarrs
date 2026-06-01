@@ -6,7 +6,7 @@ use super::{
     FixedScaleOffsetCodecConfiguration, FixedScaleOffsetCodecConfigurationNumcodecsF64,
     FixedScaleOffsetDataTypeExt, FixedScaleOffsetElementType,
 };
-use crate::array::{DataType, FillValue};
+use crate::array::{ChunkShape, DataType, FillValue};
 use crate::convert::data_type_metadata_v2_to_v3;
 use std::num::NonZeroU64;
 use zarrs_codec::{
@@ -320,6 +320,14 @@ fn do_decode(
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for FixedScaleOffsetCodec {
+    fn decoded_partial_decode_granularity(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(encoded_granularity.to_vec())
+    }
+
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
     }

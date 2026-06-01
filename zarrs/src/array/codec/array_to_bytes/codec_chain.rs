@@ -895,11 +895,38 @@ impl ArrayCodecTraits for CodecChain {
     }
 
     fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> ChunkShape {
-        if let Some(array_to_array) = self.array_to_array.first() {
-            array_to_array.partial_decode_granularity(shape)
-        } else {
-            self.array_to_bytes.partial_decode_granularity(shape)
-        }
+        let compute = || -> Result<ChunkShape, CodecError> {
+            let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
+            array_shapes.push(shape.to_vec());
+            for codec in &self.array_to_array {
+                let decoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+                let encoded_shape = codec.encoded_shape(decoded_shape)?;
+                array_shapes.push(encoded_shape);
+            }
+            let encoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+            let mut granularity = self
+                .array_to_bytes
+                .partial_decode_granularity(encoded_shape);
+            for (codec, decoded_shape) in self
+                .array_to_array
+                .iter()
+                .rev()
+                .zip(array_shapes.iter().rev().skip(1))
+            {
+                granularity =
+                    codec.decoded_partial_decode_granularity(decoded_shape, &granularity)?;
+            }
+            if granularity.len() != shape.len() || granularity.iter().zip(shape).any(|(g, s)| g > s)
+            {
+                return Err(CodecError::Other(
+                    "incompatible partial decode granularity".to_string(),
+                ));
+            }
+            Ok(granularity)
+        };
+        // The existing public query is infallible. Invalid or indeterminate mappings
+        // conservatively retain whole-chunk granularity rather than changing its API.
+        compute().unwrap_or_else(|_| shape.to_vec())
     }
 }
 

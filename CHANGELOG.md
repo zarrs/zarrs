@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filesystem partial writes now update values in place instead of reading and rewriting the entire value
 
 ### Fixed
+- Compose partial-decode granularity through all array-to-array codecs, retaining the infallible query and conservative defaults for custom codecs (backport of #388).
 - Validate DLPack export buffer lengths and shapes without changing the `TensorLike` interface or `dlpark` dependency (backport of #456).
 - Validate encoded-cache chunk indices and subsets even when the stored chunk is absent (backport of #461), preserving existing chunk-grid bounds policies.
 - Propagate codec-specific options through `CodecChain`s used as nested array-to-bytes codecs (backport of #470).

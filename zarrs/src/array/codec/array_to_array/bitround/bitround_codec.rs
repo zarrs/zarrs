@@ -6,7 +6,7 @@ use super::{
     BitroundCodecConfiguration, BitroundCodecConfigurationV1, BitroundDataTypeExt,
     bitround_codec_partial, round_bytes,
 };
-use crate::array::{DataType, FillValue};
+use crate::array::{ChunkShape, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
     ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
@@ -101,6 +101,14 @@ impl ArrayCodecTraits for BitroundCodec {
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
 impl ArrayToArrayCodecTraits for BitroundCodec {
+    fn decoded_partial_decode_granularity(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(encoded_granularity.to_vec())
+    }
+
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
     }

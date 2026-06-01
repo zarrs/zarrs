@@ -1170,6 +1170,24 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         self.into_dyn()
     }
 
+    /// Map an encoded partial-decode granularity back into decoded coordinates.
+    ///
+    /// The default retains this codec's existing granularity recommendation, which is
+    /// conservative (the full decoded chunk) unless overridden. Shape-preserving codecs
+    /// that support partial decoding may return `encoded_granularity` unchanged.
+    /// Existing implementations need not implement this method.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the shapes are incompatible with this codec.
+    #[allow(unused_variables)]
+    fn decoded_partial_decode_granularity(
+        &self,
+        decoded_shape: &[NonZeroU64],
+        encoded_granularity: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(self.partial_decode_granularity(decoded_shape))
+    }
+
     /// Returns the encoded data type for a given decoded data type.
     ///
     /// # Errors

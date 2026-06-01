@@ -159,6 +159,80 @@ impl CodecTraitsV3 for ReshapeCodec {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn codec_reshape_partial_decode_granularity() {
+        let codec = ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![0]),
+            ReshapeDim::InputDims(vec![1]),
+        ]));
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(4), nz(6)], &[nz(2), nz(3)])
+                .unwrap(),
+            vec![nz(2), nz(3)]
+        );
+
+        let codec = ReshapeCodec::new(ReshapeShape(vec![ReshapeDim::InputDims(vec![0, 1])]));
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(20)], &[nz(5)])
+                .unwrap(),
+            vec![nz(1), nz(5)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(20)], &[nz(20)])
+                .unwrap(),
+            vec![nz(1), nz(20)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(20)], &[nz(40)])
+                .unwrap(),
+            vec![nz(2), nz(20)]
+        );
+
+        let codec = ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::Size(nz(2)),
+            ReshapeDim::Size(nz(3)),
+            ReshapeDim::Size(nz(2)),
+        ]));
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(12)], &[nz(1), nz(1), nz(2)])
+                .unwrap(),
+            vec![nz(2)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(12)], &[nz(1), nz(3), nz(2)])
+                .unwrap(),
+            vec![nz(6)]
+        );
+
+        let codec = ReshapeCodec::new(ReshapeShape(vec![
+            ReshapeDim::InputDims(vec![2]),
+            ReshapeDim::InputDims(vec![0, 1]),
+        ]));
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1), nz(6)])
+                .unwrap(),
+            vec![nz(2), nz(3), nz(4)]
+        );
+        assert_eq!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(2), nz(6)])
+                .unwrap(),
+            vec![nz(1), nz(3), nz(4)]
+        );
+        assert!(
+            codec
+                .decoded_partial_decode_granularity(&[nz(2), nz(3), nz(4)], &[nz(1)])
+                .is_err()
+        );
+    }
+
     use std::num::NonZeroU64;
     use std::sync::Mutex;
 
