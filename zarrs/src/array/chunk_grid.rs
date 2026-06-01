@@ -11,6 +11,7 @@ pub mod rectangular;
 pub mod rectilinear;
 pub mod regular;
 pub mod regular_bounded;
+pub(crate) mod repeat;
 
 pub use rectangular::*;
 pub use rectilinear::*;
