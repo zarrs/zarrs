@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+  - Use `Array::partial_decode_granularity` instead
 
 ### Fixed
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
