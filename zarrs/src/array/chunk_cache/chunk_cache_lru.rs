@@ -272,22 +272,29 @@ macro_rules! impl_ChunkCacheLruDecoded {
 
 macro_rules! impl_ChunkCacheLruPartialDecoder {
     () => {
-        fn retrieve_chunk_bytes(
+        fn partial_decoder(
             &self,
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
-            let partial_decoder = self
-                .cache
+        ) -> Result<ChunkCacheTypePartialDecoder, ArrayError> {
+            self.cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    self.array.partial_decoder(chunk_indices)
+                    self.array.partial_decoder_opt(chunk_indices, options)
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
                     Arc::try_unwrap(err).unwrap_or_else(|err| {
                         ArrayError::StorageError(StorageError::from(err.to_string()))
                     })
-                })?;
+                })
+        }
+
+        fn retrieve_chunk_bytes(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+            let partial_decoder = self.partial_decoder(chunk_indices, options)?;
             let chunk_shape =
                 $crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
             Ok(partial_decoder
@@ -302,17 +309,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             chunk_subset: &dyn ArraySubsetTraits,
             options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
-            let partial_decoder = self
-                .cache
-                .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    self.array.partial_decoder(chunk_indices)
-                })
-                .map_err(|err| {
-                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
-                    Arc::try_unwrap(err).unwrap_or_else(|err| {
-                        ArrayError::StorageError(StorageError::from(err.to_string()))
-                    })
-                })?;
+            let partial_decoder = self.partial_decoder(chunk_indices, options)?;
             Ok(partial_decoder
                 .partial_decode(chunk_subset, options)?
                 .into_owned()

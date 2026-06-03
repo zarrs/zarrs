@@ -99,6 +99,18 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
 
+    /// Cached variant of [`partial_decoder`](Array::partial_decoder).
+    ///
+    /// If a partial decoder is cached, subsequent calls will use the `options` of the first call that cached the partial decoder, and the `options` argument of subsequent calls will be ignored.
+    #[allow(clippy::missing_errors_doc)]
+    fn partial_decoder(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+        self.array().partial_decoder_opt(chunk_indices, options)
+    }
+
     /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_bytes(
