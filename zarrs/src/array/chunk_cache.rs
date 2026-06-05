@@ -107,9 +107,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        self.array().partial_decoder_opt(chunk_indices, options)
-    }
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
 
     /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]

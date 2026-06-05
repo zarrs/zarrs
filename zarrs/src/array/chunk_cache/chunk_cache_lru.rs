@@ -1,14 +1,15 @@
 use std::borrow::Cow;
-use std::sync::{Arc, atomic};
+use std::sync::{Arc, Mutex, atomic};
 
 use super::{
     ChunkCache, ChunkCacheType, ChunkCacheTypeDecoded, ChunkCacheTypeEncoded,
     ChunkCacheTypePartialDecoder,
 };
 use crate::array::{
-    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShapeTraits,
+    Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape,
+    ChunkShapeTraits, DataType, Indexer,
 };
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecError};
+use zarrs_codec::{ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
 
 type ChunkIndices = ArrayIndices;
@@ -31,6 +32,52 @@ trait CacheChunkLimitTraits {
 
 trait CacheSizeLimitTraits {
     fn new_with_size_capacity(size_capacity: u64) -> Self;
+}
+
+struct CachedArrayBytesPartialDecoder {
+    bytes: ChunkCacheTypeDecoded,
+    shape: ChunkShape,
+    data_type: DataType,
+}
+
+impl CachedArrayBytesPartialDecoder {
+    fn new(bytes: ChunkCacheTypeDecoded, shape: ChunkShape, data_type: DataType) -> Self {
+        Self {
+            bytes,
+            shape,
+            data_type,
+        }
+    }
+}
+
+impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn exists(&self) -> Result<bool, StorageError> {
+        Ok(true)
+    }
+
+    fn size_held(&self) -> usize {
+        self.bytes.size()
+    }
+
+    fn partial_decode(
+        &self,
+        indexer: &dyn Indexer,
+        _options: &zarrs_codec::CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        Ok(self.bytes.extract_array_subset(
+            indexer,
+            bytemuck::must_cast_slice(&self.shape),
+            &self.data_type,
+        )?)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -115,6 +162,42 @@ macro_rules! impl_ChunkCacheLruCommon {
 
 macro_rules! impl_ChunkCacheLruEncoded {
     () => {
+        fn partial_decoder(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<ChunkCacheTypePartialDecoder, ArrayError> {
+            let chunk_encoded: ChunkCacheTypeEncoded = self
+                .cache
+                .try_get_or_insert_with(chunk_indices.to_vec(), || {
+                    Ok(self
+                        .array
+                        .retrieve_encoded_chunk(chunk_indices)?
+                        .map(|chunk| Arc::new(Cow::Owned(chunk))))
+                })
+                .map_err(|err| {
+                    // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
+                    Arc::try_unwrap(err).unwrap_or_else(|err| {
+                        ArrayError::StorageError(StorageError::from(err.to_string()))
+                    })
+                })?;
+
+            let input_handle: Arc<dyn zarrs_codec::BytesPartialDecoderTraits> =
+                if let Some(chunk_encoded) = chunk_encoded {
+                    chunk_encoded
+                } else {
+                    Arc::new(Mutex::new(None))
+                };
+            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
+            Ok(self.array.codecs().clone().partial_decoder(
+                input_handle,
+                &chunk_shape,
+                self.array.data_type(),
+                self.array.fill_value(),
+                options,
+            )?)
+        }
+
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
@@ -217,6 +300,20 @@ macro_rules! impl_ChunkCacheLruEncoded {
 
 macro_rules! impl_ChunkCacheLruDecoded {
     () => {
+        fn partial_decoder(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<ChunkCacheTypePartialDecoder, ArrayError> {
+            let bytes = self.retrieve_chunk_bytes(chunk_indices, options)?;
+            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
+            Ok(Arc::new(CachedArrayBytesPartialDecoder::new(
+                bytes,
+                chunk_shape,
+                self.array.data_type().clone(),
+            )))
+        }
+
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
@@ -767,13 +864,12 @@ mod tests {
         array_chunk_cache_impl(store, cache, true, true, true, false);
     }
 
-    // zstd gets fully decoded and cached in a CodecChain, so expect no additional store reads after creating and caching a partial decoder.
-    #[test]
     #[cfg(feature = "zstd")]
-    #[cfg_attr(miri, ignore)]
-    fn array_chunk_cache_partial_decoder_zstd_decoded_data_cached() {
-        let (store, array) = create_store_array_zstd();
-        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+    fn array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl<TChunkCache: ChunkCache>(
+        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: TChunkCache,
+        expect_same_partial_decoder: bool,
+    ) {
         let options = CodecOptions::default();
         let decoded_chunk_size = 4 * 4 * size_of::<u8>();
 
@@ -792,7 +888,10 @@ mod tests {
         assert_eq!(store.reads(), 1);
 
         let cached_partial_decoder = cache.partial_decoder(&[0, 0], &options).unwrap();
-        assert!(Arc::ptr_eq(&partial_decoder, &cached_partial_decoder));
+        assert_eq!(
+            Arc::ptr_eq(&partial_decoder, &cached_partial_decoder),
+            expect_same_partial_decoder
+        );
         assert_eq!(cached_partial_decoder.size_held(), decoded_chunk_size);
         assert_eq!(
             cached_partial_decoder
@@ -802,6 +901,61 @@ mod tests {
         );
         assert_eq!(store.reads(), 1);
         assert_eq!(cache.len(), 1);
+    }
+
+    // zstd gets fully decoded and cached in a CodecChain, so expect no additional store reads after creating a partial decoder.
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_chunks_zstd_partial_decoder_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, false);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_size_zstd_partial_decoder_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheEncodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, false);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_chunks_zstd_partial_decoder_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, false);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_size_zstd_partial_decoder_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheDecodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, false);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks_zstd_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, true);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size_zstd_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
+        array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, true);
     }
 
     #[allow(clippy::type_complexity)]
