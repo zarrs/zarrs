@@ -457,6 +457,37 @@ mod tests {
         (store, array)
     }
 
+    #[cfg(feature = "zstd")]
+    #[allow(clippy::type_complexity)]
+    fn create_store_array_zstd() -> (
+        Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        Arc<Array<dyn ReadableStorageTraits>>,
+    ) {
+        let store: ReadableWritableStorage = Arc::new(MemoryStore::default());
+        let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
+        let array = ArrayBuilder::new(
+            vec![8, 8], // array shape
+            vec![4, 4], // regular chunk shape
+            data_type::uint8(),
+            0u8,
+        )
+        .bytes_to_bytes_codecs(vec![Arc::new(crate::array::codec::ZstdCodec::new(
+            5, false,
+        ))])
+        .build_arc(store.clone(), "/")
+        .unwrap();
+
+        let data: Vec<u8> = (0..8 * 8).map(|i| i as u8).collect();
+        array
+            .store_array_subset(&ArraySubset::new_with_shape(vec![8, 8]), &data)
+            .unwrap();
+        array.store_metadata().unwrap();
+
+        store.reset();
+        let array = Arc::new(array.readable());
+        (store, array)
+    }
+
     fn array_chunk_cache_impl<TChunkCache: ChunkCache>(
         store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
         cache: TChunkCache,
@@ -734,6 +765,43 @@ mod tests {
         let cache =
             ChunkCachePartialDecoderLruSizeLimitThreadLocal::new(array, 2 * chunk_size as u64);
         array_chunk_cache_impl(store, cache, true, true, true, false);
+    }
+
+    // zstd gets fully decoded and cached in a CodecChain, so expect no additional store reads after creating and caching a partial decoder.
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_zstd_decoded_data_cached() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        let options = CodecOptions::default();
+        let decoded_chunk_size = 4 * 4 * size_of::<u8>();
+
+        assert_eq!(store.reads(), 0);
+        assert!(cache.is_empty());
+
+        let partial_decoder = cache.partial_decoder(&[0, 0], &options).unwrap();
+        assert_eq!(store.reads(), 1);
+        assert_eq!(partial_decoder.size_held(), decoded_chunk_size);
+        assert_eq!(
+            partial_decoder
+                .partial_decode(&[0..2, 0..2], &options)
+                .unwrap(),
+            vec![0, 1, 8, 9].into()
+        );
+        assert_eq!(store.reads(), 1);
+
+        let cached_partial_decoder = cache.partial_decoder(&[0, 0], &options).unwrap();
+        assert!(Arc::ptr_eq(&partial_decoder, &cached_partial_decoder));
+        assert_eq!(cached_partial_decoder.size_held(), decoded_chunk_size);
+        assert_eq!(
+            cached_partial_decoder
+                .partial_decode(&[2..4, 2..4], &options)
+                .unwrap(),
+            vec![18, 19, 26, 27].into()
+        );
+        assert_eq!(store.reads(), 1);
+        assert_eq!(cache.len(), 1);
     }
 
     #[allow(clippy::type_complexity)]
