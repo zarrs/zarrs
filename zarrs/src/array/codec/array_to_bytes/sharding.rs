@@ -3,8 +3,6 @@
 //! Sharding logically splits chunks (shards) into sub-chunks (inner chunks) that can be individually compressed and accessed.
 //! This allows to colocate multiple chunks within one storage object, bundling them in shards.
 //!
-//! This codec requires the `sharding` feature, which is enabled by default.
-//!
 //! The [`ShardingCodecBuilder`] can help with creating a [`ShardingCodec`].
 //!
 //! ### Compatible Implementations
