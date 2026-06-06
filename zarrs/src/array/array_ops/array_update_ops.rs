@@ -2,6 +2,7 @@ use super::*;
 use zarrs_codec::ArrayPartialEncoderTraits;
 
 mod array;
+mod array_cached;
 
 /// Synchronous array read/write update operations.
 pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {

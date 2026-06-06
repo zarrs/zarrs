@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use super::chunk_cache::ChunkCache;
 use super::{
-    Array, ArrayBuilder, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
+    Array, ArrayBuilder, ArrayCached, ArrayCreateError, ArrayError, ArrayIndices, ArrayMetadata,
     ArrayMetadataOptions, ArrayShape, ArraySubset, ArraySubsetTraits, ChunkGrid, ChunkKeyEncoding,
     ChunkShape, CodecChain, CodecOptions, CodecSpecificOptions, DataType, DimensionName, FillValue,
     FromArrayBytes, IncompatibleDimensionalityError, IntoArrayBytes, NodePath,

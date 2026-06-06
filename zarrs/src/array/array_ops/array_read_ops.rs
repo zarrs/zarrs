@@ -2,6 +2,7 @@ use super::*;
 use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
 
 mod array;
+mod array_cached;
 
 /// Synchronous array read operations.
 pub trait ArrayReadOps: ArrayOps {

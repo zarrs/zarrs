@@ -206,19 +206,6 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.chunk_grid().grid_shape()
     }
 
-    pub fn is_sharded(&self) -> bool {
-        self.codecs
-            .array_to_bytes_codec()
-            .as_any()
-            .is::<crate::array::codec::ShardingCodec>()
-    }
-
-    pub fn is_exclusively_sharded(&self) -> bool {
-        self.is_sharded()
-            && self.codecs.array_to_array_codecs().is_empty()
-            && self.codecs.bytes_to_bytes_codecs().is_empty()
-    }
-
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
         let configuration = self
             .codecs
