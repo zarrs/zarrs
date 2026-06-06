@@ -6,7 +6,7 @@ use super::super::super::{
 };
 use super::super::*;
 use super::ArrayOps;
-use crate::array::codec::{ShardingCodec, ShardingCodecConfiguration};
+use crate::array::codec::ShardingCodecConfiguration;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
@@ -210,7 +210,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.codecs
             .array_to_bytes_codec()
             .as_any()
-            .is::<ShardingCodec>()
+            .is::<crate::array::codec::ShardingCodec>()
     }
 
     pub fn is_exclusively_sharded(&self) -> bool {
