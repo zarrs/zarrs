@@ -22,6 +22,7 @@
 //! `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
 //!
 //! Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
+//!  - [`retrieve_chunk_if_exists`](ChunkCache::retrieve_chunk_if_exists)
 //!  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
 //!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
 //!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
@@ -65,7 +66,7 @@ pub use chunk_cache_lru::*;
 pub type ChunkCacheTypeEncoded = Option<Arc<ArrayBytesRaw<'static>>>;
 
 /// The chunk type of a decoded chunk cache.
-pub type ChunkCacheTypeDecoded = Arc<ArrayBytes<'static>>;
+pub type ChunkCacheTypeDecoded = Option<Arc<ArrayBytes<'static>>>;
 
 /// The chunk type of a partial decoder chunk cache.
 pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
@@ -84,7 +85,7 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
 
 impl ChunkCacheType for ChunkCacheTypeDecoded {
     fn size(&self) -> usize {
-        ArrayBytes::size(self)
+        self.as_ref().map_or(0, |v| v.size())
     }
 }
 
@@ -99,13 +100,52 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
 
+    /// Cached variant of [`partial_decoder`](Array::partial_decoder).
+    ///
+    /// If a partial decoder is cached, subsequent calls will use the `options` of the first call that cached the partial decoder, and the `options` argument of subsequent calls will be ignored.
+    #[allow(clippy::missing_errors_doc)]
+    fn partial_decoder(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Cached variant of [`retrieve_chunk_if_exists_opt`](Array::retrieve_chunk_if_exists_opt) returning the cached bytes.
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_bytes_if_exists(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>;
+
     /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt) returning the cached bytes.
     #[allow(clippy::missing_errors_doc)]
     fn retrieve_chunk_bytes(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
+
+    /// Cached variant of [`retrieve_chunk_if_exists_opt`](Array::retrieve_chunk_if_exists_opt).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_if_exists<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<T>, ArrayError>
+    where
+        Self: Sized,
+    {
+        let Some(bytes) = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)? else {
+            return Ok(None);
+        };
+        let shape = self
+            .array()
+            .chunk_grid()
+            .chunk_shape_u64(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        T::from_array_bytes_arc(bytes, &shape, self.array().data_type()).map(Some)
+    }
 
     /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
     #[allow(clippy::missing_errors_doc)]
@@ -133,7 +173,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ChunkCacheTypeDecoded, ArrayError>;
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
 
     /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
     #[allow(clippy::missing_errors_doc)]
@@ -157,7 +197,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
         let array = self.array();
         if array_subset.dimensionality() != array.dimensionality() {
             return Err(ArrayError::InvalidArraySubset(
@@ -259,7 +299,7 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         &self,
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
         if chunks.dimensionality() != self.array().dimensionality() {
             return Err(IncompatibleDimensionalityError::new(
                 chunks.dimensionality(),
@@ -307,7 +347,7 @@ fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
-) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
     let nesting_depth = optional_nesting_depth(array.data_type());
 
     // Retrieve chunks for variable-length data
@@ -368,7 +408,7 @@ fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
     chunks: &dyn ArraySubsetTraits,
     chunk_concurrent_limit: usize,
     options: &CodecOptions,
-) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
     // Allocate data buffer and optional mask buffer
     let data_type_size = array
         .data_type()

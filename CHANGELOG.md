@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
 - **Breaking**: `ArrayShardedExt::subchunk_grid` now returns a reference
+- **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
+- **Breaking**: Refactor `ChunkCache` trait:
+  - **Breaking**: Add required `partial_decoder` method
+  - **Breaking**: Add required `retrieve_chunk_bytes_if_exists` method
+  - Add `retrieve_chunk_if_exists`
+  - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
 
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
