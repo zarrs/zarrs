@@ -29,6 +29,7 @@
 //!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
 //!  - [`invalidate_chunk`](ChunkCache::invalidate_chunk)
 //!  - [`invalidate_chunks`](ChunkCache::invalidate_chunks)
+//!  - [`invalidate`](ChunkCache::invalidate)
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
@@ -101,6 +102,11 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
+
+    /// Invalidate all cached chunks, returning the number of chunks invalidated.
+    ///
+    /// For a thread-local cache, clears only the current thread's cache.
+    fn invalidate(&self) -> usize;
 
     /// Invalidate a cached chunk, returning true if the chunk was cached.
     ///

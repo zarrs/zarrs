@@ -29,6 +29,13 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for CacheChunkLimit<CT> {
         self.get().pop(chunk_indices).is_some()
     }
 
+    fn clear(&self) -> usize {
+        let mut cache = self.get();
+        let count = cache.len();
+        cache.clear();
+        count
+    }
+
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -86,6 +93,14 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for CacheSizeLimit<CT> {
         } else {
             false
         }
+    }
+
+    fn clear(&self) -> usize {
+        let mut cache = self.get();
+        let count = cache.len();
+        cache.clear();
+        self.size.store(0, atomic::Ordering::SeqCst);
+        count
     }
 
     fn try_get_or_insert_with<F>(

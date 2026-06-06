@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `partial_decoder`
     - `retrieve_chunk_bytes_if_exists`
     - `invalidate_chunk`
+    - `invalidate`
   - Add methods with default implementations:
     - `retrieve_chunk_if_exists`
     - `invalidate_chunks`

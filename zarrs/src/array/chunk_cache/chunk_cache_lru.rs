@@ -19,6 +19,8 @@ trait CacheTraits<CT: ChunkCacheType> {
 
     fn remove(&self, chunk_indices: &[u64]) -> bool;
 
+    fn clear(&self) -> usize;
+
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -211,6 +213,10 @@ macro_rules! impl_ChunkCacheLruCommon {
 
         fn len(&self) -> usize {
             self.cache.len()
+        }
+
+        fn invalidate(&self) -> usize {
+            CacheTraits::clear(&self.cache)
         }
     };
 }
