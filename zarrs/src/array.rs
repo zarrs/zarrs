@@ -21,8 +21,6 @@
 //!
 //! The documentation for [`Array`] details how to interact with arrays.
 
-#[cfg(feature = "async")]
-mod array_async_sharded_readable_ext;
 mod array_bytes_internal;
 mod array_errors;
 mod array_metadata_options;
@@ -97,6 +95,8 @@ use zarrs_plugin::{
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
 pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, ArrayWriteOps};
+#[cfg(feature = "async")]
+pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
 pub use self::codec::CodecChain;
 pub use self::element::{Element, ElementError, ElementOwned};
@@ -104,10 +104,6 @@ pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
-#[cfg(feature = "async")]
-pub use array_async_sharded_readable_ext::{
-    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
-};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -897,10 +893,6 @@ mod array_sync_readable;
 
 #[cfg(feature = "async")]
 mod array_async_readable;
-#[cfg(feature = "async")]
-mod array_async_readable_writable;
-#[cfg(feature = "async")]
-mod array_async_writable;
 
 /// Transmute from `&[u8]` to `Vec<T>`.
 #[must_use]
