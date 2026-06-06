@@ -21,13 +21,10 @@
 //!
 //! The documentation for [`Array`] details how to interact with arrays.
 
-#[cfg(feature = "async")]
-mod array_async_sharded_readable_ext;
 mod array_bytes_internal;
 mod array_errors;
 mod array_metadata_options;
 mod array_ops;
-mod array_sync_sharded_readable_ext;
 mod element;
 mod from_array_bytes;
 mod into_array_bytes;
@@ -105,11 +102,6 @@ pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
-#[cfg(feature = "async")]
-pub use array_async_sharded_readable_ext::{
-    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
-};
-pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
@@ -185,9 +177,6 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 ///    - [`partial_encoder`](Array::partial_encoder)
 ///
 /// `async_` prefix variants can be used with async stores (requires `async` feature).
-///
-/// Additional methods for reading sharded arrays are available through [`ArrayShardedReadableExt`]:
-/// see [Reading Sharded Arrays](#reading-sharded-arrays).
 ///
 /// [`ChunkCache`](chunk_cache::ChunkCache) implementations offer a similar API to [`Array::ReadableStorageTraits`](crate::storage::ReadableStorageTraits), except with [Chunk Caching](#chunk-caching) support.
 ///
@@ -323,13 +312,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// [`Array`] provides methods to query if an array is sharded and retrieve the subchunk shape.
 /// Additionally, the *subchunk grid* can be queried, which is a [`ChunkGrid`](chunk_grid) where chunk indices refer to subchunks rather than shards.
 ///
-/// [`ArrayShardedReadableExt`] adds methods to conveniently and efficiently access the data in a sharded array:
-///  - [`retrieve_subchunk_opt`](ArrayShardedReadableExt::retrieve_subchunk_opt)
-///  - [`retrieve_subchunks_opt`](ArrayShardedReadableExt::retrieve_subchunks_opt)
-///  - [`retrieve_array_subset_sharded_opt`](ArrayShardedReadableExt::retrieve_array_subset_sharded_opt)
+// TODO: UPDATE THESE DOCS /// [`ArrayShardedReadableExt`] adds methods to conveniently and efficiently access the data in a sharded array:
+// TODO: UPDATE THESE DOCS ///  - [`retrieve_subchunk_opt`](ArrayShardedReadableExt::retrieve_subchunk_opt)
+// TODO: UPDATE THESE DOCS ///  - [`retrieve_subchunks_opt`](ArrayShardedReadableExt::retrieve_subchunks_opt)
 ///
 /// For unsharded arrays, these methods gracefully fallback to referencing standard chunks.
-/// Each method has a cache parameter ([`ArrayShardedReadableExtCache`]) that stores shard indexes so that they do not have to be repeatedly retrieved and decoded.
 ///
 /// ## Parallelism and Concurrency
 /// ### Sync API

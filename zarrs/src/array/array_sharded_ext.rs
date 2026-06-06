@@ -1,3 +1,5 @@
+#![expect(dead_code)]
+
 use std::num::NonZeroU64;
 
 use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};

@@ -77,6 +77,7 @@ impl AsyncShardingPartialDecoder {
     /// Retrieve the byte range of an encoded subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
+    #[expect(dead_code)]
     pub(crate) fn subchunk_byte_range(
         &self,
         chunk_indices: &[u64],
@@ -92,6 +93,7 @@ impl AsyncShardingPartialDecoder {
     /// Retrieve the encoded bytes of a subchunk.
     ///
     /// The `chunk_indices` are relative to the start of the shard.
+    #[expect(dead_code)]
     pub(crate) async fn retrieve_subchunk_encoded(
         &self,
         chunk_indices: &[u64],

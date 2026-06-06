@@ -57,14 +57,6 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
-    /// Returns true if the array-to-bytes codec of the array is `sharding_indexed`.
-    #[must_use]
-    fn is_sharded(&self) -> bool;
-
-    /// Returns true if the array-to-bytes codec of the array is `sharding_indexed` and the array has no array-to-array or bytes-to-bytes codecs.
-    #[must_use]
-    fn is_exclusively_sharded(&self) -> bool;
-
     /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
     ///
     /// Returns [`None`] for an unsharded array.

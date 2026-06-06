@@ -70,9 +70,6 @@ use crate::array::{
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
-#[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
     CodecOptions, CodecPluginV3, CodecTraitsV3,
@@ -180,6 +177,7 @@ fn get_index_byte_range(
     })
 }
 
+#[expect(dead_code)]
 fn subchunk_byte_range(
     shard_index: Option<&[u64]>,
     shard_shape: &[NonZeroU64],
