@@ -13,8 +13,8 @@ use super::codec::array_to_bytes::sharding::ShardingPartialDecoder;
 use super::concurrency::concurrency_chunks_and_codec;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
-    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
-    ChunkGrid, DataTypeSize,
+    Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec, ChunkGrid,
+    DataTypeSize,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::{ArraySubset, ArraySubsetTraits};
