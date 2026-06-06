@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
 
+### Added
+- Add various inherent traits for `Array`
+  - `ArrayOps`
+  - `ArrayMutOps`
+
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
@@ -29,12 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `retrieve_chunk_if_exists`
     - `invalidate_chunks`
   - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
+- **Breaking**: Remove the `ArrayShardedExt` trait, methods are moved to `ArrayOps`
+  - `ArrayShardedExt::effective_subchunk_shape` is replaced by `ArrayOps::partial_decode_granularity`
 
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
-- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
-  - Use `Array::partial_decode_granularity` instead
 
 ### Fixed
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
