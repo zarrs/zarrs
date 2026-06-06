@@ -20,9 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking**: `ArrayShardedExt::subchunk_grid` now returns a reference
 - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
 - **Breaking**: Refactor `ChunkCache` trait:
-  - **Breaking**: Add required `partial_decoder` method
-  - **Breaking**: Add required `retrieve_chunk_bytes_if_exists` method
-  - Add `retrieve_chunk_if_exists`
+  - **Breaking**: Add new required methods:
+    - `partial_decoder`
+    - `retrieve_chunk_bytes_if_exists`
+    - `invalidate_chunk`
+  - Add methods with default implementations:
+    - `retrieve_chunk_if_exists`
+    - `invalidate_chunks`
   - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
 
 ### Removed

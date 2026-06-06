@@ -17,6 +17,8 @@ type ChunkIndices = ArrayIndices;
 trait CacheTraits<CT: ChunkCacheType> {
     fn len(&self) -> usize;
 
+    fn remove(&self, chunk_indices: &[u64]) -> bool;
+
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -200,6 +202,11 @@ macro_rules! impl_ChunkCacheLruCommon {
     () => {
         fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>> {
             self.array.clone()
+        }
+
+        fn invalidate_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError> {
+            validate_chunk_indices(&self.array, chunk_indices)?;
+            Ok(CacheTraits::remove(&self.cache, chunk_indices))
         }
 
         fn len(&self) -> usize {
@@ -619,6 +626,7 @@ mod tests {
     use crate::array::chunk_cache::{
         ChunkCache, ChunkCacheDecodedLruChunkLimit, ChunkCacheDecodedLruSizeLimit,
         ChunkCacheEncodedLruChunkLimit, ChunkCacheEncodedLruSizeLimit,
+        ChunkCachePartialDecoderLruChunkLimit, ChunkCachePartialDecoderLruSizeLimit,
     };
     use crate::array::{Array, ArrayBuilder, ArraySubset, data_type};
     use zarrs_codec::CodecOptions;
@@ -1187,6 +1195,171 @@ mod tests {
         let (store, array) = create_store_array_zstd();
         let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
         array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    fn array_chunk_cache_invalidate_chunk_impl<TChunkCache: ChunkCache>(
+        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: TChunkCache,
+    ) {
+        let options = CodecOptions::default();
+
+        assert!(cache.is_empty());
+        cache.partial_decoder(&[0, 0], &options).unwrap();
+        let reads_after_first_retrieve = store.reads();
+        assert!(reads_after_first_retrieve > 0);
+        assert_eq!(cache.len(), 1);
+
+        cache.partial_decoder(&[0, 0], &options).unwrap();
+        assert_eq!(store.reads(), reads_after_first_retrieve);
+
+        assert!(cache.invalidate_chunk(&[0, 0]).unwrap());
+        assert!(cache.is_empty());
+
+        cache.partial_decoder(&[0, 0], &options).unwrap();
+        assert!(store.reads() > reads_after_first_retrieve);
+        assert_eq!(cache.len(), 1);
+
+        assert!(!cache.invalidate_chunk(&[1, 0]).unwrap());
+        assert_eq!(cache.len(), 1);
+
+        let err = cache.invalidate_chunk(&[3, 0]).unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![3, 0]
+        ));
+
+        let err = cache.invalidate_chunk(&[0]).unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![0]
+        ));
+    }
+
+    fn array_chunk_cache_invalidate_chunks_impl<TChunkCache: ChunkCache>(
+        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: TChunkCache,
+    ) {
+        let options = CodecOptions::default();
+
+        cache.partial_decoder(&[0, 0], &options).unwrap();
+        cache.partial_decoder(&[1, 0], &options).unwrap();
+        let reads_after_first_retrieves = store.reads();
+        assert_eq!(cache.len(), 2);
+
+        assert_eq!(cache.invalidate_chunks(&[0..2, 0..1]).unwrap(), 2);
+        assert!(cache.is_empty());
+
+        cache.partial_decoder(&[0, 0], &options).unwrap();
+        assert!(store.reads() > reads_after_first_retrieves);
+
+        let err = cache.invalidate_chunks(&[3..4, 0..1]).unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![3, 0]
+        ));
+
+        #[allow(clippy::single_range_in_vec_init)]
+        let err = cache.invalidate_chunks(&[0..1]).unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![0]
+        ));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_chunks_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_size_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheEncodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_chunks_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_size_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheDecodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size_invalidate_chunk() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunk_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_chunks_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_size_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheEncodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_chunks_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_size_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCacheDecodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size_invalidate_chunks() {
+        let (store, array) = create_store_array();
+        let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
+        array_chunk_cache_invalidate_chunks_impl(store, cache);
     }
 
     #[allow(clippy::type_complexity)]
