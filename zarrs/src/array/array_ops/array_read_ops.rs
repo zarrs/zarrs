@@ -1,0 +1,275 @@
+use super::*;
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
+
+mod array;
+
+/// Synchronous array read operations.
+pub trait ArrayReadOps: ArrayOps {
+    /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist with default codec options.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if
+    ///  - `chunk_indices` are invalid,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of elements in the chunk exceeds `usize::MAX`.
+    fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64]) -> Result<T, ArrayError>;
+
+    /// Read and decode the chunk at `chunk_indices` with explicit codec options.
+    /// Explicit options version of [`retrieve_chunk`](ArrayReadOps::retrieve_chunk).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_opt<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the chunk at `chunk_indices` into a preallocated `output_target`.
+    ///
+    /// Only supports fixed-length data types (including optional types with fixed inner types).
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if:
+    ///  - the chunk indices are invalid,
+    ///  - the data type is variable-length,
+    ///  - the number of elements in `output_target` does not match the chunk,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    fn retrieve_chunk_into(
+        &self,
+        chunk_indices: &[u64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError>;
+
+    /// Read and decode the chunks at `chunks` into their bytes.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if
+    ///  - any chunk indices in `chunks` are invalid,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of array elements in the chunk exceeds `usize::MAX`.
+    fn retrieve_chunks<T: FromArrayBytes>(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the chunks in `chunks` with explicit codec options.
+    /// Explicit options version of [`retrieve_chunks`](ArrayReadOps::retrieve_chunks).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunks_opt<T: FromArrayBytes>(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if:
+    ///  - the chunk indices are invalid,
+    ///  - the chunk subset is invalid,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Will panic if the number of elements in `chunk_subset` is `usize::MAX` or larger.
+    fn retrieve_chunk_subset<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode a subset of the chunk at `chunk_indices` with explicit codec options.
+    /// Explicit options version of [`retrieve_chunk_subset`](ArrayReadOps::retrieve_chunk_subset).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into a preallocated `output_target`.
+    ///
+    /// Only supports fixed-length data types (including optional types with fixed inner types).
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if:
+    ///  - the chunk indices are invalid,
+    ///  - the chunk subset is invalid,
+    ///  - the data type is variable-length,
+    ///  - the number of elements in `output_target` does not match `chunk_subset`,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    fn retrieve_chunk_subset_into(
+        &self,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError>;
+
+    /// Read and decode the `array_subset` of array into its bytes.
+    ///
+    /// Out-of-bounds elements will have the fill value.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if:
+    ///  - the `array_subset` dimensionality does not match the chunk grid dimensionality,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if attempting to reference a byte beyond `usize::MAX`.
+    fn retrieve_array_subset<T: FromArrayBytes>(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the array subset with explicit codec options.
+    /// Explicit options version of [`retrieve_array_subset`](ArrayReadOps::retrieve_array_subset).
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    fn retrieve_array_subset_opt<T: FromArrayBytes>(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the chunk at `chunk_indices` into its bytes if it exists with default codec options.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if
+    ///  - `chunk_indices` are invalid,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    ///
+    /// # Panics
+    /// Panics if the number of elements in the chunk exceeds `usize::MAX`.
+    fn retrieve_chunk_if_exists<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<T>, ArrayError>;
+
+    /// Read and decode the chunk at `chunk_indices` if it exists with explicit codec options.
+    /// Explicit options version of [`retrieve_chunk_if_exists`](ArrayReadOps::retrieve_chunk_if_exists).
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<T>, ArrayError>;
+
+    /// Retrieve the encoded bytes of a chunk.
+    ///
+    /// # Errors
+    /// Returns an [`StorageError`] if there is an underlying store error.
+    #[allow(clippy::missing_panics_doc)]
+    fn retrieve_encoded_chunk(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, StorageError>;
+
+    /// Retrieve the encoded bytes of the chunks in `chunks`.
+    ///
+    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if there is an underlying store error.
+    fn retrieve_encoded_chunks(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+
+    /// Retrieve the encoded bytes of a subchunk.
+    ///
+    /// Only supported for arrays where the array-to-bytes codec is `sharding_indexed` and there
+    /// are no array-to-array or bytes-to-bytes codecs.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the array is not exclusively sharded, the subchunk indices are
+    /// invalid, decoding the shard index fails, or there is an underlying store error.
+    fn retrieve_encoded_subchunk(
+        &self,
+        subchunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, ArrayError>;
+
+    /// Read and decode the subchunk at `subchunk_indices` with explicit codec options.
+    ///
+    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if the subchunk indices are invalid, there is a codec decoding
+    /// error, or there is an underlying store error.
+    fn retrieve_subchunk_opt<T: FromArrayBytes>(
+        &self,
+        subchunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the subchunks at `subchunks` with explicit codec options.
+    ///
+    /// For an unsharded array, subchunk indices are equivalent to chunk indices.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if any subchunk indices are invalid, there is a codec decoding
+    /// error, or there is an underlying store error.
+    fn retrieve_subchunks_opt<T: FromArrayBytes>(
+        &self,
+        subchunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode the `array_subset` of array into a preallocated `output_target`.
+    ///
+    /// Only supports fixed-length data types (including optional types with fixed inner types).
+    ///
+    /// Out-of-bounds elements will have the fill value.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if:
+    ///  - the `array_subset` dimensionality does not match the chunk grid dimensionality,
+    ///  - the data type is variable-length,
+    ///  - the number of elements in `output_target` does not match `array_subset`,
+    ///  - there is a codec decoding error, or
+    ///  - an underlying store error.
+    fn retrieve_array_subset_into(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+    ) -> Result<(), ArrayError>;
+
+    /// Read and decode an array subset into a preallocated target with explicit codec options.
+    /// Explicit options version of [`retrieve_array_subset_into`](ArrayReadOps::retrieve_array_subset_into).
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    fn retrieve_array_subset_into_opt(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), ArrayError>;
+
+    /// Initialises a partial decoder for the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns an [`ArrayError`] if initialisation of the partial decoder fails.
+    fn partial_decoder(
+        &self,
+        chunk_indices: &[u64],
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+
+    /// Initialises a partial decoder for the chunk at `chunk_indices` with explicit codec options.
+    /// Explicit options version of [`partial_decoder`](ArrayReadOps::partial_decoder).
+    #[allow(clippy::missing_errors_doc)]
+    fn partial_decoder_opt(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+}

@@ -168,10 +168,8 @@
 //! //  [ -1.2,  1.3]]
 //!
 //! // Retrieve a subchunk
-//! use zarrs::array::ArrayShardedReadableExt;
-//! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
+// TODO: mention using a partial decoder cache
 //! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk_opt(
-//!     &shard_index_cache,
 //!     &[0, 3], // subchunk index
 //!     &zarrs::array::CodecOptions::default(),
 //! )?;
