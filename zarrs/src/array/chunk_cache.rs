@@ -27,6 +27,8 @@
 //!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
 //!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
 //!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
+//!  - [`invalidate_chunk`](ChunkCache::invalidate_chunk)
+//!  - [`invalidate_chunks`](ChunkCache::invalidate_chunks)
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
@@ -48,7 +50,7 @@ use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::from_array_bytes::FromArrayBytes;
 use crate::array::{
     Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits,
-    IncompatibleDimensionalityError,
+    IncompatibleDimensionalityError, Indexer,
 };
 use crate::iter_concurrent_limit;
 use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
@@ -99,6 +101,24 @@ impl ChunkCacheType for ChunkCacheTypePartialDecoder {
 pub trait ChunkCache: MaybeSend + MaybeSync {
     /// Return the array associated with the chunk cache.
     fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
+
+    /// Invalidate a cached chunk, returning true if the chunk was cached.
+    ///
+    /// # Errors
+    /// Returns an error if the chunk indices are invalid for the array's chunk grid.
+    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
+
+    /// Invalidate cached chunks, returning the number of chunks invalidated.
+    ///
+    /// # Errors
+    /// Returns an error if any of the chunk indices are invalid for the array's chunk grid.
+    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> Result<usize, ArrayError> {
+        let mut invalidated = 0;
+        for chunk_indices in chunks.iter_indices() {
+            invalidated += usize::from(self.invalidate_chunk(&chunk_indices)?);
+        }
+        Ok(invalidated)
+    }
 
     /// Cached variant of [`partial_decoder`](Array::partial_decoder).
     ///
