@@ -58,6 +58,8 @@ mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
+#[cfg(feature = "async")]
+pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
 use std::borrow::Cow;
@@ -72,8 +74,6 @@ use crate::array::{
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
-#[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
     CodecOptions, CodecPluginV3, CodecTraitsV3,

@@ -1,28 +1,27 @@
+use inherent::inherent;
+use std::sync::Arc;
+
 use futures::{StreamExt, TryStreamExt};
 
-use super::concurrency::concurrency_chunks_and_codec;
-use super::{Array, ArrayError, ArrayIndicesTinyVec, IntoArrayBytes};
-use crate::array::ArraySubsetTraits;
+use super::super::super::concurrency::concurrency_chunks_and_codec;
+use super::super::*;
+use super::AsyncArrayUpdateOps;
+use crate::array::{ArrayIndicesTinyVec, update_array_bytes};
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecOptions, CodecTraits,
-    StoragePartialEncoder, update_array_bytes,
+    ArrayToBytesCodecTraits, AsyncArrayPartialEncoderTraits, CodecTraits, StoragePartialEncoder,
 };
-use zarrs_storage::{AsyncReadableStorageTraits, AsyncReadableWritableStorageTraits, MaybeSend};
+use zarrs_storage::StorageHandle;
 
-impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TStorage> {
-    /// Return a read-only instantiation of the array.
-    #[must_use]
-    pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
-        self.with_storage(self.storage.clone().readable())
-    }
-
-    /// Async variant of [`store_chunk_subset`](Array::store_chunk_subset).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset<'a>(
+#[cfg(feature = "async")]
+#[inherent]
+impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArrayUpdateOps
+    for Array<TStorage>
+{
+    pub async fn async_store_chunk_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: impl IntoArrayBytes<'a> + MaybeSend,
+        chunk_subset_data: T,
     ) -> Result<(), ArrayError> {
         self.async_store_chunk_subset_opt(
             chunk_indices,
@@ -33,63 +32,11 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         .await
     }
 
-    /// Async variant of [`store_array_subset`](Array::store_array_subset).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_array_subset<'a>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        subset_data: impl IntoArrayBytes<'a> + MaybeSend,
-    ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
-            .await
-    }
-
-    /// Async variant of [`compact_chunk`](Array::compact_chunk).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_compact_chunk(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<bool, ArrayError> {
-        let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
-        if let Some(chunk_bytes) = chunk_bytes {
-            let chunk_bytes: Vec<u8> = chunk_bytes.into();
-            let chunk_shape = self.chunk_shape(chunk_indices)?;
-            if let Some(compacted_bytes) = self.codecs.compact(
-                chunk_bytes.into(),
-                &chunk_shape,
-                self.data_type(),
-                self.fill_value(),
-                options,
-            )? {
-                // SAFETY: The compacted bytes are already encoded
-                unsafe {
-                    self.async_store_encoded_chunk(
-                        chunk_indices,
-                        bytes::Bytes::from(compacted_bytes.into_owned()),
-                    )
-                    .await?;
-                }
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    /////////////////////////////////////////////////////////////////////////////
-    // Advanced methods
-    /////////////////////////////////////////////////////////////////////////////
-
-    /// Async variant of [`store_chunk_subset_opt`](Array::store_chunk_subset_opt).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub async fn async_store_chunk_subset_opt<'a>(
+    pub async fn async_store_chunk_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
-        chunk_subset_data: impl IntoArrayBytes<'a> + MaybeSend,
+        chunk_subset_data: T,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let chunk_shape = self
@@ -115,11 +62,6 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         } else {
             let chunk_subset_bytes = chunk_subset_data.into_array_bytes(self.data_type())?;
             chunk_subset_bytes.validate(chunk_subset.num_elements(), self.data_type())?;
-
-            // Lock the chunk
-            // let key = self.chunk_key(chunk_indices);
-            // let mutex = self.storage.mutex(&key).await?;
-            // let _lock = mutex.lock();
 
             if options.experimental_partial_encoding()
                 && self.codecs.partial_encoder_capability().partial_encode
@@ -156,13 +98,19 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         }
     }
 
-    /// Async variant of [`store_array_subset_opt`](Array::store_array_subset_opt).
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    #[allow(clippy::too_many_lines)]
-    pub async fn async_store_array_subset_opt<'a>(
+    pub async fn async_store_array_subset<'a, T: IntoArrayBytes<'a> + MaybeSend>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-        subset_data: impl IntoArrayBytes<'a> + MaybeSend,
+        subset_data: T,
+    ) -> Result<(), ArrayError> {
+        self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
+            .await
+    }
+
+    pub async fn async_store_array_subset_opt<'a, T: IntoArrayBytes<'a> + MaybeSend>(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+        subset_data: T,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         // Validation
@@ -250,25 +198,50 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> Array<TSto
         Ok(())
     }
 
-    /// Initialises an asynchronous partial encoder for the chunk at `chunk_indices`.
-    ///
-    /// Only one partial encoder should be created for a chunk at a time because:
-    /// - partial encoders can hold internal state that may become out of sync, and
-    /// - parallel writing to the same chunk [may result in data loss](#parallel-writing).
-    ///
-    /// Partial encoding with [`AsyncArrayPartialEncoderTraits::partial_encode`] will use parallelism internally where possible.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if initialisation of the partial encoder fails.
+    pub async fn async_compact_chunk(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<bool, ArrayError> {
+        let chunk_bytes = self.async_retrieve_encoded_chunk(chunk_indices).await?;
+        if let Some(chunk_bytes) = chunk_bytes {
+            let chunk_bytes: Vec<u8> = chunk_bytes.into();
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
+            if let Some(compacted_bytes) = self.codecs.compact(
+                chunk_bytes.into(),
+                &chunk_shape,
+                self.data_type(),
+                self.fill_value(),
+                options,
+            )? {
+                unsafe {
+                    self.async_store_encoded_chunk(
+                        chunk_indices,
+                        bytes::Bytes::from(compacted_bytes.into_owned()),
+                    )
+                    .await?;
+                }
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+    pub fn async_readable(&self) -> Array<dyn AsyncReadableStorageTraits> {
+        self.with_storage(self.storage.clone().readable())
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Advanced methods
+    /////////////////////////////////////////////////////////////////////////////
+
     pub async fn async_partial_encoder(
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<std::sync::Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
-        use std::sync::Arc;
-
-        use zarrs_storage::StorageHandle;
-
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, ArrayError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
 
         let chunk_shape = self.chunk_shape(chunk_indices)?;
