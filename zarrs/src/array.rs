@@ -98,11 +98,6 @@ use zarrs_plugin::{
 pub use self::array_errors::{AdditionalFieldUnsupportedError, ArrayCreateError, ArrayError};
 pub use self::array_metadata_options::ArrayMetadataOptions;
 pub use self::array_ops::{ArrayMutOps, ArrayOps};
-#[cfg(feature = "async")]
-pub use array_async_sharded_readable_ext::{
-    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
-};
-pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
 use self::chunk_grid::RegularChunkGrid;
 pub use self::codec::CodecChain;
 pub use self::element::{Element, ElementError, ElementOwned};
@@ -110,6 +105,11 @@ pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
 pub use self::storage_transformer::{StorageTransformerChain, StorageTransformerTraits};
 pub use self::tensor::{Tensor, TensorError};
+#[cfg(feature = "async")]
+pub use array_async_sharded_readable_ext::{
+    AsyncArrayShardedReadableExt, AsyncArrayShardedReadableExtCache,
+};
+pub use array_sync_sharded_readable_ext::{ArrayShardedReadableExt, ArrayShardedReadableExtCache};
 
 /// Convert a [`ChunkShape`] reference to an [`ArrayShape`].
 #[must_use]
