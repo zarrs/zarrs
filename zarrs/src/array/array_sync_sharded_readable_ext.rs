@@ -14,7 +14,7 @@ use super::concurrency::concurrency_chunks_and_codec;
 use super::from_array_bytes::FromArrayBytes;
 use super::{
     Array, ArrayBytes, ArrayBytesFixedDisjointView, ArrayError, ArrayIndicesTinyVec,
-    ArrayShardedExt, ChunkGrid, DataTypeSize,
+    ChunkGrid, DataTypeSize,
 };
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::{ArraySubset, ArraySubsetTraits};
@@ -72,16 +72,12 @@ impl ArrayShardedReadableExtCache {
     }
 
     /// Returns true if the array is sharded.
-    ///
-    /// This is cheaper than calling [`ArrayShardedExt::is_sharded`] repeatedly.
     #[must_use]
     pub fn array_is_sharded(&self) -> bool {
         self.array_is_sharded
     }
 
     /// Returns true if the array is exclusively sharded (no array-to-array or bytes-to-bytes codecs).
-    ///
-    /// This is cheaper than calling [`ArrayShardedExt::is_exclusively_sharded`] repeatedly.
     #[must_use]
     pub fn array_is_exclusively_sharded(&self) -> bool {
         self.array_is_exclusively_sharded

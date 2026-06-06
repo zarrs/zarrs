@@ -59,6 +59,7 @@ flate2 = { version = "1.1.1", optional = true }
 futures = { version = "0.3.29", optional = true }
 gdeflate-sys = { version = "0.4.1", optional = true }
 half.workspace = true
+inherent = "1.0.13"
 inventory.workspace = true
 itertools = "0.14.0"
 lru = "0.16.0"

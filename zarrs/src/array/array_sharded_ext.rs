@@ -1,13 +1,11 @@
 use std::num::NonZeroU64;
 
 use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};
-use super::codec::ShardingCodecConfiguration;
 use super::{Array, ArrayError, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
 use zarrs_codec::ArrayToBytesCodecTraits;
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::ExtensionAliasesV3;
 
@@ -173,70 +171,6 @@ pub(crate) fn create_subchunk_grid(
     }
 }
 
-/// An [`Array`] extension trait to simplify working with arrays using the `sharding_indexed` codec.
-pub trait ArrayShardedExt: private::Sealed {
-    /// Returns true if the array to bytes codec of the array is `sharding_indexed`.
-    fn is_sharded(&self) -> bool;
-
-    /// Returns true if the array-to-bytes codec of the array is `sharding_indexed` and the array has no array-to-array or bytes-to-bytes codecs.
-    fn is_exclusively_sharded(&self) -> bool;
-
-    /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
-    ///
-    /// Returns [`None`] for an unsharded array.
-    fn subchunk_shape(&self) -> Option<ChunkShape>;
-
-    /// Retrieve the subchunk grid.
-    ///
-    /// Returns the normal chunk grid for an unsharded array.
-    fn subchunk_grid(&self) -> &ChunkGrid;
-
-    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
-    ///
-    /// Returns the normal chunk grid shape for an unsharded array.
-    fn subchunk_grid_shape(&self) -> ArrayShape;
-}
-
-impl<TStorage: ?Sized> ArrayShardedExt for Array<TStorage> {
-    fn is_sharded(&self) -> bool {
-        self.codecs
-            .array_to_bytes_codec()
-            .as_any()
-            .is::<ShardingCodec>()
-    }
-
-    fn is_exclusively_sharded(&self) -> bool {
-        self.is_sharded()
-            && self.codecs.array_to_array_codecs().is_empty()
-            && self.codecs.bytes_to_bytes_codecs().is_empty()
-    }
-
-    fn subchunk_shape(&self) -> Option<ChunkShape> {
-        let configuration = self
-            .codecs
-            .array_to_bytes_codec()
-            .configuration_v3(self.metadata_options.codec_metadata_options())
-            .expect("the array to bytes codec should have metadata");
-        if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
-            ShardingCodecConfiguration::try_from_configuration(configuration)
-        {
-            Some(sharding_configuration.chunk_shape)
-        } else {
-            None
-        }
-    }
-
-    fn subchunk_grid(&self) -> &ChunkGrid {
-        self.subchunk_grid
-            .as_ref()
-            .unwrap_or_else(|| self.chunk_grid())
-    }
-
-    fn subchunk_grid_shape(&self) -> ArrayShape {
-        self.subchunk_grid().grid_shape().to_vec()
-    }
-}
-
 struct SubchunkShardLocation {
     shard_indices: Vec<u64>,
     shard_origin: Vec<u64>,
@@ -299,14 +233,6 @@ pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
         .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
     Ok((location.shard_indices, chunk_indices))
 }
-mod private {
-    use super::Array;
-
-    pub trait Sealed {}
-
-    impl<TStorage: ?Sized> Sealed for Array<TStorage> {}
-}
-
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
