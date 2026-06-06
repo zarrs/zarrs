@@ -111,6 +111,23 @@ fn fill_value_chunk(
     ))
 }
 
+fn validate_chunk_indices(
+    array: &Array<dyn ReadableStorageTraits>,
+    chunk_indices: &[u64],
+) -> Result<ChunkShape, ArrayError> {
+    if chunk_indices.len() != array.dimensionality()
+        || chunk_indices
+            .iter()
+            .zip(array.chunk_grid_shape())
+            .any(|(&index, &size)| index >= size)
+    {
+        return Err(ArrayError::InvalidChunkGridIndicesError(
+            chunk_indices.to_vec(),
+        ));
+    }
+    array.chunk_shape(chunk_indices)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "chunk_cache_lru_moka.rs"]
 mod platform;
@@ -219,7 +236,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 } else {
                     Arc::new(Mutex::new(None))
                 };
-            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
+            let chunk_shape = validate_chunk_indices(&self.array, chunk_indices)?;
             Ok(self.array.codecs().clone().partial_decoder(
                 input_handle,
                 &chunk_shape,
@@ -234,6 +251,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
+            let chunk_shape = validate_chunk_indices(&self.array, chunk_indices)?;
             let chunk_encoded: ChunkCacheTypeEncoded = self
                 .cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -250,7 +268,6 @@ macro_rules! impl_ChunkCacheLruEncoded {
                 })?;
 
             if let Some(chunk_encoded) = chunk_encoded.as_ref() {
-                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
                 let bytes = self
                     .array
                     .codecs()
@@ -354,6 +371,7 @@ macro_rules! impl_ChunkCacheLruDecoded {
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
+            validate_chunk_indices(&self.array, chunk_indices)?;
             self.cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
                     Ok(self
@@ -456,11 +474,12 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
         ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
+            let chunk_shape = $crate::array::chunk_shape_to_array_shape(&validate_chunk_indices(
+                &self.array,
+                chunk_indices,
+            )?);
             let partial_decoder = self.partial_decoder(chunk_indices, options)?;
             if partial_decoder.exists()? {
-                let chunk_shape = $crate::array::chunk_shape_to_array_shape(
-                    &self.array.chunk_shape(chunk_indices)?,
-                );
                 Ok(Some(
                     partial_decoder
                         .partial_decode(&ArraySubset::new_with_shape(chunk_shape), options)?
@@ -1093,6 +1112,26 @@ mod tests {
             Arc::new(vec![0; 16].into())
         );
         assert_eq!(store.reads(), 2);
+
+        let reads = store.reads();
+        let err = cache
+            .retrieve_chunk_bytes_if_exists(&[3, 0], &options)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![3, 0]
+        ));
+        assert_eq!(store.reads(), reads);
+
+        let err = cache
+            .retrieve_chunk_bytes_if_exists(&[0], &options)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            ArrayError::InvalidChunkGridIndicesError(indices) if indices == vec![0]
+        ));
+        assert_eq!(store.reads(), reads);
+
         assert_eq!(cache.len(), 2);
     }
 
