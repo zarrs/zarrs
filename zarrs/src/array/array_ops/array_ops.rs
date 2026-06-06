@@ -1,0 +1,168 @@
+use super::*;
+
+mod array;
+
+/// Core array operations.
+pub trait ArrayOps {
+    /// The backing storage type.
+    type Storage: ?Sized;
+
+    /// Get the underlying storage backing the array.
+    fn storage(&self) -> Arc<Self::Storage>;
+
+    /// Get the node path.
+    fn path(&self) -> &NodePath;
+
+    /// Get the data type.
+    fn data_type(&self) -> &DataType;
+
+    /// Get the fill value.
+    fn fill_value(&self) -> &FillValue;
+
+    /// Get the array shape.
+    fn shape(&self) -> &[u64];
+
+    /// Get the array dimensionality.
+    fn dimensionality(&self) -> usize;
+
+    /// Get the codecs.
+    fn codecs(&self) -> Arc<CodecChain>;
+
+    /// Get the chunk grid.
+    fn chunk_grid(&self) -> &ChunkGrid;
+
+    /// Get the chunk key encoding.
+    fn chunk_key_encoding(&self) -> &ChunkKeyEncoding;
+
+    /// Get the storage transformers.
+    fn storage_transformers(&self) -> &StorageTransformerChain;
+
+    /// Get the dimension names.
+    fn dimension_names(&self) -> &Option<Vec<DimensionName>>;
+
+    /// Get the attributes.
+    fn attributes(&self) -> &serde_json::Map<String, serde_json::Value>;
+
+    /// Return the underlying array metadata.
+    fn metadata(&self) -> &ArrayMetadata;
+
+    /// Return a new [`ArrayMetadata`] with [`ArrayMetadataOptions`] applied.
+    ///
+    /// This method is used internally by [`Array::store_metadata`] and [`Array::store_metadata_opt`].
+    fn metadata_opt(&self, options: &ArrayMetadataOptions) -> ArrayMetadata;
+
+    /// Create an array builder matching the parameters of this array.
+    fn builder(&self) -> ArrayBuilder;
+
+    /// Return the shape of the chunk grid (i.e., the number of chunks).
+    fn chunk_grid_shape(&self) -> &[u64];
+
+    /// Returns true if the array-to-bytes codec of the array is `sharding_indexed`.
+    #[must_use]
+    fn is_sharded(&self) -> bool;
+
+    /// Returns true if the array-to-bytes codec of the array is `sharding_indexed` and the array has no array-to-array or bytes-to-bytes codecs.
+    #[must_use]
+    fn is_exclusively_sharded(&self) -> bool;
+
+    /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
+    ///
+    /// Returns [`None`] for an unsharded array.
+    #[must_use]
+    fn subchunk_shape(&self) -> Option<ChunkShape>;
+
+    /// Retrieve the subchunk grid.
+    ///
+    /// Returns the normal chunk grid for an unsharded array.
+    #[must_use]
+    fn subchunk_grid(&self) -> &ChunkGrid;
+
+    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
+    ///
+    /// Returns the normal chunk grid shape for an unsharded array.
+    #[must_use]
+    fn subchunk_grid_shape(&self) -> ArrayShape;
+
+    /// Return the store key of the chunk at `chunk_indices`.
+    fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey;
+
+    /// Return the origin of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunk_origin(&self, chunk_indices: &[u64]) -> Result<ArrayIndices, ArrayError>;
+
+    /// Return the shape of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunk_shape(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
+
+    /// Return the partial decode granularity of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    ///
+    /// # Panics
+    /// Panics if any component of the shape of the chunk at `chunk_indices` exceeds [`usize::MAX`].
+    #[allow(clippy::missing_errors_doc)]
+    fn partial_decode_granularity(&self, chunk_indices: &[u64]) -> Result<ChunkShape, ArrayError>;
+
+    /// Return an array subset that spans the entire array.
+    fn subset_all(&self) -> ArraySubset;
+
+    /// Return the shape of the chunk at `chunk_indices` as `usize` values.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    ///
+    /// # Panics
+    /// Panics if any component of the chunk shape exceeds [`usize::MAX`].
+    #[allow(clippy::missing_errors_doc)]
+    fn chunk_shape_usize(&self, chunk_indices: &[u64]) -> Result<Vec<usize>, ArrayError>;
+
+    /// Return the array subset of the chunk at `chunk_indices`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunk_subset(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError>;
+
+    /// Return the array subset of the chunk at `chunk_indices` bounded by the array shape.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunk_subset_bounded(&self, chunk_indices: &[u64]) -> Result<ArraySubset, ArrayError>;
+
+    /// Return the array subset of `chunks`.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if a chunk in `chunks` is incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunks_subset(&self, chunks: &dyn ArraySubsetTraits) -> Result<ArraySubset, ArrayError>;
+
+    /// Return the array subset of `chunks` bounded by the array shape.
+    ///
+    /// # Errors
+    /// Returns [`ArrayError::InvalidChunkGridIndicesError`] if the `chunk_indices` are incompatible with the chunk grid.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunks_subset_bounded(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<ArraySubset, ArrayError>;
+
+    /// Return an array subset indicating the chunks intersecting `array_subset`.
+    ///
+    /// Returns [`None`] if the intersecting chunks cannot be determined.
+    ///
+    /// # Errors
+    /// Returns [`IncompatibleDimensionalityError`] if the array subset has an incorrect dimensionality.
+    #[allow(clippy::missing_errors_doc)]
+    fn chunks_in_array_subset(
+        &self,
+        array_subset: &dyn ArraySubsetTraits,
+    ) -> Result<Option<ArraySubset>, IncompatibleDimensionalityError>;
+}
