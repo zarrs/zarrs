@@ -7,7 +7,7 @@ use super::{
 };
 use crate::array::{
     Array, ArrayBytes, ArrayError, ArrayIndices, ArraySubset, ArraySubsetTraits, ChunkShape,
-    ChunkShapeTraits, DataType, Indexer,
+    ChunkShapeTraits, DataType, FillValue, Indexer,
 };
 use zarrs_codec::{ArrayPartialDecoderTraits, ArrayToBytesCodecTraits, CodecError};
 use zarrs_storage::{ReadableStorageTraits, StorageError};
@@ -38,14 +38,21 @@ struct CachedArrayBytesPartialDecoder {
     bytes: ChunkCacheTypeDecoded,
     shape: ChunkShape,
     data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl CachedArrayBytesPartialDecoder {
-    fn new(bytes: ChunkCacheTypeDecoded, shape: ChunkShape, data_type: DataType) -> Self {
+    fn new(
+        bytes: ChunkCacheTypeDecoded,
+        shape: ChunkShape,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Self {
         Self {
             bytes,
             shape,
             data_type,
+            fill_value,
         }
     }
 }
@@ -56,7 +63,7 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
-        Ok(true)
+        Ok(self.bytes.is_some())
     }
 
     fn size_held(&self) -> usize {
@@ -68,16 +75,40 @@ impl ArrayPartialDecoderTraits for CachedArrayBytesPartialDecoder {
         indexer: &dyn Indexer,
         _options: &zarrs_codec::CodecOptions,
     ) -> Result<ArrayBytes<'_>, CodecError> {
-        Ok(self.bytes.extract_array_subset(
-            indexer,
-            bytemuck::must_cast_slice(&self.shape),
-            &self.data_type,
-        )?)
+        if let Some(bytes) = &self.bytes {
+            Ok(bytes.extract_array_subset(
+                indexer,
+                bytemuck::must_cast_slice(&self.shape),
+                &self.data_type,
+            )?)
+        } else {
+            Ok(ArrayBytes::new_fill_value(
+                &self.data_type,
+                indexer.len(),
+                &self.fill_value,
+            )?)
+        }
     }
 
     fn supports_partial_decode(&self) -> bool {
         true
     }
+}
+
+fn fill_value_chunk(
+    array: &Array<dyn ReadableStorageTraits>,
+    chunk_indices: &[u64],
+) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+    let chunk_shape = array.chunk_shape(chunk_indices)?;
+    Ok(Arc::new(
+        ArrayBytes::new_fill_value(
+            array.data_type(),
+            chunk_shape.num_elements_u64(),
+            array.fill_value(),
+        )
+        .map_err(CodecError::from)
+        .map_err(ArrayError::from)?,
+    ))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -198,12 +229,12 @@ macro_rules! impl_ChunkCacheLruEncoded {
             )?)
         }
 
-        fn retrieve_chunk_bytes(
+        fn retrieve_chunk_bytes_if_exists(
             &self,
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
-            let chunk_encoded = self
+        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
+            let chunk_encoded: ChunkCacheTypeEncoded = self
                 .cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
                     Ok(self
@@ -232,18 +263,21 @@ macro_rules! impl_ChunkCacheLruEncoded {
                     )
                     .map_err(ArrayError::CodecError)?;
                 bytes.validate(chunk_shape.num_elements_u64(), self.array.data_type())?;
-                Ok(Arc::new(bytes.into_owned()))
+                Ok(Some(Arc::new(bytes.into_owned())))
             } else {
-                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
-                Ok(Arc::new(
-                    ArrayBytes::new_fill_value(
-                        self.array.data_type(),
-                        chunk_shape.num_elements_u64(),
-                        self.array.fill_value(),
-                    )
-                    .map_err(CodecError::from)
-                    .map_err(ArrayError::from)?,
-                ))
+                Ok(None)
+            }
+        }
+
+        fn retrieve_chunk_bytes(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+            if let Some(bytes) = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)? {
+                Ok(bytes)
+            } else {
+                fill_value_chunk(&self.array, chunk_indices)
             }
         }
 
@@ -252,7 +286,7 @@ macro_rules! impl_ChunkCacheLruEncoded {
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
             let chunk_encoded: ChunkCacheTypeEncoded = self
                 .cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
@@ -305,26 +339,30 @@ macro_rules! impl_ChunkCacheLruDecoded {
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
         ) -> Result<ChunkCacheTypePartialDecoder, ArrayError> {
-            let bytes = self.retrieve_chunk_bytes(chunk_indices, options)?;
+            let bytes = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)?;
             let chunk_shape = self.array.chunk_shape(chunk_indices)?;
             Ok(Arc::new(CachedArrayBytesPartialDecoder::new(
                 bytes,
                 chunk_shape,
                 self.array.data_type().clone(),
+                self.array.fill_value().clone(),
             )))
         }
 
-        fn retrieve_chunk_bytes(
+        fn retrieve_chunk_bytes_if_exists(
             &self,
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
             self.cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(
-                        self.array
-                            .retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
-                    ))
+                    Ok(self
+                        .array
+                        .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(
+                            chunk_indices,
+                            options,
+                        )?
+                        .map(Arc::new))
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
@@ -332,6 +370,18 @@ macro_rules! impl_ChunkCacheLruDecoded {
                         ArrayError::StorageError(StorageError::from(err.to_string()))
                     })
                 })
+        }
+
+        fn retrieve_chunk_bytes(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+            if let Some(bytes) = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)? {
+                Ok(bytes)
+            } else {
+                fill_value_chunk(&self.array, chunk_indices)
+            }
         }
 
         fn retrieve_chunk_subset_bytes(
@@ -339,14 +389,17 @@ macro_rules! impl_ChunkCacheLruDecoded {
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
             let chunk = self
                 .cache
                 .try_get_or_insert_with(chunk_indices.to_vec(), || {
-                    Ok(Arc::new(
-                        self.array
-                            .retrieve_chunk_opt::<ArrayBytes<'static>>(chunk_indices, options)?,
-                    ))
+                    Ok(self
+                        .array
+                        .retrieve_chunk_if_exists_opt::<ArrayBytes<'static>>(
+                            chunk_indices,
+                            options,
+                        )?
+                        .map(Arc::new))
                 })
                 .map_err(|err| {
                     // moka returns an Arc'd error, unwrap it noting that ArrayError is not cloneable
@@ -354,15 +407,27 @@ macro_rules! impl_ChunkCacheLruDecoded {
                         ArrayError::StorageError(StorageError::from(err.to_string()))
                     })
                 })?;
-            let chunk_shape = self.array.chunk_shape(chunk_indices)?;
-            Ok(chunk
-                .extract_array_subset(
-                    chunk_subset,
-                    bytemuck::must_cast_slice(&chunk_shape),
-                    self.array.data_type(),
-                )?
-                .into_owned()
-                .into())
+            if let Some(chunk) = chunk {
+                let chunk_shape = self.array.chunk_shape(chunk_indices)?;
+                Ok(chunk
+                    .extract_array_subset(
+                        chunk_subset,
+                        bytemuck::must_cast_slice(&chunk_shape),
+                        self.array.data_type(),
+                    )?
+                    .into_owned()
+                    .into())
+            } else {
+                Ok(Arc::new(
+                    ArrayBytes::new_fill_value(
+                        self.array.data_type(),
+                        chunk_subset.num_elements(),
+                        self.array.fill_value(),
+                    )
+                    .map_err(CodecError::from)
+                    .map_err(ArrayError::from)?,
+                ))
+            }
         }
     };
 }
@@ -386,18 +451,37 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
                 })
         }
 
+        fn retrieve_chunk_bytes_if_exists(
+            &self,
+            chunk_indices: &[u64],
+            options: &zarrs_codec::CodecOptions,
+        ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError> {
+            let partial_decoder = self.partial_decoder(chunk_indices, options)?;
+            if partial_decoder.exists()? {
+                let chunk_shape = $crate::array::chunk_shape_to_array_shape(
+                    &self.array.chunk_shape(chunk_indices)?,
+                );
+                Ok(Some(
+                    partial_decoder
+                        .partial_decode(&ArraySubset::new_with_shape(chunk_shape), options)?
+                        .into_owned()
+                        .into(),
+                ))
+            } else {
+                Ok(None)
+            }
+        }
+
         fn retrieve_chunk_bytes(
             &self,
             chunk_indices: &[u64],
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
-            let partial_decoder = self.partial_decoder(chunk_indices, options)?;
-            let chunk_shape =
-                $crate::array::chunk_shape_to_array_shape(&self.array.chunk_shape(chunk_indices)?);
-            Ok(partial_decoder
-                .partial_decode(&ArraySubset::new_with_shape(chunk_shape), options)?
-                .into_owned()
-                .into())
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
+            if let Some(bytes) = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)? {
+                Ok(bytes)
+            } else {
+                fill_value_chunk(&self.array, chunk_indices)
+            }
         }
 
         fn retrieve_chunk_subset_bytes(
@@ -405,7 +489,7 @@ macro_rules! impl_ChunkCacheLruPartialDecoder {
             chunk_indices: &[u64],
             chunk_subset: &dyn ArraySubsetTraits,
             options: &zarrs_codec::CodecOptions,
-        ) -> Result<ChunkCacheTypeDecoded, ArrayError> {
+        ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
             let partial_decoder = self.partial_decoder(chunk_indices, options)?;
             Ok(partial_decoder
                 .partial_decode(chunk_subset, options)?
@@ -563,8 +647,8 @@ mod tests {
         let store: ReadableWritableStorage = Arc::new(MemoryStore::default());
         let store = Arc::new(PerformanceMetricsStorageAdapter::new(store));
         let array = ArrayBuilder::new(
-            vec![8, 8], // array shape
-            vec![4, 4], // regular chunk shape
+            vec![12, 8], // array shape
+            vec![4, 4],  // regular chunk shape
             data_type::uint8(),
             0u8,
         )
@@ -592,7 +676,7 @@ mod tests {
         thread_local: bool,
         size_limit: bool,
         partial_decoder: bool,
-        encoded: bool,
+        _encoded: bool,
     ) {
         assert_eq!(store.reads(), 0);
         assert!(cache.is_empty());
@@ -747,7 +831,7 @@ mod tests {
                 assert_eq!(store.reads(), 5);
             }
 
-            if size_limit && (encoded || partial_decoder) {
+            if size_limit {
                 assert_eq!(cache.len(), 2 + 1); // empty chunk is not included in size limit
             } else {
                 assert_eq!(cache.len(), 2);
@@ -956,6 +1040,114 @@ mod tests {
         let (store, array) = create_store_array_zstd();
         let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
         array_chunk_cache_zstd_partial_decoder_decoded_data_cached_impl(store, cache, true);
+    }
+
+    #[cfg(feature = "zstd")]
+    fn array_chunk_cache_retrieve_chunk_if_exists_zstd_impl<TChunkCache: ChunkCache>(
+        store: Arc<PerformanceMetricsStorageAdapter<dyn ReadableWritableStorageTraits>>,
+        cache: TChunkCache,
+    ) {
+        let options = CodecOptions::default();
+        let decoded_chunk: Arc<ArrayBytes<'static>> =
+            Arc::new(vec![0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27].into());
+
+        assert_eq!(store.reads(), 0);
+        assert!(cache.is_empty());
+
+        assert_eq!(
+            cache
+                .retrieve_chunk_bytes_if_exists(&[0, 0], &options)
+                .unwrap(),
+            Some(decoded_chunk)
+        );
+        assert_eq!(store.reads(), 1);
+
+        assert_eq!(
+            cache
+                .retrieve_chunk_if_exists::<Vec<u8>>(&[0, 0], &options)
+                .unwrap(),
+            Some(vec![
+                0, 1, 2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27,
+            ])
+        );
+        assert_eq!(store.reads(), 1);
+
+        assert!(
+            cache
+                .retrieve_chunk_bytes_if_exists(&[2, 1], &options)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(store.reads(), 2);
+
+        assert!(
+            cache
+                .retrieve_chunk_if_exists::<Vec<u8>>(&[2, 1], &options)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(store.reads(), 2);
+
+        assert_eq!(
+            cache.retrieve_chunk_bytes(&[2, 1], &options).unwrap(),
+            Arc::new(vec![0; 16].into())
+        );
+        assert_eq!(store.reads(), 2);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_chunks_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheEncodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_encoded_size_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheEncodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_chunks_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheDecodedLruChunkLimit::new(array, 2);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_decoded_size_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCacheDecodedLruSizeLimit::new(array, 1024);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_chunks_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCachePartialDecoderLruChunkLimit::new(array, 2);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(miri, ignore)]
+    fn array_chunk_cache_partial_decoder_size_retrieve_chunk_if_exists_zstd() {
+        let (store, array) = create_store_array_zstd();
+        let cache = ChunkCachePartialDecoderLruSizeLimit::new(array, 1024);
+        array_chunk_cache_retrieve_chunk_if_exists_zstd_impl(store, cache);
     }
 
     #[allow(clippy::type_complexity)]
