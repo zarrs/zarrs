@@ -512,6 +512,40 @@ async fn array_async_read_encoded_subchunk_missing() -> Result<(), Box<dyn std::
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
+async fn array_async_read_nested_sharding_levels() -> Result<(), Box<dyn std::error::Error>> {
+    use zarrs::array::codec::ShardingCodecBuilder;
+
+    let store = Arc::new(zarrs_object_store::AsyncObjectStore::new(InMemory::new()));
+    let data_type = data_type::uint16();
+    let nested_sharding =
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type).build_arc();
+    let outer_sharding =
+        ShardingCodecBuilder::new(vec![NonZeroU64::new(4).unwrap(); 2], &data_type)
+            .array_to_bytes_codec(nested_sharding)
+            .build_arc();
+    let array = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16)
+        .array_to_bytes_codec(outer_sharding)
+        .build(store, "/array")?;
+
+    let data: Vec<u16> = (0..64).collect();
+    array
+        .async_store_array_subset(&array.subset_all(), &data)
+        .await?;
+
+    assert_eq!(array.num_chunk_grid_levels(), 3);
+    assert_eq!(
+        array
+            .async_retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])
+            .await?,
+        array
+            .async_retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])
+            .await?
+    );
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
 async fn array_async_read_encoded_subchunk_outer_codec_unsupported()
 -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::codec::ShardingCodecBuilder;

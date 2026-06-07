@@ -98,6 +98,9 @@ pub enum ArrayError {
     /// Invalid chunk grid indices.
     #[error("invalid chunk grid indices: {_0:?}")]
     InvalidChunkGridIndicesError(Vec<u64>),
+    /// Invalid chunk grid level.
+    #[error("invalid chunk grid level {_0}")]
+    InvalidChunkGridLevel(usize),
     /// Incompatible dimensionality.
     #[error(transparent)]
     IncompatibleDimensionalityError(#[from] IncompatibleDimensionalityError),

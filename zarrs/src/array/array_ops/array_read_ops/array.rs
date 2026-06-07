@@ -86,6 +86,52 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
+    pub fn retrieve_chunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunk_at_level_opt(level, chunk_indices, &self.codec_options)
+    }
+
+    pub fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
+        let grid = self
+            .chunk_grid_at_level(level)
+            .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
+        let subset = grid
+            .subset(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        self.retrieve_array_subset_opt(&subset, options)
+    }
+
+    pub fn retrieve_chunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunks_at_level_opt(level, chunks, &self.codec_options)
+    }
+
+    pub fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
+        let grid = self
+            .chunk_grid_at_level(level)
+            .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
+        let subset = grid.chunks_subset(chunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(chunks.to_array_subset(), grid.grid_shape().to_vec())
+        })?;
+        self.retrieve_array_subset_opt(&subset, options)
+    }
+
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
@@ -650,6 +696,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::array::codec::ShardingCodecBuilder;
     use crate::array::{ArrayBuilder, ArraySubset, data_type};
     use zarrs_storage::store::MemoryStore;
 
@@ -750,6 +797,67 @@ mod tests {
     #[test]
     fn array_read_ops_subchunks_unsharded() -> Result<(), Box<dyn std::error::Error>> {
         array_read_ops_subchunks_impl(false)
+    }
+
+    #[test]
+    fn array_read_ops_nested_sharding_levels() -> Result<(), Box<dyn std::error::Error>> {
+        let store = Arc::new(MemoryStore::default());
+        let data_type = data_type::uint16();
+        let nested_sharding =
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(2).unwrap(); 2], &data_type).build_arc();
+        let outer_sharding =
+            ShardingCodecBuilder::new(vec![NonZeroU64::new(4).unwrap(); 2], &data_type)
+                .array_to_bytes_codec(nested_sharding)
+                .build_arc();
+        let array = ArrayBuilder::new(vec![8, 8], vec![8, 8], data_type, 0u16)
+            .array_to_bytes_codec(outer_sharding)
+            .build(store.clone(), "/array")?;
+
+        assert_eq!(array.num_chunk_grid_levels(), 3);
+        assert_eq!(array.chunk_grid_at_level(0).unwrap().grid_shape(), &[1, 1]);
+        assert_eq!(array.chunk_grid_at_level(1).unwrap().grid_shape(), &[2, 2]);
+        assert_eq!(array.chunk_grid_at_level(2).unwrap().grid_shape(), &[4, 4]);
+        assert!(array.chunk_grid_at_level(3).is_none());
+        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 2]);
+        assert_eq!(
+            array.subchunk_shape(),
+            Some(vec![NonZeroU64::new(4).unwrap(); 2])
+        );
+
+        let data: Vec<u16> = (0..64).collect();
+        array.store_array_subset(&array.subset_all(), &data)?;
+
+        assert_eq!(array.retrieve_chunk_at_level::<Vec<u16>>(0, &[0, 0])?, data);
+        assert_eq!(
+            array.retrieve_chunk_at_level::<Vec<u16>>(1, &[1, 1])?,
+            array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?
+        );
+        assert_eq!(
+            array.retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])?,
+            array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?
+        );
+        assert_eq!(
+            array.retrieve_chunks_at_level::<Vec<u16>>(
+                2,
+                &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+            )?,
+            array.retrieve_array_subset::<Vec<u16>>(&[2..6, 2..6])?
+        );
+        assert!(matches!(
+            array.retrieve_chunk_at_level::<Vec<u16>>(3, &[0, 0]),
+            Err(ArrayError::InvalidChunkGridLevel(3))
+        ));
+        assert!(array.retrieve_encoded_subchunk(&[0, 0])?.is_some());
+
+        array.store_metadata()?;
+        let reopened = Array::open(store, "/array")?;
+        assert_eq!(reopened.num_chunk_grid_levels(), 3);
+        assert_eq!(
+            reopened.retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])?,
+            array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?
+        );
+
+        Ok(())
     }
 
     #[test]

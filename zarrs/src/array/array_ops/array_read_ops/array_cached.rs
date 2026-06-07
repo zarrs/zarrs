@@ -438,6 +438,52 @@ where
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
+    pub fn retrieve_chunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunk_at_level_opt(level, chunk_indices, &self.array().codec_options)
+    }
+
+    pub fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
+        let grid = self
+            .chunk_grid_at_level(level)
+            .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
+        let subset = grid
+            .subset(chunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+        self.retrieve_array_subset_opt(&subset, options)
+    }
+
+    pub fn retrieve_chunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunks_at_level_opt(level, chunks, &self.array().codec_options)
+    }
+
+    pub fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError> {
+        let grid = self
+            .chunk_grid_at_level(level)
+            .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
+        let subset = grid.chunks_subset(chunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(chunks.to_array_subset(), grid.grid_shape().to_vec())
+        })?;
+        self.retrieve_array_subset_opt(&subset, options)
+    }
+
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
@@ -521,6 +567,10 @@ mod tests {
         let cached = ArrayCached::new(array, cache);
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
         assert_eq!(
+            cached.retrieve_chunk_at_level::<Vec<u8>>(0, &[0]).unwrap(),
+            vec![1, 2]
+        );
+        assert_eq!(
             cached
                 .retrieve_chunk_subset::<Vec<u8>>(&[0], &[1..2])
                 .unwrap(),
@@ -593,6 +643,12 @@ mod tests {
         assert_eq!(
             cached
                 .retrieve_subchunk_opt::<Vec<u16>>(&[2, 3], &options)
+                .unwrap(),
+            vec![38, 39, 46, 47]
+        );
+        assert_eq!(
+            cached
+                .retrieve_chunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)
                 .unwrap(),
             vec![38, 39, 46, 47]
         );

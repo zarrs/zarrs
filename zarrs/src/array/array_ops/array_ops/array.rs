@@ -218,6 +218,22 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.chunk_grid().grid_shape()
     }
 
+    pub fn num_chunk_grid_levels(&self) -> usize {
+        self.subchunk_grids.len() + 1
+    }
+
+    pub fn chunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
+        if level == 0 {
+            Some(self.chunk_grid())
+        } else {
+            self.subchunk_grids.get(level - 1)
+        }
+    }
+
+    pub fn subchunk_grids(&self) -> &[ChunkGrid] {
+        &self.subchunk_grids
+    }
+
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
         let configuration = self
             .codecs
@@ -233,8 +249,8 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
     }
 
     pub fn subchunk_grid(&self) -> &ChunkGrid {
-        self.subchunk_grid
-            .as_ref()
+        self.subchunk_grids
+            .first()
             .unwrap_or_else(|| self.chunk_grid())
     }
 

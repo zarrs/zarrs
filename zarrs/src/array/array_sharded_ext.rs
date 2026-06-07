@@ -5,7 +5,6 @@ use super::{ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
-use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::ExtensionAliasesV3;
 
@@ -114,26 +113,19 @@ fn repeated_subchunk_grid_for_regular_shards(
         .map(ChunkGrid::new)
 }
 
-pub(crate) fn create_subchunk_grid(
+fn create_subchunk_grid_for_shape(
     chunk_grid: &ChunkGrid,
-    codecs: &CodecChain,
+    subchunk_shape: &ChunkShape,
 ) -> Option<ChunkGrid> {
-    if !codecs.array_to_bytes_codec().as_any().is::<ShardingCodec>() {
-        return None;
-    }
-
     let dimensionality = chunk_grid.dimensionality();
     let origin_chunk = vec![0; dimensionality];
     let decoded_chunk_shape = chunk_grid.chunk_shape(&origin_chunk).ok().flatten()?;
-    let subchunk_shape = codecs
-        .partial_decode_granularity(&decoded_chunk_shape)
-        .ok()?;
-    if subchunk_shape == decoded_chunk_shape {
+    if *subchunk_shape == decoded_chunk_shape {
         return Some(chunk_grid.clone());
     }
 
     if let Some(subchunk_grid) =
-        repeated_subchunk_grid_for_regular_shards(chunk_grid, &decoded_chunk_shape, &subchunk_shape)
+        repeated_subchunk_grid_for_regular_shards(chunk_grid, &decoded_chunk_shape, subchunk_shape)
     {
         return Some(subchunk_grid);
     }
@@ -148,7 +140,7 @@ pub(crate) fn create_subchunk_grid(
             dim,
             &chunk_edge_lengths,
             &decoded_chunk_shape,
-            &subchunk_shape,
+            subchunk_shape,
         ) else {
             return Some(chunk_grid.clone());
         };
@@ -166,9 +158,52 @@ pub(crate) fn create_subchunk_grid(
         ))
     } else {
         Some(ChunkGrid::new(
-            RegularChunkGrid::new(subchunk_grid_shape, subchunk_shape).ok()?,
+            RegularChunkGrid::new(subchunk_grid_shape, subchunk_shape.clone()).ok()?,
         ))
     }
+}
+
+fn subchunk_shapes(codecs: &CodecChain, decoded_shape: &ChunkShape) -> Option<Vec<ChunkShape>> {
+    let mut array_shapes = Vec::with_capacity(codecs.array_to_array_codecs().len() + 1);
+    array_shapes.push(decoded_shape.clone());
+    for codec in codecs.array_to_array_codecs() {
+        array_shapes.push(codec.encoded_shape(array_shapes.last()?).ok()?);
+    }
+
+    let sharding = codecs
+        .array_to_bytes_codec()
+        .as_any()
+        .downcast_ref::<ShardingCodec>()?;
+    let mut shapes = vec![sharding.subchunk_shape.clone()];
+    shapes.extend(
+        subchunk_shapes(&sharding.inner_codecs, &sharding.subchunk_shape).unwrap_or_default(),
+    );
+
+    for shape in &mut shapes {
+        for (codec, decoded_shape) in codecs
+            .array_to_array_codecs()
+            .iter()
+            .rev()
+            .zip(array_shapes.iter().rev().skip(1))
+        {
+            *shape = codec
+                .partial_decode_granularity(decoded_shape, shape)
+                .ok()?;
+        }
+    }
+    Some(shapes)
+}
+
+pub(crate) fn create_subchunk_grids(chunk_grid: &ChunkGrid, codecs: &CodecChain) -> Vec<ChunkGrid> {
+    let origin_chunk = vec![0; chunk_grid.dimensionality()];
+    let Some(decoded_chunk_shape) = chunk_grid.chunk_shape(&origin_chunk).ok().flatten() else {
+        return Vec::new();
+    };
+    subchunk_shapes(codecs, &decoded_chunk_shape)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|shape| create_subchunk_grid_for_shape(chunk_grid, shape))
+        .collect()
 }
 
 struct SubchunkShardLocation {

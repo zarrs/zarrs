@@ -83,6 +83,18 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().chunk_grid_shape()
     }
 
+    pub fn num_chunk_grid_levels(&self) -> usize {
+        self.array().num_chunk_grid_levels()
+    }
+
+    pub fn chunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
+        self.array().chunk_grid_at_level(level)
+    }
+
+    pub fn subchunk_grids(&self) -> &[ChunkGrid] {
+        self.array().subchunk_grids()
+    }
+
     pub fn subchunk_shape(&self) -> Option<ChunkShape> {
         self.array().subchunk_shape()
     }

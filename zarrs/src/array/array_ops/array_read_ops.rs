@@ -101,6 +101,40 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_array_subset_opt(&array_subset, options)
     }
 
+    /// Read and decode a chunk from the chunk grid at `level`.
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode a chunk from the chunk grid at `level` with explicit codec options.
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode chunks from the chunk grid at `level`.
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    /// Read and decode chunks from the chunk grid at `level` with explicit codec options.
+    #[allow(clippy::missing_errors_doc)]
+    fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
     /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
     ///
     /// # Errors

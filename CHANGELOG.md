@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
   - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
+  - Add nested sharding grid hierarchy queries: `num_chunk_grid_levels`, `chunk_grid_at_level`, and `subchunk_grids`
+  - Add sync and async `retrieve_{chunk,chunks}_at_level` methods
   - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
+- Nested sharding bounded encoded size calculation and codec-specific option propagation
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 

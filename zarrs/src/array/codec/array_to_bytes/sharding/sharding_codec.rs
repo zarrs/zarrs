@@ -175,13 +175,22 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
     ) -> Arc<dyn ArrayToBytesCodecTraits> {
+        let mut codec = self;
+        let codec_mut = Arc::make_mut(&mut codec);
         if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
-            let mut codec = self;
-            Arc::make_mut(&mut codec).options = sharding_opts.clone();
-            codec
-        } else {
-            self.into_dyn()
+            codec_mut.options = sharding_opts.clone();
         }
+        codec_mut.inner_codecs = Arc::new(
+            (*codec_mut.inner_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        codec_mut.index_codecs = Arc::new(
+            (*codec_mut.index_codecs)
+                .clone()
+                .with_codec_specific_options(opts),
+        );
+        codec
     }
 
     fn encode<'a>(
@@ -661,9 +670,11 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
         fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Get the maximum size of encoded chunks
-        let chunk_bytes_representation = self
-            .inner_codecs
-            .encoded_representation(shape, data_type, fill_value)?;
+        let chunk_bytes_representation = self.inner_codecs.encoded_representation(
+            &self.subchunk_shape,
+            data_type,
+            fill_value,
+        )?;
 
         match chunk_bytes_representation {
             BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {

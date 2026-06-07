@@ -43,6 +43,40 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
+    /// Async variant of [`ArrayReadOps::retrieve_chunk_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunk_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+    ) -> Result<T, ArrayError>;
+
+    /// Async variant of [`ArrayReadOps::retrieve_chunk_at_level_opt`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
+    /// Async variant of [`ArrayReadOps::retrieve_chunks_at_level`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunks_at_level<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<T, ArrayError>;
+
+    /// Async variant of [`ArrayReadOps::retrieve_chunks_at_level_opt`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+        &self,
+        level: usize,
+        chunks: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<T, ArrayError>;
+
     /// Async variant of [`ArrayReadOps::retrieve_chunk_subset`].
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_chunk_subset<T: FromArrayBytes>(

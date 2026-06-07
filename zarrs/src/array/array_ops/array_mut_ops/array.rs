@@ -12,6 +12,10 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
 
     pub fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self {
         self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts));
+        self.subchunk_grids = crate::array::array_sharded_ext::create_subchunk_grids(
+            &self.chunk_grid,
+            self.codecs.as_ref(),
+        );
         self
     }
 
@@ -23,7 +27,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
     pub fn set_shape(&mut self, array_shape: ArrayShape) -> Result<&mut Self, ArrayCreateError> {
         self.chunk_grid = ChunkGrid::from_metadata(&self.chunk_grid.metadata(), &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
-        self.subchunk_grid = crate::array::array_sharded_ext::create_subchunk_grid(
+        self.subchunk_grids = crate::array::array_sharded_ext::create_subchunk_grids(
             &self.chunk_grid,
             self.codecs.as_ref(),
         );

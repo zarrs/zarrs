@@ -67,19 +67,34 @@ pub trait ArrayOps {
     /// Return the shape of the chunk grid (i.e., the number of chunks).
     fn chunk_grid_shape(&self) -> &[u64];
 
+    /// Return the number of chunk grid levels, including the top-level storage chunk grid.
+    #[must_use]
+    fn num_chunk_grid_levels(&self) -> usize;
+
+    /// Return the chunk grid at `level`.
+    ///
+    /// Level zero is the top-level storage chunk grid. Subsequent levels correspond to nested
+    /// `sharding_indexed` codecs, outermost first.
+    #[must_use]
+    fn chunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid>;
+
+    /// Return all subchunk grids, outermost first.
+    #[must_use]
+    fn subchunk_grids(&self) -> &[ChunkGrid];
+
     /// Return the subchunk shape as defined in the `sharding_indexed` codec metadata.
     ///
     /// Returns [`None`] for an unsharded array.
     #[must_use]
     fn subchunk_shape(&self) -> Option<ChunkShape>;
 
-    /// Retrieve the subchunk grid.
+    /// Retrieve the direct subchunk grid of the outermost `sharding_indexed` codec.
     ///
     /// Returns the normal chunk grid for an unsharded array.
     #[must_use]
     fn subchunk_grid(&self) -> &ChunkGrid;
 
-    /// Return the shape of the subchunk grid (i.e., the number of subchunks).
+    /// Return the shape of the direct subchunk grid (i.e., the number of direct subchunks).
     ///
     /// Returns the normal chunk grid shape for an unsharded array.
     #[must_use]
