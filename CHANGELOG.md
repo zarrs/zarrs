@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `Default` for `MetadataRetrieveVersion`
+- Add `GroupOpenOptions`
+- Add `Group::new_with_metadata_opt`
+- Implement `Copy` for `GroupMetadataOptions`
 
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
@@ -32,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `retrieve_chunk_if_exists`
     - `invalidate_chunks`
   - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
+- **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
 
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants

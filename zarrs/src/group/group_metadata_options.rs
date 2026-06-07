@@ -1,7 +1,7 @@
 use crate::config::MetadataConvertVersion;
 
 /// Options for writing group metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct GroupMetadataOptions {
     convert_version: MetadataConvertVersion,
 }
