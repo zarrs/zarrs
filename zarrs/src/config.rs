@@ -351,8 +351,10 @@ pub fn global_config_mut() -> RwLockWriteGuard<'static, Config> {
 /// The metadata version to retrieve.
 ///
 /// Used with [`crate::array::Array::open_opt`], [`crate::group::Group::open_opt`].
+#[derive(Debug, Clone, Copy, Default)]
 pub enum MetadataRetrieveVersion {
     /// Either Zarr V3 or V2. V3 is prioritised over V2 if found.
+    #[default]
     Default,
     /// Zarr V3.
     V3,
