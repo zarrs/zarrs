@@ -3,12 +3,19 @@
 
 use std::sync::Arc;
 
+use serial_test::serial;
+use zarrs::config::{Config, global_config_mut};
 use zarrs::filesystem::FilesystemStore;
 use zarrs::group::Group;
 use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
 use zarrs::node::Node;
 #[cfg(feature = "async")]
 use zarrs::storage::{AsyncListableStorageTraits, AsyncReadableStorageTraits};
+
+/// Reset global config to defaults. Used by tests that read global config.
+fn reset_config() {
+    *global_config_mut() = Config::default();
+}
 
 fn sync_store() -> Arc<FilesystemStore> {
     Arc::new(
@@ -28,7 +35,9 @@ async fn async_store() -> Arc<impl AsyncReadableStorageTraits + AsyncListableSto
 }
 
 #[test]
+#[serial]
 fn hierarchy_tree() {
+    reset_config();
     let store = sync_store();
     let node = Node::open(&store, "/").unwrap();
     let tree = node.hierarchy_tree();
@@ -45,7 +54,9 @@ fn hierarchy_tree() {
 }
 
 #[test]
+#[serial]
 fn consolidated_metadata() {
+    reset_config();
     let store = sync_store();
     let node = Node::open(&store, "/").unwrap();
     let consolidated_metadata = node.consolidate_metadata().unwrap();
@@ -78,7 +89,9 @@ fn consolidated_metadata() {
 }
 
 #[test]
+#[serial]
 fn child_arrays() {
+    reset_config();
     let store = sync_store();
 
     // Two arrays in /a
@@ -94,7 +107,9 @@ fn child_arrays() {
 }
 
 #[test]
+#[serial]
 fn child_groups() {
+    reset_config();
     let store = sync_store();
 
     // At root, there are two groups: a and b
@@ -110,7 +125,9 @@ fn child_groups() {
 }
 
 #[test]
+#[serial]
 fn child_paths() {
+    reset_config();
     let store = sync_store();
 
     // At root, there are two child paths: a and b (both groups)
@@ -133,7 +150,9 @@ fn child_paths() {
 }
 
 #[test]
+#[serial]
 fn child_group_paths() {
+    reset_config();
     let store = sync_store();
 
     // At root, there are two group paths: a and b
@@ -152,7 +171,9 @@ fn child_group_paths() {
 }
 
 #[test]
+#[serial]
 fn child_array_paths() {
+    reset_config();
     let store = sync_store();
 
     // At root, there are no array paths (only groups)
@@ -172,7 +193,9 @@ fn child_array_paths() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[serial]
 async fn async_child_arrays() {
+    reset_config();
     let store = async_store().await;
 
     // Two arrays in /a
@@ -189,7 +212,9 @@ async fn async_child_arrays() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[serial]
 async fn async_child_groups() {
+    reset_config();
     let store = async_store().await;
 
     // At root, there are two groups: a and b
@@ -206,7 +231,9 @@ async fn async_child_groups() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[serial]
 async fn async_child_paths() {
+    reset_config();
     let store = async_store().await;
 
     // At root, there are two child paths: a and b (both groups)
@@ -230,7 +257,9 @@ async fn async_child_paths() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[serial]
 async fn async_child_group_paths() {
+    reset_config();
     let store = async_store().await;
 
     // At root, there are two group paths: a and b
@@ -250,7 +279,9 @@ async fn async_child_group_paths() {
 
 #[cfg(feature = "async")]
 #[tokio::test]
+#[serial]
 async fn async_child_array_paths() {
+    reset_config();
     let store = async_store().await;
 
     // At root, there are no array paths (only groups)
@@ -273,7 +304,7 @@ mod consolidated_open {
 
     use serial_test::serial;
 
-    use zarrs::config::{UseConsolidatedMetadata, global_config_mut};
+    use zarrs::config::{Config, UseConsolidatedMetadata, global_config_mut};
     use zarrs::hierarchy::{Hierarchy, NodePath};
     use zarrs::metadata::NodeMetadata;
     use zarrs::metadata_ext::group::consolidated_metadata::ConsolidatedMetadata;
@@ -341,7 +372,7 @@ mod consolidated_open {
     }
 
     fn reset_config() {
-        global_config_mut().set_use_consolidated_metadata(UseConsolidatedMetadata::default());
+        *global_config_mut() = Config::default();
     }
 
     #[test]
