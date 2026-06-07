@@ -1,6 +1,7 @@
 use super::*;
 
 mod array;
+mod array_cached;
 
 /// Synchronous array write operations.
 pub trait ArrayWriteOps: ArrayOps {
