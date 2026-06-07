@@ -385,11 +385,11 @@ impl Node {
         version: &MetadataRetrieveVersion,
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
+        let policy = crate::config::global_config().use_consolidated_metadata();
         let metadata = Self::get_metadata(storage, &path, version)?;
         let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {
-                let policy = crate::config::global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&path, &metadata, policy)? {
                     Some(consolidated) => {
                         let flat = expand_consolidated_metadata(&path, consolidated)?;
@@ -434,11 +434,11 @@ impl Node {
         version: &MetadataRetrieveVersion,
     ) -> Result<Self, NodeCreateError> {
         let path: NodePath = path.try_into()?;
+        let policy = crate::config::global_config().use_consolidated_metadata();
         let metadata = Self::async_get_metadata(&storage, &path, version).await?;
         let children = match &metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {
-                let policy = crate::config::global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&path, &metadata, policy)? {
                     Some(consolidated) => {
                         let flat = expand_consolidated_metadata(&path, consolidated)?;
