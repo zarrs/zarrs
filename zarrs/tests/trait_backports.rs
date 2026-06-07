@@ -51,3 +51,22 @@ fn metadata_retrieve_traits() {
         MetadataRetrieveVersion::Default
     ));
 }
+
+#[test]
+fn group_metadata_options_are_copy() {
+    use zarrs::config::MetadataConvertVersion;
+    use zarrs::group::GroupMetadataOptions;
+    fn bounds<T: Copy>() {}
+    bounds::<GroupMetadataOptions>();
+    let options =
+        GroupMetadataOptions::default().with_metadata_convert_version(MetadataConvertVersion::V3);
+    let copied = options;
+    assert!(matches!(
+        options.metadata_convert_version(),
+        MetadataConvertVersion::V3
+    ));
+    assert!(matches!(
+        copied.metadata_convert_version(),
+        MetadataConvertVersion::V3
+    ));
+}
