@@ -407,7 +407,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             sharding_codec.inner_codecs.clone(),
             &sharding_codec.index_codecs,
             sharding_codec.index_location,
-            &CodecOptions::default(),
+            &self.codec_options,
             sharding_codec.options.clone(),
         )?;
 
