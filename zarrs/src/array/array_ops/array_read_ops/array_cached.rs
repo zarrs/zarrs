@@ -109,8 +109,18 @@ where
     let chunk_bytes_and_subsets =
         iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            retrieve_chunk_bytes(cache, array, &chunk_indices, options)
-                .map(|bytes| (bytes, chunk_subset))
+            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
+            let bytes = C::Value::retrieve_chunk_subset_bytes(
+                cache,
+                array,
+                &chunk_indices,
+                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                options,
+            )?;
+            Ok((
+                bytes,
+                chunk_subset_overlap.relative_to(&array_subset.start())?,
+            ))
         })
         .collect::<Result<Vec<_>, ArrayError>>()?;
 
