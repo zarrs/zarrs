@@ -35,7 +35,8 @@ use thiserror::Error;
 pub use self::group_builder::GroupBuilder;
 use crate::array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError};
 use crate::config::{
-    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
+    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, UseConsolidatedMetadata,
+    global_config,
 };
 use crate::convert::group_metadata_v2_to_v3;
 use crate::node::{
@@ -76,6 +77,7 @@ pub struct Group<TStorage: ?Sized> {
     metadata: GroupMetadata,
     metadata_options: GroupMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
+    use_consolidated_metadata: UseConsolidatedMetadata,
 }
 
 impl<TStorage: ?Sized> Group<TStorage> {
@@ -91,11 +93,12 @@ impl<TStorage: ?Sized> Group<TStorage> {
         metadata: GroupMetadata,
     ) -> Result<Self, GroupCreateError> {
         let path = NodePath::new(path)?;
-        let (metadata_options, metadata_erase_version) = {
+        let (metadata_options, metadata_erase_version, use_consolidated_metadata) = {
             let config = global_config();
             (
                 config.group_metadata_options(),
                 config.metadata_erase_version(),
+                config.use_consolidated_metadata(),
             )
         };
         Ok(Self {
@@ -104,6 +107,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
             metadata,
             metadata_options,
             metadata_erase_version,
+            use_consolidated_metadata,
         })
     }
 
@@ -215,6 +219,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
                 metadata,
                 metadata_options: self.metadata_options,
                 metadata_erase_version: self.metadata_erase_version,
+                use_consolidated_metadata: self.use_consolidated_metadata,
             }
         } else {
             self
@@ -334,17 +339,18 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     /// children (and their children, etc.) populated.
     ///
     /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// global [`UseConsolidatedMetadata`].
     /// policy permits, children are populated from the inline map without any
     /// per-node storage reads.
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
-        let policy = global_config().use_consolidated_metadata();
-        if let Some(consolidated) =
-            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
-        {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
             let flat = expand_consolidated_metadata(&self.path, consolidated)?;
             return Ok(if recursive {
                 build_node_tree(&self.path, flat)
@@ -358,17 +364,18 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     /// Return all the Nodes under the group, recursively
     ///
     /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// global [`UseConsolidatedMetadata`].
     /// policy permits, the result is populated from the inline map without any
     /// per-node storage reads.
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
-        let policy = global_config().use_consolidated_metadata();
-        if let Some(consolidated) =
-            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
-        {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
             return expand_consolidated_metadata(&self.path, consolidated);
         }
         get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
@@ -527,17 +534,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
     /// children (and their children, etc.) populated.
     ///
     /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// global [`UseConsolidatedMetadata`].
     /// policy permits, children are populated from the inline map without any
     /// per-node storage reads.
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
-        let policy = global_config().use_consolidated_metadata();
-        if let Some(consolidated) =
-            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
-        {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
             let flat = expand_consolidated_metadata(&self.path, consolidated)?;
             return Ok(if recursive {
                 build_node_tree(&self.path, flat)
@@ -551,17 +559,18 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
     /// Return all the Nodes under the group, recursively
     ///
     /// If the group's V3 metadata contains a `consolidated_metadata` block and the
-    /// global [`UseConsolidatedMetadata`](crate::config::UseConsolidatedMetadata)
+    /// global [`UseConsolidatedMetadata`].
     /// policy permits, the result is populated from the inline map without any
     /// per-node storage reads.
     ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
-        let policy = global_config().use_consolidated_metadata();
-        if let Some(consolidated) =
-            resolve_consolidated_policy(&self.path, self.consolidated_metadata(), policy)?
-        {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
             return expand_consolidated_metadata(&self.path, consolidated);
         }
         async_get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default).await
