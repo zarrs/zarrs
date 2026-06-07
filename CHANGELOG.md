@@ -9,13 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Implement `Default` for `MetadataRetrieveVersion`
-- Add `GroupOpenOptions`
-- Add `Group::new_with_metadata_opt`
+- Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
 - Implement `Copy` for `GroupMetadataOptions`
-- Add various inherent traits for `Array`
-  - `ArrayOps`
-  - `ArrayMutOps`
-  - **Breaking**: many `Array` methods are no longer `const`
+- Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
+- Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
+  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
+  - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
+  - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
+  - These are implemented as inherent traits on `Array` and `ArrayCached`
 
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
@@ -27,25 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
 - Soft deprecate the `sharding` feature flag
   - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
-- **Breaking**: `ArrayShardedExt::subchunk_grid` now returns a reference
-- **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
-- **Breaking**: Refactor `ChunkCache` trait:
-  - **Breaking**: Add new required methods:
-    - `partial_decoder`
-    - `retrieve_chunk_bytes_if_exists`
-    - `invalidate_chunk`
-    - `invalidate`
-  - Add methods with default implementations:
-    - `retrieve_chunk_if_exists`
-    - `invalidate_chunks`
-  - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
 - **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
-- **Breaking**: `Hierarchy::open_opt` to takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
-- **Breaking**: Remove the `ArrayShardedExt` trait, methods are moved to `ArrayOps`
-  - `ArrayShardedExt::effective_subchunk_shape` is replaced by `ArrayOps::partial_decode_granularity`
+- **Breaking**: `Hierarchy::open_opt` now takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
+- **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
+  - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
+  - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
+  - Add `invalidate` methods
 
 ### Removed
-- Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
+- **Breaking**: Remove `ArrayShardedReadableExt`
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+- Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 
 ### Fixed

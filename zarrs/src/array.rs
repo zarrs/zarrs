@@ -22,6 +22,7 @@
 //! The documentation for [`Array`] details how to interact with arrays.
 
 mod array_bytes_internal;
+mod array_cached;
 mod array_errors;
 mod array_metadata_options;
 mod array_ops;
@@ -47,6 +48,7 @@ use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+pub use self::array_cached::ArrayCached;
 pub use self::builder::ArrayBuilder;
 use self::chunk_grid::RegularBoundedChunkGridConfiguration;
 use self::chunk_key_encoding::V2ChunkKeyEncoding;
