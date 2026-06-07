@@ -1,37 +1,24 @@
+use inherent::inherent;
 use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::concurrency::concurrency_chunks_and_codec;
-use super::{
-    Array, ArrayError, ArrayIndicesTinyVec, ArrayMetadata, ArrayMetadataOptions, ChunkShapeTraits,
-    IntoArrayBytes,
-};
-use crate::array::ArraySubsetTraits;
-use crate::config::MetadataEraseVersion;
+use super::super::super::concurrency::concurrency_chunks_and_codec;
+use super::super::*;
+use super::ArrayWriteOps;
+use crate::array::{ArrayIndicesTinyVec, ChunkShapeTraits};
 use crate::iter_concurrent_limit;
 use crate::node::{meta_key_v2_array, meta_key_v2_attributes, meta_key_v3};
-use zarrs_codec::{ArrayToBytesCodecTraits, CodecOptions};
-use zarrs_storage::{Bytes, StorageError, StorageHandle, WritableStorageTraits};
+use zarrs_codec::ArrayToBytesCodecTraits;
+use zarrs_storage::{Bytes, StorageHandle};
 
-impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
-    /// Store metadata with default [`ArrayMetadataOptions`].
-    ///
-    /// The metadata is created with [`Array::metadata_opt`].
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if there is an underlying store error.
+#[inherent]
+impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
     pub fn store_metadata(&self) -> Result<(), StorageError> {
         self.store_metadata_opt(&self.metadata_options)
     }
 
-    /// Store metadata with non-default [`ArrayMetadataOptions`].
-    ///
-    /// The metadata is created with [`Array::metadata_opt`].
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if there is an underlying store error.
     pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
@@ -73,62 +60,10 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         }
     }
 
-    /// Encode `chunk_data` and store at `chunk_indices`.
-    ///
-    /// Use [`store_chunk_opt`](Array::store_chunk_opt) to control codec options.
-    /// A chunk composed entirely of the fill value will not be written to the store.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - `chunk_indices` are invalid,
-    ///  - the length of `chunk_data` is not equal to the expected length (the product of the number of elements in the chunk and the data type size in bytes),
-    ///  - there is a codec encoding error, or
-    ///  - an underlying store error.
-    pub fn store_chunk<'a>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_data: impl IntoArrayBytes<'a>,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
-    }
-
-    /// Encode `chunks_data` and store at the chunks with indices represented by the `chunks` array subset.
-    ///
-    /// Use [`store_chunks_opt`](Array::store_chunks_opt) to control codec options.
-    /// A chunk composed entirely of the fill value will not be written to the store.
-    ///
-    /// # Errors
-    /// Returns an [`ArrayError`] if
-    ///  - `chunks` are invalid,
-    ///  - the length of `chunks_data` is not equal to the expected length (the product of the number of elements in the chunks and the data type size in bytes),
-    ///  - there is a codec encoding error, or
-    ///  - an underlying store error.
-    #[allow(clippy::similar_names)]
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunks<'a>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        chunks_data: impl IntoArrayBytes<'a>,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
-    }
-
-    /// Erase the metadata with default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata(&self) -> Result<(), StorageError> {
         self.erase_metadata_opt(self.metadata_erase_version)
     }
 
-    /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
-    ///
-    /// Succeeds if the metadata does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
     pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
         let storage_handle = StorageHandle::new(self.storage.clone());
         match options {
@@ -152,51 +87,18 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         }
     }
 
-    /// Erase the chunk at `chunk_indices`.
-    ///
-    /// Succeeds if the chunk does not exist.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        storage_transformer.erase(&self.chunk_key(chunk_indices))
-    }
-
-    /// Erase the chunks in `chunks`.
-    ///
-    /// # Errors
-    /// Returns a [`StorageError`] if there is an underlying store error.
-    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            storage_transformer.erase(&self.chunk_key(&chunk_indices))
-        };
-
-        #[cfg(not(target_arch = "wasm32"))]
-        chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
-        #[cfg(target_arch = "wasm32")]
-        chunks.indices().into_iter().try_for_each(erase_chunk)?;
-
-        Ok(())
-    }
-
-    /////////////////////////////////////////////////////////////////////////////
-    // Advanced methods
-    /////////////////////////////////////////////////////////////////////////////
-
-    /// Explicit options version of [`store_chunk`](Array::store_chunk).
-    #[allow(clippy::missing_errors_doc)]
-    pub fn store_chunk_opt<'a>(
+    pub fn store_chunk<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunk_indices: &[u64],
-        chunk_data: impl IntoArrayBytes<'a>,
+        chunk_data: T,
+    ) -> Result<(), ArrayError> {
+        self.store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
+    }
+
+    pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
+        &self,
+        chunk_indices: &[u64],
+        chunk_data: T,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let chunk_bytes = chunk_data.into_array_bytes(self.data_type())?;
@@ -226,34 +128,18 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
         Ok(())
     }
 
-    /// Store `encoded_chunk_bytes` at `chunk_indices`
-    ///
-    /// # Safety
-    /// The responsibility is on the caller to ensure the chunk is encoded correctly
-    ///
-    /// # Errors
-    /// Returns [`StorageError`] if there is an underlying store error.
-    pub unsafe fn store_encoded_chunk(
-        &self,
-        chunk_indices: &[u64],
-        encoded_chunk_bytes: bytes::Bytes,
-    ) -> Result<(), ArrayError> {
-        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
-        let storage_transformer = self
-            .storage_transformers()
-            .create_writable_transformer(storage_handle)?;
-        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
-
-        Ok(())
-    }
-
-    /// Explicit options version of [`store_chunks`](Array::store_chunks).
-    #[allow(clippy::similar_names)]
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
-    pub fn store_chunks_opt<'a>(
+    pub fn store_chunks<'a, T: IntoArrayBytes<'a>>(
         &self,
         chunks: &dyn ArraySubsetTraits,
-        chunks_data: impl IntoArrayBytes<'a>,
+        chunks_data: T,
+    ) -> Result<(), ArrayError> {
+        self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
+    }
+
+    pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+        chunks_data: T,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
         let num_chunks = chunks.num_elements_usize();
@@ -296,6 +182,46 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> Array<TStorage> {
                 iter_concurrent_limit!(chunk_concurrent_limit, indices, try_for_each, store_chunk)?;
             }
         }
+
+        Ok(())
+    }
+
+    pub fn erase_chunk(&self, chunk_indices: &[u64]) -> Result<(), StorageError> {
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_writable_transformer(storage_handle)?;
+        storage_transformer.erase(&self.chunk_key(chunk_indices))
+    }
+
+    pub fn erase_chunks(&self, chunks: &dyn ArraySubsetTraits) -> Result<(), StorageError> {
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_writable_transformer(storage_handle)?;
+        let erase_chunk = |chunk_indices: ArrayIndicesTinyVec| {
+            storage_transformer.erase(&self.chunk_key(&chunk_indices))
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        chunks.indices().into_par_iter().try_for_each(erase_chunk)?;
+        #[cfg(target_arch = "wasm32")]
+        chunks.indices().into_iter().try_for_each(erase_chunk)?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn store_encoded_chunk(
+        &self,
+        chunk_indices: &[u64],
+        encoded_chunk_bytes: bytes::Bytes,
+    ) -> Result<(), ArrayError> {
+        let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
+        let storage_transformer = self
+            .storage_transformers()
+            .create_writable_transformer(storage_handle)?;
+        storage_transformer.set(&self.chunk_key(chunk_indices), encoded_chunk_bytes)?;
 
         Ok(())
     }

@@ -19,17 +19,8 @@
 //!  - [`ChunkCachePartialDecoderLruSizeLimit`]: a partial decoder chunk cache with a fixed size in bytes.
 //!
 //! There are also `ThreadLocal` suffixed variants of all of these caches that have a per-thread cache.
-//! `zarrs` consumers can create custom caches by implementing the [`ChunkCache`] trait.
-//!
-//! Chunk caches implement the [`ChunkCache`] trait which has cached versions of the equivalent [`Array`] methods:
-//!  - [`retrieve_chunk_if_exists`](ChunkCache::retrieve_chunk_if_exists)
-//!  - [`retrieve_chunk`](ChunkCache::retrieve_chunk)
-//!  - [`retrieve_chunks`](ChunkCache::retrieve_chunks)
-//!  - [`retrieve_chunk_subset`](ChunkCache::retrieve_chunk_subset)
-//!  - [`retrieve_array_subset`](ChunkCache::retrieve_array_subset)
-//!  - [`invalidate_chunk`](ChunkCache::invalidate_chunk)
-//!  - [`invalidate_chunks`](ChunkCache::invalidate_chunks)
-//!  - [`invalidate`](ChunkCache::invalidate)
+//! `zarrs` consumers can create custom cache policies by implementing the [`ChunkCache`] trait.
+//! Use a cache with [`ArrayCached`](super::ArrayCached) to perform cached array operations.
 //!
 //! Chunk caching is likely to be effective for remote stores where redundant retrievals are costly.
 //! Chunk caching may not outperform disk caching with a filesystem store.
@@ -42,28 +33,17 @@
 
 use std::sync::Arc;
 
-#[cfg(not(target_arch = "wasm32"))]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use unsafe_cell_slice::UnsafeCellSlice;
-
 use super::{ArrayBytes, ArrayBytesRaw, ArrayError};
-use crate::array::concurrency::concurrency_chunks_and_codec;
-use crate::array::from_array_bytes::FromArrayBytes;
-use crate::array::{
-    Array, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec, ArraySubsetTraits,
-    IncompatibleDimensionalityError, Indexer,
-};
-use crate::iter_concurrent_limit;
-use zarrs_codec::{ArrayPartialDecoderTraits, CodecError, CodecOptions};
+use crate::array::{Array, ArraySubsetTraits, Indexer};
+use zarrs_codec::{ArrayPartialDecoderTraits, CodecOptions};
 
-use super::array_bytes_internal::{
-    merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
-};
 use zarrs_storage::{MaybeSend, MaybeSync, ReadableStorageTraits};
 
 mod chunk_cache_lru;
+mod chunk_cache_type;
 // pub(crate) mod chunk_cache_lru_macros;
 pub use chunk_cache_lru::*;
+pub(crate) use chunk_cache_type::{fill_value_bytes, retrieve_chunk_bytes};
 
 /// The chunk type of an encoded chunk cache.
 pub type ChunkCacheTypeEncoded = Option<Arc<ArrayBytesRaw<'static>>>;
@@ -75,33 +55,75 @@ pub type ChunkCacheTypeDecoded = Option<Arc<ArrayBytes<'static>>>;
 pub type ChunkCacheTypePartialDecoder = Arc<dyn ArrayPartialDecoderTraits>;
 
 /// A chunk cache type ([`ChunkCacheTypeEncoded`], [`ChunkCacheTypeDecoded`], or [`ChunkCacheTypePartialDecoder`]).
-pub trait ChunkCacheType: MaybeSend + MaybeSync + Clone + 'static {
+pub trait ChunkCacheType:
+    chunk_cache_type_sealed::Sealed + MaybeSend + MaybeSync + Clone + 'static
+{
     /// The size of the chunk in bytes.
     fn size(&self) -> usize;
+
+    #[doc(hidden)]
+    fn partial_decoder<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized;
+
+    #[doc(hidden)]
+    fn retrieve_chunk_bytes_if_exists<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
+    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized;
+
+    #[doc(hidden)]
+    fn retrieve_chunk_subset_bytes<TStorage, C>(
+        cache: &C,
+        array: &Array<TStorage>,
+        chunk_indices: &[u64],
+        chunk_subset: &dyn ArraySubsetTraits,
+        options: &CodecOptions,
+    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>
+    where
+        TStorage: ?Sized + ReadableStorageTraits + 'static,
+        C: ChunkCache<Value = Self> + ?Sized;
 }
 
-impl ChunkCacheType for ChunkCacheTypeEncoded {
-    fn size(&self) -> usize {
-        self.as_ref().map_or(0, |v| v.len())
-    }
+mod chunk_cache_type_sealed {
+    use super::{ChunkCacheTypeDecoded, ChunkCacheTypeEncoded, ChunkCacheTypePartialDecoder};
+
+    pub trait Sealed {}
+
+    impl Sealed for ChunkCacheTypeEncoded {}
+    impl Sealed for ChunkCacheTypeDecoded {}
+    impl Sealed for ChunkCacheTypePartialDecoder {}
 }
 
-impl ChunkCacheType for ChunkCacheTypeDecoded {
-    fn size(&self) -> usize {
-        self.as_ref().map_or(0, |v| v.size())
-    }
-}
-
-impl ChunkCacheType for ChunkCacheTypePartialDecoder {
-    fn size(&self) -> usize {
-        self.as_ref().size_held()
-    }
-}
-
-/// Traits for a chunk cache.
+/// A chunk cache.
+///
+/// A chunk cache stores values by chunk indices. It is intentionally unaware of
+/// arrays; [`ArrayCached`](super::ArrayCached) is the entry point for cached
+/// array operations.
 pub trait ChunkCache: MaybeSend + MaybeSync {
-    /// Return the array associated with the chunk cache.
-    fn array(&self) -> Arc<Array<dyn ReadableStorageTraits>>;
+    /// The value stored for each chunk.
+    type Value: ChunkCacheType;
+
+    /// Return a cached value or insert the value returned by `f`.
+    #[doc(hidden)]
+    fn try_get_or_insert_with<F>(
+        &self,
+        chunk_indices: Vec<u64>,
+        f: F,
+    ) -> Result<Self::Value, Arc<ArrayError>>
+    where
+        F: FnOnce() -> Result<Self::Value, ArrayError>;
 
     /// Invalidate all cached chunks, returning the number of chunks invalidated.
     ///
@@ -110,247 +132,16 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
 
     /// Invalidate a cached chunk, returning true if the chunk was cached.
     ///
-    /// # Errors
-    /// Returns an error if the chunk indices are invalid for the array's chunk grid.
-    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> Result<bool, ArrayError>;
+    fn invalidate_chunk(&self, chunk_indices: &[u64]) -> bool;
 
     /// Invalidate cached chunks, returning the number of chunks invalidated.
     ///
-    /// # Errors
-    /// Returns an error if any of the chunk indices are invalid for the array's chunk grid.
-    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> Result<usize, ArrayError> {
+    fn invalidate_chunks(&self, chunks: &dyn Indexer) -> usize {
         let mut invalidated = 0;
         for chunk_indices in chunks.iter_indices() {
-            invalidated += usize::from(self.invalidate_chunk(&chunk_indices)?);
+            invalidated += usize::from(self.invalidate_chunk(&chunk_indices));
         }
-        Ok(invalidated)
-    }
-
-    /// Cached variant of [`partial_decoder`](Array::partial_decoder).
-    ///
-    /// If a partial decoder is cached, subsequent calls will use the `options` of the first call that cached the partial decoder, and the `options` argument of subsequent calls will be ignored.
-    #[allow(clippy::missing_errors_doc)]
-    fn partial_decoder(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
-
-    /// Cached variant of [`retrieve_chunk_if_exists_opt`](Array::retrieve_chunk_if_exists_opt) returning the cached bytes.
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_bytes_if_exists(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<Arc<ArrayBytes<'static>>>, ArrayError>;
-
-    /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt) returning the cached bytes.
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_bytes(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
-
-    /// Cached variant of [`retrieve_chunk_if_exists_opt`](Array::retrieve_chunk_if_exists_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_if_exists<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<Option<T>, ArrayError>
-    where
-        Self: Sized,
-    {
-        let Some(bytes) = self.retrieve_chunk_bytes_if_exists(chunk_indices, options)? else {
-            return Ok(None);
-        };
-        let shape = self
-            .array()
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        T::from_array_bytes_arc(bytes, &shape, self.array().data_type()).map(Some)
-    }
-
-    /// Cached variant of [`retrieve_chunk_opt`](Array::retrieve_chunk_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>
-    where
-        Self: Sized,
-    {
-        let bytes = self.retrieve_chunk_bytes(chunk_indices, options)?;
-        let shape = self
-            .array()
-            .chunk_grid()
-            .chunk_shape_u64(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
-        T::from_array_bytes_arc(bytes, &shape, self.array().data_type())
-    }
-
-    /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt) returning the cached bytes.
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset_bytes(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError>;
-
-    /// Cached variant of [`retrieve_chunk_subset_opt`](Array::retrieve_chunk_subset_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_subset<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-        chunk_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>
-    where
-        Self: Sized,
-    {
-        let bytes = self.retrieve_chunk_subset_bytes(chunk_indices, chunk_subset, options)?;
-        T::from_array_bytes_arc(bytes, &chunk_subset.shape(), self.array().data_type())
-    }
-
-    /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt) returning the cached bytes.
-    #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::too_many_lines)]
-    fn retrieve_array_subset_bytes(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-        let array = self.array();
-        if array_subset.dimensionality() != array.dimensionality() {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                array.shape().to_vec(),
-            ));
-        }
-
-        // Find the chunks intersecting this array subset
-        let chunks = array.chunks_in_array_subset(array_subset)?;
-        let Some(chunks) = chunks else {
-            return Err(ArrayError::InvalidArraySubset(
-                array_subset.to_array_subset(),
-                array.shape().to_vec(),
-            ));
-        };
-
-        let chunk_shape0 = array.chunk_shape(&vec![0; array.dimensionality()])?;
-
-        let num_chunks = chunks.num_elements_usize();
-        match num_chunks {
-            0 => Ok(ArrayBytes::new_fill_value(
-                array.data_type(),
-                array_subset.num_elements(),
-                array.fill_value(),
-            )
-            .map_err(CodecError::from)
-            .map_err(ArrayError::from)?
-            .into()),
-            1 => {
-                let chunk_indices = chunks.start();
-                let chunk_subset = array.chunk_subset(chunk_indices)?;
-                if chunk_subset == array_subset {
-                    // Single chunk fast path if the array subset domain matches the chunk domain
-                    self.retrieve_chunk_bytes(chunk_indices, options)
-                } else {
-                    let array_subset_in_chunk_subset =
-                        array_subset.relative_to(chunk_subset.start())?;
-                    self.retrieve_chunk_subset_bytes(
-                        chunk_indices,
-                        &array_subset_in_chunk_subset,
-                        options,
-                    )
-                }
-            }
-            _ => {
-                // Calculate chunk/codec concurrency
-                let num_chunks = chunks.num_elements_usize();
-                let codec_concurrency =
-                    array.recommended_codec_concurrency(&chunk_shape0, array.data_type())?;
-                let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
-                    options.concurrent_target(),
-                    num_chunks,
-                    options,
-                    &codec_concurrency,
-                );
-
-                // Delegate to appropriate helper based on data type size
-                if array.data_type().is_fixed() {
-                    retrieve_multi_chunk_fixed_impl(
-                        self,
-                        &array,
-                        array_subset,
-                        &chunks,
-                        chunk_concurrent_limit,
-                        &options,
-                    )
-                } else {
-                    retrieve_multi_chunk_variable_impl(
-                        self,
-                        &array,
-                        array_subset,
-                        &chunks,
-                        chunk_concurrent_limit,
-                        &options,
-                    )
-                }
-            }
-        }
-    }
-
-    /// Cached variant of [`retrieve_array_subset_opt`](Array::retrieve_array_subset_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_array_subset<T: FromArrayBytes>(
-        &self,
-        array_subset: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>
-    where
-        Self: Sized,
-    {
-        let bytes = self.retrieve_array_subset_bytes(array_subset, options)?;
-        T::from_array_bytes_arc(bytes, &array_subset.shape(), self.array().data_type())
-    }
-
-    /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt) returning the cached bytes.
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_bytes(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-        if chunks.dimensionality() != self.array().dimensionality() {
-            return Err(IncompatibleDimensionalityError::new(
-                chunks.dimensionality(),
-                self.array().dimensionality(),
-            )
-            .into());
-        }
-
-        let array_subset = self.array().chunks_subset(chunks)?;
-        self.retrieve_array_subset_bytes(&array_subset, options)
-    }
-
-    /// Cached variant of [`retrieve_chunks_opt`](Array::retrieve_chunks_opt).
-    #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks<T: FromArrayBytes>(
-        &self,
-        chunks: &dyn ArraySubsetTraits,
-        options: &CodecOptions,
-    ) -> Result<T, ArrayError>
-    where
-        Self: Sized,
-    {
-        let bytes = self.retrieve_chunks_bytes(chunks, options)?;
-        let array_subset = self.array().chunks_subset(chunks)?;
-        T::from_array_bytes_arc(bytes, array_subset.shape(), self.array().data_type())
+        invalidated
     }
 
     /// Return the number of chunks in the cache. For a thread-local cache, returns the number of chunks cached on the current thread.
@@ -363,189 +154,3 @@ pub trait ChunkCache: MaybeSend + MaybeSync {
         self.len() == 0
     }
 }
-
-/// Helper function to retrieve multiple chunks with variable-length data.
-/// Also handles optional data types with variable-length inner types (including nested optionals).
-fn retrieve_multi_chunk_variable_impl<CC: ChunkCache + ?Sized>(
-    cache: &CC,
-    array: &Array<dyn ReadableStorageTraits>,
-    array_subset: &dyn ArraySubsetTraits,
-    chunks: &dyn ArraySubsetTraits,
-    chunk_concurrent_limit: usize,
-    options: &CodecOptions,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-    let nesting_depth = optional_nesting_depth(array.data_type());
-
-    // Retrieve chunks for variable-length data
-    let indices = chunks.indices();
-    let chunk_bytes_and_subsets =
-        iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
-            let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            cache
-                .retrieve_chunk_bytes(&chunk_indices, options)
-                .map(|bytes| (bytes, chunk_subset))
-        })
-        .collect::<Result<Vec<_>, ArrayError>>()?;
-
-    if nesting_depth > 0 {
-        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
-            .iter()
-            .map(|(chunk_bytes, chunk_subset)| {
-                (
-                    ArrayBytes::clone(chunk_bytes)
-                        .into_optional()
-                        .expect("run on vlen data"),
-                    chunk_subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Optional(merge_chunks_vlen_optional(
-            chunk_bytes_and_subsets,
-            &array_subset.shape(),
-            nesting_depth,
-        )?)
-        .into())
-    } else {
-        let chunk_bytes_and_subsets = chunk_bytes_and_subsets
-            .iter()
-            .map(|(chunk_bytes, chunk_subset)| {
-                (
-                    ArrayBytes::clone(chunk_bytes)
-                        .into_variable()
-                        .expect("run on vlen data"),
-                    chunk_subset.clone(),
-                )
-            })
-            .collect();
-        Ok(ArrayBytes::Variable(merge_chunks_vlen(
-            chunk_bytes_and_subsets,
-            &array_subset.shape(),
-        ))
-        .into())
-    }
-}
-
-/// Helper method to retrieve multiple chunks with fixed-length data types.
-/// Also handles optional data types with fixed-length inner types.
-fn retrieve_multi_chunk_fixed_impl<CC: ChunkCache + ?Sized>(
-    cache: &CC,
-    array: &Array<dyn ReadableStorageTraits>,
-    array_subset: &dyn ArraySubsetTraits,
-    chunks: &dyn ArraySubsetTraits,
-    chunk_concurrent_limit: usize,
-    options: &CodecOptions,
-) -> Result<Arc<ArrayBytes<'static>>, ArrayError> {
-    // Allocate data buffer and optional mask buffer
-    let data_type_size = array
-        .data_type()
-        .fixed_size()
-        .expect("data_type must have fixed size");
-    let num_elements = array_subset.num_elements_usize();
-    let size_output = num_elements * data_type_size;
-    if size_output == 0 {
-        return Ok(ArrayBytes::new_flen(vec![]).into());
-    }
-    let is_optional = array.data_type().is_optional();
-    let mut data_output = Vec::with_capacity(size_output);
-    let mut mask_output = if is_optional {
-        Some(Vec::with_capacity(num_elements))
-    } else {
-        None
-    };
-
-    {
-        let data_output_slice = UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut data_output);
-        let mask_output_slice = mask_output
-            .as_mut()
-            .map(UnsafeCellSlice::new_from_vec_with_spare_capacity);
-
-        let array_subset_start = array_subset.start();
-        let array_subset_shape = array_subset.shape();
-        let retrieve_chunk = |chunk_indices: ArrayIndicesTinyVec| {
-            let chunk_subset = array.chunk_subset(&chunk_indices)?;
-            let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let chunk_subset_in_array = chunk_subset_overlap.relative_to(&array_subset_start)?;
-
-            // Retrieve the chunk subset bytes
-            let chunk_subset_bytes = cache.retrieve_chunk_subset_bytes(
-                &chunk_indices,
-                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                options,
-            )?;
-
-            // Create views for output
-            let mut data_view = unsafe {
-                // SAFETY: chunks represent disjoint array subsets
-                ArrayBytesFixedDisjointView::new(
-                    data_output_slice,
-                    data_type_size,
-                    &array_subset_shape,
-                    chunk_subset_in_array.clone(),
-                )?
-            };
-
-            let mut mask_view = mask_output_slice
-                .map(|mask_slice| unsafe {
-                    // SAFETY: chunks represent disjoint array subsets
-                    ArrayBytesFixedDisjointView::new(
-                        mask_slice,
-                        1, // 1 byte per element for mask
-                        &array_subset_shape,
-                        chunk_subset_in_array.clone(),
-                    )
-                })
-                .transpose()?;
-
-            // Copy data from chunk_subset_bytes into the views
-            match chunk_subset_bytes.as_ref() {
-                ArrayBytes::Fixed(bytes) => {
-                    data_view.copy_from_slice(bytes).map_err(CodecError::from)?;
-                }
-                ArrayBytes::Optional(optional_bytes) => {
-                    // Extract the data bytes from the boxed ArrayBytes
-                    let data_bytes = match optional_bytes.data() {
-                        ArrayBytes::Fixed(bytes) => bytes.as_ref(),
-                        ArrayBytes::Variable(..) | ArrayBytes::Optional(..) => {
-                            unreachable!("Optional data should contain Fixed array bytes")
-                        }
-                    };
-                    data_view
-                        .copy_from_slice(data_bytes)
-                        .map_err(CodecError::from)?;
-                    if let Some(ref mut mask_view) = mask_view {
-                        mask_view
-                            .copy_from_slice(optional_bytes.mask().as_ref())
-                            .map_err(CodecError::from)?;
-                    }
-                }
-                ArrayBytes::Variable(..) => {
-                    unreachable!("Variable-length data should not reach this code path");
-                }
-            }
-
-            Ok::<_, ArrayError>(())
-        };
-
-        let indices = chunks.indices();
-        iter_concurrent_limit!(
-            chunk_concurrent_limit,
-            indices,
-            try_for_each,
-            retrieve_chunk
-        )?;
-    }
-
-    unsafe { data_output.set_len(size_output) };
-    if let Some(ref mut mask) = mask_output {
-        unsafe { mask.set_len(num_elements) };
-    }
-
-    let array_bytes = ArrayBytes::from(data_output);
-    Ok(if let Some(mask) = mask_output {
-        array_bytes.with_optional_mask(mask).into()
-    } else {
-        array_bytes.into()
-    })
-}
-
-// TODO: AsyncChunkCache
