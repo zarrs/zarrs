@@ -40,3 +40,14 @@ fn array_clone_accepts_non_clone_and_unsized_storage() {
     let dynamic = array.with_storage(storage);
     assert!(Arc::ptr_eq(&dynamic.storage(), &dynamic.clone().storage()));
 }
+
+#[test]
+fn metadata_retrieve_traits() {
+    use zarrs::config::MetadataRetrieveVersion;
+    fn bounds<T: std::fmt::Debug + Clone + Copy + Default>() {}
+    bounds::<MetadataRetrieveVersion>();
+    assert!(matches!(
+        MetadataRetrieveVersion::default(),
+        MetadataRetrieveVersion::Default
+    ));
+}
