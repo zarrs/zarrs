@@ -349,6 +349,61 @@ fn exercise_all<A: ArrayUpdateOps>(array: &A) -> TestResult {
     exercise_array_write_update_ops(array)
 }
 
+fn exercise_variable_length_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+    let first_chunk = ["a", "bb", "ccc", "dddd"];
+    let second_chunk = ["eeeee", "ffffff", "ggggggg", "hhhhhhhh"];
+    array.store_chunk(&[0, 0], &first_chunk)?;
+    array.store_chunk(&[0, 1], &second_chunk)?;
+
+    assert_eq!(array.retrieve_chunk::<Vec<String>>(&[0, 0])?, first_chunk);
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?,
+        ["dddd", "ggggggg", "", ""]
+    );
+
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[1..3, 1..3]),
+        &["updated", "values", "across", "chunks"],
+    )?;
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<String>>(&ArraySubset::new_with_ranges(&[1..3, 1..3]))?,
+        ["updated", "values", "across", "chunks"]
+    );
+    Ok(())
+}
+
+fn exercise_optional_ops<A: ArrayUpdateOps>(array: &A) -> TestResult {
+    let first_chunk = [Some(1u8), None, Some(3), Some(4)];
+    let second_chunk = [None, Some(6u8), None, Some(8)];
+    array.store_chunk(&[0, 0], &first_chunk)?;
+    array.store_chunk(&[0, 1], &second_chunk)?;
+
+    assert_eq!(
+        array.retrieve_chunk::<Vec<Option<u8>>>(&[0, 0])?,
+        first_chunk
+    );
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
+            0..2,
+            1..3
+        ]))?,
+        [None, None, Some(4), None]
+    );
+
+    array.store_array_subset(
+        &ArraySubset::new_with_ranges(&[0..2, 1..3]),
+        &[Some(9u8), None, None, Some(10)],
+    )?;
+    assert_eq!(
+        array.retrieve_array_subset::<Vec<Option<u8>>>(&ArraySubset::new_with_ranges(&[
+            0..2,
+            1..3
+        ]))?,
+        [Some(9), None, None, Some(10)]
+    );
+    Ok(())
+}
+
 #[test]
 fn array_implements_complete_sync_operation_suite() -> TestResult {
     let (array, _) = fixture();
@@ -360,6 +415,44 @@ fn array_cached_implements_complete_sync_operation_suite() -> TestResult {
     let (array, _) = fixture();
     let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(16));
     exercise_all(&cached)
+}
+
+#[test]
+fn array_and_cached_support_variable_length_operation_suite() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
+        .build_arc(store, "/array")?;
+    exercise_variable_length_ops(array.as_ref())?;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(vec![4, 4], vec![2, 2], data_type::string(), "")
+        .build_arc(store, "/array")?;
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
+    exercise_variable_length_ops(&cached)
+}
+
+#[test]
+fn array_and_cached_support_optional_operation_suite() -> TestResult {
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(
+        vec![4, 4],
+        vec![2, 2],
+        data_type::uint8().to_optional(),
+        zarrs::array::FillValue::from(None::<u8>),
+    )
+    .build_arc(store, "/array")?;
+    exercise_optional_ops(array.as_ref())?;
+
+    let store = Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(
+        vec![4, 4],
+        vec![2, 2],
+        data_type::uint8().to_optional(),
+        zarrs::array::FillValue::from(None::<u8>),
+    )
+    .build_arc(store, "/array")?;
+    let cached = ArrayCached::new(array, ChunkCacheDecodedLruChunkLimit::new(4));
+    exercise_optional_ops(&cached)
 }
 
 fn assert_cache_hits_and_invalidation<C>(cache: C, caches_full_chunk_reads: bool) -> TestResult
