@@ -39,17 +39,25 @@ use super::Array;
 /// - `store_array_subset` — invalidates all intersecting chunks, or the entire
 ///   cache if the affected chunks cannot be determined.
 /// - `compact_chunk` — invalidates the chunk only if compaction occurred.
+/// - `partial_encoder` — invalidates the affected chunk after each mutation
+///   attempt.
+///
+/// For thread-local caches, invalidation only affects the thread performing the
+/// mutation.
 #[derive(Debug)]
 pub struct ArrayCached<TStorage: ?Sized, C> {
     array: Arc<Array<TStorage>>,
-    cache: C,
+    cache: Arc<C>,
 }
 
 impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
     /// Create a new cached array wrapper.
     #[must_use]
     pub fn new(array: Arc<Array<TStorage>>, cache: C) -> Self {
-        Self { array, cache }
+        Self {
+            array,
+            cache: Arc::new(cache),
+        }
     }
 
     /// Return the inner array.
@@ -60,13 +68,17 @@ impl<TStorage: ?Sized, C> ArrayCached<TStorage, C> {
 
     /// Return the chunk cache.
     #[must_use]
-    pub const fn cache(&self) -> &C {
-        &self.cache
+    pub fn cache(&self) -> &C {
+        self.cache.as_ref()
     }
 
-    /// Split into the inner array and cache.
+    /// Split into the inner array and shared cache.
     #[must_use]
-    pub fn into_inner(self) -> (Arc<Array<TStorage>>, C) {
+    pub fn into_inner(self) -> (Arc<Array<TStorage>>, Arc<C>) {
         (self.array, self.cache)
+    }
+
+    pub(crate) fn cache_arc(&self) -> Arc<C> {
+        Arc::clone(&self.cache)
     }
 }

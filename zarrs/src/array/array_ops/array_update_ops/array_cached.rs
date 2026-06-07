@@ -3,13 +3,92 @@ use std::sync::Arc;
 
 use super::super::*;
 use super::ArrayUpdateOps;
-use zarrs_codec::ArrayPartialEncoderTraits;
+use crate::array::{ArrayBytes, Indexer};
+use zarrs_codec::{
+    ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
+};
+use zarrs_storage::StorageError;
+
+struct CachedArrayPartialEncoder<C> {
+    encoder: Arc<dyn ArrayPartialEncoderTraits>,
+    cache: Arc<C>,
+    chunk_indices: ArrayIndices,
+}
+
+impl<C> ArrayPartialDecoderTraits for CachedArrayPartialEncoder<C>
+where
+    C: ChunkCache + 'static,
+{
+    fn data_type(&self) -> &DataType {
+        self.encoder.data_type()
+    }
+
+    fn exists(&self) -> Result<bool, StorageError> {
+        self.encoder.exists()
+    }
+
+    fn size_held(&self) -> usize {
+        self.encoder.size_held()
+    }
+
+    fn partial_decode(
+        &self,
+        indexer: &dyn Indexer,
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'_>, CodecError> {
+        self.encoder.partial_decode(indexer, options)
+    }
+
+    fn partial_decode_into(
+        &self,
+        indexer: &dyn Indexer,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.encoder
+            .partial_decode_into(indexer, output_target, options)
+    }
+
+    fn supports_partial_decode(&self) -> bool {
+        self.encoder.supports_partial_decode()
+    }
+}
+
+impl<C> ArrayPartialEncoderTraits for CachedArrayPartialEncoder<C>
+where
+    C: ChunkCache + 'static,
+{
+    fn into_dyn_decoder(self: Arc<Self>) -> Arc<dyn ArrayPartialDecoderTraits> {
+        self.clone()
+    }
+
+    fn erase(&self) -> Result<(), CodecError> {
+        let result = self.encoder.erase();
+        self.cache.invalidate_chunk(&self.chunk_indices);
+        result
+    }
+
+    fn partial_encode(
+        &self,
+        indexer: &dyn Indexer,
+        bytes: &ArrayBytes<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let result = self.encoder.partial_encode(indexer, bytes, options);
+        self.cache.invalidate_chunk(&self.chunk_indices);
+        result
+    }
+
+    fn supports_partial_encode(&self) -> bool {
+        self.encoder.supports_partial_encode()
+    }
+}
 
 #[inherent]
 impl<TStorage, C> ArrayUpdateOps for ArrayCached<TStorage, C>
 where
     TStorage: ?Sized + ReadableWritableStorageTraits + 'static,
-    C: ChunkCache,
+    C: ChunkCache + 'static,
 {
     #[allow(clippy::missing_errors_doc)]
     pub fn store_chunk_subset<'a, T: IntoArrayBytes<'a>>(
@@ -93,6 +172,98 @@ where
         chunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, ArrayError> {
-        self.array().partial_encoder(chunk_indices, options)
+        let encoder = self.array().partial_encoder(chunk_indices, options)?;
+        Ok(Arc::new(CachedArrayPartialEncoder {
+            encoder,
+            cache: self.cache_arc(),
+            chunk_indices: chunk_indices.to_vec(),
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![expect(clippy::single_range_in_vec_init)]
+    use super::*;
+    use crate::array::chunk_cache::{
+        ChunkCacheDecodedLruChunkLimit, ChunkCacheEncodedLruChunkLimit,
+        ChunkCachePartialDecoderLruChunkLimit,
+    };
+    use crate::array::{ArrayBuilder, ArraySubset, data_type};
+    use zarrs_storage::store::MemoryStore;
+
+    fn test_partial_encoder_invalidates<C>(cache: C)
+    where
+        C: ChunkCache + 'static,
+    {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+            .build_arc(store, "/")
+            .unwrap();
+        array.store_chunk(&[0], &[1u8, 2]).unwrap();
+
+        let cached = ArrayCached::new(array, cache);
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
+        assert_eq!(cached.cache().len(), 1);
+
+        let options = CodecOptions::default();
+        let encoder = cached.partial_encoder(&[0], &options).unwrap();
+        encoder
+            .partial_encode(
+                &ArraySubset::new_with_ranges(&[1..2]),
+                &vec![3u8].into(),
+                &options,
+            )
+            .unwrap();
+        assert!(cached.cache().is_empty());
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 3]);
+
+        encoder.erase().unwrap();
+        assert!(cached.cache().is_empty());
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![0, 0]);
+
+        assert!(!encoder.into_dyn_decoder().exists().unwrap());
+    }
+
+    fn test_failed_partial_encode_invalidates<C>(cache: C)
+    where
+        C: ChunkCache + 'static,
+    {
+        let store = Arc::new(MemoryStore::default());
+        let array = ArrayBuilder::new(vec![4], vec![2], data_type::uint8(), 0u8)
+            .build_arc(store, "/")
+            .unwrap();
+        array.store_chunk(&[0], &[1u8, 2]).unwrap();
+
+        let cached = ArrayCached::new(array, cache);
+        assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
+        assert_eq!(cached.cache().len(), 1);
+
+        let options = CodecOptions::default();
+        let encoder = cached.partial_encoder(&[0], &options).unwrap();
+        assert!(
+            encoder
+                .partial_encode(
+                    &ArraySubset::new_with_ranges(&[2..3]),
+                    &vec![3u8].into(),
+                    &options,
+                )
+                .is_err()
+        );
+        assert!(cached.cache().is_empty());
+    }
+
+    #[test]
+    fn partial_encoder_invalidates_all_cache_value_types() {
+        test_partial_encoder_invalidates(ChunkCacheEncodedLruChunkLimit::new(1));
+        test_partial_encoder_invalidates(ChunkCacheDecodedLruChunkLimit::new(1));
+        test_partial_encoder_invalidates(ChunkCachePartialDecoderLruChunkLimit::new(1));
+    }
+
+    #[test]
+    fn failed_partial_encode_invalidates_all_cache_value_types() {
+        test_failed_partial_encode_invalidates(ChunkCacheEncodedLruChunkLimit::new(1));
+        test_failed_partial_encode_invalidates(ChunkCacheDecodedLruChunkLimit::new(1));
+        test_failed_partial_encode_invalidates(ChunkCachePartialDecoderLruChunkLimit::new(1));
     }
 }
