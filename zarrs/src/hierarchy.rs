@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::array::{Array, ArrayMetadata};
-use crate::config::{MetadataRetrieveVersion, global_config};
+use crate::config::{MetadataRetrieveVersion, UseConsolidatedMetadata, global_config};
 use crate::group::Group;
 pub use crate::node::{Node, NodeCreateError, NodePath, NodePathError};
 use crate::node::{consolidated_metadata_for_open, expand_consolidated_metadata, get_all_nodes_of};
@@ -37,13 +37,80 @@ impl std::fmt::Display for Hierarchy {
 /// A hierarchy creation error.
 pub type HierarchyCreateError = NodeCreateError;
 
+/// Options for opening a [`Hierarchy`].
+///
+/// This struct is non-exhaustive and may grow additional fields in the future.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HierarchyOpenOptions {
+    /// The metadata version to retrieve.
+    version: MetadataRetrieveVersion,
+    /// Whether to use consolidated metadata if present on the root group.
+    use_consolidated_metadata: UseConsolidatedMetadata,
+}
+
+impl HierarchyOpenOptions {
+    /// Create default options.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create options populated from a [`Config`](crate::config::Config).
+    ///
+    /// The following fields are read from the config:
+    /// - `use_consolidated_metadata` from [`Config::use_consolidated_metadata`](crate::config::Config::use_consolidated_metadata)
+    ///
+    /// The `version` field defaults to [`MetadataRetrieveVersion::Default`].
+    /// The caller is responsible for acquiring the config (e.g. via [`global_config`]).
+    #[must_use]
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        Self {
+            version: MetadataRetrieveVersion::default(),
+            use_consolidated_metadata: config.use_consolidated_metadata(),
+        }
+    }
+
+    /// Get the [metadata retrieve version](MetadataRetrieveVersion).
+    #[must_use]
+    pub fn version(&self) -> MetadataRetrieveVersion {
+        self.version
+    }
+
+    /// Set the [metadata retrieve version](MetadataRetrieveVersion).
+    #[must_use]
+    pub fn with_version(mut self, version: MetadataRetrieveVersion) -> Self {
+        self.version = version;
+        self
+    }
+
+    /// Get the [use consolidated metadata](UseConsolidatedMetadata) policy.
+    #[must_use]
+    pub fn use_consolidated_metadata(&self) -> UseConsolidatedMetadata {
+        self.use_consolidated_metadata
+    }
+
+    /// Set the [use consolidated metadata](UseConsolidatedMetadata) policy.
+    #[must_use]
+    pub fn with_use_consolidated_metadata(
+        mut self,
+        use_consolidated_metadata: UseConsolidatedMetadata,
+    ) -> Self {
+        self.use_consolidated_metadata = use_consolidated_metadata;
+        self
+    }
+}
+
 impl Hierarchy {
     /// Create a new, empty hierarchy.
     fn new() -> Self {
         Hierarchy(BTreeMap::new())
     }
 
-    /// Open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    /// Open a hierarchy at `path` and read metadata and children from `storage` with default options.
+    ///
+    /// Options are populated from the global config using [`HierarchyOpenOptions::from_config`].
+    /// Use [`Hierarchy::open_opt`] to specify options explicitly.
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
@@ -51,29 +118,31 @@ impl Hierarchy {
         storage: &Arc<TStorage>,
         path: &str,
     ) -> Result<Self, HierarchyCreateError> {
-        Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
+        let options = HierarchyOpenOptions::from_config(&global_config());
+        Self::open_opt(storage, path, &options)
     }
 
-    /// Open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    /// Open a hierarchy at `path` and read metadata and children from `storage` with non-default options.
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
     pub fn open_opt<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits>(
         storage: &Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        options: &HierarchyOpenOptions,
     ) -> Result<Self, HierarchyCreateError> {
         let node_path = NodePath::try_from(path)?;
-        let node_metadata = Node::get_metadata(storage, &node_path, version)?;
+        let policy = options.use_consolidated_metadata();
+        let version = options.version();
+        let node_metadata = Node::get_metadata(storage, &node_path, &version)?;
         let mut hierarchy = Hierarchy::new();
 
         let nodes = match &node_metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {
-                let policy = global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
                     Some(consolidated) => expand_consolidated_metadata(&node_path, consolidated)?,
-                    None => get_all_nodes_of(storage, &node_path, version)?,
+                    None => get_all_nodes_of(storage, &node_path, &version)?,
                 }
             }
         };
@@ -85,7 +154,10 @@ impl Hierarchy {
     }
 
     #[cfg(feature = "async")]
-    /// Asynchronously open a hierarchy at `path` and read metadata and children from `storage` with default [`MetadataRetrieveVersion`].
+    /// Asynchronously open a hierarchy at `path` and read metadata and children from `storage` with default options.
+    ///
+    /// Options are populated from the global config using [`HierarchyOpenOptions::from_config`].
+    /// Use [`Hierarchy::async_open_opt`] to specify options explicitly.
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
@@ -95,11 +167,14 @@ impl Hierarchy {
         storage: &Arc<TStorage>,
         path: &str,
     ) -> Result<Self, HierarchyCreateError> {
-        Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
+        // Read options before any .await to avoid races with concurrent
+        // modifications to global config.
+        let options = HierarchyOpenOptions::from_config(&global_config());
+        Self::async_open_opt(storage, path, &options).await
     }
 
     #[cfg(feature = "async")]
-    /// Asynchronously open a hierarchy at a `path` and read metadata and children from `storage` with non-default [`MetadataRetrieveVersion`].
+    /// Asynchronously open a hierarchy at a `path` and read metadata and children from `storage` with non-default options.
     ///
     /// # Errors
     /// Returns [`HierarchyCreateError`] if metadata is invalid or there is a failure to list child nodes.
@@ -108,19 +183,20 @@ impl Hierarchy {
     >(
         storage: &Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        options: &HierarchyOpenOptions,
     ) -> Result<Self, HierarchyCreateError> {
         let node_path = NodePath::try_from(path)?;
-        let node_metadata = Node::async_get_metadata(storage, &node_path, version).await?;
+        let policy = options.use_consolidated_metadata();
+        let version = options.version();
+        let node_metadata = Node::async_get_metadata(storage, &node_path, &version).await?;
         let mut hierarchy = Hierarchy::new();
 
         let nodes = match &node_metadata {
             NodeMetadata::Array(_) => Vec::default(),
             NodeMetadata::Group(_) => {
-                let policy = global_config().use_consolidated_metadata();
                 match consolidated_metadata_for_open(&node_path, &node_metadata, policy)? {
                     Some(consolidated) => expand_consolidated_metadata(&node_path, consolidated)?,
-                    None => async_get_all_nodes_of(storage, &node_path, version).await?,
+                    None => async_get_all_nodes_of(storage, &node_path, &version).await?,
                 }
             }
         };

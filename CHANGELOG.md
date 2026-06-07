@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `invalidate_chunks`
   - **Breaking**: Methods returning `ChunkCacheTypeDecoded` now return `Arc<ArrayBytes<'static>>`
 - **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
+- **Breaking**: `Hierarchy::open_opt` to takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
 
 ### Removed
 - Remove deprecated `Array`, `ArrayShardedReadableExt`, `AsyncArrayShardedReadableExt`, and `ChunkCache` `_elements` / `_ndarray` method variants
