@@ -459,8 +459,18 @@ where
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
     ) -> Result<(), ArrayError> {
-        self.array()
-            .retrieve_array_subset_into_opt(array_subset, output_target, options)
+        super::common::retrieve_array_subset_into(
+            self.array(),
+            array_subset,
+            output_target,
+            options,
+            |chunk_indices, output_target, options| {
+                self.retrieve_chunk_into(chunk_indices, output_target, options)
+            },
+            |chunk_indices, chunk_subset, output_target, options| {
+                self.retrieve_chunk_subset_into(chunk_indices, chunk_subset, output_target, options)
+            },
+        )
     }
 
     #[allow(clippy::missing_errors_doc)]

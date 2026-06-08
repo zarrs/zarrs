@@ -9,6 +9,7 @@ use zarrs_storage::MaybeSync;
 
 mod array;
 mod array_cached;
+mod common;
 
 /// Synchronous array read operations.
 pub trait ArrayReadOps: ArrayOps + MaybeSync {
