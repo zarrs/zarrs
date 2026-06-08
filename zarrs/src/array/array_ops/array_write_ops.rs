@@ -11,7 +11,9 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns [`StorageError`] if there is an underlying store error.
-    fn store_metadata(&self) -> Result<(), StorageError>;
+    fn store_metadata(&self) -> Result<(), StorageError> {
+        self.store_metadata_opt(self.metadata_options())
+    }
 
     /// Store metadata with non-default [`ArrayMetadataOptions`].
     ///
@@ -27,7 +29,9 @@ pub trait ArrayWriteOps: ArrayOps {
     ///
     /// # Errors
     /// Returns a [`StorageError`] if there is an underlying store error.
-    fn erase_metadata(&self) -> Result<(), StorageError>;
+    fn erase_metadata(&self) -> Result<(), StorageError> {
+        self.erase_metadata_opt(self.metadata_erase_version())
+    }
 
     /// Erase the metadata with non-default [`MetadataEraseVersion`] options.
     ///
@@ -52,7 +56,9 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
+    }
 
     /// Explicit options version of [`store_chunk`](ArrayWriteOps::store_chunk).
     fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
@@ -77,7 +83,9 @@ pub trait ArrayWriteOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.store_chunks_opt(chunks, chunks_data, self.codec_options())
+    }
 
     /// Explicit options version of [`store_chunks`](ArrayWriteOps::store_chunks).
     fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(

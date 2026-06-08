@@ -38,6 +38,15 @@ pub trait ArrayOps {
     /// Get the storage transformers.
     fn storage_transformers(&self) -> &StorageTransformerChain;
 
+    /// Get the default codec options for no-options methods.
+    fn codec_options(&self) -> &CodecOptions;
+
+    /// Get the default array metadata options for no-options methods.
+    fn metadata_options(&self) -> &ArrayMetadataOptions;
+
+    /// Get the default metadata erase version for no-options methods.
+    fn metadata_erase_version(&self) -> MetadataEraseVersion;
+
     /// Get the dimension names.
     fn dimension_names(&self) -> &Option<Vec<DimensionName>>;
 

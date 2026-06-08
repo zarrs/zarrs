@@ -24,14 +24,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_subset_opt(
-            chunk_indices,
-            chunk_subset,
-            chunk_subset_data,
-            &CodecOptions::default(),
-        )
-    }
+    ) -> Result<(), ArrayError>;
 
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
@@ -103,9 +96,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_array_subset_opt(array_subset, subset_data, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     #[allow(clippy::too_many_lines)]

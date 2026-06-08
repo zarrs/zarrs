@@ -47,6 +47,18 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().storage_transformers()
     }
 
+    pub fn codec_options(&self) -> &CodecOptions {
+        self.array().codec_options()
+    }
+
+    pub fn metadata_options(&self) -> &ArrayMetadataOptions {
+        self.array().metadata_options()
+    }
+
+    pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
+        self.array().metadata_erase_version()
+    }
+
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {
         self.array().dimension_names()
     }

@@ -60,6 +60,18 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         &self.storage_transformers
     }
 
+    pub fn codec_options(&self) -> &CodecOptions {
+        &self.codec_options
+    }
+
+    pub fn metadata_options(&self) -> &ArrayMetadataOptions {
+        &self.metadata_options
+    }
+
+    pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
+        self.metadata_erase_version
+    }
+
     pub fn dimension_names(&self) -> &Option<Vec<DimensionName>> {
         &self.dimension_names
     }
@@ -210,7 +222,7 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         let configuration = self
             .codecs
             .array_to_bytes_codec()
-            .configuration_v3(self.metadata_options.codec_metadata_options())?;
+            .configuration_v3(self.metadata_options().codec_metadata_options())?;
         if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
             ShardingCodecConfiguration::try_from_configuration(configuration)
         {

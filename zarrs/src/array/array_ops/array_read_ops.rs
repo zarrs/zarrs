@@ -1,11 +1,17 @@
 use super::*;
-use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits};
+use crate::array::ArrayBytes;
+use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
+use crate::iter_concurrent_limit;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use zarrs_codec::{ArrayBytesDecodeIntoTarget, ArrayPartialDecoderTraits, CodecError};
+use zarrs_storage::MaybeSync;
 
 mod array;
 mod array_cached;
 
 /// Synchronous array read operations.
-pub trait ArrayReadOps: ArrayOps {
+pub trait ArrayReadOps: ArrayOps + MaybeSync {
     /// Read and decode the chunk at `chunk_indices` into its bytes or the fill value if it does not exist with default codec options.
     ///
     /// # Errors
@@ -16,7 +22,9 @@ pub trait ArrayReadOps: ArrayOps {
     ///
     /// # Panics
     /// Panics if the number of elements in the chunk exceeds `usize::MAX`.
-    fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64]) -> Result<T, ArrayError>;
+    fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64]) -> Result<T, ArrayError> {
+        self.retrieve_chunk_opt(chunk_indices, self.codec_options())
+    }
 
     /// Read and decode the chunk at `chunk_indices` with explicit codec options.
     /// Explicit options version of [`retrieve_chunk`](ArrayReadOps::retrieve_chunk).
@@ -25,7 +33,25 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        if let Some(chunk) = self.retrieve_chunk_if_exists_opt::<T>(chunk_indices, options)? {
+            Ok(chunk)
+        } else {
+            let chunk_shape = self.chunk_shape(chunk_indices)?;
+            let bytes = ArrayBytes::new_fill_value(
+                self.data_type(),
+                chunk_shape.iter().map(|&x| x.get()).product::<u64>(),
+                self.fill_value(),
+            )
+            .map_err(CodecError::from)
+            .map_err(ArrayError::from)?;
+            T::from_array_bytes(
+                bytes,
+                bytemuck::must_cast_slice(&chunk_shape),
+                self.data_type(),
+            )
+        }
+    }
 
     /// Read and decode the chunk at `chunk_indices` into a preallocated `output_target`.
     ///
@@ -58,7 +84,9 @@ pub trait ArrayReadOps: ArrayOps {
     fn retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunks_opt(chunks, self.codec_options())
+    }
 
     /// Read and decode the chunks in `chunks` with explicit codec options.
     /// Explicit options version of [`retrieve_chunks`](ArrayReadOps::retrieve_chunks).
@@ -67,7 +95,10 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let array_subset = self.chunks_subset(chunks)?;
+        self.retrieve_array_subset_opt(&array_subset, options)
+    }
 
     /// Read and decode the `chunk_subset` of the chunk at `chunk_indices` into its bytes.
     ///
@@ -84,7 +115,9 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, self.codec_options())
+    }
 
     /// Read and decode a subset of the chunk at `chunk_indices` with explicit codec options.
     /// Explicit options version of [`retrieve_chunk_subset`](ArrayReadOps::retrieve_chunk_subset).
@@ -131,7 +164,9 @@ pub trait ArrayReadOps: ArrayOps {
     fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        self.retrieve_array_subset_opt(array_subset, self.codec_options())
+    }
 
     /// Read and decode the array subset with explicit codec options.
     /// Explicit options version of [`retrieve_array_subset`](ArrayReadOps::retrieve_array_subset).
@@ -155,7 +190,9 @@ pub trait ArrayReadOps: ArrayOps {
     fn retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<T>, ArrayError>;
+    ) -> Result<Option<T>, ArrayError> {
+        self.retrieve_chunk_if_exists_opt(chunk_indices, self.codec_options())
+    }
 
     /// Read and decode the chunk at `chunk_indices` if it exists with explicit codec options.
     /// Explicit options version of [`retrieve_chunk_if_exists`](ArrayReadOps::retrieve_chunk_if_exists).
@@ -174,6 +211,19 @@ pub trait ArrayReadOps: ArrayOps {
     fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, StorageError> {
+        self.retrieve_encoded_chunk_opt(chunk_indices, self.codec_options())
+    }
+
+    /// Retrieve the encoded bytes of a chunk with explicit codec options.
+    ///
+    /// # Errors
+    /// Returns an [`StorageError`] if there is an underlying store error.
+    #[allow(clippy::missing_panics_doc)]
+    fn retrieve_encoded_chunk_opt(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
     ) -> Result<Option<Vec<u8>>, StorageError>;
 
     /// Retrieve the encoded bytes of the chunks in `chunks`.
@@ -185,8 +235,29 @@ pub trait ArrayReadOps: ArrayOps {
     fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
+    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
+        self.retrieve_encoded_chunks_opt(chunks, self.codec_options())
+    }
+
+    /// Retrieve the encoded bytes of the chunks in `chunks` with explicit codec options.
+    ///
+    /// The chunks are in order of the chunk indices returned by `chunks.indices().into_iter()`.
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] if there is an underlying store error.
+    fn retrieve_encoded_chunks_opt(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
+        iter_concurrent_limit!(
+            options.concurrent_target(),
+            chunks.indices(),
+            map,
+            |chunk_indices| self.retrieve_encoded_chunk_opt(&chunk_indices, options)
+        )
+        .collect()
+    }
 
     /// Retrieve the encoded bytes of a subchunk.
     ///
@@ -212,7 +283,11 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let (chunk_indices, chunk_subset) =
+            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
+        self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
+    }
 
     /// Read and decode the subchunks at `subchunks` with explicit codec options.
     ///
@@ -225,7 +300,18 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let array_subset = self
+            .subchunk_grid()
+            .chunks_subset(subchunks)?
+            .ok_or_else(|| {
+                ArrayError::InvalidArraySubset(
+                    subchunks.to_array_subset(),
+                    self.subchunk_grid_shape(),
+                )
+            })?;
+        self.retrieve_array_subset_opt(&array_subset, options)
+    }
 
     /// Read and decode the `array_subset` of array into a preallocated `output_target`.
     ///
@@ -244,7 +330,9 @@ pub trait ArrayReadOps: ArrayOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.retrieve_array_subset_into_opt(array_subset, output_target, self.codec_options())
+    }
 
     /// Read and decode an array subset into a preallocated target with explicit codec options.
     /// Explicit options version of [`retrieve_array_subset_into`](ArrayReadOps::retrieve_array_subset_into).
@@ -263,7 +351,9 @@ pub trait ArrayReadOps: ArrayOps {
     fn partial_decoder(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
+        self.partial_decoder_opt(chunk_indices, self.codec_options())
+    }
 
     /// Initialises a partial decoder for the chunk at `chunk_indices` with explicit codec options.
     /// Explicit options version of [`partial_decoder`](ArrayReadOps::partial_decoder).

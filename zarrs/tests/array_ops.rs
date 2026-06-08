@@ -247,7 +247,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     );
     assert!(array.retrieve_encoded_chunk(&[0, 0])?.is_some());
     assert_eq!(
-        array.retrieve_encoded_chunks(&chunks, &options)?.len(),
+        array.retrieve_encoded_chunks_opt(&chunks, &options)?.len(),
         chunks.num_elements_usize()
     );
     assert!(array.retrieve_encoded_subchunk(&[1, 1])?.is_some());

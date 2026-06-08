@@ -10,7 +10,6 @@ use super::ArrayReadOps;
 use crate::array::array_bytes_internal::{
     merge_chunks_vlen, merge_chunks_vlen_optional, optional_nesting_depth,
 };
-use crate::array::array_sharded_ext::subchunk_shard_index_and_subset;
 use crate::array::chunk_cache::{ChunkCacheType, fill_value_bytes, retrieve_chunk_bytes};
 use crate::array::concurrency::concurrency_chunks_and_codec;
 use crate::array::{ArrayBytes, ArrayBytesFixedDisjointView, ArrayIndicesTinyVec};
@@ -265,12 +264,8 @@ where
     C: ChunkCache,
 {
     #[allow(clippy::missing_errors_doc)]
-    pub fn retrieve_chunk<T: FromArrayBytes>(
-        &self,
-        chunk_indices: &[u64],
-    ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_opt(chunk_indices, &CodecOptions::default())
-    }
+    pub fn retrieve_chunk<T: FromArrayBytes>(&self, chunk_indices: &[u64])
+    -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_opt<T: FromArrayBytes>(
@@ -302,28 +297,21 @@ where
     pub fn retrieve_chunks<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.retrieve_chunks_opt(chunks, &CodecOptions::default())
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunks_opt<T: FromArrayBytes>(
         &self,
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let array_subset = self.array().chunks_subset(chunks)?;
-        self.retrieve_array_subset_opt(&array_subset, options)
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_subset<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_subset_opt(chunk_indices, chunk_subset, &CodecOptions::default())
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_subset_opt<T: FromArrayBytes>(
@@ -364,9 +352,7 @@ where
     pub fn retrieve_array_subset<T: FromArrayBytes>(
         &self,
         array_subset: &dyn ArraySubsetTraits,
-    ) -> Result<T, ArrayError> {
-        self.retrieve_array_subset_opt(array_subset, &CodecOptions::default())
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_array_subset_opt<T: FromArrayBytes>(
@@ -382,9 +368,7 @@ where
     pub fn retrieve_chunk_if_exists<T: FromArrayBytes>(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Option<T>, ArrayError> {
-        self.retrieve_chunk_if_exists_opt(chunk_indices, &CodecOptions::default())
-    }
+    ) -> Result<Option<T>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_chunk_if_exists_opt<T: FromArrayBytes>(
@@ -414,18 +398,30 @@ where
     pub fn retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
+    ) -> Result<Option<Vec<u8>>, StorageError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_chunk_opt(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
     ) -> Result<Option<Vec<u8>>, StorageError> {
-        self.array().retrieve_encoded_chunk(chunk_indices)
+        self.array()
+            .retrieve_encoded_chunk_opt(chunk_indices, options)
     }
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_chunks(
         &self,
         chunks: &dyn ArraySubsetTraits,
+    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn retrieve_encoded_chunks_opt(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<Vec<Option<Vec<u8>>>, StorageError> {
-        self.array().retrieve_encoded_chunks(chunks, options)
-    }
+    ) -> Result<Vec<Option<Vec<u8>>>, StorageError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_encoded_subchunk(
@@ -440,42 +436,21 @@ where
         &self,
         subchunk_indices: &[u64],
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let (chunk_indices, chunk_subset) = subchunk_shard_index_and_subset(
-            self.array(),
-            self.array().subchunk_grid(),
-            subchunk_indices,
-        )?;
-        self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_subchunks_opt<T: FromArrayBytes>(
         &self,
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError> {
-        let array_subset = self
-            .array()
-            .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.array().subchunk_grid_shape(),
-                )
-            })?;
-        self.retrieve_array_subset_opt(&array_subset, options)
-    }
+    ) -> Result<T, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_array_subset_into(
         &self,
         array_subset: &dyn ArraySubsetTraits,
         output_target: ArrayBytesDecodeIntoTarget<'_>,
-    ) -> Result<(), ArrayError> {
-        self.retrieve_array_subset_into_opt(array_subset, output_target, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn retrieve_array_subset_into_opt(
@@ -492,9 +467,7 @@ where
     pub fn partial_decoder(
         &self,
         chunk_indices: &[u64],
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError> {
-        self.partial_decoder_opt(chunk_indices, &CodecOptions::default())
-    }
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, ArrayError>;
 
     #[allow(clippy::missing_errors_doc)]
     pub fn partial_decoder_opt(

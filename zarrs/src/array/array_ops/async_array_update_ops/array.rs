@@ -27,7 +27,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
             chunk_indices,
             chunk_subset,
             chunk_subset_data,
-            &self.codec_options,
+            self.codec_options(),
         )
         .await
     }
@@ -103,7 +103,7 @@ impl<TStorage: ?Sized + AsyncReadableWritableStorageTraits + 'static> AsyncArray
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_array_subset_opt(array_subset, subset_data, &self.codec_options)
+        self.async_store_array_subset_opt(array_subset, subset_data, self.codec_options())
             .await
     }
 

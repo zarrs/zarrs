@@ -15,9 +15,7 @@ use zarrs_storage::{Bytes, StorageHandle};
 
 #[inherent]
 impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array<TStorage> {
-    pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.store_metadata_opt(&self.metadata_options)
-    }
+    pub fn store_metadata(&self) -> Result<(), StorageError>;
 
     pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
@@ -60,9 +58,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         }
     }
 
-    pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.erase_metadata_opt(self.metadata_erase_version)
-    }
+    pub fn erase_metadata(&self) -> Result<(), StorageError>;
 
     pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
         let storage_handle = StorageHandle::new(self.storage.clone());
@@ -91,9 +87,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
         &self,
@@ -132,9 +126,7 @@ impl<TStorage: ?Sized + WritableStorageTraits + 'static> ArrayWriteOps for Array
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
         &self,
