@@ -247,7 +247,7 @@ fn exercise_array_read_ops<A: ArrayReadOps + ArrayWriteOps>(array: &A) -> TestRe
     );
     assert!(array.retrieve_encoded_chunk(&[0, 0])?.is_some());
     assert_eq!(
-        array.retrieve_encoded_chunks(&chunks, &options)?.len(),
+        array.retrieve_encoded_chunks_opt(&chunks, &options)?.len(),
         chunks.num_elements_usize()
     );
     assert!(array.retrieve_encoded_subchunk(&[1, 1])?.is_some());
@@ -495,6 +495,36 @@ fn array_cached_cache_hits_and_invalidation_cover_all_value_types() -> TestResul
     assert_cache_hits_and_invalidation(ChunkCacheEncodedLruChunkLimit::new(16), true)?;
     assert_cache_hits_and_invalidation(ChunkCacheDecodedLruChunkLimit::new(16), true)?;
     assert_cache_hits_and_invalidation(ChunkCachePartialDecoderLruChunkLimit::new(16), false)
+}
+
+fn assert_cache_hits_for_array_subset_into<C>(cache: C) -> TestResult
+where
+    C: ChunkCache + 'static,
+{
+    let (array, store) = fixture();
+    populate(array.as_ref())?;
+    let cached = ArrayCached::new(array, cache);
+    let subset = ArraySubset::new_with_ranges(&[1..4, 1..4]);
+
+    store.reset();
+    assert_eq!(
+        retrieve_into(&cached, &subset, None, true)?,
+        [7, 8, 9, 12, 13, 14, 17, 18, 19]
+    );
+    let reads_after_miss = store.reads();
+    assert!(reads_after_miss > 0);
+    assert_eq!(
+        retrieve_into(&cached, &subset, None, true)?,
+        [7, 8, 9, 12, 13, 14, 17, 18, 19]
+    );
+    assert_eq!(store.reads(), reads_after_miss);
+    Ok(())
+}
+
+#[test]
+fn array_cached_array_subset_into_uses_cache() -> TestResult {
+    assert_cache_hits_for_array_subset_into(ChunkCacheEncodedLruChunkLimit::new(16))?;
+    assert_cache_hits_for_array_subset_into(ChunkCacheDecodedLruChunkLimit::new(16))
 }
 
 // TODO: ChunkCacheType could be adjusted so that ChunkCacheEncoded could handle caching of encoded chunks, but seems low value

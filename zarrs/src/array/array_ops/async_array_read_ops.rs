@@ -37,7 +37,11 @@ pub trait AsyncArrayReadOps: ArrayOps {
         &self,
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
-    ) -> Result<T, ArrayError>;
+    ) -> Result<T, ArrayError> {
+        let array_subset = self.chunks_subset(chunks)?;
+        self.async_retrieve_array_subset_opt(&array_subset, options)
+            .await
+    }
 
     /// Async variant of [`ArrayReadOps::retrieve_chunk_subset`].
     #[allow(clippy::missing_errors_doc)]
@@ -96,6 +100,17 @@ pub trait AsyncArrayReadOps: ArrayOps {
     async fn async_retrieve_encoded_chunk(
         &self,
         chunk_indices: &[u64],
+    ) -> Result<Option<Bytes>, StorageError> {
+        self.async_retrieve_encoded_chunk_opt(chunk_indices, self.codec_options())
+            .await
+    }
+
+    /// Async variant of [`ArrayReadOps::retrieve_encoded_chunk_opt`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_encoded_chunk_opt(
+        &self,
+        chunk_indices: &[u64],
+        options: &CodecOptions,
     ) -> Result<Option<Bytes>, StorageError>;
 
     /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks`].
@@ -108,6 +123,16 @@ pub trait AsyncArrayReadOps: ArrayOps {
     /// Returns a [`StorageError`] if there is an underlying store error.
     #[allow(clippy::missing_errors_doc)]
     async fn async_retrieve_encoded_chunks(
+        &self,
+        chunks: &dyn ArraySubsetTraits,
+    ) -> Result<Vec<Option<Bytes>>, StorageError> {
+        self.async_retrieve_encoded_chunks_opt(chunks, self.codec_options())
+            .await
+    }
+
+    /// Async variant of [`ArrayReadOps::retrieve_encoded_chunks_opt`].
+    #[allow(clippy::missing_errors_doc)]
+    async fn async_retrieve_encoded_chunks_opt(
         &self,
         chunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,

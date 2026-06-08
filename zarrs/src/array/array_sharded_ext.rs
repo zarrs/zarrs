@@ -1,7 +1,7 @@
 use std::num::NonZeroU64;
 
 use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};
-use super::{Array, ArrayError, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
+use super::{ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChain};
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
@@ -177,8 +177,8 @@ struct SubchunkShardLocation {
     array_subset: ArraySubset,
 }
 
-fn subchunk_shard_location<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+fn subchunk_shard_location<A: ArrayOps + ?Sized>(
+    array: &A,
     subchunk_grid: &ChunkGrid,
     subchunk_indices: &[u64],
 ) -> Result<SubchunkShardLocation, ArrayError> {
@@ -203,8 +203,8 @@ fn subchunk_shard_location<TStorage: ?Sized>(
     })
 }
 
-pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+pub(super) fn subchunk_shard_index_and_subset<A: ArrayOps + ?Sized>(
+    array: &A,
     subchunk_grid: &ChunkGrid,
     subchunk_indices: &[u64],
 ) -> Result<(Vec<u64>, ArraySubset), ArrayError> {
@@ -213,8 +213,8 @@ pub(super) fn subchunk_shard_index_and_subset<TStorage: ?Sized>(
     Ok((location.shard_indices, shard_subset))
 }
 
-pub(super) fn subchunk_shard_index_and_chunk_index<TStorage: ?Sized>(
-    array: &Array<TStorage>,
+pub(super) fn subchunk_shard_index_and_chunk_index<A: ArrayOps + ?Sized>(
+    array: &A,
     subchunk_grid: &ChunkGrid,
     subchunk_indices: &[u64],
 ) -> Result<(Vec<u64>, Vec<u64>), ArrayError> {
@@ -240,7 +240,7 @@ mod tests {
 
     use super::*;
     use crate::array::chunk_grid::{RectangularChunkGrid, RectilinearChunkGrid};
-    use crate::array::{ArrayBuilder, data_type};
+    use crate::array::{Array, ArrayBuilder, data_type};
     use zarrs_metadata_ext::chunk_grid::rectangular::RectangularChunkGridDimensionConfiguration;
     use zarrs_metadata_ext::chunk_grid::rectilinear::{ChunkEdgeLengths, RunLengthElement};
     use zarrs_plugin::ExtensionName;

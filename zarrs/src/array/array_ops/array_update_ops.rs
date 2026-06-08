@@ -24,7 +24,14 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         chunk_indices: &[u64],
         chunk_subset: &dyn ArraySubsetTraits,
         chunk_subset_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.store_chunk_subset_opt(
+            chunk_indices,
+            chunk_subset,
+            chunk_subset_data,
+            self.codec_options(),
+        )
+    }
 
     /// Explicit options version of [`store_chunk_subset`](ArrayUpdateOps::store_chunk_subset).
     fn store_chunk_subset_opt<'a, T: IntoArrayBytes<'a>>(
@@ -50,7 +57,9 @@ pub trait ArrayUpdateOps: ArrayReadOps + ArrayWriteOps {
         &self,
         array_subset: &dyn ArraySubsetTraits,
         subset_data: T,
-    ) -> Result<(), ArrayError>;
+    ) -> Result<(), ArrayError> {
+        self.store_array_subset_opt(array_subset, subset_data, self.codec_options())
+    }
 
     /// Explicit options version of [`store_array_subset`](ArrayUpdateOps::store_array_subset).
     fn store_array_subset_opt<'a, T: IntoArrayBytes<'a>>(

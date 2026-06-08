@@ -163,7 +163,7 @@ async fn exercise_async_read_ops<A: AsyncArrayUpdateOps>(array: &A) -> TestResul
     assert!(array.async_retrieve_encoded_chunk(&[0, 0]).await?.is_some());
     assert_eq!(
         array
-            .async_retrieve_encoded_chunks(&chunks, &options)
+            .async_retrieve_encoded_chunks_opt(&chunks, &options)
             .await?
             .len(),
         chunks.num_elements_usize()

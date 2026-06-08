@@ -9,11 +9,7 @@ where
     TStorage: ?Sized + WritableStorageTraits + 'static,
     C: ChunkCache,
 {
-    pub fn store_metadata(&self) -> Result<(), StorageError> {
-        self.array().store_metadata()?;
-        self.cache().invalidate();
-        Ok(())
-    }
+    pub fn store_metadata(&self) -> Result<(), StorageError>;
 
     pub fn store_metadata_opt(&self, options: &ArrayMetadataOptions) -> Result<(), StorageError> {
         self.array().store_metadata_opt(options)?;
@@ -21,11 +17,7 @@ where
         Ok(())
     }
 
-    pub fn erase_metadata(&self) -> Result<(), StorageError> {
-        self.array().erase_metadata()?;
-        self.cache().invalidate();
-        Ok(())
-    }
+    pub fn erase_metadata(&self) -> Result<(), StorageError>;
 
     pub fn erase_metadata_opt(&self, options: MetadataEraseVersion) -> Result<(), StorageError> {
         self.array().erase_metadata_opt(options)?;
@@ -37,9 +29,7 @@ where
         &self,
         chunk_indices: &[u64],
         chunk_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     pub fn store_chunk_opt<'a, T: IntoArrayBytes<'a>>(
         &self,
@@ -57,9 +47,7 @@ where
         &self,
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
-    ) -> Result<(), ArrayError> {
-        self.store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
-    }
+    ) -> Result<(), ArrayError>;
 
     pub fn store_chunks_opt<'a, T: IntoArrayBytes<'a>>(
         &self,

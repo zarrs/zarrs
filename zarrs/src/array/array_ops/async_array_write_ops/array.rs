@@ -17,7 +17,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     for Array<TStorage>
 {
     pub async fn async_store_metadata(&self) -> Result<(), StorageError> {
-        self.async_store_metadata_opt(&self.metadata_options).await
+        self.async_store_metadata_opt(self.metadata_options()).await
     }
 
     pub async fn async_store_metadata_opt(
@@ -68,7 +68,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
     }
 
     pub async fn async_erase_metadata(&self) -> Result<(), StorageError> {
-        self.async_erase_metadata_opt(self.metadata_erase_version)
+        self.async_erase_metadata_opt(self.metadata_erase_version())
             .await
     }
 
@@ -115,7 +115,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunk_indices: &[u64],
         chunk_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunk_opt(chunk_indices, chunk_data, &CodecOptions::default())
+        self.async_store_chunk_opt(chunk_indices, chunk_data, self.codec_options())
             .await
     }
 
@@ -157,7 +157,7 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
         chunks: &dyn ArraySubsetTraits,
         chunks_data: T,
     ) -> Result<(), ArrayError> {
-        self.async_store_chunks_opt(chunks, chunks_data, &CodecOptions::default())
+        self.async_store_chunks_opt(chunks, chunks_data, self.codec_options())
             .await
     }
 
