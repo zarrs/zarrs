@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
   - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
   - Add `invalidate` methods
+- `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
+  - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
 
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
