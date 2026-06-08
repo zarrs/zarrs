@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use camino::Utf8PathBuf;
 
 use derive_more::Display;
 use thiserror::Error;
@@ -10,8 +10,8 @@ use zarrs_storage::{StorePrefix, StorePrefixError};
 ///
 /// See <https://zarr-specs.readthedocs.io/en/latest/v3/core/index.html#path>
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Display)]
-#[display("{}", _0.to_string_lossy())]
-pub struct NodePath(PathBuf);
+#[display("{}", _0)]
+pub struct NodePath(Utf8PathBuf);
 
 /// An invalid node path.
 #[derive(Clone, Debug, Error)]
@@ -26,7 +26,7 @@ impl NodePath {
     /// Returns [`NodePathError`] if `path` is not valid according to [`NodePath::validate`()].
     pub fn new(path: &str) -> Result<Self, NodePathError> {
         if Self::validate(path) {
-            Ok(Self(PathBuf::from(path)))
+            Ok(Self(Utf8PathBuf::from(path)))
         } else {
             Err(NodePathError(path.to_string()))
         }
@@ -35,19 +35,24 @@ impl NodePath {
     /// The root node.
     #[must_use]
     pub fn root() -> Self {
-        Self(PathBuf::from("/"))
+        Self(Utf8PathBuf::from("/"))
     }
 
     /// Extracts a string slice containing the node path `String`.
-    #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn as_str(&self) -> &str {
-        self.0.to_str().unwrap()
+        self.0.as_str()
     }
 
     /// Extracts the path as a [`std::path::Path`].
     #[must_use]
     pub fn as_path(&self) -> &std::path::Path {
+        self.0.as_std_path()
+    }
+
+    /// Extracts the path as a [`camino::Utf8Path`].
+    #[must_use]
+    pub fn as_utf8_path(&self) -> &camino::Utf8Path {
         &self.0
     }
 
@@ -79,7 +84,7 @@ impl NodePath {
     /// Returns `true` if this is the root path.
     #[must_use]
     pub fn is_root(&self) -> bool {
-        self.0.as_os_str() == "/"
+        self.0.as_str() == "/"
     }
 
     /// Returns the parent path of this node, or `None` if this is the root path.
