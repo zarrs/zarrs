@@ -86,48 +86,48 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    pub fn retrieve_chunk_at_level<T: FromArrayBytes>(
+    pub fn retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_at_level_opt(level, chunk_indices, &self.codec_options)
+        self.retrieve_subchunk_at_level_opt(level, subchunk_indices, &self.codec_options)
     }
 
-    pub fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
         let subset = grid
-            .subset(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
         self.retrieve_array_subset_opt(&subset, options)
     }
 
-    pub fn retrieve_chunks_at_level<T: FromArrayBytes>(
+    pub fn retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunks_at_level_opt(level, chunks, &self.codec_options)
+        self.retrieve_subchunks_at_level_opt(level, subchunks, &self.codec_options)
     }
 
-    pub fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
-        let subset = grid.chunks_subset(chunks)?.ok_or_else(|| {
-            ArrayError::InvalidArraySubset(chunks.to_array_subset(), grid.grid_shape().to_vec())
+        let subset = grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(subchunks.to_array_subset(), grid.grid_shape().to_vec())
         })?;
         self.retrieve_array_subset_opt(&subset, options)
     }
@@ -385,8 +385,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             ));
         }
 
-        let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
+        let (shard_indices, subchunk_indices_in_shard) = subchunk_shard_index_and_chunk_index(
+            self,
+            self.subchunk_grid().unwrap_or_else(|| self.chunk_grid()),
+            subchunk_indices,
+        )?;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -713,10 +716,10 @@ mod tests {
             .collect();
         array.store_array_subset(&array.subset_all(), &data)?;
 
-        let subchunk_grid = array.subchunk_grid();
+        let subchunk_grid = array.subchunk_grid().unwrap_or_else(|| array.chunk_grid());
         if sharded {
             assert_eq!(
-                array.subchunk_shape(),
+                subchunk_grid.chunk_shape(&[0, 0])?,
                 Some(vec![NonZeroU64::new(2).unwrap(); 2])
             );
             assert_eq!(subchunk_grid.grid_shape(), &[4, 4]);
@@ -755,7 +758,7 @@ mod tests {
 
             assert!(array.retrieve_encoded_subchunk(&[0, 0])?.is_some());
         } else {
-            assert_eq!(array.subchunk_shape(), None);
+            assert!(array.subchunk_grid().is_none());
             assert_eq!(subchunk_grid.grid_shape(), &[2, 2]);
 
             let compare = array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?;
@@ -813,47 +816,49 @@ mod tests {
             .array_to_bytes_codec(outer_sharding)
             .build(store.clone(), "/array")?;
 
-        assert_eq!(array.num_chunk_grid_levels(), 3);
-        assert_eq!(array.chunk_grid_at_level(0).unwrap().grid_shape(), &[1, 1]);
-        assert_eq!(array.chunk_grid_at_level(1).unwrap().grid_shape(), &[2, 2]);
-        assert_eq!(array.chunk_grid_at_level(2).unwrap().grid_shape(), &[4, 4]);
-        assert!(array.chunk_grid_at_level(3).is_none());
-        assert_eq!(array.subchunk_grid().grid_shape(), &[2, 2]);
+        assert_eq!(array.num_subchunk_grid_levels(), 2);
+        assert_eq!(array.chunk_grid().grid_shape(), &[1, 1]);
+        assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[2, 2]);
         assert_eq!(
-            array.subchunk_shape(),
+            array.subchunk_grid_at_level(1).unwrap().grid_shape(),
+            &[4, 4]
+        );
+        assert!(array.subchunk_grid_at_level(2).is_none());
+        assert_eq!(
+            array.subchunk_grid().unwrap().chunk_shape(&[0, 0])?,
             Some(vec![NonZeroU64::new(4).unwrap(); 2])
         );
 
         let data: Vec<u16> = (0..64).collect();
         array.store_array_subset(&array.subset_all(), &data)?;
 
-        assert_eq!(array.retrieve_chunk_at_level::<Vec<u16>>(0, &[0, 0])?, data);
+        assert_eq!(array.retrieve_chunk::<Vec<u16>>(&[0, 0])?, data);
         assert_eq!(
-            array.retrieve_chunk_at_level::<Vec<u16>>(1, &[1, 1])?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(0, &[1, 1])?,
             array.retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])?
         );
         assert_eq!(
-            array.retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])?,
+            array.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
             array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?
         );
         assert_eq!(
-            array.retrieve_chunks_at_level::<Vec<u16>>(
-                2,
+            array.retrieve_subchunks_at_level::<Vec<u16>>(
+                1,
                 &ArraySubset::new_with_ranges(&[1..3, 1..3]),
             )?,
             array.retrieve_array_subset::<Vec<u16>>(&[2..6, 2..6])?
         );
         assert!(matches!(
-            array.retrieve_chunk_at_level::<Vec<u16>>(3, &[0, 0]),
-            Err(ArrayError::InvalidChunkGridLevel(3))
+            array.retrieve_subchunk_at_level::<Vec<u16>>(2, &[0, 0]),
+            Err(ArrayError::InvalidChunkGridLevel(2))
         ));
         assert!(array.retrieve_encoded_subchunk(&[0, 0])?.is_some());
 
         array.store_metadata()?;
         let reopened = Array::open(store, "/array")?;
-        assert_eq!(reopened.num_chunk_grid_levels(), 3);
+        assert_eq!(reopened.num_subchunk_grid_levels(), 2);
         assert_eq!(
-            reopened.retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])?,
+            reopened.retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])?,
             array.retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])?
         );
 

@@ -418,7 +418,7 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
         .await?;
 
     if sharded {
-        assert_eq!(array.subchunk_grid_shape(), &[4, 4]);
+        assert_eq!(array.subchunk_grid().unwrap().grid_shape(), &[4, 4]);
 
         let compare = array
             .async_retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])
@@ -445,7 +445,8 @@ async fn array_async_read_subchunks(sharded: bool) -> Result<(), Box<dyn std::er
                 .is_some()
         );
     } else {
-        assert_eq!(array.subchunk_grid_shape(), &[2, 2]);
+        assert!(array.subchunk_grid().is_none());
+        assert_eq!(array.chunk_grid().grid_shape(), &[2, 2]);
 
         let compare = array
             .async_retrieve_array_subset::<Vec<u16>>(&[4..8, 4..8])
@@ -532,10 +533,10 @@ async fn array_async_read_nested_sharding_levels() -> Result<(), Box<dyn std::er
         .async_store_array_subset(&array.subset_all(), &data)
         .await?;
 
-    assert_eq!(array.num_chunk_grid_levels(), 3);
+    assert_eq!(array.num_subchunk_grid_levels(), 2);
     assert_eq!(
         array
-            .async_retrieve_chunk_at_level::<Vec<u16>>(2, &[2, 3])
+            .async_retrieve_subchunk_at_level::<Vec<u16>>(1, &[2, 3])
             .await?,
         array
             .async_retrieve_array_subset::<Vec<u16>>(&[4..6, 6..8])

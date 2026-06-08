@@ -43,37 +43,37 @@ pub trait AsyncArrayReadOps: ArrayOps {
             .await
     }
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_at_level`].
+    /// Async variant of [`ArrayReadOps::retrieve_subchunk_at_level`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunk_at_level<T: FromArrayBytes>(
+    async fn async_retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunk_at_level_opt`].
+    /// Async variant of [`ArrayReadOps::retrieve_subchunk_at_level_opt`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+    async fn async_retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunks_at_level`].
+    /// Async variant of [`ArrayReadOps::retrieve_subchunks_at_level`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunks_at_level<T: FromArrayBytes>(
+    async fn async_retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
-    /// Async variant of [`ArrayReadOps::retrieve_chunks_at_level_opt`].
+    /// Async variant of [`ArrayReadOps::retrieve_subchunks_at_level_opt`].
     #[allow(clippy::missing_errors_doc)]
-    async fn async_retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+    async fn async_retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 

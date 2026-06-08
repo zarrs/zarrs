@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
   - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
   - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
-  - Add nested sharding grid hierarchy queries: `num_chunk_grid_levels`, `chunk_grid_at_level`, and `subchunk_grids`
-  - Add sync and async `retrieve_{chunk,chunks}_at_level` methods
+  - Add nested sharding grid hierarchy queries: `num_subchunk_grid_levels`, `subchunk_grid`, `subchunk_grid_at_level`, and `subchunk_grids`
+  - Add sync and async `retrieve_subchunk[s]_at_level` methods
   - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 
@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Breaking**: Remove `ArrayShardedReadableExt`
 - **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+- **Breaking**: Remove `ArrayOps::subchunk_shape` and `ArrayOps::subchunk_grid_shape`; use `subchunk_grid()` or `subchunk_grid_at_level(level)` instead
 - Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
   - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
 

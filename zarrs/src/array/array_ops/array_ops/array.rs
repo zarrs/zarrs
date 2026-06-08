@@ -6,12 +6,10 @@ use super::super::super::{
 };
 use super::super::*;
 use super::ArrayOps;
-use crate::array::codec::ShardingCodecConfiguration;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
 use zarrs_codec::ArrayToBytesCodecTraits;
-use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
 use zarrs_plugin::ZarrVersion;
@@ -218,44 +216,20 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         self.chunk_grid().grid_shape()
     }
 
-    pub fn num_chunk_grid_levels(&self) -> usize {
-        self.subchunk_grids.len() + 1
+    pub fn num_subchunk_grid_levels(&self) -> usize {
+        self.subchunk_grids.len()
     }
 
-    pub fn chunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
-        if level == 0 {
-            Some(self.chunk_grid())
-        } else {
-            self.subchunk_grids.get(level - 1)
-        }
+    pub fn subchunk_grid(&self) -> Option<&ChunkGrid> {
+        self.subchunk_grid_at_level(0)
+    }
+
+    pub fn subchunk_grid_at_level(&self, level: usize) -> Option<&ChunkGrid> {
+        self.subchunk_grids.get(level)
     }
 
     pub fn subchunk_grids(&self) -> &[ChunkGrid] {
         &self.subchunk_grids
-    }
-
-    pub fn subchunk_shape(&self) -> Option<ChunkShape> {
-        let configuration = self
-            .codecs
-            .array_to_bytes_codec()
-            .configuration_v3(self.metadata_options().codec_metadata_options())?;
-        if let Ok(ShardingCodecConfiguration::V1(sharding_configuration)) =
-            ShardingCodecConfiguration::try_from_configuration(configuration)
-        {
-            Some(sharding_configuration.chunk_shape)
-        } else {
-            None
-        }
-    }
-
-    pub fn subchunk_grid(&self) -> &ChunkGrid {
-        self.subchunk_grids
-            .first()
-            .unwrap_or_else(|| self.chunk_grid())
-    }
-
-    pub fn subchunk_grid_shape(&self) -> ArrayShape {
-        self.subchunk_grid().grid_shape().to_vec()
     }
 
     pub fn chunk_key(&self, chunk_indices: &[u64]) -> StoreKey {

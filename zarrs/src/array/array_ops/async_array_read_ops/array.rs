@@ -78,50 +78,50 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    pub async fn async_retrieve_chunk_at_level<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunk_at_level_opt(level, chunk_indices, &self.codec_options)
+        self.async_retrieve_subchunk_at_level_opt(level, subchunk_indices, &self.codec_options)
             .await
     }
 
-    pub async fn async_retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
         let subset = grid
-            .subset(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
         self.async_retrieve_array_subset_opt(&subset, options).await
     }
 
-    pub async fn async_retrieve_chunks_at_level<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.async_retrieve_chunks_at_level_opt(level, chunks, &self.codec_options)
+        self.async_retrieve_subchunks_at_level_opt(level, subchunks, &self.codec_options)
             .await
     }
 
-    pub async fn async_retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+    pub async fn async_retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
-        let subset = grid.chunks_subset(chunks)?.ok_or_else(|| {
-            ArrayError::InvalidArraySubset(chunks.to_array_subset(), grid.grid_shape().to_vec())
+        let subset = grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(subchunks.to_array_subset(), grid.grid_shape().to_vec())
         })?;
         self.async_retrieve_array_subset_opt(&subset, options).await
     }
@@ -423,8 +423,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             ));
         }
 
-        let (shard_indices, subchunk_indices_in_shard) =
-            subchunk_shard_index_and_chunk_index(self, self.subchunk_grid(), subchunk_indices)?;
+        let (shard_indices, subchunk_indices_in_shard) = subchunk_shard_index_and_chunk_index(
+            self,
+            self.subchunk_grid().unwrap_or_else(|| self.chunk_grid()),
+            subchunk_indices,
+        )?;
         let storage_handle = Arc::new(StorageHandle::new(self.storage.clone()));
         let storage_transformer = self
             .storage_transformers()
@@ -459,8 +462,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
+        let (chunk_indices, chunk_subset) = subchunk_shard_index_and_subset(
+            self,
+            self.subchunk_grid().unwrap_or_else(|| self.chunk_grid()),
+            subchunk_indices,
+        )?;
         self.async_retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
             .await
     }
@@ -470,15 +476,13 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let array_subset = self
-            .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
+        let subchunk_grid = self.subchunk_grid().unwrap_or_else(|| self.chunk_grid());
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
         self.async_retrieve_array_subset_opt(&array_subset, options)
             .await
     }

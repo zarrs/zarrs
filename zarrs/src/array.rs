@@ -313,10 +313,11 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The `sharding_indexed` codec ([`ShardingCodec`](codec::array_to_bytes::sharding)) enables multiple subchunks ("inner chunks") to be stored in a single chunk ("shard").
 /// With a sharded array, the [`chunk_grid`](Array::chunk_grid) and chunk indices in store/retrieve methods reference the chunks ("shards") of an array.
 ///
-/// [`Array`] provides methods to query nested sharding grid levels. Level zero is the top-level
-/// storage chunk grid, and subsequent levels are the subchunk grids of nested `sharding_indexed`
-/// codecs, outermost first. The singular subchunk APIs refer to the direct subchunks of the
-/// outermost sharding codec.
+/// [`Array`] provides methods to query nested sharding grid levels. [`chunk_grid`](Array::chunk_grid)
+/// is the top-level storage chunk grid. [`subchunk_grid`](ArrayOps::subchunk_grid) returns the
+/// direct subchunk grid of the outermost `sharding_indexed` codec, and
+/// [`subchunk_grid_at_level`](ArrayOps::subchunk_grid_at_level) queries nested `sharding_indexed`
+/// codec grids, outermost first.
 ///
 /// [`ArrayReadOps`] adds methods to conveniently access the data in a sharded array:
 ///  - [`retrieve_subchunk_opt`](ArrayReadOps::retrieve_subchunk_opt)

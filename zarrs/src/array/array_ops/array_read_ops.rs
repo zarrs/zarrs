@@ -101,37 +101,37 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         self.retrieve_array_subset_opt(&array_subset, options)
     }
 
-    /// Read and decode a chunk from the chunk grid at `level`.
+    /// Read and decode a subchunk from the subchunk grid at `level`.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_at_level<T: FromArrayBytes>(
+    fn retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode a chunk from the chunk grid at `level` with explicit codec options.
+    /// Read and decode a subchunk from the subchunk grid at `level` with explicit codec options.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+    fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode chunks from the chunk grid at `level`.
+    /// Read and decode subchunks from the subchunk grid at `level`.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_at_level<T: FromArrayBytes>(
+    fn retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError>;
 
-    /// Read and decode chunks from the chunk grid at `level` with explicit codec options.
+    /// Read and decode subchunks from the subchunk grid at `level` with explicit codec options.
     #[allow(clippy::missing_errors_doc)]
-    fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+    fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
@@ -319,8 +319,9 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
+        let subchunk_grid = self.subchunk_grid().unwrap_or_else(|| self.chunk_grid());
         let (chunk_indices, chunk_subset) =
-            subchunk_shard_index_and_subset(self, self.subchunk_grid(), subchunk_indices)?;
+            subchunk_shard_index_and_subset(self, subchunk_grid, subchunk_indices)?;
         self.retrieve_chunk_subset_opt(&chunk_indices, &chunk_subset, options)
     }
 
@@ -336,15 +337,13 @@ pub trait ArrayReadOps: ArrayOps + MaybeSync {
         subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
-        let array_subset = self
-            .subchunk_grid()
-            .chunks_subset(subchunks)?
-            .ok_or_else(|| {
-                ArrayError::InvalidArraySubset(
-                    subchunks.to_array_subset(),
-                    self.subchunk_grid_shape(),
-                )
-            })?;
+        let subchunk_grid = self.subchunk_grid().unwrap_or_else(|| self.chunk_grid());
+        let array_subset = subchunk_grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(
+                subchunks.to_array_subset(),
+                subchunk_grid.grid_shape().to_vec(),
+            )
+        })?;
         self.retrieve_array_subset_opt(&array_subset, options)
     }
 

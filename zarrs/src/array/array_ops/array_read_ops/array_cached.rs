@@ -438,48 +438,48 @@ where
         options: &CodecOptions,
     ) -> Result<T, ArrayError>;
 
-    pub fn retrieve_chunk_at_level<T: FromArrayBytes>(
+    pub fn retrieve_subchunk_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunk_at_level_opt(level, chunk_indices, &self.array().codec_options)
+        self.retrieve_subchunk_at_level_opt(level, subchunk_indices, &self.array().codec_options)
     }
 
-    pub fn retrieve_chunk_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunk_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
         let subset = grid
-            .subset(chunk_indices)?
-            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(chunk_indices.to_vec()))?;
+            .subset(subchunk_indices)?
+            .ok_or_else(|| ArrayError::InvalidChunkGridIndicesError(subchunk_indices.to_vec()))?;
         self.retrieve_array_subset_opt(&subset, options)
     }
 
-    pub fn retrieve_chunks_at_level<T: FromArrayBytes>(
+    pub fn retrieve_subchunks_at_level<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
     ) -> Result<T, ArrayError> {
-        self.retrieve_chunks_at_level_opt(level, chunks, &self.array().codec_options)
+        self.retrieve_subchunks_at_level_opt(level, subchunks, &self.array().codec_options)
     }
 
-    pub fn retrieve_chunks_at_level_opt<T: FromArrayBytes>(
+    pub fn retrieve_subchunks_at_level_opt<T: FromArrayBytes>(
         &self,
         level: usize,
-        chunks: &dyn ArraySubsetTraits,
+        subchunks: &dyn ArraySubsetTraits,
         options: &CodecOptions,
     ) -> Result<T, ArrayError> {
         let grid = self
-            .chunk_grid_at_level(level)
+            .subchunk_grid_at_level(level)
             .ok_or(ArrayError::InvalidChunkGridLevel(level))?;
-        let subset = grid.chunks_subset(chunks)?.ok_or_else(|| {
-            ArrayError::InvalidArraySubset(chunks.to_array_subset(), grid.grid_shape().to_vec())
+        let subset = grid.chunks_subset(subchunks)?.ok_or_else(|| {
+            ArrayError::InvalidArraySubset(subchunks.to_array_subset(), grid.grid_shape().to_vec())
         })?;
         self.retrieve_array_subset_opt(&subset, options)
     }
@@ -566,9 +566,11 @@ mod tests {
 
         let cached = ArrayCached::new(array, cache);
         assert_eq!(cached.retrieve_chunk::<Vec<u8>>(&[0]).unwrap(), vec![1, 2]);
-        assert_eq!(
-            cached.retrieve_chunk_at_level::<Vec<u8>>(0, &[0]).unwrap(),
-            vec![1, 2]
+        assert_eq!(cached.num_subchunk_grid_levels(), 0);
+        assert!(
+            cached
+                .retrieve_subchunk_at_level::<Vec<u8>>(0, &[0])
+                .is_err()
         );
         assert_eq!(
             cached
@@ -648,7 +650,7 @@ mod tests {
         );
         assert_eq!(
             cached
-                .retrieve_chunk_at_level_opt::<Vec<u16>>(1, &[2, 3], &options)
+                .retrieve_subchunk_at_level_opt::<Vec<u16>>(0, &[2, 3], &options)
                 .unwrap(),
             vec![38, 39, 46, 47]
         );
