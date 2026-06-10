@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bump `zarrs_metadata` to 0.7.6
 
+### Fixed
+- Support deserialising `numcodecs.zfpy` metadata with a string `mode`, as erroneously written by `zarrs` 0.20-0.22
+
 ## [0.4.4](https://github.com/zarrs/zarrs/releases/tag/zarrs_metadata_ext-v0.4.4) - 2026-05-16
 
 ### Added
