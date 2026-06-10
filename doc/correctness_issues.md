@@ -1,4 +1,6 @@
 ## Correctness Issues with Past Versions
+- `zarrs: 0.20-0.22` `numcodecs.zfpy` codec metadata incorrectly serialised a string representation of the `zfp` mode rather than integer
+  - `zarrs` 0.24+ supports deserialising the erroneous metadata
 - `zarrs: 0.20.x` Data encoded with `packbits` with a non-zero `first_bit` is incorrectly encoded
 - † `zarrs: 0.19.x` and `zarrs_metadata: <0.3.5`: it was possible for a user to create non-conformant Zarr V2 metadata with `filters: []`
   - Empty filters now always correctly serialise to `null`
