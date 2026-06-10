@@ -16,6 +16,10 @@ test:
     cargo +{{TOOLCHAIN}} test --all-features
     cargo +{{TOOLCHAIN}} test --all-features --examples
 
+# Run ignored tests
+test_ignored:
+    cargo +{{TOOLCHAIN}} test --all-features -- --ignored
+
 # Format with rustfmt
 fmt:
     cargo +{{TOOLCHAIN}} fmt
