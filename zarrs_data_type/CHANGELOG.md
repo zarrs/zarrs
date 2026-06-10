@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add `ScaleOffsetDataTypeTraits` and `impl_scale_offset_data_type_traits` for the `scale_offset` codec
+
 ## [0.9.0] - 2026-02-02
 
 ### Added

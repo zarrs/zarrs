@@ -14,6 +14,7 @@
 //! - [`impl_fixed_scale_offset_data_type_traits`] - Implement [`fixedscaleoffset::FixedScaleOffsetDataTypeTraits`]
 //! - [`impl_pack_bits_data_type_traits`] - Implement [`packbits::PackBitsDataTypeTraits`]
 //! - [`impl_pcodec_data_type_traits`] - Implement [`pcodec::PcodecDataTypeTraits`]
+//! - [`impl_scale_offset_data_type_traits`] - Implement [`scale_offset::ScaleOffsetDataTypeTraits`]
 //! - [`impl_zfp_data_type_traits`] - Implement [`zfp::ZfpDataTypeTraits`]
 
 pub mod bitround;
@@ -22,6 +23,7 @@ pub mod cast_value;
 pub mod fixedscaleoffset;
 pub mod packbits;
 pub mod pcodec;
+pub mod scale_offset;
 pub mod zfp;
 
 pub use bitround::impl_bitround_codec;
@@ -33,4 +35,5 @@ pub use cast_value::{
 pub use fixedscaleoffset::impl_fixed_scale_offset_data_type_traits;
 pub use packbits::impl_pack_bits_data_type_traits;
 pub use pcodec::impl_pcodec_data_type_traits;
+pub use scale_offset::impl_scale_offset_data_type_traits;
 pub use zfp::impl_zfp_data_type_traits;

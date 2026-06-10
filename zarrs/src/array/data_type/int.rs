@@ -69,6 +69,264 @@ impl_fixed_scale_offset_data_type_traits!(Int16DataType, I16);
 impl_fixed_scale_offset_data_type_traits!(Int32DataType, I32);
 impl_fixed_scale_offset_data_type_traits!(Int64DataType, I64);
 
+// ScaleOffset implementations for standard integers
+use zarrs_data_type::codec_traits::impl_scale_offset_data_type_traits;
+use zarrs_data_type::codec_traits::scale_offset::{
+    ScaleOffsetDataTypeTraits, ScaleOffsetError, scale_offset_decode_int, scale_offset_encode_int,
+};
+
+impl ScaleOffsetDataTypeTraits for Int8DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i8 = match offset {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i8 = match scale {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<1>().0 {
+            let value = i8::from_ne_bytes(*chunk);
+            let result = scale_offset_encode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i8 = match offset {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i8 = match scale {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<1>().0 {
+            let value = i8::from_ne_bytes(*chunk);
+            let result = scale_offset_decode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+}
+impl_scale_offset_data_type_traits!(Int8DataType);
+
+impl ScaleOffsetDataTypeTraits for Int16DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i16 = match offset {
+            Some(bytes) => i16::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i16 = match scale {
+            Some(bytes) => i16::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<2>().0 {
+            let value = i16::from_ne_bytes(*chunk);
+            let result = scale_offset_encode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i16 = match offset {
+            Some(bytes) => i16::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i16 = match scale {
+            Some(bytes) => i16::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<2>().0 {
+            let value = i16::from_ne_bytes(*chunk);
+            let result = scale_offset_decode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+}
+impl_scale_offset_data_type_traits!(Int16DataType);
+
+impl ScaleOffsetDataTypeTraits for Int32DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i32 = match offset {
+            Some(bytes) => i32::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i32 = match scale {
+            Some(bytes) => i32::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<4>().0 {
+            let value = i32::from_ne_bytes(*chunk);
+            let result = scale_offset_encode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i32 = match offset {
+            Some(bytes) => i32::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i32 = match scale {
+            Some(bytes) => i32::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<4>().0 {
+            let value = i32::from_ne_bytes(*chunk);
+            let result = scale_offset_decode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+}
+impl_scale_offset_data_type_traits!(Int32DataType);
+
+impl ScaleOffsetDataTypeTraits for Int64DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i64 = match offset {
+            Some(bytes) => i64::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i64 = match scale {
+            Some(bytes) => i64::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<8>().0 {
+            let value = i64::from_ne_bytes(*chunk);
+            let result = scale_offset_encode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i64 = match offset {
+            Some(bytes) => i64::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i64 = match scale {
+            Some(bytes) => i64::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<8>().0 {
+            let value = i64::from_ne_bytes(*chunk);
+            let result = scale_offset_decode_int(&value, &offset, &scale)?;
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+}
+impl_scale_offset_data_type_traits!(Int64DataType);
+
 // ZFP implementations for standard integers
 use zarrs_data_type::codec_traits::impl_zfp_data_type_traits;
 impl_zfp_data_type_traits!(Int8DataType, Int8);

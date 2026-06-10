@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
   - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
   - These are implemented as inherent traits on `Array` and `ArrayCached`
+- Add the `scale_offset` array-to-array codec
 
 ### Changed
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0

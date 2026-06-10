@@ -62,3 +62,83 @@ zarrs_data_type::codec_traits::impl_cast_value_data_type_traits_signed_integer!(
     i8,
     2
 );
+// ScaleOffset implementation for int2 (stored as i8, range -2..=1)
+use zarrs_data_type::codec_traits::impl_scale_offset_data_type_traits;
+use zarrs_data_type::codec_traits::scale_offset::{
+    ScaleOffsetDataTypeTraits, ScaleOffsetError, scale_offset_encode_int,
+};
+
+impl ScaleOffsetDataTypeTraits for Int2DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i8 = match offset {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i8 = match scale {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        for chunk in bytes.as_chunks_mut::<1>().0 {
+            let value = i8::from_ne_bytes(*chunk);
+            let result = scale_offset_encode_int(&value, &offset, &scale)?;
+            if !(-2..=1).contains(&result) {
+                return Err(ScaleOffsetError::NotRepresentable);
+            }
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        let offset: i8 = match offset {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 0,
+        };
+        let scale: i8 = match scale {
+            Some(bytes) => i8::from_ne_bytes(
+                bytes
+                    .try_into()
+                    .map_err(|_| ScaleOffsetError::InvalidElementBytes)?,
+            ),
+            None => 1,
+        };
+        if scale == 0 {
+            return Err(ScaleOffsetError::DivisionByZero);
+        }
+        for chunk in bytes.as_chunks_mut::<1>().0 {
+            let value = i8::from_ne_bytes(*chunk);
+            let result = value
+                .checked_div(scale)
+                .and_then(|q| q.checked_add(offset))
+                .ok_or(ScaleOffsetError::NotRepresentable)?;
+            if !(-2..=1).contains(&result) {
+                return Err(ScaleOffsetError::NotRepresentable);
+            }
+            *chunk = result.to_ne_bytes();
+        }
+        Ok(())
+    }
+}
+impl_scale_offset_data_type_traits!(Int2DataType);

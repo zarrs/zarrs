@@ -69,6 +69,98 @@ use zarrs_data_type::codec_traits::impl_fixed_scale_offset_data_type_traits;
 impl_fixed_scale_offset_data_type_traits!(Float32DataType, F32);
 impl_fixed_scale_offset_data_type_traits!(Float64DataType, F64);
 
+// ScaleOffset implementations for standard floats
+// Floats allow infinity/NaN as valid results (no overflow error).
+use half::{bf16, f16};
+use zarrs_data_type::codec_traits::impl_scale_offset_data_type_traits;
+use zarrs_data_type::codec_traits::scale_offset::{
+    ScaleOffsetDataTypeTraits, ScaleOffsetError, scale_offset_float,
+};
+
+impl ScaleOffsetDataTypeTraits for BFloat16DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<bf16, _, _>(bytes, offset, scale, |v, o, s| (v - o) * s)
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<bf16, _, _>(bytes, offset, scale, |v, o, s| (v / s) + o)
+    }
+}
+impl_scale_offset_data_type_traits!(BFloat16DataType);
+
+impl ScaleOffsetDataTypeTraits for Float16DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f16, _, _>(bytes, offset, scale, |v, o, s| (v - o) * s)
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f16, _, _>(bytes, offset, scale, |v, o, s| (v / s) + o)
+    }
+}
+impl_scale_offset_data_type_traits!(Float16DataType);
+
+impl ScaleOffsetDataTypeTraits for Float32DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f32, _, _>(bytes, offset, scale, |v, o, s| (v - o) * s)
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f32, _, _>(bytes, offset, scale, |v, o, s| (v / s) + o)
+    }
+}
+impl_scale_offset_data_type_traits!(Float32DataType);
+
+impl ScaleOffsetDataTypeTraits for Float64DataType {
+    fn scale_offset_encode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f64, _, _>(bytes, offset, scale, |v, o, s| (v - o) * s)
+    }
+
+    fn scale_offset_decode(
+        &self,
+        bytes: &mut [u8],
+        offset: Option<&[u8]>,
+        scale: Option<&[u8]>,
+    ) -> Result<(), ScaleOffsetError> {
+        scale_offset_float::<f64, _, _>(bytes, offset, scale, |v, o, s| (v / s) + o)
+    }
+}
+impl_scale_offset_data_type_traits!(Float64DataType);
+
 // ZFP implementations for standard floats
 use zarrs_data_type::codec_traits::impl_zfp_data_type_traits;
 impl_zfp_data_type_traits!(Float32DataType, Float32);

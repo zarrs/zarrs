@@ -278,3 +278,115 @@ impl_cast_value_data_type_traits_float!(
     microfloat::f8e8m0fnu,
     8
 );
+
+// ScaleOffset codec implementations for subfloats
+// Floats allow infinity/NaN as valid results (no overflow error).
+#[cfg(feature = "microfloat")]
+use zarrs_data_type::codec_traits::impl_scale_offset_data_type_traits;
+#[cfg(feature = "microfloat")]
+use zarrs_data_type::codec_traits::scale_offset::{ScaleOffsetDataTypeTraits, ScaleOffsetError};
+
+#[cfg(feature = "microfloat")]
+macro_rules! impl_subfloat_scale_offset {
+    ($marker:ty, $float_type:ty) => {
+        impl ScaleOffsetDataTypeTraits for $marker {
+            fn scale_offset_encode(
+                &self,
+                bytes: &mut [u8],
+                offset: Option<&[u8]>,
+                scale: Option<&[u8]>,
+            ) -> Result<(), ScaleOffsetError> {
+                let offset: f64 = match offset {
+                    Some([byte]) => <$float_type>::from_bits(*byte).to_f32().into(),
+                    Some(_) => return Err(ScaleOffsetError::InvalidElementBytes),
+                    None => 0.0,
+                };
+                let scale: f64 = match scale {
+                    Some([byte]) => <$float_type>::from_bits(*byte).to_f32().into(),
+                    Some(_) => return Err(ScaleOffsetError::InvalidElementBytes),
+                    None => 1.0,
+                };
+                for chunk in bytes.as_chunks_mut::<1>().0 {
+                    let value: f64 = <$float_type>::from_bits(chunk[0]).to_f32().into();
+                    let result = (value - offset) * scale;
+                    chunk[0] = <$float_type>::from_f64(result).to_bits();
+                }
+                Ok(())
+            }
+
+            fn scale_offset_decode(
+                &self,
+                bytes: &mut [u8],
+                offset: Option<&[u8]>,
+                scale: Option<&[u8]>,
+            ) -> Result<(), ScaleOffsetError> {
+                let offset: f64 = match offset {
+                    Some([byte]) => <$float_type>::from_bits(*byte).to_f32().into(),
+                    Some(_) => return Err(ScaleOffsetError::InvalidElementBytes),
+                    None => 0.0,
+                };
+                let scale: f64 = match scale {
+                    Some([byte]) => <$float_type>::from_bits(*byte).to_f32().into(),
+                    Some(_) => return Err(ScaleOffsetError::InvalidElementBytes),
+                    None => 1.0,
+                };
+                for chunk in bytes.as_chunks_mut::<1>().0 {
+                    let value: f64 = <$float_type>::from_bits(chunk[0]).to_f32().into();
+                    let result = (value / scale) + offset;
+                    chunk[0] = <$float_type>::from_f64(result).to_bits();
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float4E2M1FNDataType, microfloat::f4e2m1fn);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float4E2M1FNDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float6E2M3FNDataType, microfloat::f6e2m3fn);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float6E2M3FNDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float6E3M2FNDataType, microfloat::f6e3m2fn);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float6E3M2FNDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E3M4DataType, microfloat::f8e3m4);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E3M4DataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E4M3DataType, microfloat::f8e4m3);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E4M3DataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E4M3B11FNUZDataType, microfloat::f8e4m3b11fnuz);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E4M3B11FNUZDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E4M3FNUZDataType, microfloat::f8e4m3fnuz);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E4M3FNUZDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E5M2DataType, microfloat::f8e5m2);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E5M2DataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E5M2FNUZDataType, microfloat::f8e5m2fnuz);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E5M2FNUZDataType);
+
+#[cfg(feature = "microfloat")]
+impl_subfloat_scale_offset!(Float8E8M0FNUDataType, microfloat::f8e8m0fnu);
+#[cfg(feature = "microfloat")]
+impl_scale_offset_data_type_traits!(Float8E8M0FNUDataType);

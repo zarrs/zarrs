@@ -1574,6 +1574,23 @@ fn codec_registry() -> Vec<CodecDef> {
         skip: Some(is_vlen_or_optional),
     });
 
+    codecs.push(CodecDef {
+        name: ScaleOffsetCodec::aliases_v3().default_name.clone(),
+        category: CodecCategory::ArrayToArray,
+        name_suffix: None,
+        factory: |_dt| {
+            // An offset of 0 is a lossless identity that is valid for all numeric data types.
+            let configuration: zarrs::metadata_ext::codec::scale_offset::ScaleOffsetCodecConfiguration =
+                serde_json::from_str(r#"{ "offset": 0 }"#).unwrap();
+            CodecInstance::ArrayToArray(Arc::new(
+                ScaleOffsetCodec::new_with_configuration(&configuration).unwrap(),
+            ))
+        },
+        lossy: true,
+        non_deterministic: false,
+        skip: Some(is_vlen_or_optional),
+    });
+
     // =========================================================================
     // Array-to-Bytes Codecs
     // =========================================================================
@@ -1911,6 +1928,10 @@ mod compatibility_matrix {
             ),
             (
                 codec::ReshapeCodec::aliases_v3().default_name.clone(),
+                "a2a",
+            ),
+            (
+                codec::ScaleOffsetCodec::aliases_v3().default_name.clone(),
                 "a2a",
             ),
             (
