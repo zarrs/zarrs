@@ -23,6 +23,8 @@ mod registered {
     pub mod packbits;
     /// `reshape` codec metadata (draft).
     pub mod reshape;
+    /// `scale_offset` codec metadata (registered).
+    pub mod scale_offset;
     /// `sharding` codec metadata (registered, ZEP0002).
     pub mod sharding;
     /// `transpose` codec metadata (registered, core).
