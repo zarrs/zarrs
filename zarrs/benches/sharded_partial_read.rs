@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon_iter_concurrent_limit::iter_concurrent_limit;
 use zarrs::array::ArraySubset;
 use zarrs::array::codec::{ShardingCodecOptions, SubchunkWriteOrder, ZstdCodec};
 use zarrs::filesystem::FilesystemStore;
@@ -38,7 +38,6 @@ fn data_path() -> PathBuf {
         .join("sharded_partial_read")
 }
 
-
 fn make_store() -> ReadableWritableListableStorage {
     if USE_MEMORY_STORE {
         Arc::new(MemoryStore::new())
@@ -58,11 +57,9 @@ fn populate_array(store: ReadableWritableListableStorage) {
     )
     .bytes_to_bytes_codecs(vec![Arc::new(ZstdCodec::new(5, false))])
     .subchunk_shape(CHUNK_SHAPE.to_vec())
-    .codec_specific_options(
-        zarrs_codec::CodecSpecificOptions::default().with_option(
-            ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
-        ),
-    )
+    .codec_specific_options(zarrs_codec::CodecSpecificOptions::default().with_option(
+        ShardingCodecOptions::default().with_subchunk_write_order(SubchunkWriteOrder::C),
+    ))
     .build(store, "/")
     .unwrap();
     array.store_metadata().unwrap();
@@ -186,9 +183,14 @@ fn bench_read_disparate_parallel(c: &mut Criterion) {
 
     group.bench_function("disparate_parallel", |b| {
         b.iter(|| {
-                iter_concurrent_limit!(concurrency, subsets.clone(), for_each, |subset: ArraySubset| {
+            iter_concurrent_limit!(
+                concurrency,
+                subsets.clone(),
+                for_each,
+                |subset: ArraySubset| {
                     let _: zarrs::array::ArrayBytes = array.retrieve_array_subset(&subset).unwrap();
-                });
+                }
+            );
         });
     });
 
