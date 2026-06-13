@@ -55,7 +55,7 @@ jobs:
           toolchain: "stable"
           targets: "wasm32-unknown-unknown"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip sharding transpose async zstd blosc"
+      - run: cargo build --target wasm32-unknown-unknown --no-default-features --features "ndarray crc32c gzip transpose async zstd blosc"
         working-directory: ./zarrs
   test_windows:
     runs-on: windows-latest
@@ -184,7 +184,7 @@ jobs:
         with:
           toolchain: "1.82"
       - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-hack cargo-minimal-versions --locked
+      - run: cargo install cargo-hack@0.6.44 cargo-minimal-versions --locked
       - run: sed -i 's/edition = "2024"/edition = "2021"/' */Cargo.toml \
       - run: cargo minimal-versions check --all-features -p zarrs_storage -p zarrs_filesystem
   # msrv-1-77:

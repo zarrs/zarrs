@@ -7,7 +7,7 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
-use zarrs_chunk_grid::ArraySubset;
+use zarrs_chunk_grid::{ArraySubset, ChunkGridTraits};
 use zarrs_data_type::FillValue;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
@@ -334,7 +334,9 @@ fn collect_chunk_indices(
     array_subset: &dyn ArraySubsetTraits,
     chunks_per_shard: &[u64],
 ) -> Result<Vec<u64>, CodecError> {
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
     let mut chunk_indices = Vec::with_capacity(chunks.num_elements_usize());
     for chunk_indices_nd in chunks.indices() {
         let idx = ravel_indices(&chunk_indices_nd, chunks_per_shard).expect("inbounds chunk");
@@ -478,7 +480,8 @@ fn partial_decode_fixed_array_subset_into(
         |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
             let chunk_subset = shard_chunk_grid
                 .subset(chunk_indices_nd)
-                .expect("matching dimensionality");
+                .expect("matching dimensionality")
+                .expect("subchunk always within shard");
             let overlap = array_subset.overlap(&chunk_subset)?;
             overlap
                 .relative_to(&array_subset.start())
@@ -659,7 +662,8 @@ fn partial_decode_variable_array_subset(
     let chunk_overlap_in_output = |chunk_indices_nd: &[u64]| -> Result<ArraySubset, CodecError> {
         let chunk_subset = shard_chunk_grid
             .subset(chunk_indices_nd)
-            .expect("matching dimensionality");
+            .expect("matching dimensionality")
+            .expect("subchunk always within shard");
         let overlap = array_subset.overlap(&chunk_subset)?;
         Ok(overlap.relative_to(&array_subset.start()).unwrap())
     };

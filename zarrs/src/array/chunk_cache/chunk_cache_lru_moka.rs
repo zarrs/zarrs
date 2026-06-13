@@ -19,6 +19,19 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for Cache<CT> {
         usize::try_from(self.entry_count()).unwrap()
     }
 
+    fn remove(&self, chunk_indices: &[u64]) -> bool {
+        let removed = self.remove(chunk_indices).is_some();
+        self.run_pending_tasks();
+        removed
+    }
+
+    fn clear(&self) -> usize {
+        self.run_pending_tasks();
+        let count = usize::try_from(self.entry_count()).unwrap();
+        self.invalidate_all();
+        count
+    }
+
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -77,6 +90,17 @@ impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheChunkLimit<CT> {
         self.get().len()
     }
 
+    fn remove(&self, chunk_indices: &[u64]) -> bool {
+        self.get().pop(chunk_indices).is_some()
+    }
+
+    fn clear(&self) -> usize {
+        let mut cache = self.get();
+        let count = cache.len();
+        cache.clear();
+        count
+    }
+
     fn try_get_or_insert_with<F>(
         &self,
         chunk_indices: Vec<u64>,
@@ -126,6 +150,27 @@ impl<CT: ChunkCacheType> ThreadLocalCacheSizeLimit<CT> {
 impl<CT: ChunkCacheType> CacheTraits<CT> for ThreadLocalCacheSizeLimit<CT> {
     fn len(&self) -> usize {
         self.get().len()
+    }
+
+    fn remove(&self, chunk_indices: &[u64]) -> bool {
+        if let Some(chunk) = self.get().pop(chunk_indices) {
+            self.size
+                .get_or_default()
+                .fetch_sub(chunk.size(), atomic::Ordering::SeqCst);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn clear(&self) -> usize {
+        let mut cache = self.get();
+        let count = cache.len();
+        cache.clear();
+        self.size
+            .get_or_default()
+            .store(0, atomic::Ordering::SeqCst);
+        count
     }
 
     fn try_get_or_insert_with<F>(

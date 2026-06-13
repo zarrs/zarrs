@@ -7,7 +7,7 @@
 |                | 🚧[`zarrs.squeeze`]                | -                                   |               |
 | Array to Bytes | [`bytes`]                          | (implicit array-to-bytes)           |               |
 |                | 🚧[`zarrs.optional`]               | -                                   |               |
-|                | [`sharding_indexed`]               | -                                   | **sharding**  |
+|                | [`sharding_indexed`]               | -                                   |               |
 |                | 🚧[`vlen-array`]                   | `vlen-array`                        |               |
 |                | [`vlen-bytes`]                     | `vlen-bytes`                        |               |
 |                | [`vlen-utf8`]                      | `vlen-utf8`                         |               |

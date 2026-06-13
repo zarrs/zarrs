@@ -1,6 +1,6 @@
 [package]
 name = "zarrs"
-version = "0.23.10"
+version = "0.24.0-dev"
 authors = ["Lachlan Deakin <ljdgit@gmail.com>"]
 edition = "2024"
 rust-version = "1.91"
@@ -14,7 +14,7 @@ categories = ["encoding", "science"]
 exclude = [".github/", "doc/TODO.md", "tests/"]
 
 [features]
-default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "sharding", "transpose", "zstd"]
+default = ["filesystem", "ndarray", "blosc", "crc32c", "gzip", "transpose", "zstd"]
 filesystem = ["dep:zarrs_filesystem"] # Re-export zarrs_filesystem as zarrs::filesystem
 adler32 = ["dep:simd-adler32"] # Enable the adler32 checksum codec
 bitround = [] # Enable the bitround codec
@@ -25,7 +25,7 @@ fletcher32 = [] # Enable the fletcher32 checksum codec
 gdeflate = ["dep:gdeflate-sys"] # Enable the experimental gdeflate codec
 gzip = ["dep:flate2"] # Enable the gzip codec
 pcodec = ["dep:pco"] # Enable the pcodec codec
-sharding = [] # Enable the sharding codec
+sharding = [] # Enable the sharding codec (DEPRECATED, now always enabled)
 transpose = ["dep:ndarray"] # Enable the transpose codec
 zfp = ["dep:zfp-sys"] # Enable the zfp codec
 zlib = ["dep:flate2"] # Enable the zlib codec
@@ -35,7 +35,8 @@ dlpack =["dep:dlpark"] # Adds dlpack utility functions to Array
 async = ["dep:async-generic", "dep:async-trait", "dep:futures", "moka/future", "zarrs_storage/async", "zarrs_codec/async"] # Enable experimental async API
 jiff = ["dep:jiff"] # Adds support for jiff time array elements
 chrono = ["dep:chrono"] # Adds support for chrono time array elements
-float8 = ["dep:float8"] # Adds support for float8 array elements
+float8 = ["dep:float8"] # Deprecated: Adds support for float8 array elements (use microfloat instead)
+microfloat = ["dep:microfloat"] # Adds support for microfloat array elements
 
 [lints]
 workspace = true
@@ -58,6 +59,7 @@ flate2 = { version = "1.1.1", optional = true }
 futures = { version = "0.3.29", optional = true }
 gdeflate-sys = { version = "0.4.1", optional = true }
 half.workspace = true
+inherent = "1.0.13"
 inventory.workspace = true
 itertools = "0.14.0"
 lru = "0.16.0"
@@ -87,8 +89,10 @@ zarrs_metadata_ext.workspace = true
 jiff = { version = "0.2.15", optional = true }
 chrono = { version = "0.4.39", optional = true }
 float8 = { version = "0.5.0", optional = true, features = ["bytemuck"] }
+microfloat = { version = "0.1.3", optional = true, features = ["bytemuck"] }
 simd-adler32 = { version = "0.3.7", optional = true }
 itoa = "1.0.15"
+camino = "1.1"
 log = "0.4.28"
 base64 = "0.22.1"
 zarrs_chunk_grid.workspace = true
@@ -166,7 +170,7 @@ doc-scrape-examples = true
 
 [[example]]
 name = "sharded_array_write_read"
-required-features = ["filesystem", "ndarray", "sharding"]
+required-features = ["filesystem", "ndarray"]
 
 [[bench]]
 name = "array_subset"
@@ -191,4 +195,4 @@ harness = false
 [[bench]]
 name = "sharded_partial_read"
 harness = false
-required-features = ["sharding", "filesystem"]
+required-features = ["filesystem"]

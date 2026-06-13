@@ -25,7 +25,6 @@ zarrs = { path = "../zarrs", features = [
     "gdeflate",
     "gzip",
     "pcodec",
-    "sharding",
     "transpose",
     "zfp",
     "zlib",

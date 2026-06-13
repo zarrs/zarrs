@@ -3,8 +3,6 @@
 //! Sharding logically splits chunks (shards) into sub-chunks (inner chunks) that can be individually compressed and accessed.
 //! This allows to colocate multiple chunks within one storage object, bundling them in shards.
 //!
-//! This codec requires the `sharding` feature, which is enabled by default.
-//!
 //! The [`ShardingCodecBuilder`] can help with creating a [`ShardingCodec`].
 //!
 //! ### Compatible Implementations
@@ -60,6 +58,10 @@ mod sharding_partial_decoder_async;
 mod sharding_partial_decoder_sync;
 mod sharding_partial_encoder;
 
+#[cfg(feature = "async")]
+pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
+pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
+
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -72,9 +74,6 @@ use crate::array::{
 pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
-#[cfg(feature = "async")]
-pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
-pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
     CodecOptions, CodecPluginV3, CodecTraitsV3,

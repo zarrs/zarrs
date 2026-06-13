@@ -35,12 +35,115 @@ use thiserror::Error;
 pub use self::group_builder::GroupBuilder;
 use crate::array::{AdditionalFieldUnsupportedError, Array, ArrayCreateError};
 use crate::config::{
-    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, global_config,
+    MetadataConvertVersion, MetadataEraseVersion, MetadataRetrieveVersion, UseConsolidatedMetadata,
+    global_config,
 };
+
+/// Options for opening a [`Group`].
+///
+/// This struct is non-exhaustive and may grow additional fields in the future.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GroupOpenOptions {
+    /// The metadata version to retrieve.
+    version: MetadataRetrieveVersion,
+    /// Whether to use consolidated metadata if present on the root group.
+    use_consolidated_metadata: UseConsolidatedMetadata,
+    /// Options for writing group metadata.
+    metadata_options: GroupMetadataOptions,
+    /// The metadata erase version.
+    metadata_erase_version: MetadataEraseVersion,
+}
+
+impl GroupOpenOptions {
+    /// Create default options.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create options populated from a [`Config`](crate::config::Config).
+    ///
+    /// The following fields are read from the config:
+    /// - `use_consolidated_metadata` from [`Config::use_consolidated_metadata`](crate::config::Config::use_consolidated_metadata)
+    /// - `metadata_options` from [`Config::group_metadata_options`](crate::config::Config::group_metadata_options)
+    /// - `metadata_erase_version` from [`Config::metadata_erase_version`](crate::config::Config::metadata_erase_version)
+    ///
+    /// The `version` field defaults to [`MetadataRetrieveVersion::Default`].
+    /// The caller is responsible for acquiring the config (e.g. via [`global_config`]).
+    #[must_use]
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        Self {
+            version: MetadataRetrieveVersion::default(),
+            use_consolidated_metadata: config.use_consolidated_metadata(),
+            metadata_options: config.group_metadata_options(),
+            metadata_erase_version: config.metadata_erase_version(),
+        }
+    }
+
+    /// Get the [metadata retrieve version](MetadataRetrieveVersion).
+    #[must_use]
+    pub fn version(&self) -> MetadataRetrieveVersion {
+        self.version
+    }
+
+    /// Set the [metadata retrieve version](MetadataRetrieveVersion).
+    #[must_use]
+    pub fn with_version(mut self, version: MetadataRetrieveVersion) -> Self {
+        self.version = version;
+        self
+    }
+
+    /// Get the [use consolidated metadata](UseConsolidatedMetadata) policy.
+    #[must_use]
+    pub fn use_consolidated_metadata(&self) -> UseConsolidatedMetadata {
+        self.use_consolidated_metadata
+    }
+
+    /// Set the [use consolidated metadata](UseConsolidatedMetadata) policy.
+    #[must_use]
+    pub fn with_use_consolidated_metadata(
+        mut self,
+        use_consolidated_metadata: UseConsolidatedMetadata,
+    ) -> Self {
+        self.use_consolidated_metadata = use_consolidated_metadata;
+        self
+    }
+
+    /// Get the [metadata options](GroupMetadataOptions).
+    #[must_use]
+    pub fn metadata_options(&self) -> GroupMetadataOptions {
+        self.metadata_options
+    }
+
+    /// Set the [metadata options](GroupMetadataOptions).
+    #[must_use]
+    pub fn with_metadata_options(mut self, metadata_options: GroupMetadataOptions) -> Self {
+        self.metadata_options = metadata_options;
+        self
+    }
+
+    /// Get the [metadata erase version](MetadataEraseVersion).
+    #[must_use]
+    pub fn metadata_erase_version(&self) -> MetadataEraseVersion {
+        self.metadata_erase_version
+    }
+
+    /// Set the [metadata erase version](MetadataEraseVersion).
+    #[must_use]
+    pub fn with_metadata_erase_version(
+        mut self,
+        metadata_erase_version: MetadataEraseVersion,
+    ) -> Self {
+        self.metadata_erase_version = metadata_erase_version;
+        self
+    }
+}
 use crate::convert::group_metadata_v2_to_v3;
 use crate::node::{
-    Node, NodeCreateError, NodePath, NodePathError, get_all_nodes_of, get_child_nodes,
-    meta_key_v2_attributes, meta_key_v2_group, meta_key_v3,
+    Node, NodeCreateError, NodePath, NodePathError, build_node_tree, direct_children_from_flat,
+    expand_consolidated_metadata, get_all_nodes_of, get_child_nodes, meta_key_v2_attributes,
+    meta_key_v2_group, meta_key_v3, resolve_consolidated_policy,
 };
 #[cfg(feature = "async")]
 use crate::{
@@ -75,11 +178,15 @@ pub struct Group<TStorage: ?Sized> {
     metadata: GroupMetadata,
     metadata_options: GroupMetadataOptions,
     metadata_erase_version: MetadataEraseVersion,
+    use_consolidated_metadata: UseConsolidatedMetadata,
 }
 
 impl<TStorage: ?Sized> Group<TStorage> {
     /// Create a group in `storage` at `path` with `metadata`.
     /// This does **not** write to the store, use [`store_metadata`](Group<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    ///
+    /// Options are populated from the global config using [`GroupOpenOptions::from_config`].
+    /// Use [`Group::new_with_metadata_opt`] to specify options explicitly.
     ///
     /// # Errors
     ///
@@ -89,20 +196,30 @@ impl<TStorage: ?Sized> Group<TStorage> {
         path: &str,
         metadata: GroupMetadata,
     ) -> Result<Self, GroupCreateError> {
+        let options = GroupOpenOptions::from_config(&global_config());
+        Self::new_with_metadata_opt(storage, path, metadata, &options)
+    }
+
+    /// Create a group in `storage` at `path` with `metadata` and non-default options.
+    /// This does **not** write to the store, use [`store_metadata`](Group<WritableStorageTraits>::store_metadata) to write `metadata` to `storage`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GroupCreateError`] if any metadata is invalid.
+    pub fn new_with_metadata_opt(
+        storage: Arc<TStorage>,
+        path: &str,
+        metadata: GroupMetadata,
+        options: &GroupOpenOptions,
+    ) -> Result<Self, GroupCreateError> {
         let path = NodePath::new(path)?;
-        let (metadata_options, metadata_erase_version) = {
-            let config = global_config();
-            (
-                config.group_metadata_options(),
-                config.metadata_erase_version(),
-            )
-        };
         Ok(Self {
             storage,
             path,
             metadata,
-            metadata_options,
-            metadata_erase_version,
+            metadata_options: options.metadata_options(),
+            metadata_erase_version: options.metadata_erase_version(),
+            use_consolidated_metadata: options.use_consolidated_metadata(),
         })
     }
 
@@ -214,6 +331,7 @@ impl<TStorage: ?Sized> Group<TStorage> {
                 metadata,
                 metadata_options: self.metadata_options,
                 metadata_erase_version: self.metadata_erase_version,
+                use_consolidated_metadata: self.use_consolidated_metadata,
             }
         } else {
             self
@@ -264,16 +382,20 @@ impl<TStorage: ?Sized> Group<TStorage> {
 }
 
 impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
-    /// Open a group in `storage` at `path` with [`MetadataRetrieveVersion`].
+    /// Open a group in `storage` at `path` with default options.
     /// The metadata is read from the store.
+    ///
+    /// Options are read from the global config.
+    /// Use [`Group::open_opt`] to specify options explicitly.
     ///
     /// # Errors
     /// Returns [`GroupCreateError`] if there is a storage error or any metadata is invalid.
     pub fn open(storage: Arc<TStorage>, path: &str) -> Result<Self, GroupCreateError> {
-        Self::open_opt(storage, path, &MetadataRetrieveVersion::Default)
+        let options = GroupOpenOptions::from_config(&global_config());
+        Self::open_opt(storage, path, &options)
     }
 
-    /// Open a group in `storage` at `path` with non-default [`MetadataRetrieveVersion`].
+    /// Open a group in `storage` at `path` with non-default options.
     /// The metadata is read from the store.
     ///
     /// # Errors
@@ -281,11 +403,12 @@ impl<TStorage: ?Sized + ReadableStorageTraits> Group<TStorage> {
     pub fn open_opt(
         storage: Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        options: &GroupOpenOptions,
     ) -> Result<Self, GroupCreateError> {
-        let metadata = Self::open_metadata(&storage, path, version)?;
+        let version = options.version();
+        let metadata = Self::open_metadata(&storage, path, &version)?;
         Self::validate_metadata(&metadata)?;
-        Self::new_with_metadata(storage, path, metadata)
+        Self::new_with_metadata_opt(storage, path, metadata, options)
     }
 
     fn open_metadata(
@@ -332,17 +455,46 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
     /// The `recursive` argument determines whether the returned `Node`s will have their
     /// children (and their children, etc.) populated.
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`].
+    /// policy permits, children are populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
+            return Ok(if recursive {
+                build_node_tree(&self.path, flat)
+            } else {
+                direct_children_from_flat(&self.path, flat)
+            });
+        }
         get_child_nodes(&self.storage, &self.path, recursive)
     }
 
     /// Return all the Nodes under the group, recursively
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`].
+    /// policy permits, the result is populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub fn traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
+            return expand_consolidated_metadata(&self.path, consolidated);
+        }
         get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default)
     }
 
@@ -435,9 +587,13 @@ impl<TStorage: ?Sized + ReadableStorageTraits + ListableStorageTraits> Group<TSt
 #[cfg(feature = "async")]
 impl<TStorage: ?Sized + AsyncReadableStorageTraits> Group<TStorage> {
     /// Async variant of [`open`](Group::open).
+    ///
+    /// Options are read from the global config before any I/O.
+    /// Use [`Group::async_open_opt`] to specify options explicitly.
     #[allow(clippy::missing_errors_doc)]
     pub async fn async_open(storage: Arc<TStorage>, path: &str) -> Result<Self, GroupCreateError> {
-        Self::async_open_opt(storage, path, &MetadataRetrieveVersion::Default).await
+        let options = GroupOpenOptions::from_config(&global_config());
+        Self::async_open_opt(storage, path, &options).await
     }
 
     /// Async variant of [`open_opt`](Group::open_opt).
@@ -445,17 +601,17 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits> Group<TStorage> {
     pub async fn async_open_opt(
         storage: Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        options: &GroupOpenOptions,
     ) -> Result<Self, GroupCreateError> {
-        let metadata = Self::async_open_metadata(storage.clone(), path, version).await?;
+        let metadata = Self::async_open_metadata(storage.clone(), path, options.version()).await?;
         Self::validate_metadata(&metadata)?;
-        Self::new_with_metadata(storage, path, metadata)
+        Self::new_with_metadata_opt(storage, path, metadata, options)
     }
 
     async fn async_open_metadata(
         storage: Arc<TStorage>,
         path: &str,
-        version: &MetadataRetrieveVersion,
+        version: MetadataRetrieveVersion,
     ) -> Result<GroupMetadata, GroupCreateError> {
         let node_path = path.try_into()?;
 
@@ -498,17 +654,46 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + AsyncListableStorageTraits>
     /// The `recursive` argument determines whether the returned `Node`s will have their
     /// children (and their children, etc.) populated.
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`].
+    /// policy permits, children are populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_children(&self, recursive: bool) -> Result<Vec<Node>, NodeCreateError> {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
+            let flat = expand_consolidated_metadata(&self.path, consolidated)?;
+            return Ok(if recursive {
+                build_node_tree(&self.path, flat)
+            } else {
+                direct_children_from_flat(&self.path, flat)
+            });
+        }
         async_get_child_nodes(&self.storage, &self.path, recursive).await
     }
 
     /// Return all the Nodes under the group, recursively
     ///
+    /// If the group's V3 metadata contains a `consolidated_metadata` block and the
+    /// global [`UseConsolidatedMetadata`].
+    /// policy permits, the result is populated from the inline map without any
+    /// per-node storage reads.
+    ///
     /// # Errors
     /// Returns [`NodeCreateError`] if there is a metadata related error, or an underlying store error.
     pub async fn async_traverse(&self) -> Result<Vec<(NodePath, NodeMetadata)>, NodeCreateError> {
+        if let Some(consolidated) = resolve_consolidated_policy(
+            &self.path,
+            self.consolidated_metadata(),
+            self.use_consolidated_metadata,
+        )? {
+            return expand_consolidated_metadata(&self.path, consolidated);
+        }
         async_get_all_nodes_of(&self.storage, &self.path, &MetadataRetrieveVersion::Default).await
     }
 

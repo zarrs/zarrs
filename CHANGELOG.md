@@ -5,7 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.10...HEAD)
+## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
+
+### Added
+- Implement `Default` for `MetadataRetrieveVersion`
+- Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
+- Implement `Copy` for `GroupMetadataOptions`
+- Add `ArrayCached<TStorage, C>` — a wrapper that pairs an `Array` with a chunk cache
+- Add operation traits decoupling array methods from the `Array` type: `ArrayOps`, `ArrayReadOps`, `ArrayWriteOps`, `ArrayUpdateOps`, `ArrayMutOps`, and async variants
+  - Promote previously private methods to public: `retrieve_chunk_into`, `retrieve_chunk_subset_into`
+  - Add `ArrayOps::partial_decode_granularity` replacing `ArrayShardedExt::effective_subchunk_shape`
+  - Add `ArrayReadOps::{retrieve_encoded_subchunk,retrieve_subchunk_opt,retrieve_subchunks_opt}`
+  - These are implemented as inherent traits on `Array` and `ArrayCached`
+
+### Changed
+- **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
+- **Breaking**: Bump `zarrs_codec` to 0.3.0
+  - Improves the API for computing partial decoding granularity
+- **Behavioural change**: Chunk grids no longer support out-of-bounds operations or unlimited dimensions - resize before extending arrays
+  - Reading/writing completely out-of-bounds chunks is now an error
+  - Querying completely out-of-bounds chunks always returns `None`
+  - Zero sized array dimensions are no longer functionally _unlimited_ with certain chunk grids (e.g. `regular`)
+- Soft deprecate the `sharding` feature flag
+  - The sharding codec and associated utilities are now always available and no longer require opting in via the `sharding` feature
+- **Breaking**: `Group::open_opt` now takes a `GroupOpenOptions` parameter rather than `MetadataRetrieveVersion`
+- **Breaking**: `Hierarchy::open_opt` now takes a `HierarchyOpenOptions` parameter rather than a `MetadataRetrieveVersion`
+- **Breaking**: Refactor `ChunkCache` trait to a pure key/chunk value container:
+  - **Breaking**: Remove `retrieve_*` methods, these are handled by `ArrayCached` instead
+  - **Breaking**: Change `ChunkCacheTypeDecoded` to an `Option`
+  - Add `invalidate` methods
+- `NodePath` now uses `camino::Utf8PathBuf` internally instead of `std::path::PathBuf`
+  - Add `NodePath::as_utf8_path()` for direct access to `camino::Utf8Path`
+
+### Removed
+- **Breaking**: Remove `ArrayShardedReadableExt`
+- **Breaking**: Remove `ArrayShardedExt::effective_subchunk_shape`
+- Remove deprecated `_elements` / `_ndarray` method variants present on `Array` and array extension traits/`ChunkCache`
+  - Use the generic `store_*` and `retrieve_*` methods with `Vec<T>` or `ndarray::Array<T, D>` instead
+
+### Fixed
+- The partial decode granularity potentially being incorrect with multiple array-to-array codecs
+
+## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
+
+### Added
+- Implement `IntoArrayBytes` for `&ndarray::ArrayBase`
+
+### Fixed
+- Support partial encoding and decoding in the `reshape` codec
+  - This codec remains unregistered and aliased as `zarrs.reshape`
+
+## [0.23.12](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.12) - 2026-05-16
+
+### Added
+- Add the `fixed_length_utf32` data type
+  - Supports `[char; N]`, `Vec<char>`, and `&[char]` as `Element[Owned]`
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.4
+
+## [0.23.11](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.11) - 2026-05-13
+
+### Added
+- Add a `microfloat` feature for expanded subfloat and complex subfloat data type / element support
+  - The `float8` feature is considered deprecated as the associated types are not IEEE 754-compliant
+- Add `NodePath::is_root`, `NodePath::parent`, and `NodePath::join` for safer hierarchy path manipulation
+- Use Zarr V3 consolidated metadata (when present on a root group) to populate child nodes — avoiding `list_dir` and per-array reads — for `Hierarchy::open`, `Node::open`, `Group::children`, `Group::traverse`, `Group::child_arrays`, `Group::child_groups`, `Group::child_paths`, `Group::child_array_paths`, `Group::child_group_paths`, and their async variants
+  - Add `UseConsolidatedMetadata` (`Auto` / `Must` / `Never`) and a new `Config::use_consolidated_metadata` global setting (default `Auto`)
+  - When `Must` is set but consolidated metadata is absent, return `NodeCreateError::MissingMetadata` with a descriptive message (a more specific variant may be added in a future breaking release)
+
+### Changed
+- Bump `zarrs_metadata_ext` to 0.4.3
+
+### Fixed
+- `NodePath::validate` now rejects components starting with `__` (the reserved prefix) and components composed only of period characters (`.` / `..` / `...`), matching `NodeName` rules
 
 ## [0.23.10](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.10) - 2026-04-09
 

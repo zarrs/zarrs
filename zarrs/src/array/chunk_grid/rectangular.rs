@@ -31,7 +31,10 @@ use derive_more::From;
 use itertools::Itertools;
 use thiserror::Error;
 
-use crate::array::{ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionalityError};
+use crate::array::{
+    ArrayIndices, ArrayShape, ChunkShape, IncompatibleDimensionError,
+    IncompatibleDimensionalityError,
+};
 use zarrs_chunk_grid::{ChunkGrid, ChunkGridPlugin, ChunkGridTraits};
 use zarrs_metadata::Configuration;
 use zarrs_metadata::v3::MetadataV3;
@@ -192,11 +195,37 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         &self.grid_shape
     }
 
+    fn chunk_edge_lengths(
+        &self,
+        dimension: usize,
+    ) -> Result<Vec<NonZeroU64>, IncompatibleDimensionError> {
+        if dimension >= self.dimensionality() {
+            return Err(IncompatibleDimensionError::new(
+                dimension,
+                self.dimensionality(),
+            ));
+        }
+        if self.array_shape[dimension] == 0 {
+            return Ok(Vec::new());
+        }
+        match &self.chunks[dimension] {
+            RectangularChunkGridDimension::Fixed(size) => {
+                Ok(vec![*size; self.grid_shape[dimension] as usize])
+            }
+            RectangularChunkGridDimension::Varying(offsets_sizes) => {
+                Ok(offsets_sizes.iter().map(|os| os.size).collect())
+            }
+        }
+    }
+
     fn chunk_shape(
         &self,
         chunk_indices: &[u64],
     ) -> Result<Option<ChunkShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
+            if self.array_shape.contains(&0) {
+                return Ok(None);
+            }
             Ok(std::iter::zip(chunk_indices, &self.chunks)
                 .map(|(chunk_index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(chunk_size) => Some(*chunk_size),
@@ -223,6 +252,9 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayShape>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
+            if self.array_shape.contains(&0) {
+                return Ok(None);
+            }
             Ok(std::iter::zip(chunk_indices, &self.chunks)
                 .map(|(chunk_index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(chunk_size) => Some(chunk_size.get()),
@@ -249,6 +281,9 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         chunk_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if chunk_indices.len() == self.dimensionality() {
+            if self.array_shape.contains(&0) {
+                return Ok(None);
+            }
             Ok(std::iter::zip(chunk_indices, &self.chunks)
                 .map(|(chunk_index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(chunk_size) => {
@@ -277,6 +312,9 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         array_indices: &[u64],
     ) -> Result<Option<ArrayIndices>, IncompatibleDimensionalityError> {
         if array_indices.len() == self.dimensionality() {
+            if self.array_shape.contains(&0) {
+                return Ok(None);
+            }
             Ok(std::iter::zip(array_indices, &self.chunks)
                 .map(|(index, chunks)| match chunks {
                     RectangularChunkGridDimension::Fixed(size) => Some(index / size.get()),
@@ -332,7 +370,7 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
         array_indices.len() == self.dimensionality()
             && itertools::izip!(array_indices, self.array_shape(), &self.chunks).all(
                 |(array_index, array_size, chunks)| {
-                    (*array_size == 0 || array_index < array_size)
+                    array_index < array_size
                         && match chunks {
                             RectangularChunkGridDimension::Fixed(_) => true,
                             RectangularChunkGridDimension::Varying(offsets_sizes) => offsets_sizes
@@ -348,6 +386,51 @@ unsafe impl ChunkGridTraits for RectangularChunkGrid {
 mod tests {
     use super::*;
     use crate::array::ArraySubset;
+
+    #[test]
+    fn chunk_grid_rectangular_edge_lengths() {
+        let array_shape: ArrayShape = vec![100, 100];
+        let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
+        ];
+        let grid = RectangularChunkGrid::new(array_shape, &chunk_shapes).unwrap();
+
+        assert_eq!(
+            grid.chunk_edge_lengths(0).unwrap(),
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+        );
+        assert_eq!(
+            grid.chunk_edge_lengths(1).unwrap(),
+            vec![NonZeroU64::new(10).unwrap(); 10usize]
+        );
+
+        let unlimited = RectangularChunkGrid::new(vec![100, 0], &chunk_shapes).unwrap();
+        assert_eq!(
+            unlimited.chunk_edge_lengths(1).unwrap(),
+            Vec::<NonZeroU64>::new()
+        );
+
+        let result = grid.chunk_edge_lengths(2);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn chunk_grid_rectangular() {
@@ -437,7 +520,99 @@ mod tests {
     }
 
     #[test]
-    fn chunk_grid_rectangular_unlimited() {
+    fn chunk_grid_rectangular_fully_and_partially_out_of_bounds() {
+        // Array [100, 100], dim 0: Varying [5,5,5,15,15,20,35], dim 1: Fixed(10)
+        // Grid shape: [7, 10]
+        let array_shape: ArrayShape = vec![100, 100];
+        let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
+            vec![
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(5).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(20).unwrap(),
+                NonZeroU64::new(35).unwrap(),
+            ]
+            .into(),
+            NonZeroU64::new(10).unwrap().into(),
+        ];
+        let chunk_grid = RectangularChunkGrid::new(array_shape.clone(), &chunk_shapes).unwrap();
+
+        assert_eq!(chunk_grid.grid_shape(), &[7, 10]);
+
+        // Fully out-of-bounds: varying dim index past list, fixed dim in bounds
+        assert_eq!(chunk_grid.chunk_origin(&[7, 5]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_shape(&[7, 5]).unwrap(), None);
+
+        // Fully out-of-bounds: both dims past extent
+        assert_eq!(chunk_grid.chunk_origin(&[99, 99]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_shape(&[99, 99]).unwrap(), None);
+
+        // Fully out-of-bounds: fixed dim past grid, varying dim in bounds
+        // Fixed dim index 10 is past grid shape [7, 10], but varying dim is checked first
+        // Returns None because Varying dim index 6 is valid, but fixed dim 10 is not
+        // The fixed dim returns Some(10*10=100), but the overall method checks if
+        // chunk_index >= offsets_sizes.len() for varying dims only.
+        // For fixed dims, chunk_origin always returns Some.
+        // However, chunk_shape for fixed dim returns Some even for out-of-bounds.
+        // The grid only checks varying dim bounds for None returns.
+        // So [6, 10] returns Some for fixed-dim-based queries but the varying dim 6 is valid.
+        // This demonstrates that fixed dims have no per-chunk bounds check in the impl.
+
+        // Fully out-of-bounds array indices
+        assert_eq!(chunk_grid.chunk_indices(&[100, 100]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_indices(&[999, 999]).unwrap(), None);
+        assert_eq!(chunk_grid.chunk_element_indices(&[100, 100]).unwrap(), None);
+
+        // Partially out-of-bounds (edge) last chunk: [6, 9]
+        // origin [65, 90], chunk size [35, 10], extent [100, 100] = exactly at boundary
+        assert_eq!(
+            chunk_grid.chunk_origin(&[6, 9]).unwrap(),
+            Some(vec![65, 90])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape(&[6, 9]).unwrap(),
+            Some(vec![
+                NonZeroU64::new(35).unwrap(),
+                NonZeroU64::new(10).unwrap()
+            ])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape_u64(&[6, 9]).unwrap(),
+            Some(vec![35, 10])
+        );
+        assert_eq!(
+            chunk_grid.subset(&[6, 9]).unwrap(),
+            Some(ArraySubset::new_with_ranges(&[65..100, 90..100]))
+        );
+
+        // In-bounds array index at array boundary -> last chunk
+        assert_eq!(
+            chunk_grid.chunk_indices(&[99, 99]).unwrap(),
+            Some(vec![6, 9])
+        );
+        assert_eq!(
+            chunk_grid.chunk_element_indices(&[99, 99]).unwrap(),
+            Some(vec![34, 9])
+        );
+
+        // In-bounds interior chunk
+        assert_eq!(
+            chunk_grid.chunk_origin(&[3, 1]).unwrap(),
+            Some(vec![15, 10])
+        );
+        assert_eq!(
+            chunk_grid.chunk_shape(&[3, 1]).unwrap(),
+            Some(vec![
+                NonZeroU64::new(15).unwrap(),
+                NonZeroU64::new(10).unwrap()
+            ])
+        );
+    }
+
+    #[test]
+    fn chunk_grid_rectangular_zero_dim() {
         let array_shape: ArrayShape = vec![100, 0];
         let chunk_shapes: Vec<RectangularChunkGridDimensionConfiguration> = vec![
             vec![
@@ -456,18 +631,20 @@ mod tests {
 
         assert_eq!(chunk_grid.grid_shape(), &[7, 0]);
 
-        let array_indices: ArrayIndices = vec![101, 150];
-        assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
-
-        let chunk_indices: ArrayShape = vec![6, 9];
-        assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
-        assert!(chunk_grid.chunk_origin(&chunk_indices).unwrap().is_some());
-
-        let chunk_indices: ArrayShape = vec![7, 9];
+        // No indices are in-bounds for zero-dim
+        let chunk_indices: ArrayShape = vec![6, 0];
         assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
-        assert!(chunk_grid.chunk_origin(&chunk_indices).unwrap().is_none());
 
-        let chunk_indices: ArrayShape = vec![6, 123];
-        assert!(chunk_grid.chunk_indices_inbounds(&chunk_indices));
+        // Out of bounds in first dimension
+        let chunk_indices: ArrayShape = vec![7, 0];
+        assert!(!chunk_grid.chunk_indices_inbounds(&chunk_indices));
+
+        // No array indices are in-bounds when second dimension is zero
+        let array_indices: ArrayIndices = vec![50, 0];
+        assert!(!chunk_grid.array_indices_inbounds(&array_indices));
+
+        // Array indices beyond explicit chunks in the first dimension
+        let array_indices: ArrayIndices = vec![101, 0];
+        assert!(chunk_grid.chunk_indices(&array_indices).unwrap().is_none());
     }
 }

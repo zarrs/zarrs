@@ -45,17 +45,26 @@ impl<'a, T: Element, const N: usize> IntoArrayBytes<'a> for &'a [T; N] {
     }
 }
 
-// #[cfg(feature = "ndarray")]
-// impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static>
-//     for &ndarray::ArrayRef<T, D>
-// {
-//     fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'static>, ArrayError> {
-//         let cow = super::ndarray_to_cow(self);
-//         // Use Element::into_array_bytes which handles the conversion properly,
-//         // then convert to owned to get 'static lifetime
-//         T::into_array_bytes(data_type, &cow).map(ArrayBytes::into_owned)
-//     }
-// }
+#[cfg(feature = "ndarray")]
+impl<'a, T, S, D> IntoArrayBytes<'a> for &'a ndarray::ArrayBase<S, D>
+where
+    T: Element,
+    S: ndarray::Data<Elem = T>,
+    D: ndarray::Dimension,
+{
+    fn into_array_bytes(self, data_type: &DataType) -> Result<ArrayBytes<'a>, ElementError> {
+        if let Some(elements) = self.as_slice() {
+            T::to_array_bytes(data_type, elements)
+        } else {
+            let elements = self
+                .as_standard_layout()
+                .into_owned()
+                .into_raw_vec_and_offset()
+                .0;
+            Ok(T::into_array_bytes(data_type, elements)?.into_owned())
+        }
+    }
+}
 
 #[cfg(feature = "ndarray")]
 impl<T: Element, D: ndarray::Dimension> IntoArrayBytes<'static> for ndarray::Array<T, D> {

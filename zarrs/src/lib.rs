@@ -142,25 +142,25 @@
 //! // }
 //!
 //! // Perform some write operations on the chunks
-//! array.store_chunk_elements::<f32>(
+//! array.store_chunk(
 //!     &[0, 1], // chunk index
-//!     &[0.2, 0.3, 1.2, 1.3]
+//!     &[0.2f32, 0.3, 1.2, 1.3]
 //! )?;
-//! array.store_array_subset_ndarray::<f32, _>(
-//!     &[1, 1], // array index (start of subset)
-//!     &ndarray::array![[-1.1, -1.2], [-2.1, -2.2]]
+//! array.store_array_subset(
+//!     &[1..3, 1..3], // array indices
+//!     &ndarray::array![[-1.1f32, -1.2], [-2.1, -2.2]]
 //! )?;
 //! array.erase_chunk(&[1, 1])?;
 //!
 //! // Retrieve all array elements as an ndarray
-//! let array_all = array.retrieve_array_subset_ndarray::<f32>(&[0..3, 0..4])?;
+//! let array_all: ndarray::Array2<f32> = array.retrieve_array_subset(&[0..3, 0..4])?;
 //! println!("{array_all:4}");
 //! // [[ NaN,  NaN,  0.2,  0.3],
 //! //  [ NaN, -1.1, -1.2,  1.3],
 //! //  [ NaN, -2.1,  NaN,  NaN]]
 //!
 //! // Retrieve a chunk directly
-//! let array_chunk = array.retrieve_chunk_ndarray::<f32>(
+//! let array_chunk: ndarray::Array2<f32> = array.retrieve_chunk(
 //!     &[0, 1], // chunk index
 //! )?;
 //! println!("{array_chunk:4}");
@@ -168,10 +168,8 @@
 //! //  [ -1.2,  1.3]]
 //!
 //! // Retrieve a subchunk
-//! use zarrs::array::ArrayShardedReadableExt;
-//! let shard_index_cache = zarrs::array::ArrayShardedReadableExtCache::new(&array);
-//! let array_subchunk = array.retrieve_subchunk_ndarray_opt::<f32>(
-//!     &shard_index_cache,
+// TODO: mention using a partial decoder cache
+//! let array_subchunk: ndarray::Array2<f32> = array.retrieve_subchunk_opt(
 //!     &[0, 3], // subchunk index
 //!     &zarrs::array::CodecOptions::default(),
 //! )?;
@@ -195,7 +193,7 @@
 //! #### Default
 //!  - `filesystem`: Re-export [`zarrs_filesystem`] as [`zarrs::filesystem`](crate::filesystem`).
 //!  - `ndarray`: [`ndarray`] utility functions for [`Array`](crate::array::Array).
-//!  - Codecs: `blosc`, `crc32c`, `gzip`, `sharding`, `transpose`, `zstd`.
+//!  - Codecs: `blosc`, `crc32c`, `gzip`, `transpose`, `zstd`.
 //!
 //! #### Non-Default
 //!  - `async`: an **experimental** asynchronous API for [`stores`](storage), [`Array`](crate::array::Array), and [`Group`](group::Group).
@@ -205,6 +203,7 @@
 //!  - `dlpack`: adds convenience methods for [`DLPack`](https://arrow.apache.org/docs/python/dlpack.html) tensor interop to [`Array`](crate::array::Array).
 //!  - Additional [`Element`](crate::array::Element)/[`ElementOwned`](crate::array::ElementOwned) implementations:
 //!    - `float8`: add support for [`float8`] subfloat data types.
+//!    - `microfloat`: add support for [`microfloat`] subfloat data types.
 //!    - `jiff`: add support for [`jiff`] time data types.
 //!    - `chrono`: add support for [`chrono`] time data types.
 //!

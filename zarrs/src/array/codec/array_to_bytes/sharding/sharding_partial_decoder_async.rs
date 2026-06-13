@@ -4,6 +4,7 @@ use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
+use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
@@ -301,6 +302,7 @@ async fn partial_decode_fixed_array_subset(
     // Find filled / non filled chunks
     let chunk_info = shard_chunk_grid
         .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard")
         .indices()
         .into_iter()
         .map(|chunk_indices: ArrayIndicesTinyVec| {
@@ -310,7 +312,8 @@ async fn partial_decode_fixed_array_subset(
 
             let chunk_subset = shard_chunk_grid
                 .subset(&chunk_indices)
-                .expect("matching dimensionality");
+                .expect("matching dimensionality")
+                .expect("subchunk always within shard");
 
             // Read the offset/size
             let offset = shard_index[chunk_index * 2];
@@ -530,12 +533,15 @@ async fn partial_decode_variable_array_subset(
     };
 
     // Decode the subchunk subsets
-    let chunks = shard_chunk_grid.chunks_in_array_subset(array_subset)?;
+    let chunks = shard_chunk_grid
+        .chunks_in_array_subset(array_subset)?
+        .expect("subchunks always within shard");
     let chunk_bytes_and_subsets =
         futures::future::try_join_all(chunks.indices().into_iter().map(|chunk_indices| {
             let chunk_subset = shard_chunk_grid
                 .subset(&chunk_indices)
-                .expect("matching dimensionality");
+                .expect("matching dimensionality")
+                .expect("subchunk always within shard");
             let decode = &decode_subchunk_subset;
             decode(chunk_indices, chunk_subset)
         }))

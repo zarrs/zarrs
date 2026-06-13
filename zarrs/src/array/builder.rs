@@ -121,7 +121,6 @@ pub struct ArrayBuilder {
     /// Additional fields.
     additional_fields: AdditionalFieldsV3,
     /// Subchunk (inner chunk) shape for sharding.
-    #[cfg(feature = "sharding")]
     subchunk_shape: Option<ArrayShape>,
     /// Codec options.
     codec_options: CodecOptions,
@@ -141,7 +140,6 @@ impl ArrayBuilder {
     /// Create a new array builder for an array at `path` from an array shape and chunk grid metadata.
     ///
     /// The length of the array shape must match the dimensionality of the intended array.
-    /// Some chunk grids (e.g. `regular`) support all zero shape, indicating the shape is unbounded.
     #[must_use]
     pub fn new(
         shape: impl Into<ArrayShape>,
@@ -172,7 +170,6 @@ impl ArrayBuilder {
             storage_transformers: StorageTransformerChain::default(),
             dimension_names: None,
             additional_fields: AdditionalFieldsV3::default(),
-            #[cfg(feature = "sharding")]
             subchunk_shape: None,
             codec_options,
             codec_specific_options: CodecSpecificOptions::default(),
@@ -207,7 +204,6 @@ impl ArrayBuilder {
             storage_transformers: StorageTransformerChain::default(),
             dimension_names: None,
             additional_fields: AdditionalFieldsV3::default(),
-            #[cfg(feature = "sharding")]
             subchunk_shape: None,
             codec_options,
             codec_specific_options: CodecSpecificOptions::default(),
@@ -384,7 +380,6 @@ impl ArrayBuilder {
     /// .build(store, "/array")
     /// .unwrap();
     /// ```
-    #[cfg(feature = "sharding")]
     pub fn subchunk_shape(&mut self, subchunk_shape: impl Into<Option<ArrayShape>>) -> &mut Self {
         self.subchunk_shape = subchunk_shape.into();
         self
@@ -546,7 +541,6 @@ impl ArrayBuilder {
             .unwrap_or_else(|| super::codec::default_array_to_bytes_codec(&data_type));
 
         // If subchunk_shape is set, wrap the codec chain with a sharding codec
-        #[cfg(feature = "sharding")]
         let codec_chain = if let Some(subchunk_shape) = &self.subchunk_shape {
             use super::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
@@ -572,13 +566,6 @@ impl ArrayBuilder {
                 self.bytes_to_bytes_codecs.clone(),
             )
         };
-
-        #[cfg(not(feature = "sharding"))]
-        let codec_chain = CodecChain::new(
-            self.array_to_array_codecs.clone(),
-            array_to_bytes_codec,
-            self.bytes_to_bytes_codecs.clone(),
-        );
 
         Ok(codec_chain)
     }
@@ -922,7 +909,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "sharding")]
     fn array_builder_codec_specific_options_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
@@ -953,20 +939,18 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "sharding")]
     fn array_builder_codec_specific_options_random() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_specific_options_impl(SubchunkWriteOrder::Random);
     }
 
     #[test]
-    #[cfg(feature = "sharding")]
     fn array_builder_codec_specific_options_c() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_specific_options_impl(SubchunkWriteOrder::C);
     }
 
-    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    #[cfg(feature = "zstd")]
     fn array_builder_codec_options_preserved_from_codec_object_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
@@ -1029,14 +1013,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    #[cfg(feature = "zstd")]
     fn array_builder_codec_options_preserved_from_codec_object_random() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::Random);
     }
 
     #[test]
-    #[cfg(all(feature = "sharding", feature = "zstd"))]
+    #[cfg(feature = "zstd")]
     fn array_builder_codec_options_preserved_from_codec_object_c() {
         use crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder;
         array_builder_codec_options_preserved_from_codec_object_impl(SubchunkWriteOrder::C);

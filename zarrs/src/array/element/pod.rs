@@ -80,3 +80,63 @@ impl_element_pod!(num::Complex<float8::F8E4M3>);
 
 #[cfg(feature = "float8")]
 impl_element_pod!(num::Complex<float8::F8E5M2>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f4e2m1fn);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f6e2m3fn);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f6e3m2fn);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e3m4);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e4m3);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e4m3b11fnuz);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e4m3fnuz);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e5m2);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e5m2fnuz);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(microfloat::f8e8m0fnu);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f4e2m1fn>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f6e2m3fn>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f6e3m2fn>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e3m4>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e4m3>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e4m3b11fnuz>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e4m3fnuz>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e5m2>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e5m2fnuz>);
+
+#[cfg(feature = "microfloat")]
+impl_element_pod!(num::Complex<microfloat::f8e8m0fnu>);

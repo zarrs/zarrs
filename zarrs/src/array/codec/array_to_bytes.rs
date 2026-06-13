@@ -12,7 +12,6 @@ pub mod vlen_v2;
 
 #[cfg(feature = "pcodec")]
 pub mod pcodec;
-#[cfg(feature = "sharding")]
 pub mod sharding;
 #[cfg(feature = "zfp")]
 pub mod zfp;

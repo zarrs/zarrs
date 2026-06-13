@@ -32,7 +32,7 @@ missing_errors_doc = "warn"
 # wildcard_enum_match_arm = "warn"
 
 [workspace.dependencies.zarrs_chunk_grid]
-version = "0.5.1"
+version = "0.6.0"
 path = "zarrs_chunk_grid"
 
 [workspace.dependencies.zarrs_chunk_key_encoding]
@@ -40,7 +40,7 @@ version = "0.2.0"
 path = "zarrs_chunk_key_encoding"
 
 [workspace.dependencies.zarrs_codec]
-version = "0.2.1"
+version = "0.3.0"
 path = "zarrs_codec"
 
 [workspace.dependencies.zarrs_data_type]
@@ -52,7 +52,7 @@ version = "0.7.2" # Nothing depends on 0.7.4 yet
 path = "zarrs_metadata"
 
 [workspace.dependencies.zarrs_metadata_ext]
-version = "0.4.2"
+version = "0.4.4"
 path = "zarrs_metadata_ext"
 
 [workspace.dependencies.zarrs_plugin]

@@ -125,6 +125,10 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions};
 
+    fn nz(value: u64) -> NonZeroU64 {
+        NonZeroU64::new(value).unwrap()
+    }
+
     fn codec_squeeze_round_trip_impl(
         json: &str,
         data_type: DataType,
@@ -178,6 +182,35 @@ mod tests {
     fn codec_squeeze_round_trip_array1() {
         const JSON: &str = r"{}";
         codec_squeeze_round_trip_impl(JSON, data_type::uint8(), 0u8);
+    }
+
+    #[test]
+    fn codec_squeeze_partial_decode_granularity() {
+        let codec = SqueezeCodec::new();
+
+        assert_eq!(
+            codec
+                .partial_decode_granularity(&[nz(1), nz(10)], &[nz(5)])
+                .unwrap(),
+            vec![nz(1), nz(5)]
+        );
+        assert_eq!(
+            codec
+                .partial_decode_granularity(&[nz(2), nz(1), nz(10)], &[nz(1), nz(5)])
+                .unwrap(),
+            vec![nz(1), nz(1), nz(5)]
+        );
+        assert_eq!(
+            codec
+                .partial_decode_granularity(&[nz(1), nz(1)], &[nz(1)])
+                .unwrap(),
+            vec![nz(1), nz(1)]
+        );
+        assert!(
+            codec
+                .partial_decode_granularity(&[nz(2)], &[nz(1), nz(1)])
+                .is_err()
+        );
     }
 
     #[test]

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayCodecTraits, CodecOptions,
+    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits, CodecOptions,
 };
 
 #[allow(clippy::single_range_in_vec_init)]
@@ -120,7 +120,10 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
 
     let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
-        array.codecs().partial_decode_granularity(&chunk_shape),
+        array
+            .codecs()
+            .partial_decode_granularity(&chunk_shape)
+            .unwrap(),
         [NonZeroU64::new(2).unwrap(); 2]
     );
 
@@ -132,7 +135,6 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
@@ -156,7 +158,10 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
 
     let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
-        array.codecs().partial_decode_granularity(&chunk_shape),
+        array
+            .codecs()
+            .partial_decode_granularity(&chunk_shape)
+            .unwrap(),
         [NonZeroU64::new(1).unwrap(); 2]
     );
 
@@ -276,7 +281,6 @@ fn array_str_sync_simple() -> Result<(), Box<dyn std::error::Error>> {
     array_str_impl(array)
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 fn array_str_sync_sharded_transpose() -> Result<(), Box<dyn std::error::Error>> {
     use zarrs::array::codec::array_to_bytes::vlen::VlenCodec;
@@ -367,6 +371,44 @@ fn array_binary() -> Result<(), Box<dyn std::error::Error>> {
             vec![], vec![0], vec![0, 1], vec![],
             vec![], vec![0, 1, 2], vec![0, 1, 2, 3], vec![],
         ],
+    );
+
+    Ok(())
+}
+
+#[rustfmt::skip]
+#[test]
+fn array_store_borrowed_ndarray() -> Result<(), Box<dyn std::error::Error>> {
+    let store = std::sync::Arc::new(MemoryStore::default());
+    let array = ArrayBuilder::new(
+        vec![4, 4],
+        vec![2, 2],
+        data_type::float32(),
+        0.0,
+    )
+    .build(store, "/array")?;
+
+    let chunk = ndarray::array![[1.0f32, 2.0], [3.0, 4.0]];
+    array.store_chunk(&[0, 0], &chunk)?;
+    assert_eq!(
+        array.retrieve_chunk::<ndarray::ArrayD<f32>>(&[0, 0])?,
+        chunk.clone().into_dyn()
+    );
+
+    let subset = ndarray::array![
+        [5.0f32, 6.0, 7.0],
+        [8.0, 9.0, 10.0],
+        [11.0, 12.0, 13.0],
+    ];
+    let transposed = subset.t();
+    array.store_array_subset(&[1..4, 1..4], &transposed)?;
+    assert_eq!(
+        array.retrieve_array_subset::<ndarray::ArrayD<f32>>(&[1..4, 1..4])?,
+        ndarray::array![
+            [5.0, 8.0, 11.0],
+            [6.0, 9.0, 12.0],
+            [7.0, 10.0, 13.0],
+        ].into_dyn()
     );
 
     Ok(())
@@ -489,7 +531,6 @@ fn array_sync_read_into_uncompressed() -> Result<(), Box<dyn std::error::Error>>
     array_sync_read_into(&array)
 }
 
-#[cfg(feature = "sharding")]
 #[test]
 #[cfg_attr(miri, ignore)]
 fn array_sync_read_into_sharded() -> Result<(), Box<dyn std::error::Error>> {
