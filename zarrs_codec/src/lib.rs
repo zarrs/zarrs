@@ -1205,6 +1205,23 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         Ok(decoded_shape.to_vec())
     }
 
+    /// Returns whether decoding a chunk produces an array with identical bytes in native
+    /// in-memory order.
+    ///
+    /// The result may depend on the decoded representation. The default implementation is
+    /// conservative and returns `false`.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if the decoded representation is not supported by this codec.
+    fn is_decode_passthrough(
+        &self,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
+    ) -> Result<bool, CodecError> {
+        Ok(false)
+    }
+
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///
     /// The default implementation is for shape and order-preserving codecs, where the granularity is unchanged.
@@ -1268,6 +1285,34 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError>;
+
+    /// Decode into a subset of a preallocated output.
+    ///
+    /// The decoded representation shape and dimensionality does not need to match the output
+    /// target, but the number of elements must match. Chunk elements are written to the subset of
+    /// the output in C order.
+    ///
+    /// # Errors
+    /// Returns [`CodecError`] if a codec fails or the number of elements in the decoded
+    /// representation does not match the number of elements in the output target.
+    fn decode_into(
+        &self,
+        bytes: ArrayBytes<'_>,
+        shape: &[NonZeroU64],
+        data_type: &DataType,
+        fill_value: &FillValue,
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let num_elements = output_target.num_elements();
+        let shape_num_elements: u64 = shape.iter().map(|d| d.get()).product();
+        if shape_num_elements != num_elements {
+            return Err(InvalidNumberOfElementsError::new(num_elements, shape_num_elements).into());
+        }
+
+        let decoded_value = self.decode(bytes, shape, data_type, fill_value, options)?;
+        decode_into_array_bytes_target(&decoded_value, output_target)
+    }
 
     /// Initialise a partial decoder.
     ///

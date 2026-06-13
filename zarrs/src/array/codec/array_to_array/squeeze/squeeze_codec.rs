@@ -169,6 +169,15 @@ impl ArrayToArrayCodecTraits for SqueezeCodec {
         Ok(bytes)
     }
 
+    fn is_decode_passthrough(
+        &self,
+        _shape: &[NonZeroU64],
+        _data_type: &DataType,
+        _fill_value: &FillValue,
+    ) -> Result<bool, CodecError> {
+        Ok(true)
+    }
+
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,

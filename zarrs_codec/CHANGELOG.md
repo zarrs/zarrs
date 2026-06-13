@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Breaking**: Add `BytesToBytesCodecTraits::decode_into`, `ArrayToBytesCodecTraits::is_decode_passthrough`, and `ArrayBytesFixedDisjointView::as_mut_slice`
+- **Breaking**: Add `ArrayToArrayCodecTraits::decode_into`, `ArrayToArrayCodecTraits::is_decode_passthrough`, `BytesToBytesCodecTraits::decode_into`, `ArrayToBytesCodecTraits::is_decode_passthrough`, and `ArrayBytesFixedDisjointView::as_mut_slice`
 
 ### Changed
 - **Breaking**: Bump `zarrs_data_type` to 0.9.1

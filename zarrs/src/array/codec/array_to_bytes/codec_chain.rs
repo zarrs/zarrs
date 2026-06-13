@@ -14,7 +14,7 @@ use zarrs_codec::{
     ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
     CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, decode_into_array_bytes_target,
+    PartialEncoderCapability, RecommendedConcurrency,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -474,8 +474,20 @@ impl ArrayToBytesCodecTraits for CodecChain {
         let (array_representations, bytes_representations) =
             self.get_representations(shape, data_type, fill_value)?;
         let mut output_target = output_target;
+        let array_to_array_decode_passthrough = self
+            .array_to_array
+            .iter()
+            .zip(&array_representations)
+            .try_fold(
+                true,
+                |passthrough, (codec, (shape, data_type, fill_value))| {
+                    Ok::<_, CodecError>(
+                        passthrough && codec.is_decode_passthrough(shape, data_type, fill_value)?,
+                    )
+                },
+            )?;
 
-        if self.array_to_array.is_empty() && self.bytes_to_bytes.len() == 1 {
+        if array_to_array_decode_passthrough && self.bytes_to_bytes.len() == 1 {
             let (shape, data_type, fill_value) = array_representations.last().unwrap();
             if self
                 .array_to_bytes
@@ -495,8 +507,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
             }
         }
 
-        if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
-            // Fast path if no bytes to bytes or array to array codecs
+        if self.bytes_to_bytes.is_empty() && array_to_array_decode_passthrough {
+            // Fast path if no bytes to bytes codecs and all array to array codecs are passthrough.
             let (shape, data_type, fill_value) = array_representations.last().unwrap();
             return self.array_to_bytes.decode_into(
                 bytes,
@@ -516,8 +528,8 @@ impl ArrayToBytesCodecTraits for CodecChain {
             bytes = codec.decode(bytes, bytes_representation, options)?;
         }
 
-        if self.array_to_array.is_empty() {
-            // Fast path if no array to array codecs
+        if array_to_array_decode_passthrough {
+            // Fast path if all array to array codecs are passthrough.
             let (shape, data_type, fill_value) = array_representations.last().unwrap();
             return self.array_to_bytes.decode_into(
                 bytes,
@@ -536,18 +548,30 @@ impl ArrayToBytesCodecTraits for CodecChain {
                 .decode(bytes, shape, data_type, fill_value, options)?
         };
 
-        // array->array
+        // array->array, excluding the first codec
         for (codec, (shape, data_type, fill_value)) in std::iter::zip(
-            self.array_to_array.iter().rev(),
-            array_representations.iter().rev().skip(1),
+            self.array_to_array
+                .iter()
+                .rev()
+                .take(self.array_to_array.len() - 1),
+            array_representations
+                .iter()
+                .rev()
+                .skip(1)
+                .take(self.array_to_array.len() - 1),
         ) {
             bytes = codec.decode(bytes, shape, data_type, fill_value, options)?;
         }
 
-        let (shape, data_type, _) = array_representations.first().unwrap();
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
-
-        decode_into_array_bytes_target(&bytes, output_target)
+        let (shape, data_type, fill_value) = array_representations.first().unwrap();
+        self.array_to_array[0].decode_into(
+            bytes,
+            shape,
+            data_type,
+            fill_value,
+            output_target,
+            options,
+        )
     }
 
     fn compact<'a>(
@@ -936,15 +960,15 @@ mod tests {
     use unsafe_cell_slice::UnsafeCellSlice;
 
     #[derive(Debug)]
-    struct TestDecodePassthrough;
+    struct TestArrayToArrayDecodePassthrough;
 
-    impl ExtensionName for TestDecodePassthrough {
+    impl ExtensionName for TestArrayToArrayDecodePassthrough {
         fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
             None
         }
     }
 
-    impl CodecTraits for TestDecodePassthrough {
+    impl CodecTraits for TestArrayToArrayDecodePassthrough {
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
@@ -971,7 +995,7 @@ mod tests {
         }
     }
 
-    impl ArrayCodecTraits for TestDecodePassthrough {
+    impl ArrayCodecTraits for TestArrayToArrayDecodePassthrough {
         fn recommended_concurrency(
             &self,
             _shape: &[NonZeroU64],
@@ -981,18 +1005,28 @@ mod tests {
         }
     }
 
-    impl ArrayToBytesCodecTraits for TestDecodePassthrough {
-        fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+    impl ArrayToArrayCodecTraits for TestArrayToArrayDecodePassthrough {
+        fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
             self
         }
 
-        fn encoded_representation(
+        fn encoded_data_type(&self, decoded_data_type: &DataType) -> Result<DataType, CodecError> {
+            Ok(decoded_data_type.clone())
+        }
+
+        fn encoded_fill_value(
             &self,
-            shape: &[NonZeroU64],
-            data_type: &DataType,
-            fill_value: &FillValue,
-        ) -> Result<BytesRepresentation, CodecError> {
-            BytesCodec::default().encoded_representation(shape, data_type, fill_value)
+            _decoded_data_type: &DataType,
+            decoded_fill_value: &FillValue,
+        ) -> Result<FillValue, CodecError> {
+            Ok(decoded_fill_value.clone())
+        }
+
+        fn encoded_shape(&self, _decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+            Ok(vec![
+                NonZeroU64::new(2).unwrap(),
+                NonZeroU64::new(4).unwrap(),
+            ])
         }
 
         fn is_decode_passthrough(
@@ -1007,23 +1041,127 @@ mod tests {
         fn encode<'a>(
             &self,
             bytes: ArrayBytes<'a>,
-            shape: &[NonZeroU64],
-            data_type: &DataType,
-            fill_value: &FillValue,
-            options: &CodecOptions,
-        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-            BytesCodec::default().encode(bytes, shape, data_type, fill_value, options)
-        }
-
-        fn decode<'a>(
-            &self,
-            _bytes: ArrayBytesRaw<'a>,
             _shape: &[NonZeroU64],
             _data_type: &DataType,
             _fill_value: &FillValue,
             _options: &CodecOptions,
         ) -> Result<ArrayBytes<'a>, CodecError> {
-            panic!("pass-through array-to-bytes decode must be skipped")
+            Ok(bytes)
+        }
+
+        fn decode<'a>(
+            &self,
+            _bytes: ArrayBytes<'a>,
+            _shape: &[NonZeroU64],
+            _data_type: &DataType,
+            _fill_value: &FillValue,
+            _options: &CodecOptions,
+        ) -> Result<ArrayBytes<'a>, CodecError> {
+            panic!("pass-through array-to-array decode must be skipped")
+        }
+
+        fn decode_into(
+            &self,
+            _bytes: ArrayBytes<'_>,
+            _shape: &[NonZeroU64],
+            _data_type: &DataType,
+            _fill_value: &FillValue,
+            _output_target: ArrayBytesDecodeIntoTarget<'_>,
+            _options: &CodecOptions,
+        ) -> Result<(), CodecError> {
+            panic!("pass-through array-to-array decode_into must be skipped")
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestZstdLikeDirectDecode {
+        expected_output_ptr: usize,
+    }
+
+    impl ExtensionName for TestZstdLikeDirectDecode {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl CodecTraits for TestZstdLikeDirectDecode {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn configuration(
+            &self,
+            _version: ZarrVersion,
+            _options: &CodecMetadataOptions,
+        ) -> Option<Configuration> {
+            None
+        }
+
+        fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+            PartialDecoderCapability {
+                partial_read: false,
+                partial_decode: false,
+            }
+        }
+
+        fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+            PartialEncoderCapability {
+                partial_encode: false,
+            }
+        }
+    }
+
+    impl BytesToBytesCodecTraits for TestZstdLikeDirectDecode {
+        fn into_dyn(self: Arc<Self>) -> Arc<dyn BytesToBytesCodecTraits> {
+            self
+        }
+
+        fn recommended_concurrency(
+            &self,
+            _decoded_representation: &BytesRepresentation,
+        ) -> Result<RecommendedConcurrency, CodecError> {
+            Ok(RecommendedConcurrency::new_maximum(1))
+        }
+
+        fn encoded_representation(
+            &self,
+            decoded_representation: &BytesRepresentation,
+        ) -> BytesRepresentation {
+            *decoded_representation
+        }
+
+        fn encode<'a>(
+            &self,
+            decoded_value: ArrayBytesRaw<'a>,
+            _options: &CodecOptions,
+        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+            Ok(decoded_value)
+        }
+
+        fn decode<'a>(
+            &self,
+            _encoded_value: ArrayBytesRaw<'a>,
+            _decoded_representation: &BytesRepresentation,
+            _options: &CodecOptions,
+        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+            panic!("allocating bytes-to-bytes decode must be skipped")
+        }
+
+        fn decode_into(
+            &self,
+            encoded_value: ArrayBytesRaw<'_>,
+            decoded_representation: &BytesRepresentation,
+            output: &mut [u8],
+            _options: &CodecOptions,
+        ) -> Result<usize, CodecError> {
+            assert_eq!(output.as_mut_ptr() as usize, self.expected_output_ptr);
+            assert_eq!(
+                *decoded_representation,
+                BytesRepresentation::FixedSize(output.len() as u64)
+            );
+            assert_eq!(encoded_value.len(), output.len());
+            output.copy_from_slice(&encoded_value);
+            Ok(output.len())
         }
     }
 
@@ -1227,20 +1365,19 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "zstd")]
     #[test]
-    fn codec_chain_decode_into_arbitrary_passthrough() {
-        use crate::array::codec::bytes_to_bytes::zstd::ZstdCodec;
-
+    fn codec_chain_decode_into_array_to_array_passthrough_direct() {
         let shape = ChunkShape::from(vec![NonZeroU64::new(8).unwrap()]);
         let decoded = (0..8u16).flat_map(u16::to_ne_bytes).collect::<Vec<_>>();
-        let encoded = zstd::bulk::compress(&decoded, 1).unwrap();
-        let codec = CodecChain::new(
-            vec![],
-            Arc::new(TestDecodePassthrough),
-            vec![Arc::new(ZstdCodec::new(1, false))],
-        );
         let mut output = vec![0; decoded.len()];
+        let expected_output_ptr = output.as_mut_ptr() as usize;
+        let codec = CodecChain::new(
+            vec![Arc::new(TestArrayToArrayDecodePassthrough)],
+            Arc::new(BytesCodec::default()),
+            vec![Arc::new(TestZstdLikeDirectDecode {
+                expected_output_ptr,
+            })],
+        );
         let mut view = unsafe {
             ArrayBytesFixedDisjointView::new(
                 UnsafeCellSlice::new(&mut output),
@@ -1253,7 +1390,7 @@ mod tests {
 
         codec
             .decode_into(
-                Cow::Owned(encoded),
+                Cow::Borrowed(&decoded),
                 &shape,
                 &data_type::uint16(),
                 &FillValue::from(0u16),
