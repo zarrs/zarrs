@@ -109,13 +109,17 @@ where
         iter_concurrent_limit!(chunk_concurrent_limit, indices, map, |chunk_indices| {
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let chunk_subset_overlap = chunk_subset.overlap(array_subset)?;
-            let bytes = C::Value::retrieve_chunk_subset_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &chunk_subset_overlap.relative_to(chunk_subset.start())?,
-                options,
-            )?;
+            let bytes = if chunk_subset_overlap == chunk_subset {
+                retrieve_chunk_bytes(cache, array, &chunk_indices, options)?
+            } else {
+                C::Value::retrieve_chunk_subset_bytes(
+                    cache,
+                    array,
+                    &chunk_indices,
+                    &chunk_subset_overlap.relative_to(chunk_subset.start())?,
+                    options,
+                )?
+            };
             Ok((
                 bytes,
                 chunk_subset_overlap.relative_to(&array_subset.start())?,
@@ -193,13 +197,17 @@ where
             let chunk_subset = array.chunk_subset(&chunk_indices)?;
             let overlap = chunk_subset.overlap(array_subset)?;
             let output_subset = overlap.relative_to(&array_subset_start)?;
-            let bytes = C::Value::retrieve_chunk_subset_bytes(
-                cache,
-                array,
-                &chunk_indices,
-                &overlap.relative_to(chunk_subset.start())?,
-                options,
-            )?;
+            let bytes = if overlap == chunk_subset {
+                retrieve_chunk_bytes(cache, array, &chunk_indices, options)?
+            } else {
+                C::Value::retrieve_chunk_subset_bytes(
+                    cache,
+                    array,
+                    &chunk_indices,
+                    &overlap.relative_to(chunk_subset.start())?,
+                    options,
+                )?
+            };
             let mut data_view = unsafe {
                 ArrayBytesFixedDisjointView::new(
                     data_slice,
