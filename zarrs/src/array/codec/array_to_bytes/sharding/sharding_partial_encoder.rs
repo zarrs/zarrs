@@ -12,7 +12,7 @@ use zarrs_data_type::FillValue;
 use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::{
-    calculate_chunks_per_shard, compute_index_encoded_size,
+    calculate_subchunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
     ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
@@ -56,8 +56,8 @@ impl ShardingPartialEncoder {
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
     ) -> Result<Self, CodecError> {
-        let chunks_per_shard = calculate_chunks_per_shard(&shard_shape, &subchunk_shape)?;
-        let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
+        let subchunks_per_shard = calculate_subchunks_per_shard(&shard_shape, &subchunk_shape)?;
+        let index_shape = sharding_index_shape(subchunks_per_shard.as_slice());
 
         // Decode the index
         let shard_index = super::decode_shard_index_partial_decoder(
@@ -70,7 +70,8 @@ impl ShardingPartialEncoder {
         )?
         .unwrap_or_else(|| {
             let num_chunks =
-                usize::try_from(chunks_per_shard.iter().map(|x| x.get()).product::<u64>()).unwrap();
+                usize::try_from(subchunks_per_shard.iter().map(|x| x.get()).product::<u64>())
+                    .unwrap();
             vec![u64::MAX; num_chunks * 2]
         });
 
@@ -151,8 +152,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
     ) -> Result<(), super::CodecError> {
         let mut shard_index = self.shard_index.lock().unwrap();
 
-        let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
-        let chunks_per_shard = chunks_per_shard.to_array_shape();
+        let subchunks_per_shard =
+            calculate_subchunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
+        let subchunks_per_shard = subchunks_per_shard.to_array_shape();
 
         // Get the maximum offset of existing encoded chunks
         let max_data_offset = shard_index
@@ -213,7 +215,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         // Get all the subchunks intersected
         subchunks_intersected.extend(subchunks.iter().map(
             |subchunk_indices: ArrayIndicesTinyVec| {
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk")
+                ravel_indices(&subchunk_indices, &subchunks_per_shard).expect("inbounds chunk")
             },
         ));
 
@@ -240,7 +242,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         .zip(chunk_subset_end_exc.iter())
                         .any(|(a, b)| *a > *b)
                 {
-                    let subchunk_index = ravel_indices(&subchunk_indices, &chunks_per_shard)
+                    let subchunk_index = ravel_indices(&subchunk_indices, &subchunks_per_shard)
                         .expect("inbounds chunk");
                     Some(subchunk_index)
                 } else {
@@ -318,7 +320,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         iterator.try_for_each(|subchunk_indices: ArrayIndicesTinyVec| {
             // Extract the subchunk bytes that overlap with the chunk subset
             let subchunk_index =
-                ravel_indices(&subchunk_indices, &chunks_per_shard).expect("inbounds chunk");
+                ravel_indices(&subchunk_indices, &subchunks_per_shard).expect("inbounds chunk");
             let subchunk_subset = self
                 .chunk_grid
                 .subset(&subchunk_indices)

@@ -7,7 +7,7 @@ use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
 
-use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
+use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_subchunks_per_shard};
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
 use crate::array::codec::CodecChain;
@@ -76,27 +76,27 @@ impl AsyncShardingPartialDecoder {
 
     /// Retrieve the byte range of an encoded subchunk.
     ///
-    /// The `chunk_indices` are relative to the start of the shard.
+    /// The `subchunk_indices` are relative to the start of the shard.
     pub(crate) fn subchunk_byte_range(
         &self,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<Option<ByteRange>, CodecError> {
         super::subchunk_byte_range(
             self.shard_index.as_deref(),
             &self.shard_shape,
             &self.subchunk_shape,
-            chunk_indices,
+            subchunk_indices,
         )
     }
 
     /// Retrieve the encoded bytes of a subchunk.
     ///
-    /// The `chunk_indices` are relative to the start of the shard.
+    /// The `subchunk_indices` are relative to the start of the shard.
     pub(crate) async fn retrieve_subchunk_encoded(
         &self,
-        chunk_indices: &[u64],
+        subchunk_indices: &[u64],
     ) -> Result<Option<ArrayBytesRaw<'_>>, CodecError> {
-        let byte_range = self.subchunk_byte_range(chunk_indices)?;
+        let byte_range = self.subchunk_byte_range(subchunk_indices)?;
         if let Some(byte_range) = byte_range {
             self.input_handle
                 .partial_decode(byte_range, &CodecOptions::default())
@@ -290,8 +290,8 @@ async fn partial_decode_fixed_array_subset(
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
     };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let subchunks_per_shard =
+        calculate_subchunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
 
     let shard_chunk_grid = RegularChunkGrid::new(
         bytemuck::must_cast_slice(shard_shape).to_vec(),
@@ -305,13 +305,13 @@ async fn partial_decode_fixed_array_subset(
         .expect("subchunks always within shard")
         .indices()
         .into_iter()
-        .map(|chunk_indices: ArrayIndicesTinyVec| {
+        .map(|subchunk_indices: ArrayIndicesTinyVec| {
             let chunk_index =
-                ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+                ravel_indices(&subchunk_indices, &subchunks_per_shard).expect("inbounds chunk");
             let chunk_index = usize::try_from(chunk_index).unwrap();
 
             let chunk_subset = shard_chunk_grid
-                .subset(&chunk_indices)
+                .subset(&subchunk_indices)
                 .expect("matching dimensionality")
                 .expect("subchunk always within shard");
 
@@ -470,8 +470,8 @@ async fn partial_decode_variable_array_subset(
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, array_subset);
     };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let subchunks_per_shard =
+        calculate_subchunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
 
     let shard_chunk_grid = RegularChunkGrid::new(
         bytemuck::must_cast_slice(shard_shape).to_vec(),
@@ -480,9 +480,10 @@ async fn partial_decode_variable_array_subset(
     .expect("matching dimensionality");
 
     let array_subset_start = array_subset.start();
-    let decode_subchunk_subset = |chunk_indices: ArrayIndicesTinyVec, chunk_subset: ArraySubset| {
+    let decode_subchunk_subset = |subchunk_indices: ArrayIndicesTinyVec,
+                                  chunk_subset: ArraySubset| {
         let shard_index_idx =
-            ravel_indices(&chunk_indices, &chunks_per_shard).expect("inbounds chunk");
+            ravel_indices(&subchunk_indices, &subchunks_per_shard).expect("inbounds chunk");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let array_subset_start = &array_subset_start;
         async move {
@@ -537,13 +538,13 @@ async fn partial_decode_variable_array_subset(
         .chunks_in_array_subset(array_subset)?
         .expect("subchunks always within shard");
     let chunk_bytes_and_subsets =
-        futures::future::try_join_all(chunks.indices().into_iter().map(|chunk_indices| {
+        futures::future::try_join_all(chunks.indices().into_iter().map(|subchunk_indices| {
             let chunk_subset = shard_chunk_grid
-                .subset(&chunk_indices)
+                .subset(&subchunk_indices)
                 .expect("matching dimensionality")
                 .expect("subchunk always within shard");
             let decode = &decode_subchunk_subset;
-            decode(chunk_indices, chunk_subset)
+            decode(subchunk_indices, chunk_subset)
         }))
         .await?;
 
@@ -568,12 +569,12 @@ async fn partial_decode_fixed_indexer(
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, indexer);
     };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let subchunks_per_shard =
+        calculate_subchunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
     // let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
     //     &inner_codecs,
     //     &chunk_representation,
-    //     &chunks_per_shard,
+    //     &subchunks_per_shard,
     //     options,
     // )?;
     let options = &options;
@@ -582,10 +583,10 @@ async fn partial_decode_fixed_indexer(
     let mut output: Vec<u8> = Vec::with_capacity(output_len);
 
     #[cfg(not(target_arch = "wasm32"))]
-    let subchunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    let subchunk_partial_decoders = moka::future::Cache::new(subchunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
     let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
+        usize::try_from(subchunks_per_shard.iter().product::<u64>()).unwrap(),
     );
 
     for indices in indexer.iter_indices() {
@@ -597,22 +598,22 @@ async fn partial_decode_fixed_indexer(
             )
             .into());
         }
-        let chunk_index: ArrayIndices = indices
+        let subchunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let subchunk_index_1d = ravel_indices(&subchunk_index, &subchunks_per_shard)
+            .ok_or_else(|| IndexerError::new_oob(subchunk_index, subchunks_per_shard.clone()))?;
 
         // Get the partial decoder
-        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
+        let shard_index_idx: usize = usize::try_from(subchunk_index_1d).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
 
         #[cfg(not(target_arch = "wasm32"))]
         let inner_partial_decoder = subchunk_partial_decoders
-            .entry(chunk_index_1d)
+            .entry(subchunk_index_1d)
             .or_try_insert_with(get_subchunk_partial_decoder(
                 input_handle,
                 data_type,
@@ -628,7 +629,7 @@ async fn partial_decode_fixed_indexer(
             .into_value();
         #[cfg(target_arch = "wasm32")]
         let inner_partial_decoder = subchunk_partial_decoders
-            .get_or_insert_async(&chunk_index_1d, async {
+            .get_or_insert_async(&subchunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
                     data_type,
@@ -678,12 +679,12 @@ async fn partial_decode_variable_indexer(
     let Some(shard_index) = shard_index else {
         return super::partial_decode_empty_shard(data_type, fill_value, indexer);
     };
-    let chunks_per_shard =
-        calculate_chunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
+    let subchunks_per_shard =
+        calculate_subchunks_per_shard(shard_shape, subchunk_shape)?.to_array_shape();
     // let (subchunk_concurrent_limit, options) = super::get_concurrent_target_and_codec_options(
     //     &inner_codecs,
     //     &chunk_representation,
-    //     &chunks_per_shard,
+    //     &subchunks_per_shard,
     //     options,
     // )?;
     let options = &options;
@@ -694,10 +695,10 @@ async fn partial_decode_variable_indexer(
     offsets.push(0);
 
     #[cfg(not(target_arch = "wasm32"))]
-    let subchunk_partial_decoders = moka::future::Cache::new(chunks_per_shard.iter().product());
+    let subchunk_partial_decoders = moka::future::Cache::new(subchunks_per_shard.iter().product());
     #[cfg(target_arch = "wasm32")]
     let subchunk_partial_decoders = quick_cache::sync::Cache::new(
-        usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap(),
+        usize::try_from(subchunks_per_shard.iter().product::<u64>()).unwrap(),
     );
 
     for indices in indexer.iter_indices() {
@@ -709,22 +710,22 @@ async fn partial_decode_variable_indexer(
             )
             .into());
         }
-        let chunk_index: ArrayIndices = indices
+        let subchunk_index: ArrayIndices = indices
             .iter()
             .zip(subchunk_shape)
             .map(|(&i, &cs)| i / cs)
             .collect();
-        let chunk_index_1d = ravel_indices(&chunk_index, &chunks_per_shard)
-            .ok_or_else(|| IndexerError::new_oob(chunk_index, chunks_per_shard.clone()))?;
+        let subchunk_index_1d = ravel_indices(&subchunk_index, &subchunks_per_shard)
+            .ok_or_else(|| IndexerError::new_oob(subchunk_index, subchunks_per_shard.clone()))?;
 
         // Get the partial decoder
-        let shard_index_idx: usize = usize::try_from(chunk_index_1d).unwrap();
+        let shard_index_idx: usize = usize::try_from(subchunk_index_1d).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
 
         #[cfg(not(target_arch = "wasm32"))]
         let inner_partial_decoder = subchunk_partial_decoders
-            .entry(chunk_index_1d)
+            .entry(subchunk_index_1d)
             .or_try_insert_with(get_subchunk_partial_decoder(
                 input_handle,
                 data_type,
@@ -740,7 +741,7 @@ async fn partial_decode_variable_indexer(
             .into_value();
         #[cfg(target_arch = "wasm32")]
         let inner_partial_decoder = subchunk_partial_decoders
-            .get_or_insert_async(&chunk_index_1d, async {
+            .get_or_insert_async(&subchunk_index_1d, async {
                 get_subchunk_partial_decoder(
                     input_handle,
                     data_type,

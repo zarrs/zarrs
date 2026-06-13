@@ -100,7 +100,7 @@ impl CodecTraitsV3 for ShardingCodec {
     }
 }
 
-fn calculate_chunks_per_shard(
+fn calculate_subchunks_per_shard(
     shard_shape: &[NonZeroU64],
     subchunk_shape: &[NonZeroU64],
 ) -> Result<ChunkShape, CodecError> {
@@ -119,9 +119,9 @@ fn calculate_chunks_per_shard(
         .collect()
 }
 
-fn sharding_index_shape(chunks_per_shard: &[NonZeroU64]) -> ChunkShape {
-    let mut index_shape = Vec::with_capacity(chunks_per_shard.len() + 1);
-    index_shape.extend(chunks_per_shard);
+fn sharding_index_shape(subchunks_per_shard: &[NonZeroU64]) -> ChunkShape {
+    let mut index_shape = Vec::with_capacity(subchunks_per_shard.len() + 1);
+    index_shape.extend(subchunks_per_shard);
     index_shape.push(unsafe { NonZeroU64::new_unchecked(2) });
     ChunkShape::from(index_shape)
 }
@@ -184,15 +184,15 @@ fn get_index_byte_range(
 fn subchunk_byte_range(
     shard_index: Option<&[u64]>,
     shard_shape: &[NonZeroU64],
-    chunk_shape: &[NonZeroU64],
-    chunk_indices: &[u64],
+    subchunk_shape: &[NonZeroU64],
+    subchunk_indices: &[u64],
 ) -> Result<Option<ByteRange>, CodecError> {
     if let Some(shard_index) = shard_index {
-        let chunks_per_shard = calculate_chunks_per_shard(shard_shape, chunk_shape)?;
-        let chunks_per_shard = chunks_per_shard.to_array_shape();
+        let subchunks_per_shard = calculate_subchunks_per_shard(shard_shape, subchunk_shape)?;
+        let subchunks_per_shard = subchunks_per_shard.to_array_shape();
 
         let shard_index_idx =
-            ravel_indices(chunk_indices, &chunks_per_shard).expect("inbounds indices");
+            ravel_indices(subchunk_indices, &subchunks_per_shard).expect("inbounds indices");
         let shard_index_idx = usize::try_from(shard_index_idx).unwrap();
         let offset = shard_index[shard_index_idx * 2];
         let size = shard_index[shard_index_idx * 2 + 1];
@@ -214,17 +214,17 @@ fn get_concurrent_target_and_codec_options(
     inner_codecs: &CodecChain,
     data_type: &DataType,
     subchunk_shape: &[NonZeroU64],
-    chunks_per_shard: &[u64],
+    subchunks_per_shard: &[u64],
     options: &CodecOptions,
 ) -> Result<(usize, CodecOptions), CodecError> {
-    let num_chunks = usize::try_from(chunks_per_shard.iter().product::<u64>()).unwrap();
+    let num_subchunks = usize::try_from(subchunks_per_shard.iter().product::<u64>()).unwrap();
 
     // Calculate subchunk/codec concurrency
     let (subchunk_concurrent_limit, concurrency_limit_codec) = calc_concurrency_outer_inner(
         options.concurrent_target(),
         &RecommendedConcurrency::new_maximum(std::cmp::min(
             options.concurrent_target(),
-            num_chunks,
+            num_subchunks,
         )),
         &inner_codecs.recommended_concurrency(subchunk_shape, data_type)?,
     );
@@ -241,8 +241,8 @@ fn decode_shard_index_partial_decoder(
     subchunk_shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<Option<Vec<u64>>, CodecError> {
-    let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
-    let index_shape = sharding_index_shape(&chunks_per_shard);
+    let subchunks_per_shard = calculate_subchunks_per_shard(shard_shape, subchunk_shape)?;
+    let index_shape = sharding_index_shape(&subchunks_per_shard);
     let index_byte_range = get_index_byte_range(&index_shape, index_codecs, index_location)?;
     let encoded_shard_index = input_handle.partial_decode(index_byte_range, options)?;
     Ok(match encoded_shard_index {
@@ -266,8 +266,8 @@ async fn decode_shard_index_async_partial_decoder(
     subchunk_shape: &[NonZeroU64],
     options: &CodecOptions,
 ) -> Result<Option<Vec<u64>>, CodecError> {
-    let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
-    let index_shape = sharding_index_shape(&chunks_per_shard);
+    let subchunks_per_shard = calculate_subchunks_per_shard(shard_shape, subchunk_shape)?;
+    let index_shape = sharding_index_shape(&subchunks_per_shard);
     let index_byte_range = get_index_byte_range(&index_shape, index_codecs, index_location)?;
     let encoded_shard_index = input_handle
         .partial_decode(index_byte_range, options)
