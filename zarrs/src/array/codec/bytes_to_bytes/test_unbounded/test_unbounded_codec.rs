@@ -128,3 +128,72 @@ impl BytesToBytesCodecTraits for TestUnboundedCodec {
         BytesRepresentation::UnboundedSize
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use super::*;
+
+    #[test]
+    fn default_decode_into() {
+        let codec = TestUnboundedCodec::new();
+        let options = CodecOptions::default();
+        let encoded = Cow::Borrowed(&b"decoded"[..]);
+        let mut output = [0; 7];
+
+        assert_eq!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::FixedSize(7),
+                    &mut output,
+                    &options,
+                )
+                .unwrap(),
+            7
+        );
+        assert_eq!(&output, b"decoded");
+        assert!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::FixedSize(8),
+                    &mut [0; 8],
+                    &options,
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::BoundedSize(6),
+                    &mut output,
+                    &options,
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::BoundedSize(7),
+                    &mut [0; 6],
+                    &options,
+                )
+                .is_err()
+        );
+        assert_eq!(
+            codec
+                .decode_into(
+                    encoded,
+                    &BytesRepresentation::UnboundedSize,
+                    &mut output,
+                    &options,
+                )
+                .unwrap(),
+            7
+        );
+    }
+}

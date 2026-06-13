@@ -138,6 +138,18 @@ impl ArrayToBytesCodecTraits for BytesCodec {
         self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
+    fn is_decode_passthrough(
+        &self,
+        _shape: &[NonZeroU64],
+        data_type: &DataType,
+        _fill_value: &FillValue,
+    ) -> Result<bool, CodecError> {
+        if !data_type.is_fixed() || data_type.is_optional() {
+            return Ok(false);
+        }
+        Ok(data_type.codec_bytes()?.is_decode_passthrough(self.endian))
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
@@ -279,5 +291,55 @@ impl ArrayToBytesCodecTraits for BytesCodec {
                 shape.num_elements_u64() * data_type_size as u64,
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::array::data_type;
+
+    #[test]
+    fn decode_passthrough() {
+        let shape = [NonZeroU64::new(1).unwrap()];
+
+        assert!(
+            BytesCodec::new(None)
+                .is_decode_passthrough(&shape, &data_type::uint8(), &FillValue::from(0u8))
+                .unwrap()
+        );
+        assert!(
+            BytesCodec::new(Some(Endianness::native()))
+                .is_decode_passthrough(&shape, &data_type::uint16(), &FillValue::from(0u16))
+                .unwrap()
+        );
+        let non_native = if Endianness::native() == Endianness::Little {
+            Endianness::Big
+        } else {
+            Endianness::Little
+        };
+        assert!(
+            !BytesCodec::new(Some(non_native))
+                .is_decode_passthrough(&shape, &data_type::uint16(), &FillValue::from(0u16))
+                .unwrap()
+        );
+        assert!(
+            !BytesCodec::new(None)
+                .is_decode_passthrough(
+                    &shape,
+                    &data_type::uint8().to_optional(),
+                    &FillValue::from(0u8).into_optional(),
+                )
+                .unwrap()
+        );
+        assert!(
+            !BytesCodec::new(None)
+                .is_decode_passthrough(
+                    &shape,
+                    &data_type::bytes(),
+                    &FillValue::from(Vec::<u8>::new())
+                )
+                .unwrap()
+        );
     }
 }

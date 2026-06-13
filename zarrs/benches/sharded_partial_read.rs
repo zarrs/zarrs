@@ -100,7 +100,7 @@ fn retrieve_array_subset_into(
         ArrayBytesFixedDisjointView::new(
             output_slice,
             ELEMENT_SIZE as usize,
-            &shape,
+            shape,
             ArraySubset::new_with_shape(shape.to_vec()),
         )
         .unwrap()

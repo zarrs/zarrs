@@ -473,6 +473,27 @@ impl ArrayToBytesCodecTraits for CodecChain {
     ) -> Result<(), CodecError> {
         let (array_representations, bytes_representations) =
             self.get_representations(shape, data_type, fill_value)?;
+        let mut output_target = output_target;
+
+        if self.array_to_array.is_empty() && self.bytes_to_bytes.len() == 1 {
+            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+            if self
+                .array_to_bytes
+                .is_decode_passthrough(shape, data_type, fill_value)?
+                && let BytesRepresentation::FixedSize(decoded_size) = bytes_representations[0]
+                && let ArrayBytesDecodeIntoTarget::Fixed(output) = &mut output_target
+                && let Some(output) = output.as_mut_slice()
+                && output.len() == usize::try_from(decoded_size).unwrap()
+            {
+                self.bytes_to_bytes[0].decode_into(
+                    bytes,
+                    &bytes_representations[0],
+                    output,
+                    options,
+                )?;
+                return Ok(());
+            }
+        }
 
         if self.bytes_to_bytes.is_empty() && self.array_to_array.is_empty() {
             // Fast path if no bytes to bytes or array to array codecs
@@ -904,10 +925,107 @@ impl ArrayCodecTraits for CodecChain {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::num::NonZeroU64;
 
     use super::*;
-    use crate::array::{ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type};
+    use crate::array::codec::array_to_bytes::bytes::BytesCodec;
+    use crate::array::{
+        ArrayBytesFixedDisjointView, ArraySubset, ArraySubsetTraits, ChunkShapeTraits, data_type,
+    };
+    use unsafe_cell_slice::UnsafeCellSlice;
+
+    #[derive(Debug)]
+    struct TestDecodePassthrough;
+
+    impl ExtensionName for TestDecodePassthrough {
+        fn name(&self, _version: ZarrVersion) -> Option<Cow<'static, str>> {
+            None
+        }
+    }
+
+    impl CodecTraits for TestDecodePassthrough {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn configuration(
+            &self,
+            _version: ZarrVersion,
+            _options: &CodecMetadataOptions,
+        ) -> Option<Configuration> {
+            None
+        }
+
+        fn partial_decoder_capability(&self) -> PartialDecoderCapability {
+            PartialDecoderCapability {
+                partial_read: false,
+                partial_decode: false,
+            }
+        }
+
+        fn partial_encoder_capability(&self) -> PartialEncoderCapability {
+            PartialEncoderCapability {
+                partial_encode: false,
+            }
+        }
+    }
+
+    impl ArrayCodecTraits for TestDecodePassthrough {
+        fn recommended_concurrency(
+            &self,
+            _shape: &[NonZeroU64],
+            _data_type: &DataType,
+        ) -> Result<RecommendedConcurrency, CodecError> {
+            Ok(RecommendedConcurrency::new_maximum(1))
+        }
+    }
+
+    impl ArrayToBytesCodecTraits for TestDecodePassthrough {
+        fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+            self
+        }
+
+        fn encoded_representation(
+            &self,
+            shape: &[NonZeroU64],
+            data_type: &DataType,
+            fill_value: &FillValue,
+        ) -> Result<BytesRepresentation, CodecError> {
+            BytesCodec::default().encoded_representation(shape, data_type, fill_value)
+        }
+
+        fn is_decode_passthrough(
+            &self,
+            _shape: &[NonZeroU64],
+            _data_type: &DataType,
+            _fill_value: &FillValue,
+        ) -> Result<bool, CodecError> {
+            Ok(true)
+        }
+
+        fn encode<'a>(
+            &self,
+            bytes: ArrayBytes<'a>,
+            shape: &[NonZeroU64],
+            data_type: &DataType,
+            fill_value: &FillValue,
+            options: &CodecOptions,
+        ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+            BytesCodec::default().encode(bytes, shape, data_type, fill_value, options)
+        }
+
+        fn decode<'a>(
+            &self,
+            _bytes: ArrayBytesRaw<'a>,
+            _shape: &[NonZeroU64],
+            _data_type: &DataType,
+            _fill_value: &FillValue,
+            _options: &CodecOptions,
+        ) -> Result<ArrayBytes<'a>, CodecError> {
+            panic!("pass-through array-to-bytes decode must be skipped")
+        }
+    }
 
     #[cfg(feature = "transpose")]
     const JSON_TRANSPOSE1: &str = r#"{
@@ -1107,6 +1225,43 @@ mod tests {
             &decoded_region,
             decoded_partial_chunk_true,
         );
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn codec_chain_decode_into_arbitrary_passthrough() {
+        use crate::array::codec::bytes_to_bytes::zstd::ZstdCodec;
+
+        let shape = ChunkShape::from(vec![NonZeroU64::new(8).unwrap()]);
+        let decoded = (0..8u16).flat_map(u16::to_ne_bytes).collect::<Vec<_>>();
+        let encoded = zstd::bulk::compress(&decoded, 1).unwrap();
+        let codec = CodecChain::new(
+            vec![],
+            Arc::new(TestDecodePassthrough),
+            vec![Arc::new(ZstdCodec::new(1, false))],
+        );
+        let mut output = vec![0; decoded.len()];
+        let mut view = unsafe {
+            ArrayBytesFixedDisjointView::new(
+                UnsafeCellSlice::new(&mut output),
+                size_of::<u16>(),
+                &[8],
+                ArraySubset::new_with_shape(vec![8]),
+            )
+        }
+        .unwrap();
+
+        codec
+            .decode_into(
+                Cow::Owned(encoded),
+                &shape,
+                &data_type::uint16(),
+                &FillValue::from(0u16),
+                (&mut view).into(),
+                &CodecOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(output, decoded);
     }
 
     #[cfg(feature = "pcodec")]

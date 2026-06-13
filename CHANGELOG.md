@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 
 ### Changed
+- **Breaking**: Bump `zarrs_codec` to 0.3.1 and `zarrs_data_type` to 0.9.1
+  - Decode fixed-size bytes-to-bytes codec output directly into contiguous preallocated array output when the array-to-bytes codec declares decode pass-through
+  - Reuse Zstd decompression contexts for direct decoding into preallocated output
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
@@ -11,6 +12,27 @@ use zarrs_codec::{
     PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
 };
 use zarrs_metadata::Configuration;
+
+thread_local! {
+    static ZSTD_DECOMPRESSOR: RefCell<Option<zstd::bulk::Decompressor<'static>>> =
+        const { RefCell::new(None) };
+}
+
+fn decompress_to_buffer(encoded_value: &[u8], output: &mut [u8]) -> std::io::Result<usize> {
+    ZSTD_DECOMPRESSOR.with(|decompressor| {
+        if let Ok(mut decompressor) = decompressor.try_borrow_mut() {
+            if decompressor.is_none() {
+                *decompressor = Some(zstd::bulk::Decompressor::new()?);
+            }
+            decompressor
+                .as_mut()
+                .unwrap()
+                .decompress_to_buffer(encoded_value, output)
+        } else {
+            zstd::bulk::decompress_to_buffer(encoded_value, output)
+        }
+    })
+}
 
 /// A `zstd` codec implementation.
 #[derive(Clone, Debug)]
@@ -133,6 +155,39 @@ impl BytesToBytesCodecTraits for ZstdCodec {
         }
     }
 
+    fn decode_into(
+        &self,
+        encoded_value: ArrayBytesRaw<'_>,
+        decoded_representation: &BytesRepresentation,
+        output: &mut [u8],
+        _options: &CodecOptions,
+    ) -> Result<usize, CodecError> {
+        let decoded_len = decompress_to_buffer(&encoded_value, output)?;
+        match decoded_representation {
+            BytesRepresentation::FixedSize(size)
+                if decoded_len != usize::try_from(*size).unwrap() =>
+            {
+                Err(zarrs_codec::InvalidBytesLengthError::new(
+                    decoded_len,
+                    usize::try_from(*size).unwrap(),
+                )
+                .into())
+            }
+            BytesRepresentation::BoundedSize(size)
+                if decoded_len > usize::try_from(*size).unwrap() =>
+            {
+                Err(zarrs_codec::InvalidBytesLengthError::new(
+                    decoded_len,
+                    usize::try_from(*size).unwrap(),
+                )
+                .into())
+            }
+            BytesRepresentation::FixedSize(_)
+            | BytesRepresentation::BoundedSize(_)
+            | BytesRepresentation::UnboundedSize => Ok(decoded_len),
+        }
+    }
+
     fn encoded_representation(
         &self,
         decoded_representation: &BytesRepresentation,
@@ -148,5 +203,94 @@ impl BytesToBytesCodecTraits for ZstdCodec {
                 let blocks_overhead = BLOCK_OVERHEAD * size.div_ceil(MIN_WINDOW_SIZE);
                 BytesRepresentation::BoundedSize(size + HEADER_TRAILER_OVERHEAD + blocks_overhead)
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_into() {
+        let codec = ZstdCodec::new(1, false);
+        let decoded = b"decode directly into this buffer".repeat(32);
+        let encoded = codec
+            .encode(Cow::Borrowed(&decoded), &CodecOptions::default())
+            .unwrap();
+
+        let mut output = vec![0; decoded.len()];
+        assert_eq!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::FixedSize(decoded.len() as u64),
+                    &mut output,
+                    &CodecOptions::default(),
+                )
+                .unwrap(),
+            decoded.len()
+        );
+        assert_eq!(output, decoded);
+
+        assert!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::FixedSize(decoded.len() as u64 + 1),
+                    &mut output,
+                    &CodecOptions::default(),
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode_into(
+                    encoded.clone(),
+                    &BytesRepresentation::BoundedSize(decoded.len() as u64 - 1),
+                    &mut output,
+                    &CodecOptions::default(),
+                )
+                .is_err()
+        );
+        assert!(
+            codec
+                .decode_into(
+                    encoded,
+                    &BytesRepresentation::BoundedSize(decoded.len() as u64),
+                    &mut output[..decoded.len() - 1],
+                    &CodecOptions::default(),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn decode_into_parallel() {
+        let codec = Arc::new(ZstdCodec::new(1, false));
+        let decoded = b"parallel decode into".repeat(128);
+        let encoded = codec
+            .encode(Cow::Borrowed(&decoded), &CodecOptions::default())
+            .unwrap()
+            .into_owned();
+
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let codec = codec.clone();
+                let encoded = &encoded;
+                let decoded = &decoded;
+                scope.spawn(move || {
+                    let mut output = vec![0; decoded.len()];
+                    codec
+                        .decode_into(
+                            Cow::Borrowed(encoded),
+                            &BytesRepresentation::FixedSize(decoded.len() as u64),
+                            &mut output,
+                            &CodecOptions::default(),
+                        )
+                        .unwrap();
+                    assert_eq!(&output, decoded);
+                });
+            }
+        });
     }
 }

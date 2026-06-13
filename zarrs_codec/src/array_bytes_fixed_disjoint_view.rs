@@ -134,6 +134,22 @@ impl<'a> ArrayBytesFixedDisjointView<'a> {
         self.contiguous_indices.contiguous_elements_usize() * self.data_type_size
     }
 
+    /// Return the complete view as a mutable slice if it occupies one contiguous region.
+    ///
+    /// # Panics
+    /// Panics if an offset into the internal bytes reference exceeds [`usize::MAX`].
+    #[must_use]
+    pub fn as_mut_slice(&mut self) -> Option<&mut [u8]> {
+        if self.contiguous_linearised_indices.len() != 1 {
+            return None;
+        }
+        let (index, contiguous_elements) = self.contiguous_linearised_indices.iter().next()?;
+        let offset = usize::try_from(index * self.data_type_size as u64).unwrap();
+        let length = usize::try_from(contiguous_elements * self.data_type_size as u64).unwrap();
+        debug_assert_eq!(length, self.bytes_in_subset_len);
+        Some(unsafe { self.bytes.index_mut(offset..offset + length) })
+    }
+
     /// Fill the view with the fill value.
     ///
     /// # Errors
@@ -261,6 +277,7 @@ mod tests {
             }
             .unwrap();
             assert_eq!(view0.shape(), shape);
+            assert!(view0.as_mut_slice().is_none());
 
             view0.copy_from_slice(&[11, 12, 14, 15]).unwrap();
             assert!(view0.copy_from_slice(&[11, 12, 14, 15, 255]).is_err()); // wrong length
@@ -292,6 +309,7 @@ mod tests {
                 )
             }
             .unwrap();
+            assert_eq!(view1.as_mut_slice().unwrap(), &[7, 8]);
             view1.fill(&[255]).unwrap();
             assert!(view1.fill(&[255, 255]).is_err()); // invalid fill value
         }
