@@ -199,8 +199,9 @@ fn bench_read_disparate_parallel(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // bench_read_partial_aligned,
-    // bench_read_partial_unaligned,
+    bench_read_full,
+    bench_read_partial_aligned,
+    bench_read_partial_unaligned,
     bench_read_disparate_parallel,
 );
 criterion_main!(benches);
