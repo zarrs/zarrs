@@ -11,10 +11,11 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
-    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
-    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
-    PartialEncoderCapability, RecommendedConcurrency, decode_into_array_bytes_target,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
+    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -37,18 +38,24 @@ type BytesRepresentations = Vec<BytesRepresentation>;
 ///    - preceding the first codec with `partial_decode` true and `partial_read` false.
 #[derive(Debug, Clone)]
 pub struct CodecChain {
-    array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
-    array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
+    array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
+    array_to_bytes: Arc<dyn UnboundArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     cache_index: Option<usize>, // for partial decoders
+}
+
+/// A codec chain bound to an array data type and fill value.
+#[derive(Debug)]
+pub struct CodecChainBound {
+    codec: Arc<dyn ArrayToBytesCodecTraits>,
 }
 
 impl CodecChain {
     /// Create a new codec chain.
     #[must_use]
     pub fn new(
-        array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
-        array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
+        array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
+        array_to_bytes: Arc<dyn UnboundArrayToBytesCodecTraits>,
         bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     ) -> Self {
         let mut cache_index_must = None;
@@ -108,6 +115,32 @@ impl CodecChain {
         }
     }
 
+    /// Bind this codec chain to an array data type and fill value.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if any array codec does not support its derived context.
+    pub fn with_context(
+        self: Arc<Self>,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<CodecChainBound>, CodecError> {
+        let mut encoded_data_type = data_type.clone();
+        let mut encoded_fill_value = fill_value.clone();
+        for codec in &self.array_to_array {
+            let bound = codec
+                .clone()
+                .with_context(encoded_data_type, encoded_fill_value)?;
+            encoded_data_type = bound.encoded_data_type().clone();
+            encoded_fill_value = bound.encoded_fill_value().clone();
+        }
+        self.array_to_bytes
+            .clone()
+            .with_context(encoded_data_type, encoded_fill_value)?;
+
+        let codec = UnboundArrayToBytesCodecTraits::with_context(self, data_type, fill_value)?;
+        Ok(Arc::new(CodecChainBound { codec }))
+    }
+
     /// Create a new codec chain from a list of metadata.
     ///
     /// # Errors
@@ -116,8 +149,8 @@ impl CodecChain {
     ///  - no array to bytes codec is supplied, or
     ///  - more than one array to bytes codec is supplied.
     pub fn from_metadata(metadatas: &[MetadataV3]) -> Result<Self, PluginCreateError> {
-        let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
-        let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
+        let mut array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>> = vec![];
+        let mut array_to_bytes: Option<Arc<dyn UnboundArrayToBytesCodecTraits>> = None;
         let mut bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>> = vec![];
         for metadata in metadatas {
             let codec = match Codec::from_metadata(metadata) {
@@ -159,19 +192,21 @@ impl CodecChain {
     /// Each codec in the chain is given the opportunity to read its own options type
     /// from `opts` and return a new instance. Codecs that do not recognise any option
     /// in `opts` are returned unchanged (default behaviour).
-    #[must_use]
-    pub fn with_codec_specific_options(self, opts: &zarrs_codec::CodecSpecificOptions) -> Self {
-        Self::new(
+    pub fn with_codec_specific_options(
+        self,
+        opts: &zarrs_codec::CodecSpecificOptions,
+    ) -> Result<Self, CodecError> {
+        Ok(Self::new(
             self.array_to_array
                 .into_iter()
                 .map(|c| c.with_codec_specific_options(opts))
-                .collect(),
-            self.array_to_bytes.with_codec_specific_options(opts),
+                .collect::<Result<_, _>>()?,
+            self.array_to_bytes.with_codec_specific_options(opts)?,
             self.bytes_to_bytes
                 .into_iter()
                 .map(|c| c.with_codec_specific_options(opts))
                 .collect(),
-        )
+        ))
     }
 
     /// Create codec chain metadata.
@@ -215,13 +250,13 @@ impl CodecChain {
 
     /// Get the array to array codecs
     #[must_use]
-    pub fn array_to_array_codecs(&self) -> &[Arc<dyn ArrayToArrayCodecTraits>] {
+    pub fn array_to_array_codecs(&self) -> &[Arc<dyn UnboundArrayToArrayCodecTraits>] {
         &self.array_to_array
     }
 
     /// Get the array to bytes codec
     #[must_use]
-    pub fn array_to_bytes_codec(&self) -> &Arc<dyn ArrayToBytesCodecTraits> {
+    pub fn array_to_bytes_codec(&self) -> &Arc<dyn UnboundArrayToBytesCodecTraits> {
         &self.array_to_bytes
     }
 
@@ -276,6 +311,133 @@ impl CodecChain {
             self.get_bytes_representations(shape, data_type, fill_value)?
         };
         Ok((array_representations, bytes_representations))
+    }
+}
+
+impl ArrayCodecTraits for CodecChainBound {
+    fn data_type(&self) -> &DataType {
+        self.codec.data_type()
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        self.codec.fill_value()
+    }
+
+    fn recommended_concurrency(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        self.codec.recommended_concurrency(shape)
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for CodecChainBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self
+    }
+
+    fn encoded_representation(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentation, CodecError> {
+        self.codec.encoded_representation(shape)
+    }
+
+    fn partial_decode_granularity(
+        &self,
+        decoded_shape: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        self.codec.partial_decode_granularity(decoded_shape)
+    }
+
+    fn encode<'a>(
+        &self,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        self.codec.encode(bytes, shape, options)
+    }
+
+    fn decode<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        self.codec.decode(bytes, shape, options)
+    }
+
+    fn compact<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        self.codec.compact(bytes, shape, options)
+    }
+
+    fn decode_into(
+        &self,
+        bytes: ArrayBytesRaw<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        self.codec.decode_into(bytes, shape, output_target, options)
+    }
+
+    fn partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        self.codec
+            .clone()
+            .partial_decoder(input_handle, shape, options)
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        self.codec
+            .clone()
+            .partial_encoder(input_output_handle, shape, options)
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        self.codec
+            .clone()
+            .async_partial_decoder(input_handle, shape, options)
+            .await
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        self.codec
+            .clone()
+            .async_partial_encoder(input_output_handle, shape, options)
+            .await
     }
 }
 
@@ -352,9 +514,9 @@ impl CodecTraits for CodecChain {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for CodecChain {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self as Arc<dyn ArrayToBytesCodecTraits>
+impl UnboundArrayToBytesCodecTraits for CodecChain {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
     fn partial_decode_granularity(&self, shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {

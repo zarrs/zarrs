@@ -75,8 +75,8 @@ pub use sharding_codec::ShardingCodec;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
-    CodecOptions, CodecPluginV3, CodecTraitsV3,
+    ArrayCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions, CodecPluginV3,
+    CodecTraitsV3, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -127,7 +127,7 @@ fn sharding_index_shape(chunks_per_shard: &[NonZeroU64]) -> ChunkShape {
 }
 
 fn compute_index_encoded_size(
-    index_codecs: &dyn ArrayToBytesCodecTraits,
+    index_codecs: &dyn UnboundArrayToBytesCodecTraits,
     sharding_index_shape: &[NonZeroU64],
 ) -> Result<u64, CodecError> {
     let bytes_representation = index_codecs.encoded_representation(
@@ -148,7 +148,7 @@ fn compute_index_encoded_size(
 fn decode_shard_index(
     encoded_shard_index: &[u8],
     index_shape: &[NonZeroU64],
-    index_codecs: &dyn ArrayToBytesCodecTraits,
+    index_codecs: &dyn UnboundArrayToBytesCodecTraits,
     options: &CodecOptions,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
@@ -291,7 +291,9 @@ mod tests {
     use crate::array::codec::bytes_to_bytes::test_unbounded::TestUnboundedCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
     use zarrs_chunk_grid::Indexer;
-    use zarrs_codec::{ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecSpecificOptions};
+    use zarrs_codec::{
+        BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
+    };
 
     fn get_concurrent_target(parallel: bool) -> usize {
         if parallel {
@@ -418,6 +420,7 @@ mod tests {
             .with_codec_specific_options(&CodecSpecificOptions::default().with_option(
                 ShardingCodecOptions::default().with_subchunk_write_order(subchunk_write_order),
             ))
+            .unwrap()
             .encode(
                 bytes.clone(),
                 &chunk_shape,

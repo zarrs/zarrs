@@ -53,7 +53,7 @@ macro_rules! vlen_v2_codec {
         use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
         use zarrs_codec::{
             ArrayCodecTraits,
-            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits,
+            ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, UnboundArrayToBytesCodecTraits,
             BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
             CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
             PartialEncoderCapability,
@@ -128,9 +128,9 @@ macro_rules! vlen_v2_codec {
             async_trait::async_trait
         )]
         #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-        impl ArrayToBytesCodecTraits for $struct {
-            fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-                self as Arc<dyn ArrayToBytesCodecTraits>
+        impl UnboundArrayToBytesCodecTraits for $struct {
+            fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+                self as Arc<dyn UnboundArrayToBytesCodecTraits>
             }
 
             fn encode<'a>(

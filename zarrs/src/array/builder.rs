@@ -17,8 +17,8 @@ use crate::config::global_config;
 use crate::node::NodePath;
 use zarrs_chunk_key_encoding::ChunkKeyEncoding;
 use zarrs_codec::{
-    ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions,
-    CodecSpecificOptions,
+    BytesToBytesCodecTraits, CodecOptions, CodecSpecificOptions, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::v3::{AdditionalFieldsV3, MetadataV3};
 use zarrs_metadata::{ChunkKeySeparator, IntoDimensionName};
@@ -107,9 +107,9 @@ pub struct ArrayBuilder {
     /// Fill value.
     fill_value: ArrayBuilderFillValue,
     /// The array-to-array codecs.
-    array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+    array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     /// The array-to-bytes codec.
-    array_to_bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
+    array_to_bytes_codec: Option<Arc<dyn UnboundArrayToBytesCodecTraits>>,
     /// The bytes-to-bytes codecs. If [`None`], chooses a default based on the data type.
     bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     /// Storage transformer chain.
@@ -313,7 +313,7 @@ impl ArrayBuilder {
     /// If left unmodified, the array will have no array-to-array codecs.
     pub fn array_to_array_codecs(
         &mut self,
-        array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+        array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     ) -> &mut Self {
         self.array_to_array_codecs = array_to_array_codecs;
         self
@@ -324,7 +324,7 @@ impl ArrayBuilder {
     /// If left unmodified, the array will default to using the `bytes` codec with native endian encoding.
     pub fn array_to_bytes_codec(
         &mut self,
-        array_to_bytes_codec: Arc<dyn ArrayToBytesCodecTraits>,
+        array_to_bytes_codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     ) -> &mut Self {
         self.array_to_bytes_codec = Some(array_to_bytes_codec);
         self
@@ -588,7 +588,7 @@ impl ArrayBuilder {
             Array::new_with_codec_chain(storage, path, array_metadata_v3, codec_chain)?
                 .with_metadata_options(self.metadata_options)
                 .with_codec_options(self.codec_options)
-                .with_codec_specific_options(&self.codec_specific_options),
+                .with_codec_specific_options(&self.codec_specific_options)?,
         )
     }
 

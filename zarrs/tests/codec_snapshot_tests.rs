@@ -41,7 +41,9 @@ use zarrs::array::{
     data_type,
 };
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
-use zarrs_codec::{ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, BytesToBytesCodecTraits};
+use zarrs_codec::{
+    BytesToBytesCodecTraits, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_plugin::ExtensionAliasesV3;
 
@@ -182,9 +184,9 @@ pub struct TestConfig {
     /// Chunk shape (outer chunks for sharding)
     pub chunk_shape: Vec<u64>,
     /// Optional array-to-array codecs
-    pub array_to_array_codecs: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
+    pub array_to_array_codecs: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>>,
     /// Optional array-to-bytes codec (None = use default for data type)
-    pub array_to_bytes_codec: Option<Arc<dyn ArrayToBytesCodecTraits>>,
+    pub array_to_bytes_codec: Option<Arc<dyn UnboundArrayToBytesCodecTraits>>,
     /// Optional bytes-to-bytes codecs
     pub bytes_to_bytes_codecs: Vec<Arc<dyn BytesToBytesCodecTraits>>,
     /// Chunk grid name for snapshot naming (e.g., "regular", "rectangular")
@@ -803,6 +805,16 @@ impl SnapshotPath {
         }
         None
     }
+
+    /// Return whether this test path has any unsupported marker.
+    #[must_use]
+    pub fn has_unsupported(&self, base_dir: &Path) -> bool {
+        base_dir
+            .join("unsupported")
+            .join(self.relative_path())
+            .read_dir()
+            .is_ok_and(|mut entries| entries.next().is_some())
+    }
 }
 
 /// Status of an existing snapshot
@@ -889,9 +901,12 @@ pub fn run_codec_test(config: &TestConfig, output_dir: &Path) -> CodecTestResult
     let array = match builder.build(store.clone(), "/") {
         Ok(a) => a,
         Err(e) => {
-            return CodecTestResult::Unsupported {
-                reason: format!("Array creation failed: {e}"),
+            let reason = if let zarrs::array::ArrayCreateError::CodecError(e) = e {
+                format!("Data storage failed: {e}")
+            } else {
+                format!("Array creation failed: {e}")
             };
+            return CodecTestResult::Unsupported { reason };
         }
     };
 
@@ -1231,7 +1246,9 @@ pub fn run_and_verify_snapshot_v2(config: &TestConfig, snapshot_path: &SnapshotP
                         );
                     }
                     None => {
-                        panic!(
+                        assert!(
+                            reason.starts_with("Data storage failed:")
+                                && snapshot_path.has_unsupported(&snapshots),
                             "Test {display_path} is unsupported ({reason}). Run with UPDATE_SNAPSHOTS=1 to record this."
                         );
                     }
@@ -1303,8 +1320,8 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 /// A codec instance that can be any of the three codec categories
 pub enum CodecInstance {
-    ArrayToArray(Arc<dyn ArrayToArrayCodecTraits>),
-    ArrayToBytes(Arc<dyn ArrayToBytesCodecTraits>),
+    ArrayToArray(Arc<dyn UnboundArrayToArrayCodecTraits>),
+    ArrayToBytes(Arc<dyn UnboundArrayToBytesCodecTraits>),
     BytesToBytes(Arc<dyn BytesToBytesCodecTraits>),
 }
 

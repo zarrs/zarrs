@@ -137,14 +137,8 @@ impl<TStorage: ?Sized + AsyncWritableStorageTraits + 'static> AsyncArrayWriteOps
             self.async_erase_chunk(chunk_indices).await?;
         } else {
             let chunk_encoded = self
-                .codecs()
-                .encode(
-                    chunk_bytes,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .encode(chunk_bytes, &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             let chunk_encoded = Bytes::from(chunk_encoded.into_owned());
             unsafe { self.async_store_encoded_chunk(chunk_indices, chunk_encoded) }.await?;

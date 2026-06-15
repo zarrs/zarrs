@@ -9,9 +9,9 @@ use super::{
 use crate::array::{DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
-    ArrayToArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    ArrayBytes, ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncArrayPartialEncoderTraits};
@@ -21,6 +21,14 @@ use zarrs_metadata::Configuration;
 #[derive(Clone, Debug, Default)]
 pub struct BitroundCodec {
     keepbits: u32,
+}
+
+/// A `bitround` codec implementation.
+#[derive(Clone, Debug, Default)]
+struct BitroundCodecBound {
+    keepbits: u32,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl BitroundCodec {
@@ -84,11 +92,39 @@ impl CodecTraits for BitroundCodec {
     }
 }
 
-impl ArrayCodecTraits for BitroundCodec {
+impl UnboundArrayToArrayCodecTraits for BitroundCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToArrayCodecTraits> {
+        self as Arc<dyn UnboundArrayToArrayCodecTraits>
+    }
+
+    fn with_context(
+        self: Arc<Self>,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError> {
+        data_type.codec_bitround()?;
+        Ok(Arc::new(BitroundCodecBound {
+            keepbits: self.keepbits,
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for BitroundCodecBound {
+    /// Return the decoded data type bound to this codec.
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    /// Return the decoded fill value bound to this codec.
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // TODO: bitround is well suited to multithread, when is it optimal to kick in?
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -100,7 +136,7 @@ impl ArrayCodecTraits for BitroundCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToArrayCodecTraits for BitroundCodec {
+impl ArrayToArrayCodecTraits for BitroundCodecBound {
     fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToArrayCodecTraits> {
         self as Arc<dyn ArrayToArrayCodecTraits>
     }

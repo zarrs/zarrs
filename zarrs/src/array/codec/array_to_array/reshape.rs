@@ -150,7 +150,8 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits, DataType, FillValue, data_type};
     use zarrs_codec::{
-        ArrayPartialDecoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits, CodecOptions,
+        ArrayPartialDecoderTraits, CodecOptions, UnboundArrayToArrayCodecTraits,
+        UnboundArrayToBytesCodecTraits,
     };
 
     fn nz(value: u64) -> NonZeroU64 {

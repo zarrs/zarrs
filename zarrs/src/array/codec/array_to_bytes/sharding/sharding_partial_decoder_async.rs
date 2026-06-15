@@ -17,8 +17,8 @@ use crate::array::{
     DataTypeSize, IncompatibleDimensionalityError, Indexer, IndexerError, ravel_indices,
 };
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
-    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions,
+    AsyncArrayPartialDecoderTraits, AsyncByteIntervalPartialDecoder,
+    AsyncBytesPartialDecoderTraits, CodecError, CodecOptions, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_plugin::ExtensionAliasesV3;
 use zarrs_storage::StorageError;

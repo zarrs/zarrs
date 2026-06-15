@@ -13,7 +13,8 @@ use zarrs::array::{
     DataType, ElementOwned, Indexer, IndexerError, data_type,
 };
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecOptions,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;
 
@@ -243,7 +244,7 @@ fn indexer_array_subsets_vec() {
 
 #[async_generic::async_generic]
 fn indexer_partial_decode_impl<T: ElementOwned>(
-    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     data_type: DataType,
@@ -304,7 +305,7 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
 
 // #[async_generic::async_generic]
 fn indexer_partial_encode_impl<T: ElementOwned>(
-    codec: Arc<dyn ArrayToBytesCodecTraits>,
+    codec: Arc<dyn UnboundArrayToBytesCodecTraits>,
     shape: &[NonZeroU64],
     indexer: &dyn Indexer,
     elements_partial_encode: &[T],
@@ -396,7 +397,7 @@ async fn async_indexer_array_subsets_fixed() {
         12.0, 13.0, 140.0, 150.0, //
     ];
 
-    let codecs: Vec<(Arc<dyn ArrayToBytesCodecTraits>, bool)> = vec![
+    let codecs: Vec<(Arc<dyn UnboundArrayToBytesCodecTraits>, bool)> = vec![
         (Arc::new(BytesCodec::little()), true),
         (
             Arc::new(CodecChain::new(
@@ -524,7 +525,7 @@ async fn async_indexer_array_subsets_variable() {
         "140.0",
         "150.0", //
     ];
-    let codecs: Vec<(Arc<dyn ArrayToBytesCodecTraits>, bool)> = vec![
+    let codecs: Vec<(Arc<dyn UnboundArrayToBytesCodecTraits>, bool)> = vec![
         (Arc::new(VlenCodec::default()), true),
         (
             Arc::new(CodecChain::new(

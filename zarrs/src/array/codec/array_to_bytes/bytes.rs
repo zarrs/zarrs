@@ -119,8 +119,8 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, Endianness, FillValue, data_type,
     };
     use zarrs_codec::{
-        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions,
-        CodecTraits,
+        BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecTraits,
+        UnboundArrayToBytesCodecTraits,
     };
 
     #[test]

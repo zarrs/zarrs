@@ -118,15 +118,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
                 self.chunk_key(chunk_indices),
             ));
             let bytes = self
-                .codecs
-                .clone()
-                .async_partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .async_partial_decoder(input_handle, &chunk_shape, options)
                 .await?
                 .partial_decode(chunk_subset, options)
                 .await?
@@ -301,14 +294,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
-                .codecs()
-                .decode(
-                    Cow::Owned(chunk_encoded.into()),
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             bytes.validate(chunk_shape.num_elements_u64(), self.data_type())?;
             Ok(Some(T::from_array_bytes(
@@ -533,15 +520,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
             self.chunk_key(chunk_indices),
         ));
         Ok(self
-            .codecs
-            .clone()
-            .async_partial_decoder(
-                input_handle,
-                &self.chunk_shape(chunk_indices)?,
-                self.data_type(),
-                self.fill_value(),
-                options,
-            )
+            .codecs_bound()
+            .async_partial_decoder(input_handle, &self.chunk_shape(chunk_indices)?, options)
             .await?)
     }
 }
@@ -569,12 +549,10 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
-            self.codecs()
+            self.codecs_bound()
                 .decode_into(
                     Cow::Owned(chunk_encoded.into()),
                     &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
                     output_target,
                     options,
                 )
@@ -855,15 +833,8 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> Array<TStorage> {
                 self.chunk_key(chunk_indices),
             ));
 
-            self.codecs
-                .clone()
-                .async_partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+            self.codecs_bound()
+                .async_partial_decoder(input_handle, &chunk_shape, options)
                 .await?
                 .partial_decode_into(chunk_subset, output_target, options)
                 .await?;

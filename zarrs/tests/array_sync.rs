@@ -7,7 +7,8 @@ use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits, CodecOptions,
+    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
+    UnboundArrayToBytesCodecTraits,
 };
 
 #[allow(clippy::single_range_in_vec_init)]

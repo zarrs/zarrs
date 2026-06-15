@@ -36,13 +36,9 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
             None => Arc::new(Mutex::new(None)),
         };
         let chunk_shape = validate_chunk_indices(array, chunk_indices)?;
-        Ok(array.codecs().partial_decoder(
-            input,
-            &chunk_shape,
-            array.data_type(),
-            array.fill_value(),
-            options,
-        )?)
+        Ok(array
+            .codecs_bound()
+            .partial_decoder(input, &chunk_shape, options)?)
     }
 
     fn retrieve_chunk_bytes_if_exists<TStorage, C>(
@@ -67,14 +63,8 @@ impl ChunkCacheType for ChunkCacheTypeEncoded {
             .as_ref()
             .map(|encoded| {
                 let bytes = array
-                    .codecs()
-                    .decode(
-                        Cow::Borrowed(encoded),
-                        &chunk_shape,
-                        array.data_type(),
-                        array.fill_value(),
-                        options,
-                    )
+                    .codecs_bound()
+                    .decode(Cow::Borrowed(encoded), &chunk_shape, options)
                     .map_err(ArrayError::CodecError)?;
                 bytes.validate(chunk_shape.num_elements_u64(), array.data_type())?;
                 Ok(Arc::new(bytes.into_owned()))

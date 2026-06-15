@@ -71,7 +71,8 @@ pub use zarrs_codec::{
     BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesRepresentation,
     BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions, CodecOptions,
     CodecSpecificOptions, CodecTraits, CodecTraitsV2, CodecTraitsV3, RecommendedConcurrency,
-    StoragePartialDecoder, copy_fill_value_into, update_array_bytes,
+    StoragePartialDecoder, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+    copy_fill_value_into, update_array_bytes,
 };
 #[cfg(feature = "async")]
 pub use zarrs_codec::{
@@ -100,7 +101,7 @@ pub use self::array_ops::{ArrayMutOps, ArrayOps, ArrayReadOps, ArrayUpdateOps, A
 #[cfg(feature = "async")]
 pub use self::array_ops::{AsyncArrayReadOps, AsyncArrayUpdateOps, AsyncArrayWriteOps};
 use self::chunk_grid::RegularChunkGrid;
-pub use self::codec::CodecChain;
+pub use self::codec::{CodecChain, CodecChainBound};
 pub use self::element::{Element, ElementError, ElementOwned};
 pub use self::from_array_bytes::FromArrayBytes;
 pub use self::into_array_bytes::IntoArrayBytes;
@@ -358,10 +359,10 @@ pub fn chunk_shape_to_array_shape(chunk_shape: &[std::num::NonZeroU64]) -> Array
 /// The key traits for each extension type are:
 /// - Data types ([`zarrs_data_type`]): [`DataTypeTraits`], [`DataTypeTraitsV2`], [`DataTypeTraitsV3`]
 /// - Codecs ([`zarrs_codec`]): [`CodecTraits`], [`CodecTraitsV2`], [`CodecTraitsV3`])
-///   - Array-to-array codecs: [`ArrayCodecTraits`] + [`ArrayToArrayCodecTraits`]
+///   - Array-to-array codecs: [`UnboundArrayToArrayCodecTraits`] and bound [`ArrayToArrayCodecTraits`]
 ///     - [`ArrayPartialEncoderTraits`], [`AsyncArrayPartialEncoderTraits`]
 ///     - [`ArrayPartialDecoderTraits`], [`AsyncArrayPartialDecoderTraits`]
-///   - Array-to-bytes codecs: [`ArrayCodecTraits`] + [`ArrayToBytesCodecTraits`]
+///   - Array-to-bytes codecs: [`UnboundArrayToBytesCodecTraits`] and bound [`ArrayToBytesCodecTraits`]
 ///     - [`BytesPartialEncoderTraits`], [`AsyncBytesPartialEncoderTraits`]
 ///     - [`BytesPartialDecoderTraits`], [`AsyncBytesPartialDecoderTraits`]
 ///   - Bytes-to-bytes codecs: [`BytesToBytesCodecTraits`]
@@ -395,6 +396,8 @@ pub struct Array<TStorage: ?Sized> {
     fill_value: FillValue,
     /// Specifies a list of codecs to be used for encoding and decoding chunks.
     codecs: Arc<CodecChain>,
+    /// The codec chain bound to this array's data type and fill value.
+    codecs_bound: Arc<CodecChainBound>,
     /// An optional list of storage transformers.
     storage_transformers: StorageTransformerChain,
     /// An optional list of dimension names.
@@ -419,6 +422,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             chunk_key_encoding: self.chunk_key_encoding.clone(),
             fill_value: self.fill_value.clone(),
             codecs: self.codecs.clone(),
+            codecs_bound: self.codecs_bound.clone(),
             storage_transformers: self.storage_transformers.clone(),
             dimension_names: self.dimension_names.clone(),
             metadata: self.metadata.clone(),
@@ -493,6 +497,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 fill_value_metadata: v3.fill_value.clone(),
             }
         })?;
+        let codecs_bound = codecs
+            .clone()
+            .with_context(data_type.clone(), fill_value.clone())?;
 
         // Create storage transformers
         let storage_transformers =
@@ -531,6 +538,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             chunk_key_encoding,
             fill_value,
             codecs,
+            codecs_bound,
             storage_transformers,
             dimension_names: v3.dimension_names.clone(),
             metadata: ArrayMetadata::V3(v3),
@@ -593,6 +601,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
             )
             .map_err(|e| ArrayCreateError::UnsupportedZarrV2Array(e.to_string()))?,
         );
+        let codecs_bound = codecs
+            .clone()
+            .with_context(data_type.clone(), fill_value.clone())?;
         let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
 
         // Create chunk key encoding from V2 dimension separator
@@ -620,6 +631,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
             chunk_key_encoding,
             fill_value,
             codecs,
+            codecs_bound,
             storage_transformers,
             dimension_names: None,
             codec_options,
@@ -642,6 +654,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// reconfigured instance. Codecs that do not recognise any option are left unchanged.
     /// This replaces the array's codec chain with the reconfigured version.
     ///
+    /// # Errors
+    /// Returns a [`CodecError`] if a codec cannot be reconfigured or rebound.
+    ///
     /// # Example
     /// ```rust,no_run
     /// # use std::sync::Arc;
@@ -655,10 +670,17 @@ impl<TStorage: ?Sized> Array<TStorage> {
     /// let array = array.with_codec_specific_options(&opts);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    #[must_use]
-    pub fn with_codec_specific_options(mut self, opts: &CodecSpecificOptions) -> Self {
-        self.codecs = Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts));
-        self
+    pub fn with_codec_specific_options(
+        mut self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<Self, CodecError> {
+        self.codecs =
+            Arc::new(Arc::unwrap_or_clone(self.codecs).with_codec_specific_options(opts)?);
+        self.codecs_bound = self
+            .codecs
+            .clone()
+            .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        Ok(self)
     }
 
     /// Set the metadata options.
@@ -745,11 +767,9 @@ impl<TStorage: ?Sized> Array<TStorage> {
     fn recommended_codec_concurrency(
         &self,
         chunk_shape: &[NonZeroU64],
-        data_type: &DataType,
+        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, ArrayError> {
-        Ok(self
-            .codecs()
-            .recommended_concurrency(chunk_shape, data_type)?)
+        Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
     }
 
     /// Convert the array to Zarr V3.
@@ -769,6 +789,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                     chunk_key_encoding: self.chunk_key_encoding,
                     fill_value: self.fill_value,
                     codecs: self.codecs,
+                    codecs_bound: self.codecs_bound,
                     storage_transformers: self.storage_transformers,
                     dimension_names: self.dimension_names,
                     metadata,
@@ -1001,8 +1022,8 @@ fn create_codec_chain_from_v2(
 ) -> Result<CodecChain, crate::convert::ArrayMetadataV2ToV3Error> {
     use crate::convert::ArrayMetadataV2ToV3Error;
 
-    let mut array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>> = vec![];
-    let mut array_to_bytes: Option<Arc<dyn ArrayToBytesCodecTraits>> = None;
+    let mut array_to_array: Vec<Arc<dyn UnboundArrayToArrayCodecTraits>> = vec![];
+    let mut array_to_bytes: Option<Arc<dyn UnboundArrayToBytesCodecTraits>> = None;
     let mut bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>> = vec![];
 
     // Insert transpose for F-order arrays

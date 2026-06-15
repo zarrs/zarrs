@@ -10,9 +10,21 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         self
     }
 
-    pub fn set_codec_specific_options(&mut self, opts: &CodecSpecificOptions) -> &mut Self {
-        self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts));
-        self
+    /// Reconfigure and rebind the codec chain.
+    ///
+    /// # Errors
+    /// Returns a [`CodecError`] if a codec cannot be reconfigured or rebound.
+    pub fn set_codec_specific_options(
+        &mut self,
+        opts: &CodecSpecificOptions,
+    ) -> Result<&mut Self, CodecError> {
+        let codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts)?);
+        let codecs_bound = codecs
+            .clone()
+            .with_context(self.data_type.clone(), self.fill_value.clone())?;
+        self.codecs = codecs;
+        self.codecs_bound = codecs_bound;
+        Ok(self)
     }
 
     pub fn set_metadata_options(&mut self, metadata_options: ArrayMetadataOptions) -> &mut Self {

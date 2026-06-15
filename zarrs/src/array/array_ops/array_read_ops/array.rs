@@ -57,12 +57,10 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             .get(&self.chunk_key(chunk_indices))
             .map_err(ArrayError::StorageError)?;
         if let Some(chunk_encoded) = chunk_encoded {
-            self.codecs()
+            self.codecs_bound()
                 .decode_into(
                     Cow::Owned(chunk_encoded.into()),
                     &self.chunk_shape(chunk_indices)?,
-                    self.data_type(),
-                    self.fill_value(),
                     output_target,
                     options,
                 )
@@ -124,15 +122,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 self.chunk_key(chunk_indices),
             ));
 
-            self.codecs
-                .clone()
-                .partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )?
+            self.codecs_bound()
+                .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode(chunk_subset, options)?
                 .into_owned()
         };
@@ -168,15 +159,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 storage_transformer,
                 self.chunk_key(chunk_indices),
             ));
-            self.codecs
-                .clone()
-                .partial_decoder(
-                    input_handle,
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )?
+            self.codecs_bound()
+                .partial_decoder(input_handle, &chunk_shape, options)?
                 .partial_decode_into(chunk_subset, output_target, options)?;
             Ok(())
         }
@@ -420,14 +404,8 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         if let Some(chunk_encoded) = chunk_encoded {
             let chunk_shape = self.chunk_shape(chunk_indices)?;
             let bytes = self
-                .codecs()
-                .decode(
-                    Cow::Owned(chunk_encoded.into()),
-                    &chunk_shape,
-                    self.data_type(),
-                    self.fill_value(),
-                    options,
-                )
+                .codecs_bound()
+                .decode(Cow::Owned(chunk_encoded.into()), &chunk_shape, options)
                 .map_err(ArrayError::CodecError)?;
             Ok(Some(T::from_array_bytes(
                 bytes.into_owned(),
@@ -474,11 +452,9 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
             storage_transformer,
             self.chunk_key(chunk_indices),
         ));
-        Ok(self.codecs.clone().partial_decoder(
+        Ok(self.codecs_bound().partial_decoder(
             input_handle,
             &self.chunk_shape(chunk_indices)?,
-            self.data_type(),
-            self.fill_value(),
             options,
         )?)
     }

@@ -50,6 +50,9 @@ pub enum ArrayCreateError {
     /// Error creating codecs.
     #[error(transparent)]
     CodecsCreateError(PluginCreateError),
+    /// Error binding codecs to the array data type and fill value.
+    #[error(transparent)]
+    CodecError(#[from] CodecError),
     /// Storage transformer creation error.
     #[error(transparent)]
     StorageTransformersCreateError(PluginCreateError),

@@ -10,7 +10,6 @@ use crate::array::codec::ShardingCodecConfiguration;
 use crate::config::MetadataConvertVersion;
 use crate::convert::array_metadata_v2_to_v3;
 use crate::node::data_key;
-use zarrs_codec::ArrayToBytesCodecTraits;
 use zarrs_metadata::ConfigurationSerialize;
 use zarrs_metadata::v2::DataTypeMetadataV2;
 use zarrs_metadata::v3::MetadataV3;
@@ -46,6 +45,10 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
 
     pub fn codecs(&self) -> Arc<CodecChain> {
         self.codecs.clone()
+    }
+
+    pub fn codecs_bound(&self) -> Arc<CodecChainBound> {
+        self.codecs_bound.clone()
     }
 
     pub fn chunk_grid(&self) -> &ChunkGrid {
@@ -265,7 +268,9 @@ impl<TStorage: ?Sized> ArrayOps for Array<TStorage> {
         chunk_indices: &[u64],
     ) -> Result<ChunkShape, ArrayError> {
         let chunk_shape = self.chunk_shape(chunk_indices)?;
-        Ok(self.codecs().partial_decode_granularity(&chunk_shape)?)
+        Ok(self
+            .codecs_bound()
+            .partial_decode_granularity(&chunk_shape)?)
     }
 
     pub fn subset_all(&self) -> ArraySubset {

@@ -10,7 +10,7 @@ use criterion::{
 use zarrs::array::codec::bytes_to_bytes::blosc::{BloscCompressor, BloscShuffleMode};
 use zarrs::array::codec::{BloscCodec, BytesCodec};
 use zarrs::array::{BytesRepresentation, Element, Endianness, data_type};
-use zarrs_codec::{ArrayToBytesCodecTraits, BytesToBytesCodecTraits, CodecOptions};
+use zarrs_codec::{BytesToBytesCodecTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
 use zarrs_data_type::FillValue;
 
 fn codec_bytes(c: &mut Criterion) {

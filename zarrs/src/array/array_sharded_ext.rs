@@ -5,7 +5,7 @@ use super::{ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodec;
-use zarrs_codec::ArrayToBytesCodecTraits;
+use zarrs_codec::UnboundArrayToBytesCodecTraits;
 use zarrs_metadata_ext::chunk_grid::rectilinear::RunLengthElement;
 use zarrs_plugin::ExtensionAliasesV3;
 

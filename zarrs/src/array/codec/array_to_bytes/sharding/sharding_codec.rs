@@ -25,10 +25,10 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency,
+    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
+    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
+    UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -159,9 +159,9 @@ impl ArrayCodecTraits for ShardingCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl ArrayToBytesCodecTraits for ShardingCodec {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
-        self as Arc<dyn ArrayToBytesCodecTraits>
+impl UnboundArrayToBytesCodecTraits for ShardingCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
     fn partial_decode_granularity(
@@ -174,13 +174,13 @@ impl ArrayToBytesCodecTraits for ShardingCodec {
     fn with_codec_specific_options(
         self: Arc<Self>,
         opts: &CodecSpecificOptions,
-    ) -> Arc<dyn ArrayToBytesCodecTraits> {
+    ) -> Result<Arc<dyn UnboundArrayToBytesCodecTraits>, CodecError> {
         if let Some(sharding_opts) = opts.get_option::<ShardingCodecOptions>() {
             let mut codec = self;
             Arc::make_mut(&mut codec).options = sharding_opts.clone();
-            codec
+            Ok(codec)
         } else {
-            self.into_dyn()
+            Ok(self.into_dyn())
         }
     }
 

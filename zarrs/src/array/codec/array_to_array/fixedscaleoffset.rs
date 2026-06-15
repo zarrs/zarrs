@@ -96,7 +96,7 @@ mod tests {
 
     use crate::array::codec::array_to_array::fixedscaleoffset::FixedScaleOffsetCodec;
     use crate::array::{ArrayBytes, data_type};
-    use zarrs_codec::{ArrayToArrayCodecTraits, CodecOptions};
+    use zarrs_codec::{CodecOptions, UnboundArrayToArrayCodecTraits};
     use zarrs_metadata_ext::codec::fixedscaleoffset::FixedScaleOffsetCodecConfiguration;
 
     #[test]

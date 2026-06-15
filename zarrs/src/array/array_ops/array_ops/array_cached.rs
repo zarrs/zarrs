@@ -35,6 +35,10 @@ impl<TStorage: ?Sized, C> ArrayOps for ArrayCached<TStorage, C> {
         self.array().codecs()
     }
 
+    pub fn codecs_bound(&self) -> Arc<CodecChainBound> {
+        self.array().codecs_bound()
+    }
+
     pub fn chunk_grid(&self) -> &ChunkGrid {
         self.array().chunk_grid()
     }

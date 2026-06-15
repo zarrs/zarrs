@@ -109,8 +109,8 @@ use crate::array::{
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
-    InvalidBytesLengthError,
+    Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError,
+    UnboundArrayToBytesCodecTraits,
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;

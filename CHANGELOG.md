@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased](https://github.com/zarrs/zarrs/compare/zarrs-v0.23.13...HEAD)
 
 ### Added
+- Add `CodecChainBound` and `ArrayOps::codecs_bound` for context-bound codec runtime operations
 - Implement `Default` for `MetadataRetrieveVersion`
 - Add `GroupOpenOptions` and `Group::new_with_metadata_opt`
 - Implement `Copy` for `GroupMetadataOptions`
@@ -19,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These are implemented as inherent traits on `Array` and `ArrayCached`
 
 ### Changed
+- **Breaking**: Make array codec-specific reconfiguration APIs fallible and rebuild the bound codec chain after reconfiguration
+- Bind array codec chains eagerly during array construction and use the bound chain for runtime and representation queries
 - **Breaking**: bump `zarrs_chunk_grid` to 0.6.0
 - **Breaking**: Bump `zarrs_codec` to 0.3.0
   - Improves the API for computing partial decoding granularity
