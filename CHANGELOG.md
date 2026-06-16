@@ -116,6 +116,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Bump `zarrs_codec` to 0.2.1
+- Sharding sync codec partial decoder: coalesce adjacent inner-chunk byte ranges into a single I/O read
+- Bump `unsafe_cell_slice` to 0.2.2
 
 ## [0.23.6] - 2026-03-08
 
