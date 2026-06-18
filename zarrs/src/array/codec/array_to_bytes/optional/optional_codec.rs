@@ -12,8 +12,8 @@ use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
 use crate::array::codec::CodecChain;
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use zarrs_codec::{
-    ArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
-    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecTraits, InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
     RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::{Configuration, DataTypeSize};
@@ -23,6 +23,14 @@ use zarrs_metadata::{Configuration, DataTypeSize};
 pub struct OptionalCodec {
     mask_codecs: Arc<CodecChain>,
     data_codecs: Arc<CodecChain>,
+}
+
+/// An `optional` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct OptionalCodecBound {
+    codec: Arc<OptionalCodec>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl OptionalCodec {
@@ -304,11 +312,46 @@ impl CodecTraits for OptionalCodec {
     }
 }
 
-impl ArrayCodecTraits for OptionalCodec {
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl UnboundArrayToBytesCodecTraits for OptionalCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        if !data_type.is_optional() {
+            return Err(CodecError::Other(
+                "optional codec requires an optional data type".to_string(),
+            ));
+        }
+        Ok(Arc::new(OptionalCodecBound {
+            codec: self,
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for OptionalCodecBound {
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // Sequential processing for now
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -320,24 +363,17 @@ impl ArrayCodecTraits for OptionalCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl UnboundArrayToBytesCodecTraits for OptionalCodec {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+impl ArrayToBytesCodecTraits for OptionalCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        if !data_type.is_optional() {
-            return Err(CodecError::Other(
-                "optional codec requires an optional data type".to_string(),
-            ));
-        }
         let ArrayBytes::Optional(optional_bytes) = bytes else {
             return Err(CodecError::Other(
                 "expected optional array bytes for optional codec".to_string(),
@@ -353,35 +389,32 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
             )));
         }
 
-        let opt = data_type.as_optional().ok_or_else(|| {
+        let opt = self.data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
         })?;
 
         // Encode mask
-        let encoded_mask = self.mask_codecs.encode(
-            ArrayBytes::from(mask.as_ref()),
-            shape,
-            &crate::array::data_type::bool(),
-            &FillValue::from(0u8),
-            options,
-        )?;
+        let encoded_mask = self
+            .codec
+            .mask_codecs
+            .clone()
+            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
+            .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
-        let sparse_data = Self::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
+        let sparse_data = OptionalCodec::extract_sparse_data(&dense_data, &mask, opt.data_type())?;
 
         // Encode sparse data
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
-            let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
-            self.data_codecs.encode(
-                sparse_data,
-                &data_shape,
-                opt.data_type(),
-                &fill_value,
-                options,
-            )?
+            let fill_value = OptionalCodec::create_fill_value_for_inner_type(opt.data_type());
+            self.codec
+                .data_codecs
+                .clone()
+                .with_context(opt.data_type().clone(), fill_value)?
+                .encode(sparse_data, &data_shape, options)?
         } else {
             ArrayBytesRaw::from(vec![])
         };
@@ -400,8 +433,6 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Extract mask length and data length from header
@@ -420,17 +451,16 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let encoded_data = &bytes[16 + mask_len..];
 
         // Decode mask
-        let decoded_mask = self.mask_codecs.decode(
-            encoded_mask.into(),
-            shape,
-            &crate::array::data_type::bool(),
-            &FillValue::from(0u8),
-            options,
-        )?;
+        let decoded_mask = self
+            .codec
+            .mask_codecs
+            .clone()
+            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
+            .decode(encoded_mask.into(), shape, options)?;
         let mask = decoded_mask.into_fixed()?.into_owned();
 
         // Decode data
-        let opt = data_type.as_optional().ok_or_else(|| {
+        let opt = self.data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
         })?;
 
@@ -439,23 +469,20 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let dense_data = if valid_count > 0 {
             let sparse_data = {
                 let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-                let fill_value = Self::create_fill_value_for_inner_type(opt.data_type());
-                self.data_codecs
-                    .decode(
-                        encoded_data.into(),
-                        &data_shape,
-                        opt.data_type(),
-                        &fill_value,
-                        options,
-                    )?
+                let fill_value = OptionalCodec::create_fill_value_for_inner_type(opt.data_type());
+                self.codec
+                    .data_codecs
+                    .clone()
+                    .with_context(opt.data_type().clone(), fill_value)?
+                    .decode(encoded_data.into(), &data_shape, options)?
                     .into_owned()
             };
 
             // Expand sparse data to dense format (supports nested optional types)
-            Self::expand_to_dense(sparse_data, &mask, opt.data_type())?
+            OptionalCodec::expand_to_dense(sparse_data, &mask, opt.data_type())?
         } else {
             // No valid elements - create empty dense data of the right type/size
-            Self::create_empty_dense_data(&mask, opt.data_type())?
+            OptionalCodec::create_empty_dense_data(&mask, opt.data_type())?
         };
 
         // Return ArrayBytes with mask and dense data
@@ -465,29 +492,31 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Header: mask_len (u64) + data_len (u64) = 16 bytes
         const HEADER_SIZE: u64 = 16;
 
         // Get the inner data type (unwrap Optional)
-        let inner_type = data_type.as_optional().ok_or_else(|| {
+        let inner_type = self.data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
         })?;
 
         // Compute mask representation: bool array with same shape
-        let mask_bytes_repr = self.mask_codecs.encoded_representation(
-            shape,
-            &crate::array::data_type::bool(),
-            &FillValue::from(0u8),
-        )?;
+        let mask_bytes_repr = self
+            .codec
+            .mask_codecs
+            .clone()
+            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
+            .encoded_representation(shape)?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
-        let fill_value = Self::create_fill_value_for_inner_type(inner_type.data_type());
-        let data_bytes_repr =
-            self.data_codecs
-                .encoded_representation(shape, inner_type.data_type(), &fill_value)?;
+        let fill_value = OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
+        let data_bytes_repr = self
+            .codec
+            .data_codecs
+            .clone()
+            .with_context(inner_type.data_type().clone(), fill_value)?
+            .encoded_representation(shape)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
         match (mask_bytes_repr.size(), data_bytes_repr.size()) {
@@ -509,7 +538,7 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
 mod tests {
     use super::*;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
-    use zarrs_codec::{CodecOptions, CodecTraits, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{CodecOptions, CodecTraits};
 
     #[test]
     fn codec_optional_configuration() {

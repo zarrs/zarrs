@@ -21,9 +21,9 @@ use super::{
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -31,6 +31,15 @@ use zarrs_metadata_ext::codec::zfp::ZfpMode;
 /// A `zfp` codec implementation.
 #[derive(Clone, Copy, Debug)]
 pub struct ZfpCodec {
+    mode: ZfpMode,
+    write_header: bool,
+}
+
+/// A `zfp` codec implementation.
+#[derive(Clone, Debug)]
+pub(crate) struct ZfpCodecBound {
+    data_type: DataType,
+    fill_value: FillValue,
     mode: ZfpMode,
     write_header: bool,
 }
@@ -155,17 +164,6 @@ impl CodecTraits for ZfpCodec {
     }
 }
 
-impl ArrayCodecTraits for ZfpCodec {
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        // TODO: zfp supports multi thread, when is it optimal to kick in?
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -176,16 +174,52 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        data_type.codec_zfp()?; // Check that the data type is supported by zfp
+        Ok(Arc::new(ZfpCodecBound {
+            data_type,
+            fill_value,
+            mode: self.mode,
+            write_header: self.write_header,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for ZfpCodecBound {
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        // TODO: zfp supports multi thread, when is it optimal to kick in?
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+impl ArrayToBytesCodecTraits for ZfpCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
-        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, data_type)?;
+        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, &self.data_type)?;
         let zfp_type = bytes_promoted.zfp_type();
         let field = ZfpField::new(
             &mut bytes_promoted,
@@ -248,8 +282,6 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         zfp_decode(
@@ -257,7 +289,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
             self.write_header,
             &mut bytes.to_vec(), // FIXME: Does zfp **really** need the encoded value as mutable?
             shape,
-            data_type,
+            &self.data_type,
             false, // FIXME
         )
         .map(ArrayBytes::from)
@@ -266,10 +298,8 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        let encoding = data_type.codec_zfp()?.zfp_encoding();
+        let encoding = self.data_type.codec_zfp()?.zfp_encoding();
         let zfp_type = zfp_native_type_to_sys(encoding.native_type());
 
         let bufsize = {

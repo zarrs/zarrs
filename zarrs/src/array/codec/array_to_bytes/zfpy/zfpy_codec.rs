@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
-use super::super::zfp::ZfpCodec;
+use super::super::zfp::{ZfpCodec};
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
-    CodecTraits, PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
+    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
 use zarrs_metadata_ext::codec::zfp::ZfpMode;
@@ -27,6 +27,11 @@ use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits
 #[derive(Clone, Copy, Debug)]
 pub struct ZfpyCodec {
     inner: ZfpCodec,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ZfpyCodecBound {
+    inner: Arc<dyn ArrayToBytesCodecTraits>,
 }
 
 impl ZfpyCodec {
@@ -120,16 +125,6 @@ impl CodecTraits for ZfpyCodec {
     }
 }
 
-impl ArrayCodecTraits for ZfpyCodec {
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        self.inner.recommended_concurrency(shape, data_type)
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -140,39 +135,68 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        let inner_bound = Arc::new(self.inner.clone()).with_context(data_type, fill_value)?;
+        Ok(Arc::new(ZfpyCodecBound { inner: inner_bound }))
+    }
+}
+
+impl ArrayCodecTraits for ZfpyCodecBound {
+    fn data_type(&self) -> &DataType {
+        self.inner.data_type()
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        self.inner.fill_value()
+    }
+    
+    fn recommended_concurrency(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        self.inner.recommended_concurrency(shape)
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for ZfpyCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        self.inner
-            .encode(bytes, shape, data_type, fill_value, options)
+        self.inner.encode(bytes, shape, options)
     }
 
     fn decode<'a>(
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.inner
-            .decode(bytes, shape, data_type, fill_value, options)
+        self.inner.decode(bytes, shape, options)
     }
 
     fn partial_decoder(
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Arc::new(self.inner).partial_decoder(input_handle, shape, data_type, fill_value, options)
+        self.inner.clone().partial_decoder(input_handle, shape, options)
     }
 
     #[cfg(feature = "async")]
@@ -180,22 +204,17 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Arc::new(self.inner)
-            .async_partial_decoder(input_handle, shape, data_type, fill_value, options)
+        self.inner.clone()
+            .async_partial_decoder(input_handle, shape, options)
             .await
     }
 
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
-        self.inner
-            .encoded_representation(shape, data_type, fill_value)
+        self.inner.encoded_representation(shape)
     }
 }

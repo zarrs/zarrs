@@ -98,7 +98,7 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::element::{Element, ElementOwned};
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions};
     use zarrs_metadata_ext::codec::packbits::PackBitsPaddingEncoding;
 
     #[test]

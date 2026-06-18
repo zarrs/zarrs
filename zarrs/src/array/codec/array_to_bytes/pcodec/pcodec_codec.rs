@@ -14,8 +14,8 @@ use crate::array::{
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, BytesRepresentation, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, BytesRepresentation,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
     PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 use zarrs_metadata::Configuration;
@@ -27,6 +27,14 @@ use zarrs_metadata_ext::codec::pcodec::{
 #[derive(Debug, Clone)]
 pub struct PcodecCodec {
     chunk_config: ChunkConfig,
+}
+
+/// A `pcodec` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct PcodecCodecBound {
+    chunk_config: ChunkConfig,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 fn mode_spec_config_to_pco(mode_spec: PcodecModeSpecConfiguration) -> ModeSpec {
@@ -145,11 +153,41 @@ impl CodecTraits for PcodecCodec {
     }
 }
 
-impl ArrayCodecTraits for PcodecCodec {
+impl UnboundArrayToBytesCodecTraits for PcodecCodec {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
+        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+    }
+
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        data_type.codec_pcodec()?;
+        Ok(Arc::new(PcodecCodecBound {
+            chunk_config: self.chunk_config.clone(),
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for PcodecCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
     fn recommended_concurrency(
         &self,
         _shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, CodecError> {
         // pcodec does not support parallel decode
         Ok(RecommendedConcurrency::new_maximum(1))
@@ -161,21 +199,19 @@ impl ArrayCodecTraits for PcodecCodec {
     async_trait::async_trait
 )]
 #[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
-impl UnboundArrayToBytesCodecTraits for PcodecCodec {
-    fn into_dyn(self: Arc<Self>) -> Arc<dyn UnboundArrayToBytesCodecTraits> {
-        self as Arc<dyn UnboundArrayToBytesCodecTraits>
+impl ArrayToBytesCodecTraits for PcodecCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
     }
 
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
+        let pcodec = self.data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         let bytes = bytes.into_fixed()?;
@@ -207,12 +243,10 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         _shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
+        let pcodec = self.data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         macro_rules! pcodec_decode {
@@ -240,11 +274,9 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         // Get element type via codec support
-        let pcodec = data_type.codec_pcodec()?;
+        let pcodec = self.data_type.codec_pcodec()?;
         let element_type = pcodec.pcodec_element_type();
 
         let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();

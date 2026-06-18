@@ -479,6 +479,19 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let data_type = DataType::from_metadata(&v3.data_type)
             .map_err(ArrayCreateError::DataTypeCreateError)?;
 
+        // Create fill value from V3 metadata
+        let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
+            ArrayCreateError::InvalidFillValueMetadata {
+                data_type_name: v3.data_type.name().to_string(),
+                fill_value_metadata: v3.fill_value.clone(),
+            }
+        })?;
+
+        // Create bound codecs
+        let codecs_bound = codecs
+            .clone()
+            .with_context(data_type.clone(), fill_value.clone())?;
+
         // Create chunk grid
         let chunk_grid = ChunkGrid::from_metadata(&v3.chunk_grid, &v3.shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
@@ -488,18 +501,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
                 v3.shape.len(),
             ));
         }
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
-
-        // Create fill value from V3 metadata
-        let fill_value = data_type.fill_value_v3(&v3.fill_value).map_err(|_| {
-            ArrayCreateError::InvalidFillValueMetadata {
-                data_type_name: v3.data_type.name().to_string(),
-                fill_value_metadata: v3.fill_value.clone(),
-            }
-        })?;
-        let codecs_bound = codecs
-            .clone()
-            .with_context(data_type.clone(), fill_value.clone())?;
+        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs_bound);
 
         // Create storage transformers
         let storage_transformers =
@@ -604,7 +606,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         let codecs_bound = codecs
             .clone()
             .with_context(data_type.clone(), fill_value.clone())?;
-        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs);
+        let subchunk_grid = array_sharded_ext::create_subchunk_grid(&chunk_grid, &codecs_bound);
 
         // Create chunk key encoding from V2 dimension separator
         let chunk_key_encoding =
@@ -720,7 +722,7 @@ impl<TStorage: ?Sized> Array<TStorage> {
         self.chunk_grid = ChunkGrid::from_metadata(&chunk_grid_metadata, &array_shape)
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grid =
-            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, self.codecs.as_ref());
+            array_sharded_ext::create_subchunk_grid(&self.chunk_grid, &self.codecs_bound);
 
         // Update metadata based on version
         match &mut self.metadata {

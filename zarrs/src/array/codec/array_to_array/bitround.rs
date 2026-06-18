@@ -93,7 +93,7 @@ mod tests {
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
     use zarrs_codec::{
-        CodecOptions, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
+        CodecOptions,
     };
 
     #[test]

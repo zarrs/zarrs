@@ -510,13 +510,7 @@ where
         if let Ok(shape) = output_shape {
             let shape = ChunkShape::from(shape);
             self.codec
-                .decode(
-                    chunk_bytes,
-                    &shape,
-                    self.decoded_representation.data_type(),
-                    self.decoded_representation.fill_value(),
-                    options,
-                )
+                .decode(chunk_bytes, &shape, options)
                 .map(ArrayBytes::into_owned)
         } else {
             Ok(match self.decoded_representation.data_type().size() {
@@ -562,13 +556,9 @@ where
             .input_output_handle
             .partial_decode(&array_subset_all, options)
             .await?;
-        let mut decoded_value = self.codec.decode(
-            encoded_value,
-            self.decoded_representation.shape(),
-            self.decoded_representation.data_type(),
-            self.decoded_representation.fill_value(),
-            options,
-        )?;
+        let mut decoded_value =
+            self.codec
+                .decode(encoded_value, self.decoded_representation.shape(), options)?;
 
         // Validate the bytes
         decoded_value.validate(
@@ -595,13 +585,9 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let encoded_value = self.codec.encode(
-                decoded_value,
-                self.decoded_representation.shape(),
-                self.decoded_representation.data_type(),
-                self.decoded_representation.fill_value(),
-                options,
-            )?;
+            let encoded_value =
+                self.codec
+                    .encode(decoded_value, self.decoded_representation.shape(), options)?;
             self.input_output_handle
                 .partial_encode(&array_subset_all, &encoded_value, options)
                 .await
@@ -643,13 +629,9 @@ where
 
         if let Some(bytes_enc) = bytes_enc {
             // Decode the entire chunk
-            let bytes_dec = self.codec.decode(
-                bytes_enc,
-                self.decoded_representation.shape(),
-                self.decoded_representation.data_type(),
-                self.decoded_representation.fill_value(),
-                options,
-            )?;
+            let bytes_dec =
+                self.codec
+                    .decode(bytes_enc, self.decoded_representation.shape(), options)?;
 
             // Extract the subsets
             let chunk_shape = self.decoded_representation.shape_u64();
@@ -703,13 +685,8 @@ where
 
         // Handle a missing chunk
         let mut chunk_bytes = if let Some(chunk_bytes) = chunk_bytes {
-            self.codec.decode(
-                chunk_bytes,
-                self.decoded_representation.shape(),
-                self.decoded_representation.data_type(),
-                self.decoded_representation.fill_value(),
-                options,
-            )?
+            self.codec
+                .decode(chunk_bytes, self.decoded_representation.shape(), options)?
         } else {
             ArrayBytes::new_fill_value(
                 self.decoded_representation.data_type(),
@@ -744,13 +721,9 @@ where
             Ok(())
         } else {
             // Store the updated chunk
-            let chunk_bytes = self.codec.encode(
-                chunk_bytes,
-                self.decoded_representation.shape(),
-                self.decoded_representation.data_type(),
-                self.decoded_representation.fill_value(),
-                options,
-            )?;
+            let chunk_bytes =
+                self.codec
+                    .encode(chunk_bytes, self.decoded_representation.shape(), options)?;
             self.input_output_handle
                 .partial_encode(0, chunk_bytes, options)
                 .await

@@ -149,7 +149,9 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: SqueezeCodecConfiguration = serde_json::from_str(json).unwrap();
-        let codec = SqueezeCodec::new_with_configuration(&configuration).unwrap();
+        let codec = Arc::new(SqueezeCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
         assert_eq!(
             codec.encoded_shape(&shape).unwrap(),
             vec![
@@ -160,22 +162,10 @@ mod tests {
         );
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -188,7 +178,9 @@ mod tests {
 
     #[test]
     fn codec_squeeze_partial_decode_granularity() {
-        let codec = SqueezeCodec::new();
+        let codec = Arc::new(SqueezeCodec::new())
+            .with_context(data_type::uint8(), FillValue::from(0u8))
+            .unwrap();
 
         assert_eq!(
             codec
@@ -232,37 +224,25 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
+        let codec = codec
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
         let encoded = codec
-            .encode(
-                bytes,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let (encoded_shape, encoded_data_type, encoded_fill_value) = codec
-            .encoded_representation(&shape, &data_type, &fill_value)
+        let encoded_shape = codec.encoded_shape(&shape).unwrap();
+        let encoded_data_type = codec.encoded_data_type().clone();
+        let encoded_fill_value = codec.encoded_fill_value().clone();
+        let bytes_codec = bytes_codec
+            .with_context(encoded_data_type.clone(), encoded_fill_value.clone())
             .unwrap();
         let input_handle = bytes_codec
-            .partial_decoder(
-                input_handle,
-                &encoded_shape,
-                &encoded_data_type,
-                &encoded_fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle, &encoded_shape, &CodecOptions::default())
             .unwrap();
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // squeeze partial decoder does not hold bytes
 

@@ -91,6 +91,7 @@ pub use zarrs_data_type::codec_traits::fixedscaleoffset::{
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU64;
+    use std::sync::Arc;
 
     use zarrs_data_type::FillValue;
 
@@ -123,25 +124,16 @@ mod tests {
 
         let codec_configuration: FixedScaleOffsetCodecConfiguration =
             serde_json::from_str(JSON).unwrap();
-        let codec = FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(data_type.clone(), fill_value.clone())
+                .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         let decoded_elements = crate::array::transmute_from_bytes_vec::<f64>(
             decoded.into_fixed().unwrap().into_owned(),

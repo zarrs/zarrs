@@ -120,7 +120,6 @@ mod tests {
     };
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecTraits,
-        UnboundArrayToBytesCodecTraits,
     };
 
     #[test]

@@ -24,10 +24,10 @@ use crate::array::{
 };
 use std::num::NonZeroU64;
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecTraits, InvalidBytesLengthError,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, CodecError, CodecMetadataOptions, CodecOptions, CodecTraits,
+    InvalidBytesLengthError, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -40,6 +40,14 @@ pub struct PackBitsCodec {
     padding_encoding: PackBitsPaddingEncoding,
     first_bit: Option<u64>,
     last_bit: Option<u64>,
+}
+
+/// A `packbits` codec implementation bound to a data type and fill value.
+#[derive(Debug, Clone)]
+struct PackBitsCodecBound {
+    codec: Arc<PackBitsCodec>,
+    data_type: DataType,
+    fill_value: FillValue,
 }
 
 impl Default for PackBitsCodec {
@@ -132,16 +140,6 @@ impl CodecTraits for PackBitsCodec {
     }
 }
 
-impl ArrayCodecTraits for PackBitsCodec {
-    fn recommended_concurrency(
-        &self,
-        _shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        Ok(RecommendedConcurrency::new_maximum(1))
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -152,32 +150,67 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
+    fn with_context(
+        &self,
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        pack_bits_components(&data_type)?;
+        Ok(Arc::new(PackBitsCodecBound {
+            codec: self,
+            data_type,
+            fill_value,
+        }))
+    }
+}
+
+impl ArrayCodecTraits for PackBitsCodecBound {
+    fn data_type(&self) -> &DataType {
+        &self.data_type
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        &self.fill_value
+    }
+
+    fn recommended_concurrency(
+        &self,
+        _shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        Ok(RecommendedConcurrency::new_maximum(1))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for PackBitsCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
     fn encode<'a>(
         &self,
         bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = pack_bits_components(&self.data_type)?;
+        let first_bit = self.codec.first_bit.unwrap_or(0);
+        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their component size in bits is a multiple of 8.
-            return BytesCodec::new(Some(Endianness::Little)).encode(
-                bytes.clone(),
-                shape,
-                data_type,
-                fill_value,
-                options,
-            );
+            return Arc::new(BytesCodec::new(Some(Endianness::Little)))
+                .with_context(self.data_type.clone(), self.fill_value.clone())?
+                .encode(bytes.clone(), shape, options);
         }
 
         // Get the component and element size in bits
@@ -189,7 +222,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
 
         // Input checks
         let bytes = bytes.into_fixed()?;
-        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
+        let data_type_size_dec = self.data_type.fixed_size().ok_or_else(|| {
             CodecError::Other("data type must have a fixed size for the packbits codec".to_string())
         })?;
         if bytes.len() as u64 != num_elements * data_type_size_dec as u64 {
@@ -201,7 +234,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         }
 
         // Allocate the output
-        let padding_encoding_byte = match self.padding_encoding {
+        let padding_encoding_byte = match self.codec.padding_encoding {
             PackBitsPaddingEncoding::None => 0,
             PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
         };
@@ -209,7 +242,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
 
         // Set the padding encoding byte and grab the element bytes
         let padding_bits = padding_bits(num_elements, element_size_bits);
-        let packed_elements = match self.padding_encoding {
+        let packed_elements = match self.codec.padding_encoding {
             PackBitsPaddingEncoding::None => &mut bytes_enc[..],
             PackBitsPaddingEncoding::FirstByte => {
                 bytes_enc[0] = padding_bits;
@@ -240,28 +273,22 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         &self,
         bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = pack_bits_components(&self.data_type)?;
+        let first_bit = self.codec.first_bit.unwrap_or(0);
+        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
             // Data types are expected to support the bytes codec if their element size in bits is a multiple of 8.
-            return BytesCodec::new(Some(Endianness::Little)).decode(
-                bytes.clone(),
-                shape,
-                data_type,
-                fill_value,
-                options,
-            );
+            return Arc::new(BytesCodec::new(Some(Endianness::Little)))
+                .with_context(self.data_type.clone(), self.fill_value.clone())?
+                .decode(bytes.clone(), shape, options);
         }
 
         // Get the component and element size in bits
@@ -272,11 +299,11 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             usize::try_from((num_elements * element_size_bits).div_ceil(8)).unwrap();
 
         // Input checks
-        let data_type_size_dec = data_type.fixed_size().ok_or_else(|| {
+        let data_type_size_dec = self.data_type.fixed_size().ok_or_else(|| {
             CodecError::Other("data type must have a fixed size for packbits codec".to_string())
         })?;
         let expected_length = elements_size_bytes
-            + match self.padding_encoding {
+            + match self.codec.padding_encoding {
                 PackBitsPaddingEncoding::None => 0,
                 PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
             };
@@ -285,7 +312,7 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         }
 
         let padding_bits = padding_bits(num_elements, element_size_bits);
-        let packed_elements = match self.padding_encoding {
+        let packed_elements = match self.codec.padding_encoding {
             PackBitsPaddingEncoding::None => &bytes[..],
             PackBitsPaddingEncoding::FirstByte => {
                 if bytes[0] != padding_bits {
@@ -349,17 +376,15 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = pack_bits_components(&self.data_type)?;
+        let first_bit = self.codec.first_bit.unwrap_or(0);
+        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -367,19 +392,19 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 Some(Endianness::Little),
             )))
         } else {
             Ok(Arc::new(PackBitsPartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
-                data_type.clone(),
-                fill_value.clone(),
-                self.padding_encoding,
-                self.first_bit,
-                self.last_bit,
+                self.data_type.clone(),
+                self.fill_value.clone(),
+                self.codec.padding_encoding,
+                self.codec.first_bit,
+                self.codec.last_bit,
             )))
         }
     }
@@ -389,17 +414,15 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         self: Arc<Self>,
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         _options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = pack_bits_components(&self.data_type)?;
+        let first_bit = self.codec.first_bit.unwrap_or(0);
+        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -407,19 +430,19 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
             Ok(Arc::new(BytesCodecPartial::new(
                 input_handle,
                 shape,
-                data_type,
-                fill_value,
+                &self.data_type,
+                &self.fill_value,
                 Some(Endianness::Little),
             )))
         } else {
             Ok(Arc::new(AsyncPackBitsPartialDecoder::new(
                 input_handle,
                 shape.to_vec(),
-                data_type.clone(),
-                fill_value.clone(),
-                self.padding_encoding,
-                self.first_bit,
-                self.last_bit,
+                self.data_type.clone(),
+                self.fill_value.clone(),
+                self.codec.padding_encoding,
+                self.codec.first_bit,
+                self.codec.last_bit,
             )))
         }
     }
@@ -427,23 +450,21 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
     fn encoded_representation(
         &self,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        _fill_value: &FillValue,
     ) -> Result<BytesRepresentation, CodecError> {
         let PackBitsCodecComponents {
             component_size_bits,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = pack_bits_components(&self.data_type)?;
+        let first_bit = self.codec.first_bit.unwrap_or(0);
+        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
 
         let num_elements = shape.num_elements_u64();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes = (num_elements * element_size_bits).div_ceil(8);
 
-        let padding_encoding_byte = match self.padding_encoding {
+        let padding_encoding_byte = match self.codec.padding_encoding {
             PackBitsPaddingEncoding::None => 0,
             PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
         };

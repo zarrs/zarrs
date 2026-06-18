@@ -20,15 +20,15 @@ use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesRaw, ArraySubset, BytesRepresentation,
-    ChunkShape, ChunkShapeTraits, DataType, DataTypeSize, FillValue, chunk_shape_to_array_shape,
-    transmute_to_bytes_vec, unravel_index,
+    ChunkShape, ChunkShapeTraits, CodecChainBound, DataType, DataTypeSize, FillValue,
+    chunk_shape_to_array_shape, transmute_to_bytes_vec, unravel_index,
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, BytesPartialDecoderTraits, BytesPartialEncoderTraits, CodecError,
-    CodecMetadataOptions, CodecOptions, CodecSpecificOptions, CodecTraits,
-    PartialDecoderCapability, PartialEncoderCapability, RecommendedConcurrency,
-    UnboundArrayToBytesCodecTraits,
+    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits,
+    BytesPartialEncoderTraits, CodecError, CodecMetadataOptions, CodecOptions,
+    CodecSpecificOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
+    RecommendedConcurrency, UnboundArrayToBytesCodecTraits,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
@@ -48,6 +48,16 @@ pub struct ShardingCodec {
     pub(crate) index_location: ShardingIndexLocation,
     /// Runtime options applied at array creation/opening time.
     pub(crate) options: ShardingCodecOptions,
+}
+
+/// A `sharding` codec implementation bound to a data type and fill value.
+#[derive(Clone, Debug)]
+pub(crate) struct ShardingCodecBound {
+    subchunk_shape: ChunkShape,
+    inner_codecs: Arc<CodecChainBound>,
+    index_codecs: Arc<CodecChainBound>,
+    index_location: ShardingIndexLocation,
+    options: ShardingCodecOptions,
 }
 
 impl ShardingCodec {
@@ -142,18 +152,6 @@ impl CodecTraits for ShardingCodec {
     }
 }
 
-impl ArrayCodecTraits for ShardingCodec {
-    fn recommended_concurrency(
-        &self,
-        shape: &[NonZeroU64],
-        _data_type: &DataType,
-    ) -> Result<RecommendedConcurrency, CodecError> {
-        let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
-        let num_elements = chunks_per_shard.num_elements_nonzero_usize();
-        Ok(RecommendedConcurrency::new_maximum(num_elements.into()))
-    }
-}
-
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -164,11 +162,26 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
         self as Arc<dyn UnboundArrayToBytesCodecTraits>
     }
 
-    fn partial_decode_granularity(
+    fn with_context(
         &self,
-        _decoded_shape: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError> {
-        Ok(self.subchunk_shape.clone())
+        data_type: DataType,
+        fill_value: FillValue,
+    ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
+        let inner_codecs = self
+            .inner_codecs
+            .clone()
+            .with_context(data_type, fill_value)?;
+        let index_codecs = self
+            .index_codecs
+            .clone()
+            .with_context(crate::array::data_type::uint64(), FillValue::from(u64::MAX))?;
+        Ok(Arc::new(ShardingCodecBound {
+            subchunk_shape: self.subchunk_shape.clone(),
+            inner_codecs,
+            index_codecs,
+            index_location: self.index_location.clone(),
+            options: self.options.clone(),
+        }))
     }
 
     fn with_codec_specific_options(
@@ -183,529 +196,9 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
             Ok(self.into_dyn())
         }
     }
-
-    fn encode<'a>(
-        &self,
-        bytes: ArrayBytes<'a>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-        bytes.validate(num_elements, data_type)?;
-
-        // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
-        let chunk_bytes_representation = self.inner_codecs.encoded_representation(
-            &self.subchunk_shape,
-            data_type,
-            fill_value,
-        )?;
-
-        let bytes = match chunk_bytes_representation {
-            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => self
-                .encode_bounded(
-                    &bytes,
-                    data_type,
-                    fill_value,
-                    shape,
-                    &self.subchunk_shape,
-                    size,
-                    options,
-                ),
-            BytesRepresentation::UnboundedSize => self.encode_unbounded(
-                &bytes,
-                data_type,
-                fill_value,
-                shape,
-                &self.subchunk_shape,
-                options,
-            ),
-        }?;
-        Ok(ArrayBytesRaw::from(bytes))
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn decode<'a>(
-        &self,
-        encoded_shard: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<ArrayBytes<'a>, CodecError> {
-        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let num_chunks = chunks_per_shard
-            .as_slice()
-            .iter()
-            .map(|i| usize::try_from(i.get()).unwrap())
-            .product::<usize>();
-
-        let shard_index =
-            self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
-
-        // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
-            options.concurrent_target(),
-            &self.recommended_concurrency(shape, data_type)?,
-            &self
-                .inner_codecs
-                .recommended_concurrency(&self.subchunk_shape, data_type)?,
-        );
-        let options = options.with_concurrent_target(concurrency_limit_subchunks);
-
-        if data_type.is_optional() {
-            return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
-                Self::aliases_v3().default_name.to_string(),
-            ));
-        }
-
-        let shard_shape_u64 = bytemuck::must_cast_slice(shape);
-        match data_type.size() {
-            DataTypeSize::Variable => {
-                let decode_subchunk = |chunk_index: usize| {
-                    let chunk_subset = self
-                        .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                        .expect("inbounds chunk");
-
-                    // Read the offset/size
-                    let offset = shard_index[chunk_index * 2];
-                    let size = shard_index[chunk_index * 2 + 1];
-                    let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
-                        ArrayBytes::new_fill_value(
-                            data_type,
-                            self.subchunk_shape.num_elements_u64(),
-                            fill_value,
-                        )?
-                        .into_variable()?
-                    } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                        return Err(CodecError::Other(
-                            "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                                .to_string(),
-                        ));
-                    } else {
-                        let offset: usize = offset.try_into().unwrap();
-                        let size: usize = size.try_into().unwrap();
-                        let encoded_chunk = &encoded_shard[offset..offset + size];
-                        self.inner_codecs
-                            .decode(
-                                Cow::Borrowed(encoded_chunk),
-                                &self.subchunk_shape,
-                                data_type,
-                                fill_value,
-                                &options,
-                            )?
-                            .into_variable()?
-                    };
-                    Ok((chunk_bytes, chunk_subset))
-                };
-
-                // Decode the subchunks
-                let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
-                    shard_concurrent_limit,
-                    (0..num_chunks),
-                    map,
-                    decode_subchunk
-                )
-                .collect::<Result<Vec<_>, _>>()?;
-
-                // Convert into an array
-                Ok(ArrayBytes::Variable(merge_chunks_vlen(
-                    chunk_bytes_and_subsets,
-                    shard_shape_u64,
-                )))
-            }
-            DataTypeSize::Fixed(data_type_size) => {
-                // Allocate an array for the output
-                let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
-                let size_output = usize::try_from(num_elements).unwrap() * data_type_size;
-                if size_output == 0 {
-                    return Ok(ArrayBytes::new_flen(vec![]));
-                }
-                let mut decoded_shard = Vec::<u8>::with_capacity(size_output);
-
-                {
-                    let output =
-                        UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut decoded_shard);
-                    let decode_chunk = |chunk_index: usize| {
-                        let chunk_subset = self
-                            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                            .expect("inbounds chunk");
-                        let mut output_view_subchunk = unsafe {
-                            // SAFETY: chunks represent disjoint array subsets
-                            ArrayBytesFixedDisjointView::new(
-                                output,
-                                data_type_size,
-                                shard_shape_u64,
-                                chunk_subset,
-                            )?
-                        };
-
-                        // Read the offset/size
-                        let offset = shard_index[chunk_index * 2];
-                        let size = shard_index[chunk_index * 2 + 1];
-                        if offset == u64::MAX && size == u64::MAX {
-                            output_view_subchunk.fill(fill_value.as_ne_bytes())?;
-                        } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                            return Err(CodecError::Other(
-                                "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                                    .to_string(),
-                            ));
-                        } else {
-                            let offset: usize = offset.try_into().unwrap();
-                            let size: usize = size.try_into().unwrap();
-                            let encoded_chunk = &encoded_shard[offset..offset + size];
-                            self.inner_codecs.decode_into(
-                                Cow::Borrowed(encoded_chunk),
-                                &self.subchunk_shape,
-                                data_type,
-                                fill_value,
-                                ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
-                                &options,
-                            )?;
-                        }
-
-                        Ok::<_, CodecError>(())
-                    };
-
-                    crate::iter_concurrent_limit!(
-                        shard_concurrent_limit,
-                        (0..num_chunks),
-                        try_for_each,
-                        decode_chunk
-                    )?;
-                }
-                unsafe { decoded_shard.set_len(decoded_shard.capacity()) };
-                Ok(ArrayBytes::from(decoded_shard))
-            }
-        }
-    }
-
-    fn compact<'a>(
-        &self,
-        bytes: ArrayBytesRaw<'a>,
-        shape: &[NonZeroU64],
-        _data_type: &DataType,
-        _fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
-        // Calculate chunks per shard
-        let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
-
-        // Decode the shard index
-        let shard_index = self.decode_index(&bytes, chunks_per_shard.as_slice(), options)?;
-
-        // Get index metadata
-        let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
-        let index_encoded_size =
-            compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
-
-        // Check if compaction is needed (no-op optimization)
-        let mut needs_compaction = false;
-        let mut chunks_size = 0;
-        for &[offset, size] in shard_index.as_chunks::<2>().0 {
-            if offset != u64::MAX && size != u64::MAX {
-                chunks_size += size;
-            }
-        }
-        if chunks_size != bytes.len() as u64 - index_encoded_size {
-            needs_compaction = true;
-        }
-
-        if !needs_compaction {
-            return Ok(None); // No compaction needed
-        }
-
-        // Calculate compact size
-        let data_size: usize = shard_index
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .filter(|chunk| chunk[0] != u64::MAX)
-            .map(|chunk| usize::try_from(chunk[1]).unwrap())
-            .sum();
-
-        let compact_size = data_size + usize::try_from(index_encoded_size).unwrap();
-
-        // Build compacted shard
-        let mut compact_shard = vec![0u8; compact_size];
-        let mut new_index = vec![u64::MAX; shard_index.len()];
-
-        let mut write_offset = match self.index_location {
-            ShardingIndexLocation::Start => usize::try_from(index_encoded_size).unwrap(),
-            ShardingIndexLocation::End => 0,
-        };
-
-        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
-            if old_offset != u64::MAX && size != u64::MAX {
-                let old_offset_usize = usize::try_from(old_offset).unwrap();
-                let size_usize = usize::try_from(size).unwrap();
-
-                // Validate bounds
-                if old_offset_usize + size_usize > bytes.len() {
-                    return Err(CodecError::Other(
-                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                            .to_string(),
-                    ));
-                }
-
-                // Copy chunk data
-                compact_shard[write_offset..write_offset + size_usize]
-                    .copy_from_slice(&bytes[old_offset_usize..old_offset_usize + size_usize]);
-
-                // Update index
-                new_index[i * 2] = u64::try_from(write_offset).unwrap();
-                new_index[i * 2 + 1] = size;
-
-                write_offset += size_usize;
-            }
-        }
-
-        // Encode and write index
-        let index_bytes = transmute_to_bytes_vec(new_index);
-        let encoded_index = self.index_codecs.encode(
-            ArrayBytes::from(index_bytes),
-            &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
-            options,
-        )?;
-
-        match self.index_location {
-            ShardingIndexLocation::Start => {
-                compact_shard[..encoded_index.len()].copy_from_slice(&encoded_index);
-            }
-            ShardingIndexLocation::End => {
-                let index_start = compact_size - encoded_index.len();
-                compact_shard[index_start..].copy_from_slice(&encoded_index);
-            }
-        }
-
-        Ok(Some(Cow::Owned(compact_shard)))
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn decode_into(
-        &self,
-        encoded_shard: ArrayBytesRaw<'_>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        output_target: ArrayBytesDecodeIntoTarget<'_>,
-        options: &CodecOptions,
-    ) -> Result<(), CodecError> {
-        // Sharding currently only supports non-optional data
-        let output_view = match output_target {
-            ArrayBytesDecodeIntoTarget::Fixed(data) => data,
-            ArrayBytesDecodeIntoTarget::Optional(..) => {
-                return Err(CodecError::UnsupportedDataType(
-                    data_type.clone(),
-                    Self::aliases_v3().default_name.to_string(),
-                ));
-            }
-        };
-        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
-        let num_chunks = chunks_per_shard
-            .as_slice()
-            .iter()
-            .map(|i| usize::try_from(i.get()).unwrap())
-            .product::<usize>();
-
-        let shard_index =
-            self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
-
-        // Calc self/internal concurrent limits
-        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
-            options.concurrent_target(),
-            &self.recommended_concurrency(shape, data_type)?,
-            &self
-                .inner_codecs
-                .recommended_concurrency(&self.subchunk_shape, data_type)?,
-        );
-        let options = options.with_concurrent_target(concurrency_limit_subchunks);
-
-        let decode_chunk = |chunk_index: usize| {
-            let chunk_subset = self
-                .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
-                .expect("inbounds chunk");
-
-            let output_subset_chunk = ArraySubset::new_with_start_shape(
-                std::iter::zip(
-                    output_view.subset().start().iter(),
-                    chunk_subset.start().iter(),
-                )
-                .map(|(o, s)| o + s)
-                .collect(),
-                chunk_subset.shape().to_vec(),
-            )
-            .unwrap();
-            let mut output_view_subchunk = unsafe {
-                // SAFETY: subchunks represent disjoint array subsets
-                output_view.subdivide(output_subset_chunk)?
-            };
-
-            // Read the offset/size
-            let offset = shard_index[chunk_index * 2];
-            let size = shard_index[chunk_index * 2 + 1];
-            if offset == u64::MAX && size == u64::MAX {
-                output_view_subchunk.fill(fill_value.as_ne_bytes())?;
-            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
-                return Err(CodecError::Other(
-                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
-                        .to_string(),
-                ));
-            } else {
-                let offset: usize = offset.try_into().unwrap();
-                let size: usize = size.try_into().unwrap();
-                let encoded_chunk = &encoded_shard[offset..offset + size];
-                self.inner_codecs.decode_into(
-                    Cow::Borrowed(encoded_chunk),
-                    &self.subchunk_shape,
-                    data_type,
-                    fill_value,
-                    ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
-                    &options,
-                )?;
-            }
-
-            Ok::<_, CodecError>(())
-        };
-
-        crate::iter_concurrent_limit!(
-            shard_concurrent_limit,
-            (0..num_chunks),
-            try_for_each,
-            decode_chunk
-        )?;
-
-        Ok(())
-    }
-
-    fn partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn BytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(ShardingPartialDecoder::new(
-            input_handle,
-            data_type.clone(),
-            fill_value.clone(),
-            ChunkShape::from(shape.to_vec()),
-            self.subchunk_shape.clone(),
-            self.inner_codecs.clone(),
-            &self.index_codecs,
-            self.index_location,
-            options,
-            self.options.clone(),
-        )?))
-    }
-
-    #[cfg(feature = "async")]
-    async fn async_partial_decoder(
-        self: Arc<Self>,
-        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        Ok(Arc::new(
-            AsyncShardingPartialDecoder::new(
-                input_handle,
-                data_type.clone(),
-                fill_value.clone(),
-                ChunkShape::from(shape.to_vec()),
-                self.subchunk_shape.clone(),
-                self.inner_codecs.clone(),
-                &self.index_codecs,
-                self.index_location,
-                options,
-                self.options.clone(),
-            )
-            .await?,
-        ))
-    }
-
-    fn partial_encoder(
-        self: Arc<Self>,
-        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-        options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
-        Ok(Arc::new(
-            sharding_partial_encoder::ShardingPartialEncoder::new(
-                input_output_handle,
-                data_type.clone(),
-                fill_value.clone(),
-                ChunkShape::from(shape.to_vec()),
-                self.subchunk_shape.clone(),
-                self.inner_codecs.clone(),
-                self.index_codecs.clone(),
-                self.index_location,
-                options,
-                self.options.clone(),
-            )?,
-        ))
-    }
-
-    fn encoded_representation(
-        &self,
-        shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
-    ) -> Result<BytesRepresentation, CodecError> {
-        // Get the maximum size of encoded chunks
-        let chunk_bytes_representation = self
-            .inner_codecs
-            .encoded_representation(shape, data_type, fill_value)?;
-
-        match chunk_bytes_representation {
-            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
-                let chunks_per_shard =
-                    calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
-                let index_encoded_size = compute_index_encoded_size(
-                    self.index_codecs.as_ref(),
-                    &sharding_index_shape(chunks_per_shard.as_slice()),
-                )?;
-                let shard_size = Self::encoded_shard_bounded_size(
-                    index_encoded_size,
-                    size,
-                    chunks_per_shard.as_slice(),
-                );
-                Ok(BytesRepresentation::BoundedSize(shard_size))
-            }
-            BytesRepresentation::UnboundedSize => Ok(BytesRepresentation::UnboundedSize),
-        }
-    }
 }
 
-impl ShardingCodec {
-    /// Convert a linearised chunk index to an array subset.
-    /// Returns [`None`] if `chunk_index` is out-of-bounds of `chunks_per_shard`.
-    fn chunk_index_to_subset(
-        &self,
-        chunk_index: u64,
-        chunks_per_shard: &[NonZeroU64],
-    ) -> Option<ArraySubset> {
-        let chunks_per_shard = chunk_shape_to_array_shape(chunks_per_shard);
-        let chunk_indices = unravel_index(chunk_index, chunks_per_shard.as_slice())?;
-        let chunk_start = std::iter::zip(&chunk_indices, self.subchunk_shape.as_slice())
-            .map(|(i, c)| i * c.get())
-            .collect::<Vec<_>>();
-        let shape = self.subchunk_shape.as_slice();
-        let ranges = shape
-            .iter()
-            .zip(&chunk_start)
-            .map(|(&sh, &st)| st..(st + sh.get()));
-        Some(ArraySubset::from(ranges))
-    }
-
+impl ShardingCodecBound {
     /// Computed the bounded size of an encoded shard from
     ///  - the chunk bytes representation, and
     ///  - the number of chunks per shard.
@@ -720,66 +213,17 @@ impl ShardingCodec {
         num_chunks * chunk_encoded_size + index_encoded_size
     }
 
-    /// Encode an inner chunk from the `decoded_value` or return None.
-    #[expect(clippy::too_many_arguments)]
-    fn encode_inner_by_chunk_index(
-        &self,
-        chunk_index: usize,
-        decoded_value: &ArrayBytes,
-        shard_shape: &[NonZeroU64],
-        chunks_per_shard: &[NonZeroU64],
-        fill_value: &FillValue,
-        data_type: &DataType,
-        subchunk_shape: &[NonZeroU64],
-        options_inner: &CodecOptions,
-    ) -> Option<Result<(usize, Vec<u8>), CodecError>> {
-        let chunk_subset = self
-            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
-            .expect("inbounds chunk");
-
-        let bytes = decoded_value.extract_array_subset(
-            &chunk_subset,
-            bytemuck::must_cast_slice(shard_shape),
-            data_type,
-        );
-        let bytes = match bytes {
-            Ok(bytes) => bytes,
-            Err(err) => return Some(Err(err)),
-        };
-
-        let is_fill_value = bytes.is_fill_value(fill_value);
-        if is_fill_value {
-            None
-        } else {
-            let encoded_chunk = self.inner_codecs.encode(
-                bytes,
-                subchunk_shape,
-                data_type,
-                fill_value,
-                options_inner,
-            );
-            match encoded_chunk {
-                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
-                Err(err) => Some(Err(err)),
-            }
-        }
-    }
-
     /// Preallocate shard, encode and write chunks (in parallel), then truncate shard
     #[allow(clippy::too_many_lines)]
     #[expect(clippy::too_many_arguments)]
     fn encode_bounded(
         &self,
         decoded_value: &ArrayBytes,
-        data_type: &DataType,
-        fill_value: &FillValue,
         shard_shape: &[NonZeroU64],
         subchunk_shape: &[NonZeroU64],
         chunk_size_bounded: u64,
         options: &CodecOptions,
     ) -> Result<Vec<u8>, CodecError> {
-        decoded_value.validate(shard_shape.num_elements_u64(), data_type)?;
-
         // Calculate maximum possible shard size
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
@@ -807,10 +251,10 @@ impl ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shard_shape, data_type)?,
+            &self.recommended_concurrency(shard_shape)?,
             &self
                 .inner_codecs
-                .recommended_concurrency(subchunk_shape, data_type)?,
+                .recommended_concurrency(subchunk_shape)?,
         );
         let options = options.with_concurrent_target(concurrency_limit_subchunks);
 
@@ -835,8 +279,6 @@ impl ShardingCodec {
                             decoded_value,
                             shard_shape,
                             chunks_per_shard.as_slice(),
-                            fill_value,
-                            data_type,
                             subchunk_shape,
                             &options,
                         );
@@ -886,8 +328,6 @@ impl ShardingCodec {
                                 decoded_value,
                                 shard_shape,
                                 chunks_per_shard.as_slice(),
-                                fill_value,
-                                data_type,
                                 subchunk_shape,
                                 &options,
                             )
@@ -939,8 +379,6 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             shard_index_bytes.into(),
             &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
             &options,
         )?;
         {
@@ -968,14 +406,10 @@ impl ShardingCodec {
     fn encode_unbounded(
         &self,
         decoded_value: &ArrayBytes,
-        data_type: &DataType,
-        fill_value: &FillValue,
         shard_shape: &[NonZeroU64],
         subchunk_shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Vec<u8>, CodecError> {
-        decoded_value.validate(shard_shape.num_elements_u64(), data_type)?;
-
         let chunks_per_shard = calculate_chunks_per_shard(shard_shape, subchunk_shape)?;
         let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
         let index_encoded_size =
@@ -992,10 +426,10 @@ impl ShardingCodec {
         // Calc self/internal concurrent limits
         let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
             options.concurrent_target(),
-            &self.recommended_concurrency(shard_shape, data_type)?,
+            &self.recommended_concurrency(shard_shape)?,
             &self
                 .inner_codecs
-                .recommended_concurrency(subchunk_shape, data_type)?,
+                .recommended_concurrency(subchunk_shape)?,
         );
         let options_inner = options.with_concurrent_target(concurrency_limit_subchunks);
 
@@ -1021,8 +455,6 @@ impl ShardingCodec {
                 decoded_value,
                 shard_shape,
                 chunks_per_shard.as_slice(),
-                fill_value,
-                data_type,
                 subchunk_shape,
                 &options_inner
             )
@@ -1110,8 +542,6 @@ impl ShardingCodec {
         let encoded_array_index = self.index_codecs.encode(
             ArrayBytes::from(transmute_to_bytes_vec(shard_index)),
             &index_shape,
-            &crate::array::data_type::uint64(),
-            &FillValue::from(u64::MAX),
             options,
         )?;
         {
@@ -1130,6 +560,571 @@ impl ShardingCodec {
         // SAFETY: all elements have been initialised
         unsafe { shard.set_len(shard_length) };
         Ok(shard)
+    }
+}
+
+impl ArrayCodecTraits for ShardingCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn data_type(&self) -> &DataType {
+        self.inner_codecs.data_type()
+    }
+
+    fn fill_value(&self) -> &FillValue {
+        self.inner_codecs.fill_value()
+    }
+
+    fn recommended_concurrency(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<RecommendedConcurrency, CodecError> {
+        let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
+        let num_elements = chunks_per_shard.num_elements_nonzero_usize();
+        Ok(RecommendedConcurrency::new_maximum(num_elements.into()))
+    }
+}
+
+#[cfg_attr(
+    all(feature = "async", not(target_arch = "wasm32")),
+    async_trait::async_trait
+)]
+#[cfg_attr(all(feature = "async", target_arch = "wasm32"), async_trait::async_trait(?Send))]
+impl ArrayToBytesCodecTraits for ShardingCodecBound {
+    fn into_dyn(self: Arc<Self>) -> Arc<dyn ArrayToBytesCodecTraits> {
+        self as Arc<dyn ArrayToBytesCodecTraits>
+    }
+
+    fn encoded_representation(
+        &self,
+        shape: &[NonZeroU64],
+    ) -> Result<BytesRepresentation, CodecError> {
+        // Get the maximum size of encoded chunks
+        let chunk_bytes_representation = self.inner_codecs.encoded_representation(shape)?;
+
+        match chunk_bytes_representation {
+            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
+                let chunks_per_shard =
+                    calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
+                let index_encoded_size = compute_index_encoded_size(
+                    self.index_codecs.as_ref(),
+                    &sharding_index_shape(chunks_per_shard.as_slice()),
+                )?;
+                let shard_size = Self::encoded_shard_bounded_size(
+                    index_encoded_size,
+                    size,
+                    chunks_per_shard.as_slice(),
+                );
+                Ok(BytesRepresentation::BoundedSize(shard_size))
+            }
+            BytesRepresentation::UnboundedSize => Ok(BytesRepresentation::UnboundedSize),
+        }
+    }
+
+    fn partial_decode_granularity(
+        &self,
+        _decoded_shape: &[NonZeroU64],
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(self.subchunk_shape.clone())
+    }
+
+    fn encode<'a>(
+        &self,
+        bytes: ArrayBytes<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytesRaw<'a>, CodecError> {
+        let data_type = self.data_type();
+        let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+        bytes.validate(num_elements, data_type)?;
+
+        // Get chunk bytes representation, and choose implementation based on whether the size is unbounded or not
+        let chunk_bytes_representation = self
+            .inner_codecs
+            .encoded_representation(&self.subchunk_shape)?;
+
+        bytes.validate(shape.num_elements_u64(), data_type)?;
+        let bytes = match chunk_bytes_representation {
+            BytesRepresentation::BoundedSize(size) | BytesRepresentation::FixedSize(size) => {
+                self.encode_bounded(&bytes, shape, &self.subchunk_shape, size, options)
+            }
+            BytesRepresentation::UnboundedSize => {
+                self.encode_unbounded(&bytes, shape, &self.subchunk_shape, options)
+            }
+        }?;
+        Ok(ArrayBytesRaw::from(bytes))
+    }
+
+    fn decode<'a>(
+        &self,
+        encoded_shard: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<ArrayBytes<'a>, CodecError> {
+        let data_type = self.data_type();
+        let fill_value = self.fill_value();
+        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
+        let num_chunks = chunks_per_shard
+            .as_slice()
+            .iter()
+            .map(|i| usize::try_from(i.get()).unwrap())
+            .product::<usize>();
+
+        let shard_index =
+            self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
+
+        // Calc self/internal concurrent limits
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
+            options.concurrent_target(),
+            &self.recommended_concurrency(shape)?,
+            &self
+                .inner_codecs
+                .recommended_concurrency(&self.subchunk_shape)?,
+        );
+        let options = options.with_concurrent_target(concurrency_limit_subchunks);
+
+        if data_type.is_optional() {
+            return Err(CodecError::UnsupportedDataType(
+                data_type.clone(),
+                ShardingCodec::aliases_v3().default_name.to_string(),
+            ));
+        }
+
+        let shard_shape_u64 = bytemuck::must_cast_slice(shape);
+        match data_type.size() {
+            DataTypeSize::Variable => {
+                let decode_subchunk = |chunk_index: usize| {
+                    let chunk_subset = self
+                        .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
+                        .expect("inbounds chunk");
+
+                    // Read the offset/size
+                    let offset = shard_index[chunk_index * 2];
+                    let size = shard_index[chunk_index * 2 + 1];
+                    let chunk_bytes = if offset == u64::MAX && size == u64::MAX {
+                        ArrayBytes::new_fill_value(
+                            data_type,
+                            self.subchunk_shape.num_elements_u64(),
+                            fill_value,
+                        )?
+                        .into_variable()?
+                    } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                        return Err(CodecError::Other(
+                            "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                                .to_string(),
+                        ));
+                    } else {
+                        let offset: usize = offset.try_into().unwrap();
+                        let size: usize = size.try_into().unwrap();
+                        let encoded_chunk = &encoded_shard[offset..offset + size];
+                        self.inner_codecs
+                            .decode(
+                                Cow::Borrowed(encoded_chunk),
+                                &self.subchunk_shape,
+                                &options,
+                            )?
+                            .into_variable()?
+                    };
+                    Ok((chunk_bytes, chunk_subset))
+                };
+
+                // Decode the subchunks
+                let chunk_bytes_and_subsets = crate::iter_concurrent_limit!(
+                    shard_concurrent_limit,
+                    (0..num_chunks),
+                    map,
+                    decode_subchunk
+                )
+                .collect::<Result<Vec<_>, _>>()?;
+
+                // Convert into an array
+                Ok(ArrayBytes::Variable(merge_chunks_vlen(
+                    chunk_bytes_and_subsets,
+                    shard_shape_u64,
+                )))
+            }
+            DataTypeSize::Fixed(data_type_size) => {
+                // Allocate an array for the output
+                let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
+                let size_output = usize::try_from(num_elements).unwrap() * data_type_size;
+                if size_output == 0 {
+                    return Ok(ArrayBytes::new_flen(vec![]));
+                }
+                let mut decoded_shard = Vec::<u8>::with_capacity(size_output);
+
+                {
+                    let output =
+                        UnsafeCellSlice::new_from_vec_with_spare_capacity(&mut decoded_shard);
+                    let decode_chunk = |chunk_index: usize| {
+                        let chunk_subset = self
+                            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
+                            .expect("inbounds chunk");
+                        let mut output_view_subchunk = unsafe {
+                            // SAFETY: chunks represent disjoint array subsets
+                            ArrayBytesFixedDisjointView::new(
+                                output,
+                                data_type_size,
+                                shard_shape_u64,
+                                chunk_subset,
+                            )?
+                        };
+
+                        // Read the offset/size
+                        let offset = shard_index[chunk_index * 2];
+                        let size = shard_index[chunk_index * 2 + 1];
+                        if offset == u64::MAX && size == u64::MAX {
+                            output_view_subchunk.fill(fill_value.as_ne_bytes())?;
+                        } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                            return Err(CodecError::Other(
+                                "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                                    .to_string(),
+                            ));
+                        } else {
+                            let offset: usize = offset.try_into().unwrap();
+                            let size: usize = size.try_into().unwrap();
+                            let encoded_chunk = &encoded_shard[offset..offset + size];
+                            self.inner_codecs.decode_into(
+                                Cow::Borrowed(encoded_chunk),
+                                &self.subchunk_shape,
+                                ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
+                                &options,
+                            )?;
+                        }
+
+                        Ok::<_, CodecError>(())
+                    };
+
+                    crate::iter_concurrent_limit!(
+                        shard_concurrent_limit,
+                        (0..num_chunks),
+                        try_for_each,
+                        decode_chunk
+                    )?;
+                }
+                unsafe { decoded_shard.set_len(decoded_shard.capacity()) };
+                Ok(ArrayBytes::from(decoded_shard))
+            }
+        }
+    }
+
+    fn compact<'a>(
+        &self,
+        bytes: ArrayBytesRaw<'a>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Option<ArrayBytesRaw<'a>>, CodecError> {
+        // Calculate chunks per shard
+        let chunks_per_shard = calculate_chunks_per_shard(shape, self.subchunk_shape.as_slice())?;
+
+        // Decode the shard index
+        let shard_index = self.decode_index(&bytes, chunks_per_shard.as_slice(), options)?;
+
+        // Get index metadata
+        let index_shape = sharding_index_shape(chunks_per_shard.as_slice());
+        let index_encoded_size =
+            compute_index_encoded_size(self.index_codecs.as_ref(), &index_shape)?;
+
+        // Check if compaction is needed (no-op optimization)
+        let mut needs_compaction = false;
+        let mut chunks_size = 0;
+        for &[offset, size] in shard_index.as_chunks::<2>().0 {
+            if offset != u64::MAX && size != u64::MAX {
+                chunks_size += size;
+            }
+        }
+        if chunks_size != bytes.len() as u64 - index_encoded_size {
+            needs_compaction = true;
+        }
+
+        if !needs_compaction {
+            return Ok(None); // No compaction needed
+        }
+
+        // Calculate compact size
+        let data_size: usize = shard_index
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .filter(|chunk| chunk[0] != u64::MAX)
+            .map(|chunk| usize::try_from(chunk[1]).unwrap())
+            .sum();
+
+        let compact_size = data_size + usize::try_from(index_encoded_size).unwrap();
+
+        // Build compacted shard
+        let mut compact_shard = vec![0u8; compact_size];
+        let mut new_index = vec![u64::MAX; shard_index.len()];
+
+        let mut write_offset = match self.index_location {
+            ShardingIndexLocation::Start => usize::try_from(index_encoded_size).unwrap(),
+            ShardingIndexLocation::End => 0,
+        };
+
+        for (i, &[old_offset, size]) in shard_index.as_chunks::<2>().0.iter().enumerate() {
+            if old_offset != u64::MAX && size != u64::MAX {
+                let old_offset_usize = usize::try_from(old_offset).unwrap();
+                let size_usize = usize::try_from(size).unwrap();
+
+                // Validate bounds
+                if old_offset_usize + size_usize > bytes.len() {
+                    return Err(CodecError::Other(
+                        "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                            .to_string(),
+                    ));
+                }
+
+                // Copy chunk data
+                compact_shard[write_offset..write_offset + size_usize]
+                    .copy_from_slice(&bytes[old_offset_usize..old_offset_usize + size_usize]);
+
+                // Update index
+                new_index[i * 2] = u64::try_from(write_offset).unwrap();
+                new_index[i * 2 + 1] = size;
+
+                write_offset += size_usize;
+            }
+        }
+
+        // Encode and write index
+        let index_bytes = transmute_to_bytes_vec(new_index);
+        let encoded_index = self.index_codecs.encode(
+            ArrayBytes::from(index_bytes),
+            &index_shape,
+            options,
+        )?;
+
+        match self.index_location {
+            ShardingIndexLocation::Start => {
+                compact_shard[..encoded_index.len()].copy_from_slice(&encoded_index);
+            }
+            ShardingIndexLocation::End => {
+                let index_start = compact_size - encoded_index.len();
+                compact_shard[index_start..].copy_from_slice(&encoded_index);
+            }
+        }
+
+        Ok(Some(Cow::Owned(compact_shard)))
+    }
+
+    fn decode_into(
+        &self,
+        encoded_shard: ArrayBytesRaw<'_>,
+        shape: &[NonZeroU64],
+        output_target: ArrayBytesDecodeIntoTarget<'_>,
+        options: &CodecOptions,
+    ) -> Result<(), CodecError> {
+        let data_type = self.data_type();
+        let fill_value = self.fill_value();
+
+        // Sharding currently only supports non-optional data
+        let output_view = match output_target {
+            ArrayBytesDecodeIntoTarget::Fixed(data) => data,
+            ArrayBytesDecodeIntoTarget::Optional(..) => {
+                return Err(CodecError::UnsupportedDataType(
+                    data_type.clone(),
+                    ShardingCodec::aliases_v3().default_name.to_string(),
+                ));
+            }
+        };
+        let chunks_per_shard = calculate_chunks_per_shard(shape, &self.subchunk_shape)?;
+        let num_chunks = chunks_per_shard
+            .as_slice()
+            .iter()
+            .map(|i| usize::try_from(i.get()).unwrap())
+            .product::<usize>();
+
+        let shard_index =
+            self.decode_index(&encoded_shard, chunks_per_shard.as_slice(), options)?;
+
+        // Calc self/internal concurrent limits
+        let (shard_concurrent_limit, concurrency_limit_subchunks) = calc_concurrency_outer_inner(
+            options.concurrent_target(),
+            &self.recommended_concurrency(shape)?,
+            &self
+                .inner_codecs
+                .recommended_concurrency(&self.subchunk_shape)?,
+        );
+        let options = options.with_concurrent_target(concurrency_limit_subchunks);
+
+        let decode_chunk = |chunk_index: usize| {
+            let chunk_subset = self
+                .chunk_index_to_subset(chunk_index as u64, chunks_per_shard.as_slice())
+                .expect("inbounds chunk");
+
+            let output_subset_chunk = ArraySubset::new_with_start_shape(
+                std::iter::zip(
+                    output_view.subset().start().iter(),
+                    chunk_subset.start().iter(),
+                )
+                .map(|(o, s)| o + s)
+                .collect(),
+                chunk_subset.shape().to_vec(),
+            )
+            .unwrap();
+            let mut output_view_subchunk = unsafe {
+                // SAFETY: subchunks represent disjoint array subsets
+                output_view.subdivide(output_subset_chunk)?
+            };
+
+            // Read the offset/size
+            let offset = shard_index[chunk_index * 2];
+            let size = shard_index[chunk_index * 2 + 1];
+            if offset == u64::MAX && size == u64::MAX {
+                output_view_subchunk.fill(fill_value.as_ne_bytes())?;
+            } else if usize::try_from(offset + size).unwrap() > encoded_shard.len() {
+                return Err(CodecError::Other(
+                    "The shard index references out-of-bounds bytes. The chunk may be corrupted."
+                        .to_string(),
+                ));
+            } else {
+                let offset: usize = offset.try_into().unwrap();
+                let size: usize = size.try_into().unwrap();
+                let encoded_chunk = &encoded_shard[offset..offset + size];
+                self.inner_codecs.decode_into(
+                    Cow::Borrowed(encoded_chunk),
+                    &self.subchunk_shape,
+                    ArrayBytesDecodeIntoTarget::Fixed(&mut output_view_subchunk),
+                    &options,
+                )?;
+            }
+
+            Ok::<_, CodecError>(())
+        };
+
+        crate::iter_concurrent_limit!(
+            shard_concurrent_limit,
+            (0..num_chunks),
+            try_for_each,
+            decode_chunk
+        )?;
+
+        Ok(())
+    }
+
+    fn partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn BytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        Ok(Arc::new(ShardingPartialDecoder::new(
+            input_handle,
+            ChunkShape::from(shape.to_vec()),
+            self.subchunk_shape.clone(),
+            self.inner_codecs.clone(),
+            &self.index_codecs,
+            self.index_location,
+            options,
+            self.options.clone(),
+        )?))
+    }
+
+    fn partial_encoder(
+        self: Arc<Self>,
+        input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        Ok(Arc::new(
+            sharding_partial_encoder::ShardingPartialEncoder::new(
+                input_output_handle,
+                ChunkShape::from(shape.to_vec()),
+                self.subchunk_shape.clone(),
+                self.inner_codecs.clone(),
+                self.index_codecs.clone(),
+                self.index_location,
+                options,
+                self.options.clone(),
+            )?,
+        ))
+    }
+
+    #[cfg(feature = "async")]
+    async fn async_partial_decoder(
+        self: Arc<Self>,
+        input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
+        shape: &[NonZeroU64],
+        options: &CodecOptions,
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        Ok(Arc::new(
+            AsyncShardingPartialDecoder::new(
+                input_handle,
+                ChunkShape::from(shape.to_vec()),
+                self.subchunk_shape.clone(),
+                self.inner_codecs.clone(),
+                &self.index_codecs,
+                self.index_location,
+                options,
+                self.options.clone(),
+            )
+            .await?,
+        ))
+    }
+}
+
+impl ShardingCodecBound {
+    /// Convert a linearised chunk index to an array subset.
+    /// Returns [`None`] if `chunk_index` is out-of-bounds of `chunks_per_shard`.
+    fn chunk_index_to_subset(
+        &self,
+        chunk_index: u64,
+        chunks_per_shard: &[NonZeroU64],
+    ) -> Option<ArraySubset> {
+        let chunks_per_shard = chunk_shape_to_array_shape(chunks_per_shard);
+        let chunk_indices = unravel_index(chunk_index, chunks_per_shard.as_slice())?;
+        let chunk_start = std::iter::zip(&chunk_indices, self.subchunk_shape.as_slice())
+            .map(|(i, c)| i * c.get())
+            .collect::<Vec<_>>();
+        let shape = self.subchunk_shape.as_slice();
+        let ranges = shape
+            .iter()
+            .zip(&chunk_start)
+            .map(|(&sh, &st)| st..(st + sh.get()));
+        Some(ArraySubset::from(ranges))
+    }
+
+    /// Encode an inner chunk from the `decoded_value` or return None.
+    #[expect(clippy::too_many_arguments)]
+    fn encode_inner_by_chunk_index(
+        &self,
+        chunk_index: usize,
+        decoded_value: &ArrayBytes,
+        shard_shape: &[NonZeroU64],
+        chunks_per_shard: &[NonZeroU64],
+        subchunk_shape: &[NonZeroU64],
+        options_inner: &CodecOptions,
+    ) -> Option<Result<(usize, Vec<u8>), CodecError>> {
+        let data_type = self.inner_codecs.data_type();
+        let fill_value = self.inner_codecs.fill_value();
+        let chunk_subset = self
+            .chunk_index_to_subset(chunk_index as u64, chunks_per_shard)
+            .expect("inbounds chunk");
+
+        let bytes = decoded_value.extract_array_subset(
+            &chunk_subset,
+            bytemuck::must_cast_slice(shard_shape),
+            data_type,
+        );
+        let bytes = match bytes {
+            Ok(bytes) => bytes,
+            Err(err) => return Some(Err(err)),
+        };
+
+        let is_fill_value = bytes.is_fill_value(fill_value);
+        if is_fill_value {
+            None
+        } else {
+            let encoded_chunk = self.inner_codecs.encode(
+                bytes,
+                subchunk_shape,
+                options_inner,
+            );
+            match encoded_chunk {
+                Ok(encoded_chunk) => Some(Ok((chunk_index, encoded_chunk.to_vec()))),
+                Err(err) => Some(Err(err)),
+            }
+        }
     }
 
     /// Decode the shard index inside the given encoded shard.

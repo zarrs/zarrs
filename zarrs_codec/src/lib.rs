@@ -421,6 +421,9 @@ pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
 
 /// Traits shared by context-bound array codecs.
 pub trait ArrayCodecTraits: MaybeSend + MaybeSync {
+    /// Returns this codec as [`Any`].
+    fn as_any(&self) -> &dyn Any;
+
     /// Return the decoded data type bound to this codec.
     fn data_type(&self) -> &DataType;
 
@@ -1176,7 +1179,7 @@ pub trait UnboundArrayToArrayCodecTraits: CodecTraits + core::fmt::Debug {
     /// # Errors
     /// Returns a [`CodecError`] if the `data_type` or `fill_value` is not supported by this codec.
     fn with_context(
-        self: Arc<Self>,
+        &self,
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError>;
@@ -1202,7 +1205,9 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     ///
     /// # Errors
     /// Returns a [`CodecError`] if the `decoded_shape` is not supported by this codec.
-    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError>;
+    fn encoded_shape(&self, decoded_shape: &[NonZeroU64]) -> Result<ChunkShape, CodecError> {
+        Ok(decoded_shape.to_vec())
+    }
 
     /// Map a partial decode granularity from the encoded representation to the decoded representation.
     ///
@@ -1212,7 +1217,14 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         &self,
         decoded_shape: &[NonZeroU64],
         encoded_granularity: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError>;
+    ) -> Result<ChunkShape, CodecError> {
+        let encoded_shape = self.encoded_shape(decoded_shape)?;
+        if encoded_shape == decoded_shape {
+            Ok(encoded_granularity.to_vec())
+        } else {
+            Ok(decoded_shape.to_vec())
+        }
+    }
 
     /// Encode a chunk.
     ///
@@ -1245,7 +1257,16 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_handle: Arc<dyn ArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     /// Initialise a partial encoder.
     ///
@@ -1256,7 +1277,16 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_output_handle: Arc<dyn ArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial decoder.
@@ -1268,7 +1298,16 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_handle: Arc<dyn AsyncArrayPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial encoder.
@@ -1280,7 +1319,16 @@ pub trait ArrayToArrayCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_output_handle: Arc<dyn AsyncArrayPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToArrayCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 }
 
 /// Traits for array to bytes codecs.
@@ -1313,7 +1361,7 @@ pub trait UnboundArrayToBytesCodecTraits: CodecTraits + core::fmt::Debug {
     /// # Errors
     /// Returns a [`CodecError`] if the `data_type` or `fill_value` is not supported by this codec.
     fn with_context(
-        self: Arc<Self>,
+        &self,
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError>;
@@ -1349,7 +1397,9 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
     fn partial_decode_granularity(
         &self,
         decoded_shape: &[NonZeroU64],
-    ) -> Result<ChunkShape, CodecError>;
+    ) -> Result<ChunkShape, CodecError> {
+        Ok(decoded_shape.to_vec())
+    }
 
     /// Encode a chunk.
     ///
@@ -1410,7 +1460,10 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         shape: &[NonZeroU64],
         output_target: ArrayBytesDecodeIntoTarget<'_>,
         options: &CodecOptions,
-    ) -> Result<(), CodecError>;
+    ) -> Result<(), CodecError> {
+        let bytes = self.decode(bytes, shape, options)?;
+        decode_into_array_bytes_target(&bytes, output_target)
+    }
 
     /// Initialise a partial decoder.
     /// # Errors
@@ -1420,7 +1473,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_handle: Arc<dyn BytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     /// Initialise a partial encoder.
     ///
@@ -1431,7 +1493,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn ArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial decoder.
@@ -1443,7 +1514,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_handle: Arc<dyn AsyncBytesPartialDecoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 
     #[cfg(feature = "async")]
     /// Initialise an asynchronous partial encoder.
@@ -1455,7 +1535,16 @@ pub trait ArrayToBytesCodecTraits: ArrayCodecTraits + core::fmt::Debug {
         input_output_handle: Arc<dyn AsyncBytesPartialEncoderTraits>,
         shape: &[NonZeroU64],
         options: &CodecOptions,
-    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError>;
+    ) -> Result<Arc<dyn AsyncArrayPartialEncoderTraits>, CodecError> {
+        _ = options;
+        Ok(Arc::new(ArrayToBytesCodecPartialDefault::new(
+            input_output_handle,
+            shape.to_vec(),
+            self.data_type().clone(),
+            self.fill_value().clone(),
+            self.into_dyn(),
+        )))
+    }
 }
 
 /// Traits for bytes to bytes codecs.

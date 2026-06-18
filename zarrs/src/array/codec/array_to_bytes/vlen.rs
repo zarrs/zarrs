@@ -109,8 +109,8 @@ use crate::array::{
 use itertools::Itertools;
 pub use vlen_codec::VlenCodec;
 use zarrs_codec::{
-    Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3, InvalidBytesLengthError,
-    UnboundArrayToBytesCodecTraits,
+    ArrayToBytesCodecTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3,
+    InvalidBytesLengthError,
 };
 use zarrs_data_type::FillValue;
 use zarrs_metadata::v3::MetadataV3;
@@ -180,14 +180,9 @@ fn get_vlen_bytes_and_offsets(
     };
 
     // Decode the index
-    let mut index = index_codecs
-        .decode(
-            index_enc.into(),
-            &index_shape,
-            &data_type,
-            &fill_value,
-            options,
-        )?
+    let mut index = Arc::new(index_codecs.clone())
+        .with_context(data_type.clone(), fill_value.clone())?
+        .decode(index_enc.into(), &index_shape, options)?
         .into_fixed()?;
     if Endianness::Big.is_native() {
         reverse_endianness(index.to_mut(), &data_type::uint64());
@@ -212,14 +207,9 @@ fn get_vlen_bytes_and_offsets(
 
     // Decode the data
     let data = if let Ok(data_len_expected) = NonZeroU64::try_from(data_len_expected as u64) {
-        data_codecs
-            .decode(
-                data_enc.into(),
-                &[data_len_expected],
-                &data_type::uint8(),
-                &0u8.into(),
-                options,
-            )?
+        Arc::new(data_codecs.clone())
+            .with_context(data_type::uint8(), 0u8.into())?
+            .decode(data_enc.into(), &[data_len_expected], options)?
             .into_fixed()?
             .into_owned()
     } else {

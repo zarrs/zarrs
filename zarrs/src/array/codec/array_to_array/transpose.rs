@@ -258,25 +258,15 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: TransposeCodecConfiguration = serde_json::from_str(json).unwrap();
-        let codec = TransposeCodec::new_with_configuration(&configuration).unwrap();
+        let codec = Arc::new(TransposeCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
     }
@@ -311,25 +301,15 @@ mod tests {
         let bytes = Element::into_array_bytes(&data_type::string(), strings).unwrap();
 
         // Create transpose codec with order [1, 0] (swap axes)
-        let codec = TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap());
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &shape, &CodecOptions::default())
             .unwrap();
 
         assert_eq!(bytes, decoded);
@@ -380,34 +360,25 @@ mod tests {
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
 
+        let codec = codec
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
         let encoded = codec
-            .encode(
-                bytes,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes, &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
             .unwrap();
+        let input_handle = bytes_codec
+            .partial_decoder(input_handle, &shape, &CodecOptions::default())
+            .unwrap();
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // transpose partial decoder does not hold bytes
         let decoded_regions = [

@@ -8,6 +8,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::ChunkGridTraits;
 use zarrs_data_type::FillValue;
+use zarrs_metadata_ext::data_type;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
 use crate::array::chunk_grid::RegularChunkGrid;
@@ -15,12 +16,10 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-    DataType, IndexerError, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound, DataType, IndexerError, ravel_indices, transmute_to_bytes
 };
 use zarrs_codec::{
-    ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, BytesPartialEncoderTraits, CodecError,
-    CodecOptions, UnboundArrayToBytesCodecTraits, update_array_bytes,
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -28,12 +27,10 @@ use zarrs_storage::byte_range::ByteRange;
 pub(crate) struct ShardingPartialEncoder {
     input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
     shard_shape: ChunkShape,
-    data_type: DataType,
-    fill_value: FillValue,
     subchunk_shape: ChunkShape,
     chunk_grid: RegularChunkGrid,
-    inner_codecs: Arc<CodecChain>,
-    index_codecs: Arc<CodecChain>,
+    inner_codecs: Arc<CodecChainBound>,
+    index_codecs: Arc<CodecChainBound>,
     index_location: ShardingIndexLocation,
     index_shape: ChunkShape,
     shard_index: Arc<Mutex<Vec<u64>>>,
@@ -46,12 +43,10 @@ impl ShardingPartialEncoder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         input_output_handle: Arc<dyn BytesPartialEncoderTraits>,
-        data_type: DataType,
-        fill_value: FillValue,
         shard_shape: ChunkShape,
         subchunk_shape: ChunkShape,
-        inner_codecs: Arc<CodecChain>,
-        index_codecs: Arc<CodecChain>,
+        inner_codecs: Arc<CodecChainBound>,
+        index_codecs: Arc<CodecChainBound>,
         index_location: ShardingIndexLocation,
         options: &CodecOptions,
         sharding_options: ShardingCodecOptions,
@@ -82,8 +77,6 @@ impl ShardingPartialEncoder {
         Ok(Self {
             input_output_handle,
             shard_shape,
-            data_type,
-            fill_value,
             subchunk_shape,
             chunk_grid,
             inner_codecs,
@@ -98,7 +91,7 @@ impl ShardingPartialEncoder {
 
 impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.inner_codecs.data_type()
     }
 
     fn exists(&self) -> Result<bool, StorageError> {
@@ -116,8 +109,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialEncoder {
     ) -> Result<ArrayBytes<'_>, CodecError> {
         super::sharding_partial_decoder_sync::partial_decode(
             &self.input_output_handle.clone().into_dyn_decoder(),
-            &self.data_type,
-            &self.fill_value,
             &self.shard_shape,
             &self.subchunk_shape,
             &self.inner_codecs,
@@ -149,6 +140,8 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
+        let data_type   = self.inner_codecs.data_type();
+        let fill_value = self.inner_codecs.fill_value();
         let mut shard_index = self.shard_index.lock().unwrap();
 
         let chunks_per_shard = calculate_chunks_per_shard(&self.shard_shape, &self.subchunk_shape)?;
@@ -174,9 +167,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         };
         let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
-                &self.data_type,
+                &self.inner_codecs.data_type(),
                 self.subchunk_shape.num_elements_u64(),
-                &self.fill_value,
+                &self.inner_codecs.fill_value(),
             )
         };
 
@@ -292,8 +285,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         self.inner_codecs.decode(
                             Cow::Owned(subchunk_encoded),
                             &self.subchunk_shape,
-                            &self.data_type,
-                            &self.fill_value,
                             options,
                         )?,
                     ))
@@ -330,7 +321,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     .relative_to(&chunk_subset_start)
                     .unwrap(),
                 &chunk_subset_shape,
-                &self.data_type,
+                data_type,
             )?;
 
             // Decode the subchunk
@@ -350,7 +341,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                     .relative_to(subchunk_subset.start())
                     .unwrap(),
                 &subchunk_bytes,
-                self.data_type.size(),
+                data_type.size(),
             )?;
             subchunks_decoded
                 .lock()
@@ -372,7 +363,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let updated_subchunks = iterator
             .map(|(subchunk_index, subchunk_decoded)| {
-                if subchunk_decoded.is_fill_value(&self.fill_value) {
+                if subchunk_decoded.is_fill_value(&fill_value) {
                     Ok((subchunk_index, None))
                 } else {
                     let subchunk_encoded = self
@@ -380,8 +371,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                         .encode(
                             subchunk_decoded,
                             &self.subchunk_shape,
-                            &self.data_type,
-                            &self.fill_value,
                             options,
                         )?
                         .into_owned();
@@ -439,8 +428,6 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 .encode(
                     shard_index_bytes.into(),
                     &self.index_shape,
-                    &crate::array::data_type::uint64(),
-                    &FillValue::from(u64::MAX),
                     options,
                 )?
                 .into_owned();

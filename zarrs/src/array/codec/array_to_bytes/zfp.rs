@@ -284,7 +284,7 @@ mod tests {
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions};
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"

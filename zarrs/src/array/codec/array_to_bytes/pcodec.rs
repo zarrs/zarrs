@@ -98,7 +98,7 @@ mod tests {
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, DataType, FillValue, data_type,
         transmute_to_bytes_vec,
     };
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions};
 
     const JSON_VALID: &str = r#"{
         "level": 8,
