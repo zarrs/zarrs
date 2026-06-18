@@ -35,7 +35,7 @@ pub struct BytesCodec {
 /// A `bytes` codec implementation bound to a data type and fill value.
 #[derive(Debug, Clone)]
 struct BytesCodecBound {
-    codec: Arc<BytesCodec>,
+    endian: Option<Endianness>,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -136,7 +136,7 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
         }
         data_type.codec_bytes()?;
         Ok(Arc::new(BytesCodecBound {
-            codec: self,
+            endian: self.endian,
             data_type,
             fill_value,
         }))
@@ -144,6 +144,10 @@ impl UnboundArrayToBytesCodecTraits for BytesCodec {
 }
 
 impl ArrayCodecTraits for BytesCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -193,10 +197,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         bytes.validate(num_elements, &self.data_type)?;
         let bytes = bytes.into_fixed()?;
 
-        let bytes_encoded = self
-            .data_type
-            .codec_bytes()?
-            .encode(bytes, self.codec.endian)?;
+        let bytes_encoded = self.data_type.codec_bytes()?.encode(bytes, self.endian)?;
         Ok(bytes_encoded)
     }
 
@@ -209,7 +210,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
         let bytes_decoded: ArrayBytes = self
             .data_type
             .codec_bytes()?
-            .decode(bytes, self.codec.endian)?
+            .decode(bytes, self.endian)?
             .into();
 
         let num_elements = shape.iter().map(|d| d.get()).product::<u64>();
@@ -229,7 +230,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             shape,
             &self.data_type,
             &self.fill_value,
-            self.codec.endian,
+            self.endian,
         )))
     }
 
@@ -244,7 +245,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             shape,
             &self.data_type,
             &self.fill_value,
-            self.codec.endian,
+            self.endian,
         )))
     }
 
@@ -260,7 +261,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             shape,
             &self.data_type,
             &self.fill_value,
-            self.codec.endian,
+            self.endian,
         )))
     }
 
@@ -276,7 +277,7 @@ impl ArrayToBytesCodecTraits for BytesCodecBound {
             shape,
             &self.data_type,
             &self.fill_value,
-            self.codec.endian,
+            self.endian,
         )))
     }
 
