@@ -408,44 +408,33 @@ mod tests {
     #[cfg(feature = "async")]
     #[tokio::test]
     async fn codec_transpose_async_partial_decode() {
-        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()));
-
         let elements: Vec<f32> = (0..16).map(|i| i as f32).collect();
         let shape = vec![NonZeroU64::new(4).unwrap(), NonZeroU64::new(4).unwrap()];
         let data_type = data_type::float32();
         let fill_value = FillValue::from(0.0f32);
         let bytes = crate::array::transmute_to_bytes_vec(elements);
         let bytes: ArrayBytes = bytes.into();
+        let codec = Arc::new(TransposeCodec::new(TransposeOrder::new(&[1, 0]).unwrap()))
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &shape, &CodecOptions::default())
             .unwrap();
         let input_handle = Arc::new(encoded.into_fixed().unwrap());
         let bytes_codec = Arc::new(BytesCodec::default());
-        let input_handle = bytes_codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
+        let bytes_codec = bytes_codec
+            .with_context(
+                codec.encoded_data_type().clone(),
+                codec.encoded_fill_value().clone(),
             )
+            .unwrap();
+        let input_handle = bytes_codec
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &shape, &CodecOptions::default())
             .await
             .unwrap();
         let decoded_regions = [
