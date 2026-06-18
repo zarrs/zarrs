@@ -9,7 +9,7 @@ use zarrs_data_type::FillValue;
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
 use super::{OptionalCodecConfiguration, OptionalCodecConfigurationV1};
-use crate::array::codec::CodecChain;
+use crate::array::codec::{CodecChain, CodecChainBound};
 use crate::array::{ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, DataType};
 use zarrs_codec::{
     ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError, CodecMetadataOptions, CodecOptions,
@@ -28,7 +28,8 @@ pub struct OptionalCodec {
 /// An `optional` codec implementation bound to a data type and fill value.
 #[derive(Debug, Clone)]
 struct OptionalCodecBound {
-    codec: Arc<OptionalCodec>,
+    mask_codecs: Arc<CodecChainBound>,
+    data_codecs: Arc<CodecChainBound>,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -332,8 +333,19 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
                 "optional codec requires an optional data type".to_string(),
             ));
         }
+        let inner_type = data_type.as_optional().ok_or_else(|| {
+            CodecError::Other("optional codec requires an optional data type".to_string())
+        })?;
+        let inner_fill_value = OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
         Ok(Arc::new(OptionalCodecBound {
-            codec: self,
+            mask_codecs: self.mask_codecs.clone().with_context(
+                crate::array::data_type::bool(),
+                FillValue::from(0u8),
+            )?,
+            data_codecs: self.data_codecs.clone().with_context(
+                inner_type.data_type().clone(),
+                inner_fill_value,
+            )?,
             data_type,
             fill_value,
         }))
@@ -341,6 +353,10 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
 }
 
 impl ArrayCodecTraits for OptionalCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -395,10 +411,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 
         // Encode mask
         let encoded_mask = self
-            .codec
             .mask_codecs
             .clone()
-            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
             .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
 
         // Convert dense data to sparse data (extract only valid elements)
@@ -409,11 +423,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         let num_valid = mask.iter().filter(|&&v| v != 0).count();
         let encoded_data = if num_valid > 0 {
             let data_shape = vec![std::num::NonZeroU64::try_from(num_valid as u64).unwrap()];
-            let fill_value = OptionalCodec::create_fill_value_for_inner_type(opt.data_type());
-            self.codec
-                .data_codecs
+            self.data_codecs
                 .clone()
-                .with_context(opt.data_type().clone(), fill_value)?
                 .encode(sparse_data, &data_shape, options)?
         } else {
             ArrayBytesRaw::from(vec![])
@@ -452,10 +463,8 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 
         // Decode mask
         let decoded_mask = self
-            .codec
             .mask_codecs
             .clone()
-            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
             .decode(encoded_mask.into(), shape, options)?;
         let mask = decoded_mask.into_fixed()?.into_owned();
 
@@ -467,16 +476,13 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         // Decode sparse data (only valid elements)
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
-            let sparse_data = {
-                let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-                let fill_value = OptionalCodec::create_fill_value_for_inner_type(opt.data_type());
-                self.codec
-                    .data_codecs
-                    .clone()
-                    .with_context(opt.data_type().clone(), fill_value)?
-                    .decode(encoded_data.into(), &data_shape, options)?
-                    .into_owned()
-            };
+                let sparse_data = {
+                    let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
+                    self.data_codecs
+                        .clone()
+                        .decode(encoded_data.into(), &data_shape, options)?
+                        .into_owned()
+                };
 
             // Expand sparse data to dense format (supports nested optional types)
             OptionalCodec::expand_to_dense(sparse_data, &mask, opt.data_type())?
@@ -503,19 +509,14 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 
         // Compute mask representation: bool array with same shape
         let mask_bytes_repr = self
-            .codec
             .mask_codecs
             .clone()
-            .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?
             .encoded_representation(shape)?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
-        let fill_value = OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
         let data_bytes_repr = self
-            .codec
             .data_codecs
             .clone()
-            .with_context(inner_type.data_type().clone(), fill_value)?
             .encoded_representation(shape)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
@@ -538,7 +539,7 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
 mod tests {
     use super::*;
     use crate::array::{ArrayBytes, ChunkShapeTraits, DataType, data_type};
-    use zarrs_codec::{CodecOptions, CodecTraits};
+    use zarrs_codec::{CodecOptions, CodecTraits, UnboundArrayToBytesCodecTraits};
 
     #[test]
     fn codec_optional_configuration() {
@@ -646,25 +647,14 @@ mod tests {
                 }}"#
         ))
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration)?;
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration)?)
+            .with_context(data_type.clone(), fill_value.clone())?;
 
         // Build nested ArrayBytes structure for input
         let input = build_nested_array_bytes(&data_type, num_elements);
 
-        let encoded = codec.encode(
-            input,
-            &chunk_shape,
-            &data_type,
-            &fill_value,
-            &CodecOptions::default(),
-        )?;
-        let decoded = codec.decode(
-            encoded,
-            &chunk_shape,
-            &data_type,
-            &fill_value,
-            &CodecOptions::default(),
-        )?;
+        let encoded = codec.encode(input, &chunk_shape, &CodecOptions::default())?;
+        let decoded = codec.decode(encoded, &chunk_shape, &CodecOptions::default())?;
 
         // The codec now returns optional ArrayBytes
         assert!(matches!(decoded, ArrayBytes::Optional(..)));
@@ -851,25 +841,15 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                input.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &chunk_shape, &CodecOptions::default())
             .unwrap();
 
         // Verify the decoded structure
@@ -926,25 +906,15 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                input.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &chunk_shape, &CodecOptions::default())
             .unwrap();
 
         // Verify the decoded structure
@@ -1029,25 +999,15 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                input.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &chunk_shape, &CodecOptions::default())
             .unwrap();
 
         // Verify the 3-level nested structure
@@ -1108,25 +1068,15 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let codec = OptionalCodec::new_with_configuration(&codec_configuration).unwrap();
+        let codec = Arc::new(OptionalCodec::new_with_configuration(&codec_configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                input.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(input.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &chunk_shape, &CodecOptions::default())
             .unwrap();
 
         // Verify the decoded structure
