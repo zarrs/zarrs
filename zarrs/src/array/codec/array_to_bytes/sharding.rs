@@ -131,8 +131,7 @@ fn compute_index_encoded_size(
     index_codecs: &CodecChainBound,
     sharding_index_shape: &[NonZeroU64],
 ) -> Result<u64, CodecError> {
-    let bytes_representation =
-        Arc::new(index_codecs.clone()).encoded_representation(sharding_index_shape)?;
+    let bytes_representation = index_codecs.encoded_representation(sharding_index_shape)?;
     match bytes_representation {
         BytesRepresentation::FixedSize(size) => Ok(size),
         BytesRepresentation::BoundedSize(_) | BytesRepresentation::UnboundedSize => {
@@ -150,11 +149,8 @@ fn decode_shard_index(
     options: &CodecOptions,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
-    let decoded_shard_index = Arc::new(index_codecs.clone()).decode(
-        Cow::Borrowed(encoded_shard_index),
-        index_shape,
-        options,
-    )?;
+    let decoded_shard_index =
+        index_codecs.decode(Cow::Borrowed(encoded_shard_index), index_shape, options)?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
         .as_chunks::<8>()
@@ -287,8 +283,7 @@ mod tests {
     use crate::array::{ArrayBytes, ArraySubset, data_type};
     use zarrs_chunk_grid::Indexer;
     use zarrs_codec::{
-        ArrayCodecTraits, BytesToBytesCodecTraits, CodecSpecificOptions,
-        UnboundArrayToBytesCodecTraits,
+        BytesToBytesCodecTraits, CodecSpecificOptions, UnboundArrayToBytesCodecTraits,
     };
 
     fn get_concurrent_target(parallel: bool) -> usize {
@@ -883,7 +878,6 @@ mod tests {
         let codec = Arc::new(ShardingCodec::new_with_configuration(&codec_configuration).unwrap())
             .with_context(data_type.clone(), fill_value.clone())
             .unwrap();
-        let codec = codec.as_any().downcast_ref::<ShardingCodecBound>().unwrap();
 
         // Step 1: Fully encode the shard
         let original_encoded = codec
@@ -913,6 +907,7 @@ mod tests {
             let updated_elements: Vec<u16> = vec![100, 101, 102, 103]; // New values for this subchunk
             let updated_bytes = crate::array::transmute_to_bytes_vec(updated_elements);
             let partial_encoder = codec
+                .clone()
                 .partial_encoder(
                     input_output_handle.clone(),
                     &chunk_shape,

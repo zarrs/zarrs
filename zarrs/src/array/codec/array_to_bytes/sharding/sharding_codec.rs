@@ -53,11 +53,11 @@ pub struct ShardingCodec {
 /// A `sharding` codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
 pub(crate) struct ShardingCodecBound {
-    subchunk_shape: ChunkShape,
-    inner_codecs: Arc<CodecChainBound>,
-    index_codecs: Arc<CodecChainBound>,
-    index_location: ShardingIndexLocation,
-    options: ShardingCodecOptions,
+    pub(crate) subchunk_shape: ChunkShape,
+    pub(crate) inner_codecs: Arc<CodecChainBound>,
+    pub(crate) index_codecs: Arc<CodecChainBound>,
+    pub(crate) index_location: ShardingIndexLocation,
+    pub(crate) options: ShardingCodecOptions,
 }
 
 impl ShardingCodec {
@@ -1120,7 +1120,7 @@ impl ShardingCodecBound {
     ///
     /// # Panics
     /// Panics if the encoded index size or the encoded shard minux its index length exceeds [`usize::MAX`].
-    pub fn decode_index(
+    pub(crate) fn decode_index(
         &self,
         encoded_shard: &[u8],
         chunks_per_shard: &[NonZeroU64],
