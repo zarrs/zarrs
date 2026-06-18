@@ -5,13 +5,10 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use unsafe_cell_slice::UnsafeCellSlice;
 use zarrs_chunk_grid::{ArraySubset, ChunkGridTraits};
-use zarrs_data_type::FillValue;
-use zarrs_metadata_ext::data_type;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, calculate_chunks_per_shard};
 use crate::array::array_bytes_internal::merge_chunks_vlen;
 use crate::array::chunk_grid::RegularChunkGrid;
-use crate::array::codec::CodecChain;
 use crate::array::{
     ArrayBytes, ArrayBytesFixedDisjointView, ArrayBytesOffsets, ArrayBytesRaw, ArrayIndices,
     ArrayIndicesTinyVec, ArraySubsetTraits, ChunkShape, ChunkShapeTraits, CodecChainBound,

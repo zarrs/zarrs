@@ -503,11 +503,6 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         // Header: mask_len (u64) + data_len (u64) = 16 bytes
         const HEADER_SIZE: u64 = 16;
 
-        // Get the inner data type (unwrap Optional)
-        let inner_type = self.data_type.as_optional().ok_or_else(|| {
-            CodecError::Other("optional codec requires an optional data type".to_string())
-        })?;
-
         // Compute mask representation: bool array with same shape
         let mask_bytes_repr = self.mask_codecs.clone().encoded_representation(shape)?;
 

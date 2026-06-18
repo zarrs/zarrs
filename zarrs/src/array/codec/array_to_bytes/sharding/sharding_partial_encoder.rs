@@ -7,8 +7,6 @@ use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use zarrs_chunk_grid::ChunkGridTraits;
-use zarrs_data_type::FillValue;
-use zarrs_metadata_ext::data_type;
 
 use super::{ShardingCodecOptions, ShardingIndexLocation, sharding_index_shape};
 use crate::array::chunk_grid::RegularChunkGrid;
@@ -16,8 +14,8 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
-    CodecChainBound, DataType, IndexerError, ravel_indices, transmute_to_bytes,
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChainBound,
+    DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
