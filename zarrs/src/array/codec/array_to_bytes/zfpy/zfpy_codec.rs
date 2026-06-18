@@ -146,6 +146,10 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
 }
 
 impl ArrayCodecTraits for ZfpyCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         self.inner.data_type()
     }

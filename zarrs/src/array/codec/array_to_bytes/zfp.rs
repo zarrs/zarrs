@@ -284,7 +284,7 @@ mod tests {
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions};
+    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"
@@ -516,16 +516,12 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
-        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap());
+        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_regions = [
             ArraySubset::new_with_shape(vec![1, 2, 3]),
@@ -534,13 +530,7 @@ mod tests {
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // zfp partial decoder does not hold bytes
 
@@ -580,31 +570,19 @@ mod tests {
         let bytes: ArrayBytes = bytes.into();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(JSON_REVERSIBLE).unwrap();
-        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap());
-
-        let max_encoded_size = codec
-            .encoded_representation(&chunk_shape, &data_type, &fill_value)
+        let codec = Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap())
+            .with_context(data_type.clone(), fill_value.clone())
             .unwrap();
+
+        let max_encoded_size = codec.encoded_representation(&chunk_shape).unwrap();
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert!((encoded.len() as u64) <= max_encoded_size.size().unwrap());
 
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
             .await
             .unwrap();
 
