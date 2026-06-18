@@ -251,13 +251,14 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
+    let bound_codec = codec
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
     let encoded_chunk = Arc::new(
-        codec
+        bound_codec
             .encode(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
                 shape,
-                &data_type,
-                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -265,25 +266,21 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     );
 
     let partial_decoder = if _async {
-        codec
+        bound_codec
             .clone()
             .async_partial_decoder(
                 encoded_chunk.clone(),
                 shape,
-                &data_type,
-                &fill_value,
                 &CodecOptions::default(),
             )
             .await
             .unwrap()
     } else {
-        codec
+        bound_codec
             .clone()
             .partial_decoder(
                 encoded_chunk.clone(),
                 shape,
-                &data_type,
-                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -313,13 +310,14 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     bytes: &[T],
 ) -> Vec<T> {
     let fill_value = FillValue::from(0u32);
+    let bound_codec = codec
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
     let encoded_chunk = Arc::new(
-        codec
+        bound_codec
             .encode(
                 T::to_array_bytes(&data_type, bytes).unwrap(),
                 shape,
-                &data_type,
-                &fill_value,
                 &CodecOptions::default(),
             )
             .unwrap()
@@ -328,13 +326,11 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
 
     // TODO: Async partial encoder
     let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
-    let partial_encoder = codec
+    let partial_encoder = bound_codec
         .clone()
         .partial_encoder(
             output.clone(),
             shape,
-            &data_type,
-            &fill_value,
             &CodecOptions::default(),
         )
         .unwrap();
@@ -358,14 +354,8 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let output = output.lock().unwrap().clone().unwrap();
     T::from_array_bytes(
         &data_type,
-        codec
-            .decode(
-                output.into(),
-                shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+        bound_codec
+            .decode(output.into(), shape, &CodecOptions::default())
             .unwrap(),
     )
     .unwrap()
