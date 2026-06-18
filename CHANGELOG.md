@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The partial decode granularity potentially being incorrect with multiple array-to-array codecs
+- Fixed `vlen` index endianness handling to use actual index data type rather than `uint64`
 
 ## [0.23.13](https://github.com/zarrs/zarrs/releases/tag/zarrs-v0.23.13) - 2026-05-24
 

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use super::{VlenCodecConfiguration, VlenCodecConfigurationV0_1, vlen_partial_decoder};
 use crate::array::codec::BytesCodec;
 use crate::array::{
-    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, DataType,
-    DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
+    ArrayBytes, ArrayBytesOffsets, ArrayBytesRaw, BytesRepresentation, CodecChain, CodecChainBound,
+    DataType, DataTypeSize, Endianness, FillValue, transmute_to_bytes_vec,
 };
 use zarrs_codec::{
     ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayToBytesCodecTraits,
@@ -31,7 +31,9 @@ pub struct VlenCodec {
 /// A `vlen` codec implementation bound to a data type and fill value.
 #[derive(Debug, Clone)]
 struct VlenCodecBound {
-    codec: Arc<VlenCodec>,
+    index_codecs: Arc<CodecChainBound>,
+    data_codecs: Arc<CodecChainBound>,
+    index_location: VlenIndexLocation,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -178,8 +180,24 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
                 Self::aliases_v3().default_name.to_string(),
             ));
         }
+        let index_codecs = match self.index_data_type {
+            VlenIndexDataType::UInt32 => self
+                .index_codecs
+                .clone()
+                .with_context(crate::array::data_type::uint32(), FillValue::from(0u32))?,
+            VlenIndexDataType::UInt64 => self
+                .index_codecs
+                .clone()
+                .with_context(crate::array::data_type::uint64(), FillValue::from(0u64))?,
+        };
+        let data_codecs = self
+            .data_codecs
+            .clone()
+            .with_context(crate::array::data_type::uint8(), FillValue::from(0u8))?;
         Ok(Arc::new(VlenCodecBound {
-            codec: self,
+            index_codecs,
+            data_codecs,
+            index_location: self.index_location,
             data_type,
             fill_value,
         }))
@@ -187,6 +205,10 @@ impl UnboundArrayToBytesCodecTraits for VlenCodec {
 }
 
 impl ArrayCodecTraits for VlenCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -227,48 +249,39 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         // Encode offsets
         let num_offsets =
             NonZeroU64::try_from(usize::try_from(num_elements).unwrap() as u64 + 1).unwrap();
-        let offsets = match self.codec.index_data_type {
-            VlenIndexDataType::UInt32 => {
-                let offsets = offsets
-                    .iter()
-                    .map(|offset| u32::try_from(*offset))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|_| {
-                        CodecError::Other(
-                            "index offsets are too large for a uint32 index_data_type".to_string(),
-                        )
-                    })?;
-                let offsets = transmute_to_bytes_vec(offsets);
-                let index_shape = vec![num_offsets];
-                self.codec
-                    .index_codecs
-                    .clone()
-                    .with_context(crate::array::data_type::uint32(), FillValue::from(0u32))?
-                    .encode(offsets.into(), &index_shape, options)?
-            }
-            VlenIndexDataType::UInt64 => {
-                let offsets = offsets
-                    .iter()
-                    .map(|offset| u64::try_from(*offset).unwrap())
-                    .collect::<Vec<u64>>();
-                let offsets = transmute_to_bytes_vec(offsets);
-                let index_shape = vec![num_offsets];
-                self.codec
-                    .index_codecs
-                    .clone()
-                    .with_context(crate::array::data_type::uint64(), FillValue::from(0u64))?
-                    .encode(offsets.into(), &index_shape, options)?
-            }
+        let offsets = if *self.index_codecs.data_type() == crate::array::data_type::uint32() {
+            let offsets = offsets
+                .iter()
+                .map(|offset| u32::try_from(*offset))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| {
+                    CodecError::Other(
+                        "index offsets are too large for a uint32 index_data_type".to_string(),
+                    )
+                })?;
+            let offsets = transmute_to_bytes_vec(offsets);
+            let index_shape = vec![num_offsets];
+            self.index_codecs
+                .encode(offsets.into(), &index_shape, options)?
+        } else if *self.index_codecs.data_type() == crate::array::data_type::uint64() {
+            let offsets = offsets
+                .iter()
+                .map(|offset| u64::try_from(*offset).unwrap())
+                .collect::<Vec<u64>>();
+            let offsets = transmute_to_bytes_vec(offsets);
+            let index_shape = vec![num_offsets];
+            self.index_codecs
+                .encode(offsets.into(), &index_shape, options)?
+        } else {
+            return Err(CodecError::Other(
+                "unsupported bound vlen index data type, expected uint32 or uint64".to_string(),
+            ));
         };
 
         // Encode data
         let data = if let Ok(data_len) = NonZeroU64::try_from(data.len() as u64) {
             let data_shape = vec![data_len];
-            self.codec
-                .data_codecs
-                .clone()
-                .with_context(crate::array::data_type::uint8(), FillValue::from(0u8))?
-                .encode(data.into(), &data_shape, options)?
+            self.data_codecs.encode(data.into(), &data_shape, options)?
         } else {
             vec![].into()
         };
@@ -276,7 +289,7 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         // Pack encoded offsets length, encoded offsets, and encoded data
         let mut bytes = Vec::with_capacity(size_of::<u64>() + offsets.len() + data.len());
 
-        match self.codec.index_location {
+        match self.index_location {
             VlenIndexLocation::Start => {
                 bytes.extend_from_slice(&u64::try_from(offsets.len()).unwrap().to_le_bytes()); // offsets length as u64 little endian
                 bytes.extend_from_slice(&offsets);
@@ -301,10 +314,9 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
         let (bytes, offsets) = super::get_vlen_bytes_and_offsets(
             &bytes,
             shape,
-            self.codec.index_data_type,
-            &self.codec.index_codecs,
-            &self.codec.data_codecs,
-            self.codec.index_location,
+            &self.index_codecs,
+            &self.data_codecs,
+            self.index_location,
             options,
         )?;
         let offsets = ArrayBytesOffsets::new(offsets)?;
@@ -323,10 +335,9 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
             shape.to_vec(),
             self.data_type.clone(),
             self.fill_value.clone(),
-            self.codec.index_codecs.clone(),
-            self.codec.data_codecs.clone(),
-            self.codec.index_data_type,
-            self.codec.index_location,
+            self.index_codecs.clone(),
+            self.data_codecs.clone(),
+            self.index_location,
         )))
     }
 
@@ -343,10 +354,9 @@ impl ArrayToBytesCodecTraits for VlenCodecBound {
                 shape.to_vec(),
                 self.data_type.clone(),
                 self.fill_value.clone(),
-                self.codec.index_codecs.clone(),
-                self.codec.data_codecs.clone(),
-                self.codec.index_data_type,
-                self.codec.index_location,
+                self.index_codecs.clone(),
+                self.data_codecs.clone(),
+                self.index_location,
             ),
         ))
     }

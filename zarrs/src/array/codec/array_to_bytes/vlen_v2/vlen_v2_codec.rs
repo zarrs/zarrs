@@ -93,6 +93,10 @@ impl UnboundArrayToBytesCodecTraits for VlenV2Codec {
 }
 
 impl ArrayCodecTraits for VlenV2CodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }

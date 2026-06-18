@@ -4,11 +4,11 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::array_bytes_internal::extract_decoded_regions_vlen;
-use crate::array::{ArrayBytes, ArrayBytesRaw, CodecChain, DataType, FillValue};
+use crate::array::{ArrayBytes, ArrayBytesRaw, CodecChainBound, DataType, FillValue};
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
 use zarrs_codec::{AsyncArrayPartialDecoderTraits, AsyncBytesPartialDecoderTraits};
-use zarrs_metadata_ext::codec::vlen::{VlenIndexDataType, VlenIndexLocation};
+use zarrs_metadata_ext::codec::vlen::VlenIndexLocation;
 use zarrs_storage::StorageError;
 
 /// Partial decoder for the `bytes` codec.
@@ -17,9 +17,8 @@ pub(crate) struct VlenPartialDecoder {
     shape: Vec<NonZeroU64>,
     data_type: DataType,
     fill_value: FillValue,
-    index_codecs: Arc<CodecChain>,
-    data_codecs: Arc<CodecChain>,
-    index_data_type: VlenIndexDataType,
+    index_codecs: Arc<CodecChainBound>,
+    data_codecs: Arc<CodecChainBound>,
     index_location: VlenIndexLocation,
 }
 
@@ -31,9 +30,8 @@ impl VlenPartialDecoder {
         shape: Vec<NonZeroU64>,
         data_type: DataType,
         fill_value: FillValue,
-        index_codecs: Arc<CodecChain>,
-        data_codecs: Arc<CodecChain>,
-        index_data_type: VlenIndexDataType,
+        index_codecs: Arc<CodecChainBound>,
+        data_codecs: Arc<CodecChainBound>,
         index_location: VlenIndexLocation,
     ) -> Self {
         Self {
@@ -43,7 +41,6 @@ impl VlenPartialDecoder {
             fill_value,
             index_codecs,
             data_codecs,
-            index_data_type,
             index_location,
         }
     }
@@ -51,9 +48,8 @@ impl VlenPartialDecoder {
 
 #[allow(clippy::too_many_arguments)]
 fn decode_vlen_bytes<'a>(
-    index_codecs: &CodecChain,
-    data_codecs: &CodecChain,
-    index_data_type: VlenIndexDataType,
+    index_codecs: &CodecChainBound,
+    data_codecs: &CodecChainBound,
     index_location: VlenIndexLocation,
     bytes: Option<ArrayBytesRaw>,
     indexer: &dyn crate::array::Indexer,
@@ -66,7 +62,6 @@ fn decode_vlen_bytes<'a>(
         let (data, index) = super::get_vlen_bytes_and_offsets(
             &bytes,
             shape,
-            index_data_type,
             index_codecs,
             data_codecs,
             index_location,
@@ -104,7 +99,6 @@ impl ArrayPartialDecoderTraits for VlenPartialDecoder {
         decode_vlen_bytes(
             &self.index_codecs,
             &self.data_codecs,
-            self.index_data_type,
             self.index_location,
             bytes,
             indexer,
@@ -127,9 +121,8 @@ pub(crate) struct AsyncVlenPartialDecoder {
     shape: Vec<NonZeroU64>,
     data_type: DataType,
     fill_value: FillValue,
-    index_codecs: Arc<CodecChain>,
-    data_codecs: Arc<CodecChain>,
-    index_data_type: VlenIndexDataType,
+    index_codecs: Arc<CodecChainBound>,
+    data_codecs: Arc<CodecChainBound>,
     index_location: VlenIndexLocation,
 }
 
@@ -142,9 +135,8 @@ impl AsyncVlenPartialDecoder {
         shape: Vec<NonZeroU64>,
         data_type: DataType,
         fill_value: FillValue,
-        index_codecs: Arc<CodecChain>,
-        data_codecs: Arc<CodecChain>,
-        index_data_type: VlenIndexDataType,
+        index_codecs: Arc<CodecChainBound>,
+        data_codecs: Arc<CodecChainBound>,
         index_location: VlenIndexLocation,
     ) -> Self {
         Self {
@@ -154,7 +146,6 @@ impl AsyncVlenPartialDecoder {
             fill_value,
             index_codecs,
             data_codecs,
-            index_data_type,
             index_location,
         }
     }
@@ -186,7 +177,6 @@ impl AsyncArrayPartialDecoderTraits for AsyncVlenPartialDecoder {
         decode_vlen_bytes(
             &self.index_codecs,
             &self.data_codecs,
-            self.index_data_type,
             self.index_location,
             bytes,
             indexer,

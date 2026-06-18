@@ -131,7 +131,7 @@ macro_rules! vlen_v2_codec {
             }
 
             fn with_context(
-                self: Arc<Self>,
+                &self,
                 data_type: crate::array::DataType,
                 fill_value: crate::array::FillValue,
             ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
@@ -145,6 +145,10 @@ macro_rules! vlen_v2_codec {
 
         paste::paste! {
         impl ArrayCodecTraits for [<$struct Bound>] {
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
             fn data_type(&self) -> &crate::array::DataType {
                 self.inner.data_type()
             }
