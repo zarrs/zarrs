@@ -37,7 +37,7 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
             .map_err(ArrayCreateError::ChunkGridCreateError)?;
         self.subchunk_grid = crate::array::array_sharded_ext::create_subchunk_grid(
             &self.chunk_grid,
-            self.codecs.as_ref(),
+            self.codecs_bound.as_ref(),
         );
         match &mut self.metadata {
             ArrayMetadata::V3(metadata) => {

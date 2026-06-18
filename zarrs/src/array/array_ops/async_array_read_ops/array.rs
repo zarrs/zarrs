@@ -16,7 +16,9 @@ use super::AsyncArrayReadOps;
 use crate::array::array_sharded_ext::{
     subchunk_shard_index_and_chunk_index, subchunk_shard_index_and_subset,
 };
-use crate::array::codec::array_to_bytes::sharding::{AsyncShardingPartialDecoder, ShardingCodec};
+use crate::array::codec::array_to_bytes::sharding::{
+    AsyncShardingPartialDecoder, ShardingCodecBound,
+};
 use crate::array::{ArrayBytes, ArraySubset, ChunkShapeTraits};
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayToBytesCodecTraits, AsyncArrayPartialDecoderTraits,
@@ -345,11 +347,11 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         &self,
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
-        let codecs = self.codecs();
+        let codecs = self.codecs_bound();
         let Some(sharding_codec) = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
         else {
             return Err(ArrayError::UnsupportedMethod(
                 "the array is not exclusively sharded".to_string(),
@@ -375,8 +377,6 @@ impl<TStorage: ?Sized + AsyncReadableStorageTraits + 'static> AsyncArrayReadOps
         ));
         let partial_decoder = AsyncShardingPartialDecoder::new(
             input_handle,
-            self.data_type().clone(),
-            self.fill_value().clone(),
             self.chunk_shape(&shard_indices)?,
             sharding_codec.subchunk_shape.clone(),
             sharding_codec.inner_codecs.clone(),

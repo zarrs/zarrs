@@ -12,7 +12,7 @@ use super::super::*;
 use super::ArrayReadOps;
 use crate::array::ArrayBytes;
 use crate::array::array_sharded_ext::subchunk_shard_index_and_chunk_index;
-use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingPartialDecoder};
+use crate::array::codec::array_to_bytes::sharding::{ShardingCodecBound, ShardingPartialDecoder};
 use crate::iter_concurrent_limit;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -306,11 +306,11 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
         &self,
         subchunk_indices: &[u64],
     ) -> Result<Option<Vec<u8>>, ArrayError> {
-        let codecs = self.codecs();
+        let codecs = self.codecs_bound();
         let Some(sharding_codec) = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
         else {
             return Err(ArrayError::UnsupportedMethod(
                 "the array is not exclusively sharded".to_string(),
@@ -336,8 +336,6 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
 
         let partial_decoder = ShardingPartialDecoder::new(
             input_handle,
-            self.data_type().clone(),
-            self.fill_value().clone(),
             self.chunk_shape(&shard_indices)?,
             sharding_codec.subchunk_shape.clone(),
             sharding_codec.inner_codecs.clone(),
