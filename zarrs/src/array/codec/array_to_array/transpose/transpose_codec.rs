@@ -137,6 +137,10 @@ impl UnboundArrayToArrayCodecTraits for TransposeCodec {
 }
 
 impl ArrayCodecTraits for TransposeCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }

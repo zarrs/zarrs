@@ -113,6 +113,10 @@ impl UnboundArrayToArrayCodecTraits for BitroundCodec {
 }
 
 impl ArrayCodecTraits for BitroundCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     /// Return the decoded data type bound to this codec.
     fn data_type(&self) -> &DataType {
         &self.data_type

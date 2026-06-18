@@ -107,6 +107,10 @@ impl UnboundArrayToArrayCodecTraits for SqueezeCodec {
 }
 
 impl ArrayCodecTraits for SqueezeCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
