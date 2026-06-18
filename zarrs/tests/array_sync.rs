@@ -7,8 +7,7 @@ use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder, ArrayBytes, ArraySubset, FillValue, data_type};
 use zarrs::storage::store::MemoryStore;
 use zarrs_codec::{
-    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, CodecOptions,
-    UnboundArrayToBytesCodecTraits,
+    ArrayBytesDecodeIntoTarget, ArrayBytesFixedDisjointView, ArrayToBytesCodecTraits, CodecOptions,
 };
 
 #[allow(clippy::single_range_in_vec_init)]
@@ -122,7 +121,7 @@ fn array_sync_read_uncompressed() -> Result<(), Box<dyn std::error::Error>> {
     let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
         array
-            .codecs()
+            .codecs_bound()
             .partial_decode_granularity(&chunk_shape)
             .unwrap(),
         [NonZeroU64::new(2).unwrap(); 2]
@@ -160,7 +159,7 @@ fn array_sync_read_shard_compress() -> Result<(), Box<dyn std::error::Error>> {
     let chunk_shape = array.chunk_shape(&vec![0; array.dimensionality()])?;
     assert_eq!(
         array
-            .codecs()
+            .codecs_bound()
             .partial_decode_granularity(&chunk_shape)
             .unwrap(),
         [NonZeroU64::new(1).unwrap(); 2]
