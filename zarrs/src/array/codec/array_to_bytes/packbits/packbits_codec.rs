@@ -45,7 +45,9 @@ pub struct PackBitsCodec {
 /// A `packbits` codec implementation bound to a data type and fill value.
 #[derive(Debug, Clone)]
 struct PackBitsCodecBound {
-    codec: Arc<PackBitsCodec>,
+    padding_encoding: PackBitsPaddingEncoding,
+    first_bit: Option<u64>,
+    last_bit: Option<u64>,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -157,7 +159,9 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
         pack_bits_components(&data_type)?;
         Ok(Arc::new(PackBitsCodecBound {
-            codec: self,
+            padding_encoding: self.padding_encoding,
+            first_bit: self.first_bit,
+            last_bit: self.last_bit,
             data_type,
             fill_value,
         }))
@@ -165,6 +169,10 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
 }
 
 impl ArrayCodecTraits for PackBitsCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -202,8 +210,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             num_components,
             sign_extension: _,
         } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.codec.first_bit.unwrap_or(0);
-        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -234,7 +242,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         // Allocate the output
-        let padding_encoding_byte = match self.codec.padding_encoding {
+        let padding_encoding_byte = match self.padding_encoding {
             PackBitsPaddingEncoding::None => 0,
             PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
         };
@@ -242,7 +250,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
 
         // Set the padding encoding byte and grab the element bytes
         let padding_bits = padding_bits(num_elements, element_size_bits);
-        let packed_elements = match self.codec.padding_encoding {
+        let packed_elements = match self.padding_encoding {
             PackBitsPaddingEncoding::None => &mut bytes_enc[..],
             PackBitsPaddingEncoding::FirstByte => {
                 bytes_enc[0] = padding_bits;
@@ -280,8 +288,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             num_components,
             sign_extension,
         } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.codec.first_bit.unwrap_or(0);
-        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -303,7 +311,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             CodecError::Other("data type must have a fixed size for packbits codec".to_string())
         })?;
         let expected_length = elements_size_bytes
-            + match self.codec.padding_encoding {
+            + match self.padding_encoding {
                 PackBitsPaddingEncoding::None => 0,
                 PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
             };
@@ -312,7 +320,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         }
 
         let padding_bits = padding_bits(num_elements, element_size_bits);
-        let packed_elements = match self.codec.padding_encoding {
+        let packed_elements = match self.padding_encoding {
             PackBitsPaddingEncoding::None => &bytes[..],
             PackBitsPaddingEncoding::FirstByte => {
                 if bytes[0] != padding_bits {
@@ -383,8 +391,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             num_components: _,
             sign_extension: _,
         } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.codec.first_bit.unwrap_or(0);
-        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -402,9 +410,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 shape.to_vec(),
                 self.data_type.clone(),
                 self.fill_value.clone(),
-                self.codec.padding_encoding,
-                self.codec.first_bit,
-                self.codec.last_bit,
+                self.padding_encoding,
+                self.first_bit,
+                self.last_bit,
             )))
         }
     }
@@ -421,8 +429,8 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             num_components: _,
             sign_extension: _,
         } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.codec.first_bit.unwrap_or(0);
-        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -440,9 +448,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 shape.to_vec(),
                 self.data_type.clone(),
                 self.fill_value.clone(),
-                self.codec.padding_encoding,
-                self.codec.first_bit,
-                self.codec.last_bit,
+                self.padding_encoding,
+                self.first_bit,
+                self.last_bit,
             )))
         }
     }
@@ -456,15 +464,15 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             num_components,
             sign_extension: _,
         } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.codec.first_bit.unwrap_or(0);
-        let last_bit = self.codec.last_bit.unwrap_or(component_size_bits - 1);
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
 
         let num_elements = shape.num_elements_u64();
         let component_size_bits_extracted = last_bit - first_bit + 1;
         let element_size_bits = component_size_bits_extracted * num_components;
         let elements_size_bytes = (num_elements * element_size_bits).div_ceil(8);
 
-        let padding_encoding_byte = match self.codec.padding_encoding {
+        let padding_encoding_byte = match self.padding_encoding {
             PackBitsPaddingEncoding::None => 0,
             PackBitsPaddingEncoding::FirstByte | PackBitsPaddingEncoding::LastByte => 1,
         };
