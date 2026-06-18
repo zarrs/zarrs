@@ -336,16 +336,17 @@ impl UnboundArrayToBytesCodecTraits for OptionalCodec {
         let inner_type = data_type.as_optional().ok_or_else(|| {
             CodecError::Other("optional codec requires an optional data type".to_string())
         })?;
-        let inner_fill_value = OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
+        let inner_fill_value =
+            OptionalCodec::create_fill_value_for_inner_type(inner_type.data_type());
         Ok(Arc::new(OptionalCodecBound {
-            mask_codecs: self.mask_codecs.clone().with_context(
-                crate::array::data_type::bool(),
-                FillValue::from(0u8),
-            )?,
-            data_codecs: self.data_codecs.clone().with_context(
-                inner_type.data_type().clone(),
-                inner_fill_value,
-            )?,
+            mask_codecs: self
+                .mask_codecs
+                .clone()
+                .with_context(crate::array::data_type::bool(), FillValue::from(0u8))?,
+            data_codecs: self
+                .data_codecs
+                .clone()
+                .with_context(inner_type.data_type().clone(), inner_fill_value)?,
             data_type,
             fill_value,
         }))
@@ -410,10 +411,10 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Encode mask
-        let encoded_mask = self
-            .mask_codecs
-            .clone()
-            .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
+        let encoded_mask =
+            self.mask_codecs
+                .clone()
+                .encode(ArrayBytes::from(mask.as_ref()), shape, options)?;
 
         // Convert dense data to sparse data (extract only valid elements)
         // This supports arbitrarily nested optional types
@@ -476,13 +477,13 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         // Decode sparse data (only valid elements)
         let valid_count = mask.iter().filter(|&&v| v != 0).count();
         let dense_data = if valid_count > 0 {
-                let sparse_data = {
-                    let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
-                    self.data_codecs
-                        .clone()
-                        .decode(encoded_data.into(), &data_shape, options)?
-                        .into_owned()
-                };
+            let sparse_data = {
+                let data_shape = vec![std::num::NonZeroU64::try_from(valid_count as u64).unwrap()];
+                self.data_codecs
+                    .clone()
+                    .decode(encoded_data.into(), &data_shape, options)?
+                    .into_owned()
+            };
 
             // Expand sparse data to dense format (supports nested optional types)
             OptionalCodec::expand_to_dense(sparse_data, &mask, opt.data_type())?
@@ -508,16 +509,10 @@ impl ArrayToBytesCodecTraits for OptionalCodecBound {
         })?;
 
         // Compute mask representation: bool array with same shape
-        let mask_bytes_repr = self
-            .mask_codecs
-            .clone()
-            .encoded_representation(shape)?;
+        let mask_bytes_repr = self.mask_codecs.clone().encoded_representation(shape)?;
 
         // Compute data representation: inner type array with same shape (worst case: all elements valid)
-        let data_bytes_repr = self
-            .data_codecs
-            .clone()
-            .encoded_representation(shape)?;
+        let data_bytes_repr = self.data_codecs.clone().encoded_representation(shape)?;
 
         // Combine sizes: if either is unbounded, result is unbounded
         match (mask_bytes_repr.size(), data_bytes_repr.size()) {
