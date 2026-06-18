@@ -284,7 +284,10 @@ mod tests {
     use crate::array::{
         ArrayBytes, ArraySubset, ChunkShape, ChunkShapeTraits, CodecChain, FillValue, data_type,
     };
-    use zarrs_codec::{BytesPartialDecoderTraits, CodecOptions, UnboundArrayToBytesCodecTraits};
+    use zarrs_codec::{
+        ArrayToBytesCodecTraits, BytesPartialDecoderTraits, CodecOptions,
+        UnboundArrayToBytesCodecTraits,
+    };
 
     const JSON_REVERSIBLE: &str = r#"{
         "mode": "reversible"
@@ -326,29 +329,19 @@ mod tests {
         let bytes = T::to_array_bytes(data_type, &elements).unwrap();
 
         let configuration: ZfpCodecConfiguration = serde_json::from_str(configuration).unwrap();
-        let codec = CodecChain::new(
+        let codec = Arc::new(CodecChain::new(
             vec![Arc::new(SqueezeCodec::new())],
             Arc::new(ZfpCodec::new_with_configuration(&configuration).unwrap()),
             vec![],
-        );
+        ))
+        .with_context(data_type.clone(), fill_value.clone())
+        .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                chunk_shape,
-                data_type,
-                fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded.clone(),
-                chunk_shape,
-                data_type,
-                fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded.clone(), chunk_shape, &CodecOptions::default())
             .unwrap()
             .into_owned();
         let decoded_elements = T::from_array_bytes(data_type, decoded).unwrap();
