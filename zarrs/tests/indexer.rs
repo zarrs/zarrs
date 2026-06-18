@@ -268,21 +268,13 @@ fn indexer_partial_decode_impl<T: ElementOwned>(
     let partial_decoder = if _async {
         bound_codec
             .clone()
-            .async_partial_decoder(
-                encoded_chunk.clone(),
-                shape,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
             .await
             .unwrap()
     } else {
         bound_codec
             .clone()
-            .partial_decoder(
-                encoded_chunk.clone(),
-                shape,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(encoded_chunk.clone(), shape, &CodecOptions::default())
             .unwrap()
     };
 
@@ -328,11 +320,7 @@ fn indexer_partial_encode_impl<T: ElementOwned>(
     let output = Arc::new(Mutex::new(Some(encoded_chunk.to_vec())));
     let partial_encoder = bound_codec
         .clone()
-        .partial_encoder(
-            output.clone(),
-            shape,
-            &CodecOptions::default(),
-        )
+        .partial_encoder(output.clone(), shape, &CodecOptions::default())
         .unwrap();
     assert_eq!(
         partial_encoder.supports_partial_encode(),
