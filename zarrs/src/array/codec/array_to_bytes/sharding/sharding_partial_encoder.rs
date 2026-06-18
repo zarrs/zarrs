@@ -16,10 +16,13 @@ use crate::array::codec::array_to_bytes::sharding::{
     calculate_chunks_per_shard, compute_index_encoded_size,
 };
 use crate::array::{
-    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound, DataType, IndexerError, ravel_indices, transmute_to_bytes
+    ArrayBytes, ArrayBytesRaw, ArrayIndicesTinyVec, ChunkShape, ChunkShapeTraits, CodecChain,
+    CodecChainBound, DataType, IndexerError, ravel_indices, transmute_to_bytes,
 };
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError, CodecOptions, update_array_bytes
+    ArrayCodecTraits, ArrayPartialDecoderTraits, ArrayPartialEncoderTraits,
+    ArrayToBytesCodecTraits, BytesPartialEncoderTraits, CodecError, CodecOptions,
+    update_array_bytes,
 };
 use zarrs_storage::StorageError;
 use zarrs_storage::byte_range::ByteRange;
@@ -140,7 +143,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         chunk_subset_bytes: &ArrayBytes<'_>,
         options: &super::CodecOptions,
     ) -> Result<(), super::CodecError> {
-        let data_type   = self.inner_codecs.data_type();
+        let data_type = self.inner_codecs.data_type();
         let fill_value = self.inner_codecs.fill_value();
         let mut shard_index = self.shard_index.lock().unwrap();
 
@@ -368,11 +371,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 } else {
                     let subchunk_encoded = self
                         .inner_codecs
-                        .encode(
-                            subchunk_decoded,
-                            &self.subchunk_shape,
-                            options,
-                        )?
+                        .encode(subchunk_decoded, &self.subchunk_shape, options)?
                         .into_owned();
                     Ok((subchunk_index, Some(subchunk_encoded)))
                 }
@@ -425,11 +424,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
                 transmute_to_bytes(shard_index.as_slice()).into();
             let encoded_array_index = self
                 .index_codecs
-                .encode(
-                    shard_index_bytes.into(),
-                    &self.index_shape,
-                    options,
-                )?
+                .encode(shard_index_bytes.into(), &self.index_shape, options)?
                 .into_owned();
 
             // Get the total size of the encoded subchunks

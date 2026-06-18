@@ -62,22 +62,22 @@ mod sharding_partial_encoder;
 pub(crate) use sharding_partial_decoder_async::AsyncShardingPartialDecoder;
 pub(crate) use sharding_partial_decoder_sync::ShardingPartialDecoder;
 
-
 use std::borrow::Cow;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use crate::array::concurrency::calc_concurrency_outer_inner;
 use crate::array::{
-    ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound, DataType, FillValue,
-    RecommendedConcurrency, ravel_indices,
+    ArrayBytes, BytesRepresentation, ChunkShape, ChunkShapeTraits, CodecChain, CodecChainBound,
+    DataType, FillValue, RecommendedConcurrency, ravel_indices,
 };
 pub use sharding_codec::ShardingCodec;
 pub(crate) use sharding_codec::ShardingCodecBound;
 pub use sharding_codec_builder::ShardingCodecBuilder;
 pub use sharding_options::{ShardingCodecOptions, SubchunkWriteOrder};
 use zarrs_codec::{
-    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError, CodecOptions, CodecPluginV3, CodecTraitsV3
+    ArrayCodecTraits, ArrayToBytesCodecTraits, BytesPartialDecoderTraits, Codec, CodecError,
+    CodecOptions, CodecPluginV3, CodecTraitsV3,
 };
 use zarrs_metadata::v3::MetadataV3;
 pub use zarrs_metadata_ext::codec::sharding::{
@@ -131,8 +131,8 @@ fn compute_index_encoded_size(
     index_codecs: &CodecChainBound,
     sharding_index_shape: &[NonZeroU64],
 ) -> Result<u64, CodecError> {
-    let bytes_representation = Arc::new(index_codecs.clone())
-        .encoded_representation(sharding_index_shape)?;
+    let bytes_representation =
+        Arc::new(index_codecs.clone()).encoded_representation(sharding_index_shape)?;
     match bytes_representation {
         BytesRepresentation::FixedSize(size) => Ok(size),
         BytesRepresentation::BoundedSize(_) | BytesRepresentation::UnboundedSize => {
@@ -150,8 +150,11 @@ fn decode_shard_index(
     options: &CodecOptions,
 ) -> Result<Vec<u64>, CodecError> {
     // Decode the shard index
-    let decoded_shard_index = Arc::new(index_codecs.clone())
-        .decode(Cow::Borrowed(encoded_shard_index), index_shape, options)?;
+    let decoded_shard_index = Arc::new(index_codecs.clone()).decode(
+        Cow::Borrowed(encoded_shard_index),
+        index_shape,
+        options,
+    )?;
     let decoded_shard_index = decoded_shard_index.into_fixed()?;
     Ok(decoded_shard_index
         .as_chunks::<8>()
@@ -423,11 +426,7 @@ mod tests {
             )
             .unwrap();
         let decoded = codec
-            .decode(
-                encoded.clone(),
-                &chunk_shape,
-                options,
-            )
+            .decode(encoded.clone(), &chunk_shape, options)
             .unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
@@ -578,12 +577,8 @@ mod tests {
                 .with_context(data_type, fill_value)
                 .unwrap();
 
-        let encoded = codec
-            .encode(bytes.clone(), &shape, options)
-            .unwrap();
-        let decoded = codec
-            .decode(encoded.clone(), &shape, options)
-            .unwrap();
+        let encoded = codec.encode(bytes.clone(), &shape, options).unwrap();
+        let decoded = codec.decode(encoded.clone(), &shape, options).unwrap();
         assert_eq!(bytes, decoded);
         assert_ne!(encoded, decoded.into_fixed().unwrap());
     }
@@ -736,15 +731,10 @@ mod tests {
                 })
                 .bytes_to_bytes_codecs(bytes_to_bytes_codecs)
                 .build(),
-        ).with_context(data_type, fill_value)?;
+        )
+        .with_context(data_type, fill_value)?;
 
-        let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                options,
-            )
-            .unwrap();
+        let encoded = codec.encode(bytes.clone(), &chunk_shape, options).unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec

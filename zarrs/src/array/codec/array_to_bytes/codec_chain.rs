@@ -11,11 +11,11 @@ use crate::array::{
 };
 use zarrs_codec::{
     ArrayBytesDecodeIntoTarget, ArrayCodecTraits, ArrayPartialDecoderTraits,
-    ArrayPartialEncoderTraits, ArrayToBytesCodecTraits, ArrayToArrayCodecTraits, BytesPartialDecoderTraits,
-    BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec, CodecError, CodecMetadataOptions,
-    CodecOptions, CodecTraits, PartialDecoderCapability, PartialEncoderCapability,
-    RecommendedConcurrency, UnboundArrayToArrayCodecTraits, UnboundArrayToBytesCodecTraits,
-    decode_into_array_bytes_target,
+    ArrayPartialEncoderTraits, ArrayToArrayCodecTraits, ArrayToBytesCodecTraits,
+    BytesPartialDecoderTraits, BytesPartialEncoderTraits, BytesToBytesCodecTraits, Codec,
+    CodecError, CodecMetadataOptions, CodecOptions, CodecTraits, PartialDecoderCapability,
+    PartialEncoderCapability, RecommendedConcurrency, UnboundArrayToArrayCodecTraits,
+    UnboundArrayToBytesCodecTraits, decode_into_array_bytes_target,
 };
 #[cfg(feature = "async")]
 use zarrs_codec::{
@@ -347,10 +347,12 @@ impl ArrayCodecTraits for CodecChainBound {
         // The fill value doesn't affect concurrency computation.
         let fill_value: FillValue = vec![0u8; self.data_type.fixed_size().unwrap_or(0)].into();
         let array_representations =
-            self.codec.get_array_representations(shape, &self.data_type, &fill_value)?;
+            self.codec
+                .get_array_representations(shape, &self.data_type, &fill_value)?;
         let bytes_representations = {
             let (shape, data_type, fill_value) = array_representations.last().unwrap();
-            self.codec.get_bytes_representations(shape, data_type, fill_value)?
+            self.codec
+                .get_bytes_representations(shape, data_type, fill_value)?
         };
 
         // bytes->bytes
@@ -367,7 +369,8 @@ impl ArrayCodecTraits for CodecChainBound {
             let (shape, data_type, _fill_value) = array_representations.last().unwrap();
             let fill_value = &array_representations.last().unwrap().2;
             &self
-                .codec.array_to_bytes
+                .codec
+                .array_to_bytes
                 .clone()
                 .with_context(data_type.clone(), fill_value.clone())?
                 .recommended_concurrency(shape)?

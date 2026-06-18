@@ -120,6 +120,7 @@ mod tests {
     };
     use zarrs_codec::{
         BytesPartialDecoderTraits, CodecMetadataOptions, CodecOptions, CodecTraits,
+        UnboundArrayToBytesCodecTraits,
     };
 
     #[test]
@@ -173,23 +174,12 @@ mod tests {
         let size = chunk_shape.num_elements_u64() as usize * data_type.fixed_size().unwrap();
         let bytes: ArrayBytes = (0..size).map(|s| s as u8).collect::<Vec<_>>().into();
 
-        let codec = BytesCodec::new(endianness);
+        let codec = Arc::new(BytesCodec::new(endianness))
+            .with_context(data_type.clone(), fill_value.clone())?;
 
-        let encoded = codec.encode(
-            bytes.clone(),
-            &chunk_shape,
-            &data_type,
-            &fill_value,
-            &CodecOptions::default(),
-        )?;
+        let encoded = codec.encode(bytes.clone(), &chunk_shape, &CodecOptions::default())?;
         let decoded = codec
-            .decode(
-                encoded,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .decode(encoded, &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(bytes, decoded);
         Ok(())
@@ -273,27 +263,17 @@ mod tests {
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
-        let codec = Arc::new(BytesCodec::new(None));
+        let codec = Arc::new(BytesCodec::new(None))
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .partial_decoder(
-                input_handle.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .partial_decoder(input_handle.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         assert_eq!(partial_decoder.size_held(), input_handle.size_held()); // bytes partial decoder does not hold bytes
         let decoded_partial_chunk = partial_decoder
@@ -321,27 +301,17 @@ mod tests {
         let elements: Vec<u8> = (0..chunk_shape.num_elements_u64() as u8).collect();
         let bytes: ArrayBytes = elements.into();
 
-        let codec = Arc::new(BytesCodec::new(None));
+        let codec = Arc::new(BytesCodec::new(None))
+            .with_context(data_type.clone(), fill_value.clone())
+            .unwrap();
 
         let encoded = codec
-            .encode(
-                bytes.clone(),
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .encode(bytes.clone(), &chunk_shape, &CodecOptions::default())
             .unwrap();
         let decoded_region = ArraySubset::new_with_ranges(&[1..3, 0..1]);
         let input_handle = Arc::new(encoded);
         let partial_decoder = codec
-            .async_partial_decoder(
-                input_handle,
-                &chunk_shape,
-                &data_type,
-                &fill_value,
-                &CodecOptions::default(),
-            )
+            .async_partial_decoder(input_handle, &chunk_shape, &CodecOptions::default())
             .await
             .unwrap();
         let decoded_partial_chunk = partial_decoder

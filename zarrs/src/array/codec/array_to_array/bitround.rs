@@ -92,9 +92,7 @@ mod tests {
     use super::*;
     use crate::array::codec::BytesCodec;
     use crate::array::{ArrayBytes, ArraySubset, data_type};
-    use zarrs_codec::{
-        CodecOptions,
-    };
+    use zarrs_codec::CodecOptions;
 
     #[test]
     fn codec_bitround_float() {

@@ -1,7 +1,9 @@
 use std::num::NonZeroU64;
 
 use super::chunk_grid::{RectilinearChunkGrid, RegularBoundedChunkGrid, RegularChunkGrid};
-use super::{ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChainBound};
+use super::{
+    ArrayError, ArrayOps, ArrayShape, ArraySubset, ChunkGrid, ChunkShape, CodecChainBound,
+};
 use crate::array::chunk_grid::ChunkEdgeLengths;
 use crate::array::chunk_grid::repeat::RepeatChunkGrid;
 use crate::array::codec::array_to_bytes::sharding::ShardingCodecBound;

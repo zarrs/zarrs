@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use zarrs_plugin::{PluginCreateError, ZarrVersion};
 
-use super::super::zfp::{ZfpCodec};
+use super::super::zfp::ZfpCodec;
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use zarrs_codec::{
     ArrayBytes, ArrayBytesRaw, ArrayCodecTraits, ArrayToBytesCodecTraits, CodecError,
@@ -153,7 +153,7 @@ impl ArrayCodecTraits for ZfpyCodecBound {
     fn fill_value(&self) -> &FillValue {
         self.inner.fill_value()
     }
-    
+
     fn recommended_concurrency(
         &self,
         shape: &[NonZeroU64],
@@ -196,7 +196,9 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn ArrayPartialDecoderTraits>, CodecError> {
-        self.inner.clone().partial_decoder(input_handle, shape, options)
+        self.inner
+            .clone()
+            .partial_decoder(input_handle, shape, options)
     }
 
     #[cfg(feature = "async")]
@@ -206,7 +208,8 @@ impl ArrayToBytesCodecTraits for ZfpyCodecBound {
         shape: &[NonZeroU64],
         options: &CodecOptions,
     ) -> Result<Arc<dyn AsyncArrayPartialDecoderTraits>, CodecError> {
-        self.inner.clone()
+        self.inner
+            .clone()
             .async_partial_decoder(input_handle, shape, options)
             .await
     }
