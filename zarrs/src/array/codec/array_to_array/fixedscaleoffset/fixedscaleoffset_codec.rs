@@ -31,7 +31,9 @@ pub struct FixedScaleOffsetCodec {
 /// A `fixedscaleoffset` codec implementation bound to a data type and fill value.
 #[derive(Clone, Debug)]
 struct FixedScaleOffsetCodecBound {
-    codec: Arc<FixedScaleOffsetCodec>,
+    offset: f32,
+    scale: f32,
+    astype: Option<DataType>,
     data_type: DataType,
     fill_value: FillValue,
     encoded_data_type: DataType,
@@ -424,7 +426,9 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         }
         let encoded_data_type = self.astype.clone().unwrap_or_else(|| self.dtype.clone());
         Ok(Arc::new(FixedScaleOffsetCodecBound {
-            codec: self,
+            offset: self.offset,
+            scale: self.scale,
+            astype: self.astype.clone(),
             data_type,
             fill_value,
             encoded_data_type,
@@ -433,6 +437,10 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
 }
 
 impl ArrayCodecTraits for FixedScaleOffsetCodecBound {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn data_type(&self) -> &DataType {
         &self.data_type
     }
@@ -476,9 +484,9 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         do_encode(
             bytes,
             &self.data_type,
-            self.codec.offset,
-            self.codec.scale,
-            self.codec.astype.as_ref(),
+            self.offset,
+            self.scale,
+            self.astype.as_ref(),
         )
     }
 
@@ -489,17 +497,12 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?.into_owned();
-        let mut bytes = if let Some(astype) = &self.codec.astype {
+        let mut bytes = if let Some(astype) = &self.astype {
             cast_array(&bytes, astype, &self.data_type)?
         } else {
             bytes
         };
-        unscale_array(
-            &mut bytes,
-            &self.data_type,
-            self.codec.offset,
-            self.codec.scale,
-        )?;
+        unscale_array(&mut bytes, &self.data_type, self.offset, self.scale)?;
         Ok(bytes.into())
     }
 }
