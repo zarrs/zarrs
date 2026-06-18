@@ -329,11 +329,17 @@ impl CodecChain {
 
 impl ArrayCodecTraits for CodecChainBound {
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        self.array_to_array.first().map_or_else(
+            || self.array_to_bytes.data_type(),
+            |codec| codec.data_type(),
+        )
     }
 
     fn fill_value(&self) -> &FillValue {
-        &self.fill_value
+        self.array_to_array.first().map_or_else(
+            || self.array_to_bytes.fill_value(),
+            |codec| codec.fill_value(),
+        )
     }
 
     fn recommended_concurrency(
@@ -343,21 +349,17 @@ impl ArrayCodecTraits for CodecChainBound {
         let mut concurrency_min = usize::MAX;
         let mut concurrency_max = 0;
 
-        // Create a dummy fill value for computing array representations.
-        // The fill value doesn't affect concurrency computation.
-        let fill_value: FillValue = vec![0u8; self.data_type.fixed_size().unwrap_or(0)].into();
-        let array_representations =
-            self.codec
-                .get_array_representations(shape, &self.data_type, &fill_value)?;
-        let bytes_representations = {
-            let (shape, data_type, fill_value) = array_representations.last().unwrap();
-            self.codec
-                .get_bytes_representations(shape, data_type, fill_value)?
-        };
+        let array_representations = self.get_array_representations(shape)?;
+        let bytes_representations = self.get_bytes_representations(
+            &array_representations
+                .last()
+                .expect("array representations is non-empty")
+                .0,
+        )?;
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
-            self.codec.bytes_to_bytes.iter().rev(),
+            self.bytes_to_bytes.iter().rev(),
             bytes_representations.iter().rev().skip(1),
         ) {
             let recommended_concurrency = &codec.recommended_concurrency(bytes_representation)?;
@@ -365,35 +367,24 @@ impl ArrayCodecTraits for CodecChainBound {
             concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
         }
 
-        let recommended_concurrency = {
-            let (shape, data_type, _fill_value) = array_representations.last().unwrap();
-            let fill_value = &array_representations.last().unwrap().2;
-            &self
-                .codec
-                .array_to_bytes
-                .clone()
-                .with_context(data_type.clone(), fill_value.clone())?
-                .recommended_concurrency(shape)?
-        };
+        let recommended_concurrency = self
+            .array_to_bytes
+            .recommended_concurrency(&array_representations.last().unwrap().0)?;
         concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
         concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
 
         // array->array
-        for (codec, (shape, data_type, _fill_value)) in std::iter::zip(
-            self.codec.array_to_array.iter().rev(),
+        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
+            self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
-            let recommended_concurrency = codec
-                .clone()
-                .with_context(data_type.clone(), _fill_value.clone())?
-                .recommended_concurrency(shape)?;
+            let recommended_concurrency = codec.recommended_concurrency(shape)?;
             concurrency_min = std::cmp::min(concurrency_min, recommended_concurrency.min());
             concurrency_max = std::cmp::max(concurrency_max, recommended_concurrency.max());
         }
 
         let recommended_concurrency = RecommendedConcurrency::new(
-            std::cmp::min(concurrency_min, concurrency_max)
-                ..std::cmp::max(concurrency_max, concurrency_max),
+            std::cmp::min(concurrency_min, concurrency_max)..concurrency_max,
         );
 
         Ok(recommended_concurrency)
@@ -414,8 +405,14 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        self.codec
-            .encoded_representation(shape, &self.data_type, &self.fill_value)
+        let array_representations = self.get_array_representations(shape)?;
+        let mut bytes_representation = self
+            .array_to_bytes
+            .encoded_representation(&array_representations.last().unwrap().0)?;
+        for codec in &self.bytes_to_bytes {
+            bytes_representation = codec.encoded_representation(&bytes_representation);
+        }
+        Ok(bytes_representation)
     }
 
     fn partial_decode_granularity(
@@ -663,38 +660,25 @@ impl CodecChain {
         Ok(granularity)
     }
 
-    pub(crate) fn encode<'a>(
+    fn encode<'a>(
         &self,
         mut bytes: ArrayBytes<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        bytes.validate(shape.iter().map(|v| v.get()).product(), data_type)?;
+        bytes.validate(shape.iter().map(|v| v.get()).product(), self.data_type())?;
 
         let mut shape = ChunkShape::from(shape.to_vec());
-        let mut data_type = data_type.clone();
-        let mut fill_value = fill_value.clone();
 
         // array->array
         for codec in &self.array_to_array {
-            let bound = codec
-                .clone()
-                .with_context(data_type.clone(), fill_value.clone())?;
-            bytes = bound.encode(bytes, &shape, options)?;
-            shape = bound.encoded_shape(&shape)?;
-            fill_value = bound.encoded_fill_value().clone();
-            data_type = bound.encoded_data_type().clone();
+            bytes = codec.encode(bytes, &shape, options)?;
+            shape = codec.encoded_shape(&shape)?;
         }
 
         // array->bytes
-        let array_to_bytes = self
-            .array_to_bytes
-            .clone()
-            .with_context(data_type, fill_value)?;
-        let mut bytes = array_to_bytes.encode(bytes, &shape, options)?;
-        let mut decoded_representation = array_to_bytes.encoded_representation(&shape)?;
+        let mut bytes = self.array_to_bytes.encode(bytes, &shape, options)?;
+        let mut decoded_representation = self.array_to_bytes.encoded_representation(&shape)?;
 
         // bytes->bytes
         for codec in &self.bytes_to_bytes {
@@ -705,16 +689,13 @@ impl CodecChain {
         Ok(bytes)
     }
 
-    pub(crate) fn decode<'a>(
+    fn decode<'a>(
         &self,
         mut bytes: ArrayBytesRaw<'a>,
         shape: &[NonZeroU64],
-        data_type: &DataType,
-        fill_value: &FillValue,
         options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        let (array_representations, bytes_representations) =
-            self.get_representations(shape, data_type, fill_value)?;
+        let (array_representations, bytes_representations) = self.get_representations(shape)?;
 
         // bytes->bytes
         for (codec, bytes_representation) in std::iter::zip(
@@ -725,23 +706,16 @@ impl CodecChain {
         }
 
         // bytes->array
-        let mut bytes = {
-            let (shape, data_type, fill_value) = array_representations.last().unwrap();
+        let mut bytes =
             self.array_to_bytes
-                .clone()
-                .with_context(data_type.clone(), fill_value.clone())?
-                .decode(bytes, shape, options)?
-        };
+                .decode(bytes, &array_representations.last().unwrap().0, options)?;
 
         // array->array
-        for (codec, (shape, data_type, fill_value)) in std::iter::zip(
+        for (codec, (shape, _data_type, _fill_value)) in std::iter::zip(
             self.array_to_array.iter().rev(),
             array_representations.iter().rev().skip(1),
         ) {
-            bytes = codec
-                .clone()
-                .with_context(data_type.clone(), fill_value.clone())?
-                .decode(bytes, shape, options)?;
+            bytes = codec.decode(bytes, shape, options)?;
         }
 
         let (shape, data_type, _) = array_representations.first().unwrap();
