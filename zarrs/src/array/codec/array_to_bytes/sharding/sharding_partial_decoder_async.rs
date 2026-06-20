@@ -101,7 +101,6 @@ impl AsyncShardingPartialDecoder {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 pub(crate) async fn partial_decode(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
@@ -190,7 +189,7 @@ pub(crate) async fn partial_decode(
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     fn data_type(&self) -> &DataType {
-        &self.inner_codecs.data_type()
+        self.inner_codecs.data_type()
     }
 
     async fn exists(&self) -> Result<bool, StorageError> {
@@ -224,7 +223,6 @@ impl AsyncArrayPartialDecoderTraits for AsyncShardingPartialDecoder {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn get_subchunk_partial_decoder(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     subchunk_shape: &[NonZeroU64],
@@ -258,7 +256,6 @@ async fn get_subchunk_partial_decoder(
 }
 
 #[allow(clippy::too_many_lines)]
-#[expect(clippy::too_many_arguments)]
 async fn partial_decode_fixed_array_subset(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
@@ -532,7 +529,6 @@ async fn partial_decode_variable_array_subset(
     Ok(ArrayBytes::Variable(out_array_subset))
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn partial_decode_fixed_indexer(
     input_handle: &Arc<dyn AsyncBytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],

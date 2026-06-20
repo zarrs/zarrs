@@ -168,9 +168,9 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
         };
         let subchunk_fill_value = || {
             ArrayBytes::new_fill_value(
-                &self.inner_codecs.data_type(),
+                self.inner_codecs.data_type(),
                 self.subchunk_shape.num_elements_u64(),
-                &self.inner_codecs.fill_value(),
+                self.inner_codecs.fill_value(),
             )
         };
 
@@ -364,7 +364,7 @@ impl ArrayPartialEncoderTraits for ShardingPartialEncoder {
 
         let updated_subchunks = iterator
             .map(|(subchunk_index, subchunk_decoded)| {
-                if subchunk_decoded.is_fill_value(&fill_value) {
+                if subchunk_decoded.is_fill_value(fill_value) {
                     Ok((subchunk_index, None))
                 } else {
                     let subchunk_encoded = self

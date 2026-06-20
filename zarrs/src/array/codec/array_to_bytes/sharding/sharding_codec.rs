@@ -179,7 +179,7 @@ impl UnboundArrayToBytesCodecTraits for ShardingCodec {
             subchunk_shape: self.subchunk_shape.clone(),
             inner_codecs,
             index_codecs,
-            index_location: self.index_location.clone(),
+            index_location: self.index_location,
             options: self.options.clone(),
         }))
     }
@@ -215,7 +215,6 @@ impl ShardingCodecBound {
 
     /// Preallocate shard, encode and write chunks (in parallel), then truncate shard
     #[allow(clippy::too_many_lines)]
-    #[expect(clippy::too_many_arguments)]
     fn encode_bounded(
         &self,
         decoded_value: &ArrayBytes,
@@ -1073,7 +1072,6 @@ impl ShardingCodecBound {
     }
 
     /// Encode an inner chunk from the `decoded_value` or return None.
-    #[expect(clippy::too_many_arguments)]
     fn encode_inner_by_chunk_index(
         &self,
         chunk_index: usize,

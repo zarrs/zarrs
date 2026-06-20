@@ -140,7 +140,7 @@ impl UnboundArrayToBytesCodecTraits for ZfpyCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
-        let inner_bound = Arc::new(self.inner.clone()).with_context(data_type, fill_value)?;
+        let inner_bound = Arc::new(self.inner).with_context(data_type, fill_value)?;
         Ok(Arc::new(ZfpyCodecBound { inner: inner_bound }))
     }
 }

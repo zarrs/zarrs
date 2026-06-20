@@ -98,7 +98,6 @@ impl ShardingPartialDecoder {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 pub(crate) fn partial_decode(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
@@ -256,7 +255,6 @@ impl ArrayPartialDecoderTraits for ShardingPartialDecoder {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
 fn get_subchunk_partial_decoder(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     subchunk_shape: &[NonZeroU64],
@@ -382,7 +380,6 @@ fn partial_decode_fixed_array_subset_into(
     Ok(())
 }
 
-#[expect(clippy::too_many_arguments)]
 fn partial_decode_variable_array_subset(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
@@ -475,7 +472,6 @@ fn partial_decode_variable_array_subset(
     Ok(ArrayBytes::Variable(out_array_subset))
 }
 
-#[expect(clippy::too_many_arguments)]
 fn partial_decode_fixed_indexer(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
@@ -582,7 +578,6 @@ fn partial_decode_fixed_indexer(
     Ok(output.into())
 }
 
-#[expect(clippy::too_many_arguments)]
 fn partial_decode_variable_indexer(
     input_handle: &Arc<dyn BytesPartialDecoderTraits>,
     shard_shape: &[NonZeroU64],
