@@ -769,7 +769,6 @@ impl<TStorage: ?Sized> Array<TStorage> {
     fn recommended_codec_concurrency(
         &self,
         chunk_shape: &[NonZeroU64],
-        _data_type: &DataType,
     ) -> Result<RecommendedConcurrency, ArrayError> {
         Ok(self.codecs_bound().recommended_concurrency(chunk_shape)?)
     }

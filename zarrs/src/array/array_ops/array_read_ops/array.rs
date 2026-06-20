@@ -227,8 +227,7 @@ impl<TStorage: ?Sized + ReadableStorageTraits + 'static> ArrayReadOps for Array<
                 let chunk_shape = self.chunk_shape(chunks.start())?;
 
                 // Calculate chunk/codec concurrency
-                let codec_concurrency =
-                    self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+                let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
                 let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                     options.concurrent_target(),
                     num_chunks,

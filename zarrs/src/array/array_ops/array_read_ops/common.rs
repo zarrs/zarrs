@@ -87,8 +87,7 @@ where
         }
         _ => {
             let chunk_shape = array.chunk_shape(chunks.start())?;
-            let codec_concurrency =
-                array.recommended_codec_concurrency(&chunk_shape, array.data_type())?;
+            let codec_concurrency = array.recommended_codec_concurrency(&chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,

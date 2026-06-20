@@ -144,8 +144,7 @@ impl<TStorage: ?Sized + ReadableWritableStorageTraits + 'static> ArrayUpdateOps
             subset_bytes.validate(array_subset.num_elements(), self.data_type())?;
             // Calculate chunk/codec concurrency
             let chunk_shape = self.chunk_shape(&vec![0; self.dimensionality()])?;
-            let codec_concurrency =
-                self.recommended_codec_concurrency(&chunk_shape, self.data_type())?;
+            let codec_concurrency = self.recommended_codec_concurrency(&chunk_shape)?;
             let (chunk_concurrent_limit, options) = concurrency_chunks_and_codec(
                 options.concurrent_target(),
                 num_chunks,
