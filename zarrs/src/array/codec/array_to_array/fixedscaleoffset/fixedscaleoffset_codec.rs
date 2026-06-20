@@ -37,6 +37,7 @@ struct FixedScaleOffsetCodecBound {
     data_type: DataType,
     fill_value: FillValue,
     encoded_data_type: DataType,
+    encoded_fill_value: FillValue,
 }
 
 fn add_byteoder_to_dtype(dtype: &str) -> String {
@@ -398,6 +399,20 @@ fn do_encode<'a>(
     }
 }
 
+fn encode_fill_value(
+    fill_value: &FillValue,
+    data_type: &DataType,
+    offset: f32,
+    scale: f32,
+    astype: Option<&DataType>,
+) -> Result<FillValue, CodecError> {
+    let fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?;
+    let encoded_fill_value = do_encode(fill_value_bytes, data_type, offset, scale, astype)?;
+    Ok(FillValue::new(
+        encoded_fill_value.into_fixed()?.into_owned(),
+    ))
+}
+
 #[cfg_attr(
     all(feature = "async", not(target_arch = "wasm32")),
     async_trait::async_trait
@@ -421,6 +436,13 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             ));
         }
         let encoded_data_type = self.astype.clone().unwrap_or_else(|| self.dtype.clone());
+        let encoded_fill_value = encode_fill_value(
+            &fill_value,
+            &data_type,
+            self.offset,
+            self.scale,
+            self.astype.as_ref(),
+        )?;
         Ok(Arc::new(FixedScaleOffsetCodecBound {
             offset: self.offset,
             scale: self.scale,
@@ -428,6 +450,7 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             data_type,
             fill_value,
             encoded_data_type,
+            encoded_fill_value,
         }))
     }
 }
@@ -468,7 +491,7 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     }
 
     fn encoded_fill_value(&self) -> &FillValue {
-        &self.fill_value
+        &self.encoded_fill_value
     }
 
     fn encode<'a>(

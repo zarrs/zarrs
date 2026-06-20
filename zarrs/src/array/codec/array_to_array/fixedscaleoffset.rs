@@ -145,4 +145,20 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn codec_fixedscaleoffset_encoded_fill_value() {
+        const JSON: &str = r#"{ "offset": 1000, "scale": 10, "dtype": "f8", "astype": "u1" }"#;
+        let data_type = data_type::float64();
+        let fill_value = FillValue::from(1000.3f64);
+
+        let codec_configuration: FixedScaleOffsetCodecConfiguration =
+            serde_json::from_str(JSON).unwrap();
+        let codec =
+            Arc::new(FixedScaleOffsetCodec::new_with_configuration(&codec_configuration).unwrap())
+                .with_context(data_type, fill_value)
+                .unwrap();
+
+        assert_eq!(codec.encoded_fill_value(), &FillValue::from(3u8));
+    }
 }
