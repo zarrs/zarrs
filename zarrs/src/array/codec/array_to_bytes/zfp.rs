@@ -151,10 +151,8 @@ fn zfp_native_type_to_sys(native_type: ZfpNativeType) -> zfp_sys::zfp_type {
 #[allow(clippy::cast_possible_wrap)]
 fn promote_before_zfp_encoding(
     decoded_value: &[u8],
-    data_type: &DataType,
+    encoding: ZfpEncoding,
 ) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
-    let encoding = data_type.codec_zfp()?.zfp_encoding();
-
     Ok(match encoding {
         ZfpEncoding::Int32 => ZfpArray::Int32(convert_from_bytes_slice::<i32>(decoded_value)),
         ZfpEncoding::Int64 => ZfpArray::Int64(convert_from_bytes_slice::<i64>(decoded_value)),
@@ -207,13 +205,9 @@ fn promote_before_zfp_encoding(
     })
 }
 
-fn init_zfp_decoding_output(
-    shape: &[NonZeroU64],
-    data_type: &DataType,
-) -> Result<ZfpArray, zarrs_data_type::DataTypeCodecError> {
-    let encoding = data_type.codec_zfp()?.zfp_encoding();
+fn init_zfp_decoding_output(shape: &[NonZeroU64], encoding: ZfpEncoding) -> ZfpArray {
     let num_elements = shape.num_elements_usize();
-    Ok(ZfpArray::new_zeroed(encoding, num_elements))
+    ZfpArray::new_zeroed(encoding, num_elements)
 }
 
 fn zfp_decode(
@@ -221,10 +215,10 @@ fn zfp_decode(
     write_header: bool,
     encoded_value: &mut [u8],
     shape: &[NonZeroU64],
-    data_type: &DataType,
+    encoding: ZfpEncoding,
     parallel: bool,
 ) -> Result<Vec<u8>, CodecError> {
-    let mut array = init_zfp_decoding_output(shape, data_type)?;
+    let mut array = init_zfp_decoding_output(shape, encoding);
     let zfp_type = array.zfp_type();
     let stream = ZfpStream::new(zfp_mode, zfp_type)
         .ok_or_else(|| CodecError::from("failed to create zfp stream"))?;

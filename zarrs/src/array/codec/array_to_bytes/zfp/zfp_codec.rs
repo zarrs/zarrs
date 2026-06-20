@@ -15,8 +15,8 @@ use super::zfp_bitstream::ZfpBitstream;
 use super::zfp_field::ZfpField;
 use super::zfp_stream::ZfpStream;
 use super::{
-    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, promote_before_zfp_encoding,
-    zfp_decode, zfp_native_type_to_sys,
+    ZfpCodecConfiguration, ZfpCodecConfigurationV1, ZfpDataTypeExt, ZfpEncoding,
+    promote_before_zfp_encoding, zfp_decode, zfp_native_type_to_sys,
 };
 use crate::array::{BytesRepresentation, DataType, FillValue};
 use std::num::NonZeroU64;
@@ -40,6 +40,8 @@ pub struct ZfpCodec {
 pub(crate) struct ZfpCodecBound {
     data_type: DataType,
     fill_value: FillValue,
+    encoding: ZfpEncoding,
+    zfp_type: zfp_sys::zfp_type,
     mode: ZfpMode,
     write_header: bool,
 }
@@ -175,10 +177,13 @@ impl UnboundArrayToBytesCodecTraits for ZfpCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
-        data_type.codec_zfp()?; // Check that the data type is supported by zfp
+        let encoding = data_type.codec_zfp()?.zfp_encoding();
+        let zfp_type = zfp_native_type_to_sys(encoding.native_type());
         Ok(Arc::new(ZfpCodecBound {
             data_type,
             fill_value,
+            encoding,
+            zfp_type,
             mode: self.mode,
             write_header: self.write_header,
         }))
@@ -219,7 +224,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
         let bytes = bytes.into_fixed()?;
-        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, &self.data_type)?;
+        let mut bytes_promoted = promote_before_zfp_encoding(&bytes, self.encoding)?;
         let zfp_type = bytes_promoted.zfp_type();
         let field = ZfpField::new(
             &mut bytes_promoted,
@@ -289,7 +294,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             self.write_header,
             &mut bytes.to_vec(), // FIXME: Does zfp **really** need the encoded value as mutable?
             shape,
-            &self.data_type,
+            self.encoding,
             false, // FIXME
         )
         .map(ArrayBytes::from)
@@ -299,14 +304,11 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        let encoding = self.data_type.codec_zfp()?.zfp_encoding();
-        let zfp_type = zfp_native_type_to_sys(encoding.native_type());
-
         let bufsize = {
             let field = unsafe {
                 // SAFETY: zfp_stream_maximum_size does not use the data in the field, so it can be empty
                 ZfpField::new_empty(
-                    zfp_type,
+                    self.zfp_type,
                     &shape
                         .iter()
                         .map(|u| usize::try_from(u.get()).unwrap())
@@ -315,7 +317,7 @@ impl ArrayToBytesCodecTraits for ZfpCodecBound {
             }
             .ok_or_else(|| CodecError::from("failed to create zfp field"))?;
 
-            let stream = ZfpStream::new(&self.mode, zfp_type)
+            let stream = ZfpStream::new(&self.mode, self.zfp_type)
                 .ok_or_else(|| CodecError::from("failed to create zfp stream"))?;
 
             unsafe {
