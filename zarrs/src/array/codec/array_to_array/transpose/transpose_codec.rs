@@ -61,10 +61,10 @@ impl TransposeCodec {
 
 impl TransposeCodecBound {
     /// Validate the shape and data type for this codec.
-    fn validate(&self, shape: &[NonZeroU64], data_type: &DataType) -> Result<(), CodecError> {
-        if data_type.is_optional() {
+    fn validate(&self, shape: &[NonZeroU64]) -> Result<(), CodecError> {
+        if self.data_type.is_optional() {
             return Err(CodecError::UnsupportedDataType(
-                data_type.clone(),
+                self.data_type.clone(),
                 TransposeCodec::aliases_v3().default_name.to_string(),
             ));
         }
@@ -205,7 +205,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(shape, &self.data_type)?;
+        self.validate(shape)?;
 
         // Encode: apply the transpose order to the decoded shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
@@ -218,7 +218,7 @@ impl ArrayToArrayCodecTraits for TransposeCodecBound {
         shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        self.validate(shape, &self.data_type)?;
+        self.validate(shape)?;
 
         // Decode: apply the inverse permutation to the encoded (transposed) shape
         let shape_u64 = bytemuck::must_cast_slice(shape);
