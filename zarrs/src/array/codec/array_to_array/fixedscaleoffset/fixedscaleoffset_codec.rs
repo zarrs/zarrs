@@ -34,6 +34,8 @@ struct FixedScaleOffsetCodecBound {
     offset: f32,
     scale: f32,
     astype: Option<DataType>,
+    element_type: FixedScaleOffsetElementType,
+    encoded_element_type: FixedScaleOffsetElementType,
     data_type: DataType,
     fill_value: FillValue,
     encoded_data_type: DataType,
@@ -155,11 +157,10 @@ fn get_element_type(
 )]
 fn scale_array(
     bytes: &mut [u8],
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
+) -> Result<(), CodecError> {
     let float_type = element_type.intermediate_float();
 
     macro_rules! scale_impl {
@@ -186,10 +187,9 @@ fn scale_array(
         (FixedScaleOffsetElementType::F64, FixedScaleOffsetFloatType::F64) => scale_impl!(f64, f64),
         _ => {
             // FIXME: make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
+            return Err(CodecError::Other(
+                "fixedscaleoffset element type has unsupported intermediate float type".to_string(),
+            ));
         }
     }
     Ok(())
@@ -203,11 +203,10 @@ fn scale_array(
 )]
 fn unscale_array(
     bytes: &mut [u8],
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-) -> Result<(), zarrs_data_type::DataTypeCodecError> {
-    let element_type = get_element_type(data_type)?;
+) -> Result<(), CodecError> {
     let float_type = element_type.intermediate_float();
 
     macro_rules! unscale_impl {
@@ -249,10 +248,9 @@ fn unscale_array(
         }
         _ => {
             // FIXME: Make this unreachable?
-            return Err(zarrs_data_type::DataTypeCodecError::UnsupportedDataType {
-                data_type: data_type.clone(),
-                codec_name: "fixedscaleoffset",
-            });
+            return Err(CodecError::Other(
+                "fixedscaleoffset element type has unsupported intermediate float type".to_string(),
+            ));
         }
     }
     Ok(())
@@ -267,12 +265,9 @@ fn unscale_array(
 )]
 fn cast_array(
     bytes: &[u8],
-    data_type: &DataType,
-    as_type: &DataType,
-) -> Result<Vec<u8>, zarrs_data_type::DataTypeCodecError> {
-    let from_type = get_element_type(data_type)?;
-    let to_type = get_element_type(as_type)?;
-
+    from_type: FixedScaleOffsetElementType,
+    to_type: FixedScaleOffsetElementType,
+) -> Vec<u8> {
     // First cast to f32
     let elements: Vec<f32> = match from_type {
         FixedScaleOffsetElementType::I8 => bytes
@@ -380,20 +375,21 @@ fn cast_array(
             .collect(),
     };
 
-    Ok(result)
+    result
 }
 
 fn do_encode<'a>(
     bytes: ArrayBytes<'a>,
-    data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-    astype: Option<&DataType>,
+    encoded_element_type: FixedScaleOffsetElementType,
+    astype: bool,
 ) -> Result<ArrayBytes<'a>, CodecError> {
     let mut bytes = bytes.into_fixed()?.into_owned();
-    scale_array(&mut bytes, data_type, offset, scale)?;
-    if let Some(astype) = astype {
-        Ok(cast_array(&bytes, data_type, astype)?.into())
+    scale_array(&mut bytes, element_type, offset, scale)?;
+    if astype {
+        Ok(cast_array(&bytes, element_type, encoded_element_type).into())
     } else {
         Ok(bytes.into())
     }
@@ -402,12 +398,21 @@ fn do_encode<'a>(
 fn encode_fill_value(
     fill_value: &FillValue,
     data_type: &DataType,
+    element_type: FixedScaleOffsetElementType,
     offset: f32,
     scale: f32,
-    astype: Option<&DataType>,
+    encoded_element_type: FixedScaleOffsetElementType,
+    astype: bool,
 ) -> Result<FillValue, CodecError> {
     let fill_value_bytes = ArrayBytes::new_fill_value(data_type, 1, fill_value)?;
-    let encoded_fill_value = do_encode(fill_value_bytes, data_type, offset, scale, astype)?;
+    let encoded_fill_value = do_encode(
+        fill_value_bytes,
+        element_type,
+        offset,
+        scale,
+        encoded_element_type,
+        astype,
+    )?;
     Ok(FillValue::new(
         encoded_fill_value.into_fixed()?.into_owned(),
     ))
@@ -428,7 +433,7 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToArrayCodecTraits>, CodecError> {
-        get_element_type(&data_type)?;
+        let element_type = get_element_type(&data_type)?;
         if self.dtype != data_type {
             return Err(CodecError::UnsupportedDataType(
                 data_type,
@@ -436,17 +441,23 @@ impl UnboundArrayToArrayCodecTraits for FixedScaleOffsetCodec {
             ));
         }
         let encoded_data_type = self.astype.clone().unwrap_or_else(|| self.dtype.clone());
+        let encoded_element_type = get_element_type(&encoded_data_type)?;
+        let astype = self.astype.is_some();
         let encoded_fill_value = encode_fill_value(
             &fill_value,
             &data_type,
+            element_type,
             self.offset,
             self.scale,
-            self.astype.as_ref(),
+            encoded_element_type,
+            astype,
         )?;
         Ok(Arc::new(FixedScaleOffsetCodecBound {
             offset: self.offset,
             scale: self.scale,
             astype: self.astype.clone(),
+            element_type,
+            encoded_element_type,
             data_type,
             fill_value,
             encoded_data_type,
@@ -502,10 +513,11 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
     ) -> Result<ArrayBytes<'a>, CodecError> {
         do_encode(
             bytes,
-            &self.data_type,
+            self.element_type,
             self.offset,
             self.scale,
-            self.astype.as_ref(),
+            self.encoded_element_type,
+            self.astype.is_some(),
         )
     }
 
@@ -516,12 +528,12 @@ impl ArrayToArrayCodecTraits for FixedScaleOffsetCodecBound {
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
         let bytes = bytes.into_fixed()?.into_owned();
-        let mut bytes = if let Some(astype) = &self.astype {
-            cast_array(&bytes, astype, &self.data_type)?
+        let mut bytes = if self.astype.is_some() {
+            cast_array(&bytes, self.encoded_element_type, self.element_type)
         } else {
             bytes
         };
-        unscale_array(&mut bytes, &self.data_type, self.offset, self.scale)?;
+        unscale_array(&mut bytes, self.element_type, self.offset, self.scale)?;
         Ok(bytes.into())
     }
 }
