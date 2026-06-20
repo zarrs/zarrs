@@ -99,10 +99,6 @@ macro_rules! vlen_v2_codec {
         }
 
         impl CodecTraits for $struct {
-            fn as_any(&self) -> &dyn std::any::Any {
-                self
-            }
-
             fn configuration(
                 &self,
                 version: zarrs_plugin::ZarrVersion,

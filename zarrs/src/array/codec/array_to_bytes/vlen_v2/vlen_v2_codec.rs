@@ -38,10 +38,6 @@ impl VlenV2Codec {
 }
 
 impl CodecTraits for VlenV2Codec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

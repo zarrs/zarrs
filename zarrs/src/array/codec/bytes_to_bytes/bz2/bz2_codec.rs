@@ -43,10 +43,6 @@ impl Bz2Codec {
 }
 
 impl CodecTraits for Bz2Codec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

@@ -616,6 +616,7 @@ mod tests {
     use super::*;
     use crate::array::chunk_grid::RegularChunkGrid;
     use crate::array::chunk_key_encoding::V2ChunkKeyEncoding;
+    use crate::array::codec::ShardingCodecBound;
     use crate::array::data_type;
     use zarrs_metadata::FillValueMetadata;
     use zarrs_metadata::v3::MetadataV3;
@@ -912,7 +913,7 @@ mod tests {
     fn array_builder_codec_specific_options_impl(
         write_order: crate::array::codec::array_to_bytes::sharding::SubchunkWriteOrder,
     ) {
-        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecOptions};
+        use crate::array::codec::array_to_bytes::sharding::ShardingCodecOptions;
         use zarrs_codec::CodecSpecificOptions;
 
         let storage = Arc::new(MemoryStore::new());
@@ -925,11 +926,11 @@ mod tests {
         );
         let array = builder.build(storage, "/").unwrap();
 
-        let codecs = array.codecs();
+        let codecs = array.codecs_bound();
         let sharding = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
             .expect("expected ShardingCodec");
         assert!(
             matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),
@@ -956,7 +957,7 @@ mod tests {
     ) {
         use crate::array::ArraySubset;
         use crate::array::codec::ZstdCodec;
-        use crate::array::codec::array_to_bytes::sharding::{ShardingCodec, ShardingCodecBuilder};
+        use crate::array::codec::array_to_bytes::sharding::ShardingCodecBuilder;
 
         const SHAPE: [u64; 2] = [4, 4];
         const SHARD_SHAPE: [u64; 2] = [2, 2];
@@ -983,11 +984,11 @@ mod tests {
         .unwrap();
 
         // Verify the option was preserved through build()
-        let codecs = array.codecs();
+        let codecs = array.codecs_bound();
         let sharding = codecs
             .array_to_bytes_codec()
             .as_any()
-            .downcast_ref::<ShardingCodec>()
+            .downcast_ref::<ShardingCodecBound>()
             .expect("expected ShardingCodec");
         assert!(
             matches!(sharding.options.subchunk_write_order(), o if std::mem::discriminant(&o) == std::mem::discriminant(&write_order)),

@@ -108,10 +108,6 @@ impl FixedScaleOffsetCodec {
 }
 
 impl CodecTraits for FixedScaleOffsetCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

@@ -147,10 +147,6 @@ impl ReshapeCodec {
 }
 
 impl CodecTraits for ReshapeCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

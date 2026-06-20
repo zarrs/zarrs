@@ -51,10 +51,6 @@ impl GzipCodec {
 }
 
 impl CodecTraits for GzipCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,

@@ -390,9 +390,6 @@ pub trait CodecTraitsV3 {
 
 /// Codec traits.
 pub trait CodecTraits: ExtensionName + MaybeSend + MaybeSync {
-    /// Returns this codec as [`Any`].
-    fn as_any(&self) -> &dyn Any;
-
     /// Create the codec configuration.
     ///
     /// A hidden codec (e.g. a cache) will return [`None`], since it will not have any associated metadata.

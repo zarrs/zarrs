@@ -753,10 +753,6 @@ impl zarrs_plugin::ExtensionName for CodecChain {
 }
 
 impl CodecTraits for CodecChain {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     /// Returns [`None`] since a codec chain does not have standard codec metadata.
     ///
     /// Note that usage of the codec chain is explicit in [`Array`](crate::array::Array) and [`CodecChain::create_metadatas()`] will call [`CodecTraits::configuration()`] from for each codec.
@@ -980,10 +976,6 @@ mod tests {
     }
 
     impl CodecTraits for RepresentationCheckingBytesCodec {
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-
         fn configuration(
             &self,
             _version: zarrs_plugin::ZarrVersion,

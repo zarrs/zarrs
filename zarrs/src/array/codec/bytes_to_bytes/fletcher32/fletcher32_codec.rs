@@ -37,10 +37,6 @@ impl Fletcher32Codec {
 }
 
 impl CodecTraits for Fletcher32Codec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         _version: ZarrVersion,
