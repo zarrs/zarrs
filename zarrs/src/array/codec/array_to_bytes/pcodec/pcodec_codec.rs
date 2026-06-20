@@ -33,6 +33,8 @@ pub struct PcodecCodec {
 #[derive(Debug, Clone)]
 struct PcodecCodecBound {
     chunk_config: ChunkConfig,
+    element_type: PcodecElementType,
+    elements_per_element: usize,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -159,9 +161,13 @@ impl UnboundArrayToBytesCodecTraits for PcodecCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
-        data_type.codec_pcodec()?;
+        let pcodec = data_type.codec_pcodec()?;
+        let element_type = pcodec.pcodec_element_type();
+        let elements_per_element = pcodec.pcodec_elements_per_element();
         Ok(Arc::new(PcodecCodecBound {
             chunk_config: self.chunk_config.clone(),
+            element_type,
+            elements_per_element,
             data_type,
             fill_value,
         }))
@@ -206,10 +212,6 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytesRaw<'a>, CodecError> {
-        // Get element type via codec support
-        let pcodec = self.data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
-
         let bytes = bytes.into_fixed()?;
         macro_rules! pcodec_encode {
             ( $t:ty ) => {
@@ -222,7 +224,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
             };
         }
 
-        match element_type {
+        match self.element_type {
             PcodecElementType::U16 => pcodec_encode!(u16),
             PcodecElementType::U32 => pcodec_encode!(u32),
             PcodecElementType::U64 => pcodec_encode!(u64),
@@ -241,10 +243,6 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         _shape: &[NonZeroU64],
         _options: &CodecOptions,
     ) -> Result<ArrayBytes<'a>, CodecError> {
-        // Get element type via codec support
-        let pcodec = self.data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
-
         macro_rules! pcodec_decode {
             ( $t:ty ) => {
                 pco::standalone::simple_decompress(&bytes)
@@ -253,7 +251,7 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
             };
         }
 
-        let bytes = match element_type {
+        let bytes = match self.element_type {
             PcodecElementType::U16 => pcodec_decode!(u16),
             PcodecElementType::U32 => pcodec_decode!(u32),
             PcodecElementType::U64 => pcodec_decode!(u64),
@@ -271,13 +269,9 @@ impl ArrayToBytesCodecTraits for PcodecCodecBound {
         &self,
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
-        // Get element type via codec support
-        let pcodec = self.data_type.codec_pcodec()?;
-        let element_type = pcodec.pcodec_element_type();
+        let num_elements = shape.num_elements_usize() * self.elements_per_element;
 
-        let num_elements = shape.num_elements_usize() * pcodec.pcodec_elements_per_element();
-
-        let size = match element_type {
+        let size = match self.element_type {
             PcodecElementType::U16 | PcodecElementType::I16 | PcodecElementType::F16 => {
                 file_size::<u16>(num_elements, &self.chunk_config.paging_spec)
                     .map_err(|err| CodecError::from(err.to_string()))?
