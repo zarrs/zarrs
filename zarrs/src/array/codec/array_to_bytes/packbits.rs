@@ -62,7 +62,8 @@ pub use zarrs_data_type::codec_traits::packbits::{
     impl_pack_bits_data_type_traits,
 };
 
-struct PackBitsCodecComponents {
+#[derive(Debug, Clone, Copy)]
+pub(super) struct PackBitsCodecComponents {
     pub component_size_bits: u64,
     pub num_components: u64,
     pub sign_extension: bool,
@@ -174,6 +175,17 @@ mod tests {
             assert_eq!(answer, decoded_partial_chunk);
         }
         Ok(())
+    }
+
+    #[test]
+    fn codec_packbits_rejects_out_of_range_last_bit_when_bound() {
+        let data_type = data_type::uint2();
+        let fill_value = FillValue::from(0u8);
+        let codec = Arc::new(
+            super::PackBitsCodec::new(PackBitsPaddingEncoding::None, None, Some(2)).unwrap(),
+        );
+
+        assert!(codec.with_context(data_type, fill_value).is_err());
     }
 
     #[test]

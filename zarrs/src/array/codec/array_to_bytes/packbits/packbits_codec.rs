@@ -46,8 +46,9 @@ pub struct PackBitsCodec {
 #[derive(Debug, Clone)]
 struct PackBitsCodecBound {
     padding_encoding: PackBitsPaddingEncoding,
-    first_bit: Option<u64>,
-    last_bit: Option<u64>,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
     data_type: DataType,
     fill_value: FillValue,
 }
@@ -153,11 +154,26 @@ impl UnboundArrayToBytesCodecTraits for PackBitsCodec {
         data_type: DataType,
         fill_value: FillValue,
     ) -> Result<Arc<dyn ArrayToBytesCodecTraits>, CodecError> {
-        pack_bits_components(&data_type)?;
+        let components = pack_bits_components(&data_type)?;
+        let first_bit = self.first_bit.unwrap_or(0);
+        let last_bit = self.last_bit.unwrap_or(components.component_size_bits - 1);
+
+        if last_bit < first_bit {
+            return Err(CodecError::Other(
+                "packbits codec `last_bit` is less than `first_bit`".to_string(),
+            ));
+        }
+        if last_bit >= components.component_size_bits {
+            return Err(CodecError::Other(
+                "packbits codec `last_bit` is outside the data type component".to_string(),
+            ));
+        }
+
         Ok(Arc::new(PackBitsCodecBound {
             padding_encoding: self.padding_encoding,
-            first_bit: self.first_bit,
-            last_bit: self.last_bit,
+            components,
+            first_bit,
+            last_bit,
             data_type,
             fill_value,
         }))
@@ -205,9 +221,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             component_size_bits,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -283,9 +299,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             component_size_bits,
             num_components,
             sign_extension,
-        } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -386,9 +402,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -407,6 +423,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 self.data_type.clone(),
                 self.fill_value.clone(),
                 self.padding_encoding,
+                self.components,
                 self.first_bit,
                 self.last_bit,
             )))
@@ -424,9 +441,9 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
             component_size_bits,
             num_components: _,
             sign_extension: _,
-        } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
 
         // Bytes codec fast path
         if component_size_bits % 8 == 0 && first_bit == 0 && last_bit == component_size_bits - 1 {
@@ -445,6 +462,7 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
                 self.data_type.clone(),
                 self.fill_value.clone(),
                 self.padding_encoding,
+                self.components,
                 self.first_bit,
                 self.last_bit,
             )))
@@ -456,12 +474,12 @@ impl ArrayToBytesCodecTraits for PackBitsCodecBound {
         shape: &[NonZeroU64],
     ) -> Result<BytesRepresentation, CodecError> {
         let PackBitsCodecComponents {
-            component_size_bits,
+            component_size_bits: _,
             num_components,
             sign_extension: _,
-        } = pack_bits_components(&self.data_type)?;
-        let first_bit = self.first_bit.unwrap_or(0);
-        let last_bit = self.last_bit.unwrap_or(component_size_bits - 1);
+        } = self.components;
+        let first_bit = self.first_bit;
+        let last_bit = self.last_bit;
 
         let num_elements = shape.num_elements_u64();
         let component_size_bits_extracted = last_bit - first_bit + 1;

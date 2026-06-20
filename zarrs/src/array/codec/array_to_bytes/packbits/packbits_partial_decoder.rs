@@ -9,7 +9,7 @@ use num::Integer;
 use std::num::NonZeroU64;
 
 use super::PackBitsCodecComponents;
-use crate::array::codec::array_to_bytes::packbits::{div_rem_8bit, pack_bits_components};
+use crate::array::codec::array_to_bytes::packbits::div_rem_8bit;
 use crate::array::{ArrayBytes, ChunkShape, DataType, FillValue};
 use zarrs_codec::{ArrayPartialDecoderTraits, BytesPartialDecoderTraits, CodecError, CodecOptions};
 #[cfg(feature = "async")]
@@ -28,8 +28,9 @@ use zarrs_storage::byte_range::ByteRange;
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
-    first_bit: Option<u64>,
-    last_bit: Option<u64>,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 )))]
@@ -39,8 +40,9 @@ fn partial_decode<'a>(
     data_type: &DataType,
     fill_value: &FillValue,
     padding_encoding: PackBitsPaddingEncoding,
-    first_bit: Option<u64>,
-    last_bit: Option<u64>,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
     indexer: &dyn crate::array::Indexer,
     options: &CodecOptions,
 ) -> Result<ArrayBytes<'a>, CodecError> {
@@ -48,9 +50,7 @@ fn partial_decode<'a>(
         component_size_bits,
         num_components,
         sign_extension,
-    } = pack_bits_components(data_type)?;
-    let first_bit = first_bit.unwrap_or(0);
-    let last_bit = last_bit.unwrap_or(component_size_bits - 1);
+    } = components;
 
     // Get the component and element size in bits
     let component_size_bits_extracted = last_bit - first_bit + 1;
@@ -151,8 +151,9 @@ pub(crate) struct PackBitsPartialDecoder {
     data_type: DataType,
     fill_value: FillValue,
     padding_encoding: PackBitsPaddingEncoding,
-    first_bit: Option<u64>,
-    last_bit: Option<u64>,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
 }
 
 impl PackBitsPartialDecoder {
@@ -163,8 +164,9 @@ impl PackBitsPartialDecoder {
         data_type: DataType,
         fill_value: FillValue,
         padding_encoding: PackBitsPaddingEncoding,
-        first_bit: Option<u64>,
-        last_bit: Option<u64>,
+        components: PackBitsCodecComponents,
+        first_bit: u64,
+        last_bit: u64,
     ) -> Self {
         Self {
             input_handle,
@@ -172,6 +174,7 @@ impl PackBitsPartialDecoder {
             data_type,
             fill_value,
             padding_encoding,
+            components,
             first_bit,
             last_bit,
         }
@@ -202,6 +205,7 @@ impl ArrayPartialDecoderTraits for PackBitsPartialDecoder {
             &self.data_type,
             &self.fill_value,
             self.padding_encoding,
+            self.components,
             self.first_bit,
             self.last_bit,
             indexer,
@@ -222,8 +226,9 @@ pub(crate) struct AsyncPackBitsPartialDecoder {
     data_type: DataType,
     fill_value: FillValue,
     padding_encoding: PackBitsPaddingEncoding,
-    first_bit: Option<u64>,
-    last_bit: Option<u64>,
+    components: PackBitsCodecComponents,
+    first_bit: u64,
+    last_bit: u64,
 }
 
 #[cfg(feature = "async")]
@@ -235,8 +240,9 @@ impl AsyncPackBitsPartialDecoder {
         data_type: DataType,
         fill_value: FillValue,
         padding_encoding: PackBitsPaddingEncoding,
-        first_bit: Option<u64>,
-        last_bit: Option<u64>,
+        components: PackBitsCodecComponents,
+        first_bit: u64,
+        last_bit: u64,
     ) -> Self {
         Self {
             input_handle,
@@ -244,6 +250,7 @@ impl AsyncPackBitsPartialDecoder {
             data_type,
             fill_value,
             padding_encoding,
+            components,
             first_bit,
             last_bit,
         }
@@ -277,6 +284,7 @@ impl AsyncArrayPartialDecoderTraits for AsyncPackBitsPartialDecoder {
             &self.data_type,
             &self.fill_value,
             self.padding_encoding,
+            self.components,
             self.first_bit,
             self.last_bit,
             indexer,
