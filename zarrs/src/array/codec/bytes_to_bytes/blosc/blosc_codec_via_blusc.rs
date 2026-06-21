@@ -136,10 +136,6 @@ impl BloscCodec {
 }
 
 impl CodecTraits for BloscCodec {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     fn configuration(
         &self,
         version: ZarrVersion,
