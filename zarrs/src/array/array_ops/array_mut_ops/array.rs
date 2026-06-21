@@ -18,11 +18,10 @@ impl<TStorage: ?Sized> ArrayMutOps for Array<TStorage> {
         &mut self,
         opts: &CodecSpecificOptions,
     ) -> Result<&mut Self, CodecCreateError> {
-        let codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts)?);
-        let codecs_bound = codecs
-            .clone()
+        self.codecs = Arc::new((*self.codecs).clone().with_codec_specific_options(opts)?);
+        let codecs_bound = self
+            .codecs
             .with_context(self.data_type.clone(), self.fill_value.clone())?;
-        self.codecs = codecs;
         self.codecs_bound = codecs_bound;
         Ok(self)
     }
