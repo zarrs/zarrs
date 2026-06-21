@@ -424,16 +424,24 @@ impl ArrayToBytesCodecTraits for CodecChainBound {
         &self,
         decoded_shape: &[NonZeroU64],
     ) -> Result<ChunkShape, CodecError> {
-        let array_representations = self.get_array_representations(decoded_shape)?;
+        let mut array_shapes = Vec::with_capacity(self.array_to_array.len() + 1);
+        array_shapes.push(decoded_shape.to_vec());
+        for codec in &self.array_to_array {
+            let decoded_shape = array_shapes.last().expect("array_shapes is non-empty");
+            let encoded_shape = codec.encoded_shape(decoded_shape)?;
+            array_shapes.push(encoded_shape);
+        }
+
+        let encoded_shape = array_shapes.last().expect("array_shapes is non-empty");
         let mut granularity = self
             .array_to_bytes
-            .partial_decode_granularity(&array_representations.last().unwrap().0)?;
+            .partial_decode_granularity(encoded_shape)?;
 
-        for (codec, (decoded_shape, _decoded_data_type, _decoded_fill_value)) in self
+        for (codec, decoded_shape) in self
             .array_to_array
             .iter()
             .rev()
-            .zip(array_representations.iter().rev().skip(1))
+            .zip(array_shapes.iter().rev().skip(1))
         {
             granularity = codec.partial_decode_granularity(decoded_shape, &granularity)?;
         }
