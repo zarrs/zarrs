@@ -48,7 +48,7 @@ pub struct CodecChainBound {
     array_to_array: Vec<Arc<dyn ArrayToArrayCodecTraits>>,
     array_to_bytes: Arc<dyn ArrayToBytesCodecTraits>,
     bytes_to_bytes: Vec<Arc<dyn BytesToBytesCodecTraits>>,
-    cache_index: Option<usize>,
+    cache_index: Option<usize>, // for partial decoders
 }
 
 impl CodecChain {
@@ -79,31 +79,31 @@ impl CodecChain {
         let mut cache_index_should = None;
         let mut codec_index = 0;
         for codec in self.bytes_to_bytes.iter().rev() {
-            let cap = codec.partial_decoder_capability();
-            if !cap.partial_decode {
+            let capability = codec.partial_decoder_capability();
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
-            if !cap.partial_read {
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
             codec_index += 1;
         }
         {
-            let cap = self.array_to_bytes.partial_decoder_capability();
-            if !cap.partial_decode {
+            let capability = self.array_to_bytes.partial_decoder_capability();
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
-            if !cap.partial_read {
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
             codec_index += 1;
         }
         for codec in self.array_to_array.iter().rev() {
-            let cap = codec.partial_decoder_capability();
-            if !cap.partial_decode {
+            let capability = codec.partial_decoder_capability();
+            if !capability.partial_decode {
                 cache_index_must = Some(codec_index + 1);
             }
-            if !cap.partial_read {
+            if !capability.partial_read {
                 cache_index_should = Some(codec_index);
             }
             codec_index += 1;
